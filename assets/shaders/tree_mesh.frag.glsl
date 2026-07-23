@@ -28,6 +28,10 @@ uniform vec3 u_cameraPos;
 uniform sampler2D u_normalMap;
 uniform bool u_hasNormalMap;
 
+// T10: alpha-to-coverage soft leaf edges — active only in MSAA_4X (the only AA mode
+// with a multisample scene FBO). In the other modes the leaf is a crisp opaque cutout.
+uniform bool u_msaaActive;
+
 // Directional light
 uniform bool u_hasDirectionalLight;
 uniform vec3 u_lightDirection;
@@ -46,6 +50,16 @@ out vec4 fragColor;
 float interleavedGradientNoise(vec2 p)
 {
     return fract(52.9829189 * fract(dot(p, vec2(0.06711056, 0.00583715))));
+}
+
+// T10 coverage-preservation (Ben Golus): the mip level at this fragment, so the
+// leaf alpha can be rescaled to counter the mask thinning that mipping causes.
+float calcMipLevel(vec2 texelCoord)
+{
+    vec2 dx = dFdx(texelCoord);
+    vec2 dy = dFdy(texelCoord);
+    float deltaMaxSq = max(dot(dx, dx), dot(dy, dy));
+    return max(0.0, 0.5 * log2(deltaMaxSq));
 }
 
 int getCascadeIndex()
@@ -118,13 +132,25 @@ void main()
 
     vec3 base;
     float texAlpha = 1.0;
+    float cov = 1.0;   // T10 alpha-to-coverage edge coverage (leaf cards)
     if (u_hasTexture)
     {
         vec4 texel = texture(u_texture, v_texCoord);
         base = texel.rgb;
         texAlpha = texel.a;
-        if (u_useAlphaTest && texAlpha < u_alphaCutoff)
-            discard;
+        if (u_useAlphaTest)
+        {
+            // T10 coverage-preservation: mips wash out the leaf mask with distance,
+            // thinning the canopy. Rescale by the mip level to hold density
+            // (Ben Golus, _MipScale = 0.25).
+            vec2 texSize = vec2(textureSize(u_texture, 0));
+            texAlpha *= 1.0 + calcMipLevel(v_texCoord * texSize) * 0.25;
+            if (texAlpha < u_alphaCutoff)
+                discard;
+            // One-pixel-wide soft coverage for alpha-to-coverage (used only in MSAA_4X;
+            // in the other AA modes fragColor.a stays 1.0 → crisp opaque cutout).
+            cov = clamp((texAlpha - u_alphaCutoff) / max(fwidth(texAlpha), 1e-4) + 0.5, 0.0, 1.0);
+        }
     }
     else
     {
@@ -179,6 +205,9 @@ void main()
         finalColor = base;
     }
 
-    // Opaque: the dissolve (above) carries the crossfade, not the alpha channel.
-    fragColor = vec4(finalColor, 1.0);
+    // Single mode-selected alpha write (T10): A2C edge coverage for leaf cards in
+    // MSAA_4X, else opaque. The T9 dissolve is a discard (above), so it composes with
+    // this without a second alpha write — the dissolve picks which fragments survive,
+    // this sets the surviving leaf's edge coverage.
+    fragColor = vec4(finalColor, (u_msaaActive && u_useAlphaTest) ? cov : 1.0);
 }

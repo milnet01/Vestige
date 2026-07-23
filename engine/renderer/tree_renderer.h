@@ -133,6 +133,11 @@ public:
     /// @brief Wind oscillation frequency.
     float windFrequency = 1.2f;
 
+    /// @brief True when the renderer's AA mode is MSAA_4X (the only mode with a
+    ///        multisample scene FBO). Gates T10 alpha-to-coverage soft leaf edges;
+    ///        set per frame at the engine's tree-render call site.
+    bool msaaActive = false;
+
 private:
     /// @brief One primitive to draw for a tier: its mesh VAO, the node's baked
     ///        world matrix (§4.4), and its material (alpha mode / albedo).

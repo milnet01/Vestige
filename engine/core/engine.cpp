@@ -1650,6 +1650,9 @@ void Engine::run()
                     m_profiler.getGpuTimer().beginPass("Tree");
                     m_treeRenderer->windDirection = m_environmentForces->getBaseWindDirection();
                     m_treeRenderer->windAmplitude = 0.15f * std::max(0.2f, envWindSpeed);
+                    // T10: A2C soft leaf edges only work against a multisample target.
+                    m_treeRenderer->msaaActive =
+                        (m_renderer->getAntiAliasMode() == AntiAliasMode::MSAA_4X);
                     m_treeRenderer->render(visibleChunks, *m_camera, viewProj, elapsed,
                                            csm, dirLight);
                     m_profiler.getGpuTimer().endPass();

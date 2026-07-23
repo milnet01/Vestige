@@ -497,6 +497,7 @@ void TreeRenderer::render(const std::vector<const FoliageChunk*>& chunks,
     m_meshShader.setFloat("u_windFrequency", windFrequency);
     m_meshShader.setVec4("u_clipPlane", clipPlane);
     m_meshShader.setInt("u_texture", 0);
+    m_meshShader.setBool("u_msaaActive", msaaActive);
     setLightingUniforms(m_meshShader, csm, dirLight);
 
     {
@@ -504,12 +505,17 @@ void TreeRenderer::render(const std::vector<const FoliageChunk*>& chunks,
         // proper depth), so tiers z-sort correctly and there's no sorting/halo. Cull
         // is toggled per-material inside drawMeshTier (two-sided leaves disable it).
         ScopedCullFace cullGuard{true};
+        // T10: alpha-to-coverage anti-aliases the leaf-cutout edges — but only works
+        // against a multisample target, so enable it only in MSAA_4X. Bark writes
+        // fragColor.a = 1.0 → full coverage → unaffected.
+        if (msaaActive) { glEnable(GL_SAMPLE_ALPHA_TO_COVERAGE); }
         for (size_t si = 0; si < m_species.size(); ++si)
         {
             drawMeshTier(m_species[si].lod0Prims, m_lod0BySpecies[si]);
             drawMeshTier(m_species[si].midPrims, m_midBySpecies[si]);
             drawMeshTier(m_species[si].billboardPrims, m_bbBySpecies[si], true, 0.4f);
         }
+        if (msaaActive) { glDisable(GL_SAMPLE_ALPHA_TO_COVERAGE); }
     }
 }
 
