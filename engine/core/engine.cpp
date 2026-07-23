@@ -2798,9 +2798,11 @@ void Engine::finalizeMeadowTerrain()
              "rock_smallA.glb", "rock_smallB.glb", "rock_smallC.glb"},
             0x0B0DE5u, rock, 0.0f, false);
 
-        // Wildflowers, mushrooms, bushes — the dense small ground cover that
-        // breaks up the flat green. The largest draw-call load of the props
-        // (deliberate: this is a benchmark scene).
+        // Mushrooms + bushes — the dense small ground cover that breaks up the
+        // flat green. T6 (3D_E-0033): the three low-poly Kenney flower_*A.glb
+        // props were dropped here — wildflowers are now the procedural
+        // billboard star-mesh foliage (FL_YELLOW/PURPLE/WHITE above), which
+        // reads better up close and casts no extra draw-call load.
         ScatterParams flower;
         flower.regionMin = regionMin;
         flower.regionMax = regionMax;
@@ -2812,8 +2814,7 @@ void Engine::finalizeMeadowTerrain()
         flower.minScale = 0.7f;
         flower.maxScale = 1.4f;
         propCount += scatterGroup(
-            {"flower_purpleA.glb", "flower_redA.glb", "flower_yellowA.glb",
-             "mushroom_red.glb", "plant_bush.glb"},
+            {"mushroom_red.glb", "plant_bush.glb"},
             0xF10E12u, flower, 0.0f, false);
 
         // Reeds / tall plants ringing the pond shore: an annulus — inside the
