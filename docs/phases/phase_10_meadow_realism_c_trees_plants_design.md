@@ -269,6 +269,19 @@ Fragment: **half-Lambert diffuse + ambient** (albedo from material), **CSM shado
 A separate **shadow-caster** pass (reusing the foliage caster pattern, single `u_lightSpaceMatrix`)
 renders LOD0 trees into the cascade depth so they cast onto the ground.
 
+> **Implementation note (T4, 2026-07-23):** shipped as `TreeRenderer::renderShadow()` + new
+> `tree_shadow.{vert,frag}.glsl`, mirroring the foliage caster. The vert repeats
+> `tree_mesh.vert`'s instanced transform + wind sway (so the shadow tracks the swaying canopy);
+> the frag alpha-tests leaf cutouts and writes RSM flux to match the directional shadow map's
+> MRT (`shadow_depth.frag` contract). The renderer's shadow pass gathers the shared
+> `FoliageManager` chunks once and feeds both the foliage and tree casters per cascade
+> (`Renderer::setTreeShadowCaster`, wired at `engine.cpp` init). Casters are bucketed into the
+> **same tier the viewer sees** (LOD0 near, mid beyond) and culled at `billboardDistance`, so
+> the far impostor tier does **not** cast (D4 scope cap). Verified on RX 6600 / Mesa: 0 GL
+> errors, all ctest green, Tree GPU pass 0.12–0.22 ms. At the meadow's near-midday sun the cast
+> shadows pool tightly under canopies (physically correct — short shadows), so they read subtly
+> in the fixed midday viewpoints; they will strengthen at low sun angles once time-of-day lands.
+
 ### 4.5 Meadow placement (edit `engine.cpp` meadow builder)
 
 Replace the raw-prop tree `scatterGroup` call with foliage-tree placement:

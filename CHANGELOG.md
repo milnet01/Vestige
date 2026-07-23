@@ -22,6 +22,33 @@ may change any interface without notice.
 
 ## [Unreleased]
 
+### 2026-07-23 Added — Meadow trees now cast ground shadows (3D_E-0033, T4)
+
+The trees no longer float on the grass with no shadow beneath them — each one
+now drops a real sun shadow onto the ground and the grass around its base,
+grounding it in the scene. This reuses the same shadow machinery the grass and
+foliage already use, so trees, grass, and everything else share one consistent
+look. At the meadow's high midday sun the shadows sit tightly under each canopy
+(short shadows are what you'd actually see at noon); they'll stretch out and
+read more strongly at low sun angles once a time-of-day system lands.
+
+- **Shadow-caster pass (`tree_shadow.{vert,frag}.glsl`).** A depth-only sibling
+  of the tree mesh shader: it repeats the main pass's instanced transform + wind
+  sway (so the shadow tracks the swaying canopy instead of detaching), alpha-
+  tests the leaf cutouts so only leaf shapes cast, and writes RSM flux to match
+  the directional shadow map's render target (world-space GI stays fed).
+- **Wiring.** `TreeRenderer::renderShadow()` is driven by the renderer's shadow
+  pass (`Renderer::setTreeShadowCaster`), which gathers the shared
+  `FoliageManager` chunks once and feeds both the foliage and tree casters per
+  cascade. Casters are bucketed into the same LOD tier the viewer sees, so the
+  shadow matches the drawn mesh.
+- **Scope cap (D4, project Rule 5).** Only the near (LOD0) and mid meshes cast;
+  the far impostor/billboard tier receives light but does **not** cast — a
+  distant flat card's cast is ill-defined and its contribution negligible. No
+  iteration caps or hidden clamps.
+- **Performance (RX 6600, Release).** Tree GPU pass 0.12–0.22 ms, 0 GL errors,
+  full test suite green.
+
 ### 2026-07-21 Changed — GPU grass is now the meadow grass; billboard grass retired (3D_E-0039, G5)
 
 The GPU blade field graduated from "coexists with the old grass" to being THE

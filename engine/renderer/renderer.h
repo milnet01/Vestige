@@ -520,6 +520,13 @@ public:
     /// @brief Updates the elapsed time for foliage wind sync in the shadow pass.
     void setFoliageShadowTime(float time) { m_foliageShadowTime = time; }
 
+    /// @brief Sets the tree renderer for shadow casting during the shadow pass
+    ///        (T4, 3D_E-0033). Trees live in the same FoliageManager chunk store
+    ///        as foliage, so the caster reuses the foliage manager set above —
+    ///        no separate manager pointer. nullptr disables tree shadow casting.
+    /// @param treeRenderer Pointer to the tree renderer (must outlive Renderer).
+    void setTreeShadowCaster(class TreeRenderer* treeRenderer) { m_treeShadowCaster = treeRenderer; }
+
     /// @brief Gets the resolved depth texture ID for soft particles and effects.
     /// @return OpenGL texture ID, or 0 if not available.
     GLuint getResolvedDepthTexture() const;
@@ -646,7 +653,8 @@ private:
     // External shadow casters (foliage)
     class FoliageRenderer* m_foliageShadowCaster = nullptr;
     class FoliageManager* m_foliageShadowManager = nullptr;
-    float m_foliageShadowTime = 0.0f;  ///< Elapsed time for wind sync in shadow pass.
+    class TreeRenderer* m_treeShadowCaster = nullptr;  ///< Trees cast via the shared FoliageManager chunks (T4).
+    float m_foliageShadowTime = 0.0f;  ///< Elapsed time for wind sync in shadow pass (shared by foliage + trees).
     // Scratch vector for the per-cascade foliage-chunk list — its capacity is
     // preserved across frames so the shadow pass doesn't heap-alloc. (AUDIT H9.)
     mutable std::vector<const class FoliageChunk*> m_scratchFoliageChunks;

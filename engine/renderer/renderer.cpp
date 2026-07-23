@@ -7,6 +7,7 @@
 #include "renderer/gi_math.h"  // GI_ALPHA / GI_DECAY / GI_STRENGTH_DEFAULT (Slice R4)
 #include "renderer/dynamic_mesh.h"
 #include "renderer/foliage_renderer.h"
+#include "renderer/tree_renderer.h"
 #include "renderer/motion_overlay_prev_world.h"
 #include "renderer/normal_matrix.h"
 #include "renderer/sampler_fallback.h"
@@ -3890,25 +3891,38 @@ void Renderer::renderShadowPass(const std::vector<SceneRenderData::RenderItem>& 
             }
         }
 
-        // Render foliage shadows into every cascade so grass shadows are visible
-        // at all camera angles. Use ALL chunks (not camera-frustum-culled) because
-        // foliage behind the camera can cast shadows into the visible area. The
-        // per-instance shadowMaxDistance culling keeps the count bounded.
-        if (m_foliageShadowCaster && m_foliageShadowManager)
+        // Render vegetation shadows into every cascade so grass + tree shadows
+        // are visible at all camera angles. Use ALL chunks (not camera-frustum-
+        // culled) because vegetation behind the camera can cast shadows into the
+        // visible area. Grass/foliage and trees share the FoliageManager chunk
+        // store, so gather once and feed both casters; each does its own distance
+        // cull to keep the drawn count bounded.
+        if (m_foliageShadowManager && (m_foliageShadowCaster || m_treeShadowCaster))
         {
             // Reuse the scratch vector across cascades to avoid per-cascade
             // heap allocation in the shadow pass hot path. (AUDIT H9.)
             m_foliageShadowManager->getAllChunks(m_scratchFoliageChunks);
             if (!m_scratchFoliageChunks.empty())
             {
-                m_foliageShadowCaster->renderShadow(
-                    m_scratchFoliageChunks, camera, lightSpaceMatrix,
-                    m_foliageShadowTime,
-                    m_directionalLight.diffuse, m_directionalLight.direction);
-                // Restore shadow depth shader — foliage shadow binds its own shader
-                m_shadowDepthShader.use();
-                // Re-set the flux light uniforms the foliage shader's program use()
+                if (m_foliageShadowCaster)
+                {
+                    m_foliageShadowCaster->renderShadow(
+                        m_scratchFoliageChunks, camera, lightSpaceMatrix,
+                        m_foliageShadowTime,
+                        m_directionalLight.diffuse, m_directionalLight.direction);
+                }
+                if (m_treeShadowCaster)
+                {
+                    // Trees cast LOD0 + mid meshes (far impostors receive only, D4).
+                    m_treeShadowCaster->renderShadow(
+                        m_scratchFoliageChunks, camera, lightSpaceMatrix,
+                        m_foliageShadowTime,
+                        m_directionalLight.diffuse, m_directionalLight.direction);
+                }
+                // Restore shadow depth shader — the vegetation casters bind their
+                // own shaders. Re-set the flux light uniforms their program use()
                 // replaced (albedo is re-bound per batch on the next cascade).
+                m_shadowDepthShader.use();
                 m_shadowDepthShader.setVec3("u_lightRadiance", m_directionalLight.diffuse);
                 m_shadowDepthShader.setVec3("u_lightDir", m_directionalLight.direction);
             }

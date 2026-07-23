@@ -54,6 +54,13 @@ bool TreeRenderer::init(const std::string& assetPath)
         Logger::error("Failed to load tree mesh shaders");
         return false;
     }
+    // Shadow-caster shader (LOD0 + mid → cascade depth + RSM flux, T4). Trees
+    // still render if this fails; they just won't cast ground shadows.
+    if (!m_shadowShader.loadFromFiles(assetPath + "/shaders/tree_shadow.vert.glsl",
+                                       assetPath + "/shaders/tree_shadow.frag.glsl"))
+    {
+        Logger::warning("Failed to load tree shadow shaders — trees won't cast shadows");
+    }
     // Shared instanced-mesh streams (model mat4 @ binding 1, crossfade alpha @ binding 3).
     glCreateBuffers(1, &m_meshInstanceVbo);
     glCreateBuffers(1, &m_meshAlphaVbo);
@@ -79,7 +86,10 @@ void TreeRenderer::shutdown()
     m_lod0BySpecies.clear();
     m_midBySpecies.clear();
     m_bbBySpecies.clear();
+    m_shadowLod0BySpecies.clear();
+    m_shadowMidBySpecies.clear();
     m_meshShader.destroy();
+    m_shadowShader.destroy();
     m_initialized = false;
 }
 
@@ -180,6 +190,8 @@ void TreeRenderer::loadSpecies(const std::vector<TreeSpeciesConfig>& configs,
     m_lod0BySpecies.assign(m_species.size(), {});
     m_midBySpecies.assign(m_species.size(), {});
     m_bbBySpecies.assign(m_species.size(), {});
+    m_shadowLod0BySpecies.assign(m_species.size(), {});
+    m_shadowMidBySpecies.assign(m_species.size(), {});
     bindInstanceBuffers();
 
     Logger::info("Tree renderer: " + std::to_string(m_species.size()) + " species loaded");
@@ -477,6 +489,147 @@ void TreeRenderer::render(const std::vector<const FoliageChunk*>& chunks,
             drawMeshTier(m_species[si].midPrims, m_midBySpecies[si]);
             drawMeshTier(m_species[si].billboardPrims, m_bbBySpecies[si], true, 0.4f);
         }
+    }
+}
+
+void TreeRenderer::drawShadowTier(const std::vector<PrimDraw>& prims,
+                                  const std::vector<Bucketed>& bucket)
+{
+    if (prims.empty() || bucket.empty())
+    {
+        return;
+    }
+    int count = static_cast<int>(bucket.size());
+    ensureInstanceCapacity(count);
+
+    // Depth pass needs only the model matrices (no crossfade alpha — @12 is
+    // unread by tree_shadow.vert).
+    m_matScratch.resize(bucket.size());
+    for (size_t i = 0; i < bucket.size(); ++i)
+    {
+        m_matScratch[i] = bucket[i].model;
+    }
+    glNamedBufferSubData(m_meshInstanceVbo, 0,
+                         count * static_cast<GLsizeiptr>(sizeof(glm::mat4)), m_matScratch.data());
+
+    for (const PrimDraw& prim : prims)
+    {
+        if (!prim.mesh)
+        {
+            continue;
+        }
+        m_shadowShader.setMat4("u_nodeMatrix", prim.nodeMatrix);
+
+        bool hasTex = false;
+        glm::vec3 albedo(0.30f, 0.40f, 0.20f);
+        bool doubleSided = false;
+        bool useAlphaTest = false;
+        float cutoff = 0.5f;
+        if (prim.material)
+        {
+            if (prim.material->hasDiffuseTexture())
+            {
+                glBindTextureUnit(0, prim.material->getDiffuseTexture()->getId());
+                hasTex = true;
+            }
+            albedo = (prim.material->getType() == MaterialType::PBR)
+                         ? prim.material->getAlbedo()
+                         : prim.material->getDiffuseColor();
+            doubleSided = prim.material->isDoubleSided();
+            useAlphaTest = (prim.material->getAlphaMode() == AlphaMode::MASK);
+            cutoff = prim.material->getAlphaCutoff();
+        }
+        m_shadowShader.setBool("u_hasTexture", hasTex);
+        m_shadowShader.setVec3("u_albedoFactor", albedo);
+        m_shadowShader.setBool("u_useAlphaTest", useAlphaTest);
+        m_shadowShader.setFloat("u_alphaCutoff", cutoff);
+
+        // Two-sided leaves must not cull or half the canopy shadow drops out.
+        if (doubleSided)
+        {
+            glDisable(GL_CULL_FACE);
+        }
+        else
+        {
+            glEnable(GL_CULL_FACE);
+        }
+
+        glBindVertexArray(prim.mesh->getVao());
+        glDrawElementsInstanced(GL_TRIANGLES,
+                                static_cast<GLsizei>(prim.mesh->getIndexCount()),
+                                GL_UNSIGNED_INT, nullptr, count);
+    }
+}
+
+void TreeRenderer::renderShadow(const std::vector<const FoliageChunk*>& chunks,
+                                const Camera& camera,
+                                const glm::mat4& lightSpaceMatrix,
+                                float time,
+                                const glm::vec3& lightRadiance,
+                                const glm::vec3& lightDir)
+{
+    if (!m_initialized || m_species.empty() || chunks.empty() || m_shadowShader.getId() == 0)
+    {
+        return;
+    }
+
+    const glm::vec3 camPos = camera.getPosition();
+
+    for (auto& v : m_shadowLod0BySpecies) { v.clear(); }
+    for (auto& v : m_shadowMidBySpecies) { v.clear(); }
+
+    // Bucket casters by camera distance into the SAME mesh tier the viewer sees
+    // (LOD0 near, mid beyond) so the shadow tracks the drawn mesh. Trees past
+    // billboardDistance are impostor-tier and do NOT cast (D4). No crossfade in
+    // depth — the dominant tier casts across the transition band.
+    for (const FoliageChunk* chunk : chunks)
+    {
+        for (const TreeInstance& tree : chunk->getTrees())
+        {
+            if (tree.speciesIndex >= m_species.size())
+            {
+                continue;
+            }
+            const float dist = glm::distance(camPos, tree.position);
+            if (dist > billboardDistance)
+            {
+                continue;
+            }
+            const uint32_t si = tree.speciesIndex;
+            const TreeSpecies& sp = m_species[si];
+
+            glm::mat4 model = glm::translate(glm::mat4(1.0f), tree.position);
+            model = glm::rotate(model, tree.rotation, glm::vec3(0.0f, 1.0f, 0.0f));
+            model = glm::scale(model, glm::vec3(tree.scale));
+
+            if (dist < lodDistance || sp.midPrims.empty())
+            {
+                m_shadowLod0BySpecies[si].push_back({model, 1.0f});
+            }
+            else
+            {
+                m_shadowMidBySpecies[si].push_back({model, 1.0f});
+            }
+        }
+    }
+
+    m_shadowShader.use();
+    m_shadowShader.setMat4("u_lightSpaceMatrix", lightSpaceMatrix);
+    m_shadowShader.setFloat("u_time", time);
+    m_shadowShader.setVec3("u_windDirection", glm::normalize(windDirection));
+    m_shadowShader.setFloat("u_windAmplitude", windAmplitude);
+    m_shadowShader.setFloat("u_windFrequency", windFrequency);
+    m_shadowShader.setVec3("u_lightRadiance", lightRadiance);
+    m_shadowShader.setVec3("u_lightDir", lightDir);
+    m_shadowShader.setInt("u_texture", 0);
+
+    // Per-material cull toggling inside; RAII restores the shadow pass's prior
+    // cull state so the caller (renderer shadow pass) stays composable.
+    ScopedCullFace cullGuard{true};
+    for (size_t si = 0; si < m_species.size(); ++si)
+    {
+        drawShadowTier(m_species[si].lod0Prims, m_shadowLod0BySpecies[si]);
+        drawShadowTier(m_species[si].midPrims, m_shadowMidBySpecies[si]);
     }
 }
 

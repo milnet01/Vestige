@@ -87,6 +87,28 @@ public:
                 const DirectionalLight* dirLight = nullptr,
                 const glm::vec4& clipPlane = glm::vec4(0.0f));
 
+    /// @brief Renders LOD0 + mid tree meshes into one cascade's depth so trees
+    ///        cast ground shadows (design §4.4/T4). Mirrors the foliage caster:
+    ///        called once per cascade from the renderer's shadow pass with that
+    ///        cascade's light-space matrix. The far impostor tier does NOT cast
+    ///        (D4) — a distant flat card's cast is ill-defined and negligible.
+    ///        Casters are bucketed into the SAME tier the viewer sees (LOD0 near,
+    ///        mid beyond) so the shadow tracks the drawn mesh. Wind/time uniforms
+    ///        come from this renderer's public wind fields + @a time, matching
+    ///        the main pass so shadows don't detach from the swaying canopy.
+    /// @param chunks Vegetation chunks (FoliageManager::getAllChunks — trees only).
+    /// @param camera Camera whose position drives the distance/tier cull.
+    /// @param lightSpaceMatrix This cascade's light-space view-projection.
+    /// @param time Elapsed time for wind sway (synced to the main pass clock).
+    /// @param lightRadiance Directional radiance (colour × intensity) for RSM flux.
+    /// @param lightDir Directional light travel direction (RSM flux cosine).
+    void renderShadow(const std::vector<const FoliageChunk*>& chunks,
+                      const Camera& camera,
+                      const glm::mat4& lightSpaceMatrix,
+                      float time,
+                      const glm::vec3& lightRadiance,
+                      const glm::vec3& lightDir);
+
     /// @brief Distance at which LOD0 → mid transition begins (m).
     float lodDistance = 45.0f;
 
@@ -161,6 +183,13 @@ private:
                       bool forceAlphaTest = false,
                       float forceCutoff = 0.5f);
 
+    /// @brief Depth-only sibling of drawMeshTier for the shadow pass: uploads a
+    ///        bucket's model matrices (no crossfade alpha) and draws every prim
+    ///        instanced through m_shadowShader, honouring per-material
+    ///        alpha-cutout + double-sided cull for correct leaf shadows.
+    void drawShadowTier(const std::vector<PrimDraw>& prims,
+                        const std::vector<Bucketed>& bucket);
+
     /// @brief Sets the shared CSM + directional-light uniforms on @a shader
     ///        (Mesa fallback binds a sampler2DArray to unit 3 when unshadowed).
     void setLightingUniforms(Shader& shader, CascadedShadowMap* csm,
@@ -168,6 +197,8 @@ private:
 
     // Shaders (all three LOD tiers use the one instanced mesh shader)
     Shader m_meshShader;
+    // Depth+flux caster for the shadow pass (LOD0 + mid only, D4).
+    Shader m_shadowShader;
 
     // Species table (indexed by TreeInstance::speciesIndex)
     std::vector<TreeSpecies> m_species;
@@ -183,6 +214,9 @@ private:
     std::vector<std::vector<Bucketed>> m_lod0BySpecies;
     std::vector<std::vector<Bucketed>> m_midBySpecies;
     std::vector<std::vector<Bucketed>> m_bbBySpecies;
+    // Shadow-pass caster buckets (LOD0 + mid only; refilled per cascade).
+    std::vector<std::vector<Bucketed>> m_shadowLod0BySpecies;
+    std::vector<std::vector<Bucketed>> m_shadowMidBySpecies;
     std::vector<glm::mat4> m_matScratch;    ///< Flat mat4 upload staging.
     std::vector<float> m_alphaScratch;      ///< Flat alpha upload staging.
 

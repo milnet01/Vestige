@@ -335,6 +335,8 @@ bool Engine::initialize(const EngineConfig& config)
 
     // Wire up foliage shadow casting into the renderer's shadow pass
     m_renderer->setFoliageShadowCaster(m_foliageRenderer, m_foliageManager);
+    // Trees cast too (T4, 3D_E-0033) — reuses the foliage manager's chunk store.
+    m_renderer->setTreeShadowCaster(m_treeRenderer);
 
     // Give the editor access to the resource manager and foliage manager
     if (m_editor)
@@ -2038,10 +2040,11 @@ void Engine::shutdown()
         m_window->saveWindowState();
     }
 
-    // Clear foliage shadow pointers before destroying the foliage renderer
+    // Clear foliage + tree shadow pointers before destroying those renderers
     if (m_renderer)
     {
         m_renderer->setFoliageShadowCaster(nullptr, nullptr);
+        m_renderer->setTreeShadowCaster(nullptr);
     }
 
     // Tear down the music player BEFORE the system registry. It borrows
