@@ -75,9 +75,9 @@ Files: `engine/renderer/tree_renderer.{h,cpp}`, `assets/shaders/tree_mesh.{vert,
      shapes, never a dissolve.
   2. **Impostor is a hard cutout while the mid mesh blends** — the mid→far fade is asymmetric,
      so impostor cards appear/disappear abruptly against a smoothly-fading mid mesh.
-  3. **Shadow pass has no crossfade at all** — casters hard-switch tier at exactly
-     `lodDistance`/`billboardDistance` (`tree_renderer.cpp` ~605-612), so the ground shadow
-     silhouette snaps mid-fade.
+  3. **Shadow pass has no crossfade at all** — casters hard-switch LOD0→mid at `lodDistance`
+     (`tree_renderer.cpp:605`) and hard-cull to nothing at `billboardDistance` (`:594`), so the ground
+     shadow silhouette snaps at both boundaries.
   4. **Double-draw density pulse** — both tiers with two-sided leaves + blend briefly double
      canopy overdraw, reading as a brightness/thickness pulse.
 
@@ -118,8 +118,10 @@ Files: `engine/renderer/tree_renderer.{h,cpp}`, `assets/shaders/tree_mesh.{vert,
   way loc 4/5 are filled. `bindInstanceBuffers` only touches loc 6-9/12 — so this is a
   **shader-declaration-only** change, no C++ VAO work (confirmed precondition, §10 R1).
 - Build the world-space tangent/bitangent with the same `nm = mat3(i_model)*mat3(u_nodeMatrix)`
-  used for the normal, Gram-Schmidt-orthonormalising `a_tangent` against `a_normal` as `scene.vert`
-  does; emit `v_tangent`, `v_bitangent` alongside `v_normal`.
+  used for the normal: `safeNormalize` each of `nm * a_tangent` and `nm * a_bitangent` with a
+  world-axis fallback, mirroring `scene.vert`'s TBN build (`scene.vert.glsl:223-226`, which
+  independently normalizes T/B/N — no Gram-Schmidt — with a fallback so a degenerate synthesized
+  tangent can't produce NaN lighting); emit `v_tangent`, `v_bitangent` alongside `v_normal`.
 
 **Fragment (`tree_mesh.frag.glsl`):**
 - New uniforms: `uniform sampler2D u_normalMap; uniform bool u_hasNormalMap;` on unit **1**
@@ -174,11 +176,13 @@ T9), and it is why the dissolve is slice 9, not slice 10.
      hard-pushing `{model, 1.0f}` (`tree_renderer.cpp:607/611`), mirroring `render()`'s band logic:
      - **45–60 m (LOD0↔mid): a two-caster crossfade** — feed **both** LOD0 (alpha `1-t`) and mid
        (alpha `t`) through the band.
-     - **180–195 m (mid→nothing): a single-caster fade-out** — feed the mid caster alpha `1-t` so it
-       **dissolves to nothing** by 195 m. This requires extending the caster cull from the current hard
-       `dist > billboardDistance` cut (`tree_renderer.cpp:594`) out to `billboardDistance + fadeRange`.
-       The impostor still does **not** cast (D4 / parent T4) — no billboard caster is added; the far band
-       is a mid-caster fade-out, not a two-tier crossfade (holds the D4 scope cap).
+     - **180–195 m (near-tier→nothing): a single-caster fade-out** — feed the active near-tier caster
+       (mid for most species; LOD0 for a species whose mid tier collapsed, `sp.midPrims.empty()` at
+       `:605`) alpha `1-t` so it **dissolves to nothing** by 195 m. This requires extending the caster
+       cull from the current hard `dist > billboardDistance` cut (`tree_renderer.cpp:594`) out to
+       `billboardDistance + fadeRange`. The impostor still does **not** cast (D4 / parent T4) — no
+       billboard caster is added; the far band is a single-caster fade-out, not a two-tier crossfade
+       (holds the D4 scope cap).
   3. *(CPU)* `drawShadowTier` uploads that alpha to the binding-3 VBO — today it uploads **only** the
      model-matrix VBO and the comment at `tree_renderer.cpp:505-506` states "@12 is unread"; that comment
      and gap are removed here.
@@ -207,9 +211,9 @@ free for A2C coverage.
   dissolve `discard` (which never writes `fragColor.a`): the dissolve decides *which* fragments survive
   per tier, this write sets the surviving leaf's edge coverage.
 - **A2C enable/disable** is a `ScopedState` around the leaf-tier draw in `drawMeshTier`, active only
-  when `msaaActive` (§2 covers how the flag reaches `TreeRenderer` and is uploaded to the
-  `u_msaaActive` uniform). It stays disabled for bark and for the non-MSAA modes so we never get a
-  hard 50%-cutout regression there.
+  when `msaaActive` (§2: how the CPU field reaches `TreeRenderer` from the call site; §5: the
+  `u_msaaActive` uniform upload). It stays disabled for bark and for the non-MSAA modes so we never get
+  a hard 50%-cutout regression there.
 
 ## 5. CPU / GPU placement (project Rule 7)
 
@@ -255,13 +259,18 @@ class the parent doc uses for its perf/visual acceptance.
    there is the mid caster's shadow fading smoothly to nothing, not a two-caster crossfade.
 5. **Per-AA-mode smoke** *(dev-gate)* — verify leaf edges in each of `NONE / MSAA_4X / TAA / SMAA /
    FXAA`: A2C engaged only in `MSAA_4X`, and no hard 50%-cutout regression in the other four.
+6. **Coverage stability** *(dev-gate)* — walk the camera from near to far past a stand; acceptance
+   (screenshot pair, coverage-preservation on vs off): the canopy holds its leaf density into the
+   distance and doesn't thin/sparkle (the T10 mip-thinning fix, goal 2). Distinct from item 4's
+   crossfade-band pulse — this is steady-state distance thinning, a different mechanism.
 
 **Rollback bar (per slice).** Each slice ships behind its gate; if the gate shows a regression, revert
 *that slice's* change and reassess before the next slice — do not stack a fix on a regressed base.
 Concretely: **T8** reverts if item 3 shows any backlit underside darker than ambient; **T9** reverts to
 the current blend if the dissolve reads "sparkly" and widening `fadeRange` (R4) doesn't resolve it;
 **T10** reverts (or gates A2C behind the High/Ultra tree tier, §7) if the item-1 perf gate drops below
-60 FPS / the Tree pass exceeds 2.0 ms, or item 5 shows a hard-cutout regression in a non-MSAA mode.
+60 FPS / the Tree pass exceeds 2.0 ms, or item 5 shows a hard-cutout regression in a non-MSAA mode —
+and drops just the coverage rescale if item 6 shows the canopy thinning with distance.
 
 ## 7. Performance plan (60 FPS hard floor)
 
@@ -298,10 +307,11 @@ the current blend if the dissolve reads "sparkly" and widening `fadeRange` (R4) 
   cutout-tier blend and write opaque `fragColor.a`; plumb `i_alpha` + a copied
   `interleavedGradientNoise` + matching dissolve into `tree_shadow.*`; compute shadow-pass crossfade
   alpha in `renderShadow` + upload it in `drawShadowTier`; feed both casters through the LOD0↔mid band
-  only (mid fades to nothing at the far boundary — no billboard caster). Verify: §6 items 1, 4.
+  only (mid fades to nothing at the far boundary via extending the caster cull to
+  `billboardDistance + fadeRange` — no billboard caster). Verify: §6 items 1, 4.
 - **T10 — Soft leaf-card edges.** Coverage-preservation + fwidth coverage in `tree_mesh.frag`;
   change T9's opaque `fragColor.a` write to the mode-selected `cov`/`1.0`; A2C `ScopedState` around
-  the leaf draw gated on the new `msaaActive` flag. Verify: §6 items 1, 5.
+  the leaf draw gated on the new `msaaActive` flag. Verify: §6 items 1, 5, 6.
 
 Order is strict: T8 (biggest payoff, self-contained) → T9 (dissolve — removes the crossfade blend,
 freeing the alpha channel) → T10 (soft edges — claims that alpha channel for A2C, so it **depends on
@@ -391,4 +401,16 @@ _(each loop dispatched cold, no prior-loop briefing — global rule 14 / project
   applies the dissolve at both boundaries (two-caster crossfade near, single-caster fade-out far with the
   cull extended to `billboardDistance + fadeRange`), §7 budgets the extra ring. Polish: D3 dependency
   note, §1 goal→slice map, `texAlpha < u_alphaCutoff` naming, §4.2 write/read phrasing.
-- Loop 4 — pending (cold re-read of the edited doc).
+- **Loop 4 (2 lanes, cold re-read).**
+  Tally: CRITICAL 0 · HIGH 0 · MEDIUM 2 · LOW 3 · INFO 2 (verified 7 / unverified 0). No HIGH — the
+  two-boundary shadow fix, msaaActive→T10 attribution, and every cited `file:line` all re-verified
+  clean. Two substantive fixes: (1) **§4.1 Gram-Schmidt misattribution** — `scene.vert:223-226`
+  independently `safeNormalize`s T/B/N (no Gram-Schmidt), so "as scene.vert does" was false; §4.1 now
+  matches the real safeNormalize-with-fallback pattern. (2) **missing coverage-preservation gate** —
+  T10 bundles coverage-preservation (distance density, goal 2) with A2C, but only A2C was gated; added
+  §6 item 6 (coverage-stability dev-gate) + rollback trigger + §9 T10 verify map. Polish: far-band
+  fade generalized for mid-less species (`sp.midPrims.empty()` → LOD0 caster); §2 root-cause-#3 cite
+  split (`:605` switch / `:594` cull); §4.3 `msaaActive` pointer split §2-field/§5-upload; §9 notes the
+  cull extension. INFO left: "no artist TANGENT" is verifiable only on local git-ignored assets
+  (conclusion holds either way; TBN-quality caveat already present).
+- Loop 5 — pending (cold re-read of the edited doc).
