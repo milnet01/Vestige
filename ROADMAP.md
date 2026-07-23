@@ -257,8 +257,10 @@ Foundations shipped via commit `fa0b100` — "Phase 9C: New domain systems — A
 - [x] Sound material interactions (footstep sounds derived from physics material types) — **deferred to Phase 10.** ^3d_e-0023
   Delivered 2026-07-01 via the AX4 procedural / material-aware audio bundle (Phase 10): footstep + impact sounds synthesised from the struck SurfaceMaterial.
 - [ ] Music system (layered tracks, transitions, adaptive intensity) — **deferred to Phase 10.**
-- [ ] Reverb zones (indoor/outdoor, auto-detect room geometry) — **deferred to Phase 10.**
-- [ ] Audio occlusion (raycast-based, material-based transmission) — **deferred to Phase 10.**
+- [x] Reverb zones (indoor/outdoor, auto-detect room geometry) — **deferred to Phase 10.**
+  Delivered 2026-07-02..07-04 via the AX2/AX3 reverb + acoustic pre-bake bundle (Phase 10): native OpenAL convolution reverb aux slot with a parametric EAXReverb fallback, plus image-source/Sabine acoustic pre-bake feeding a runtime impulse response.
+- [x] Audio occlusion (raycast-based, material-based transmission) — **deferred to Phase 10.**
+  Delivered 2026-07-01 via the AX1 audio-occlusion bundle (Phase 10): AudioOcclusionSystem drives per-source occlusionFraction/Material from volumetric multi-ray casts against scene geometry (Fibonacci-sphere sampling, MT2-parallel, ray-budgeted).
 - [ ] Voice/dialogue playback (integrates with existing lip sync system) — **deferred to Phase 10.**
 - [ ] Editor: sound emitter placement, reverb zone painting, audio preview — **deferred to Phase 10.**
 
