@@ -1766,6 +1766,25 @@ void Engine::run()
                                                  m_renderer->getCascadedShadowMap(), reflClipPlane);
                     }
 
+                    // Trees in the reflection (T5, 3D_E-0033): mirror the treeline into
+                    // the pond with the reflected camera + clip plane. Cull against the
+                    // reflected frustum — the main tree pass already consumed
+                    // m_scratchVisibleChunks this frame, so reusing it here is safe.
+                    // msaaActive off: the reflection FBO is single-sample, so leave
+                    // A2C soft leaf edges to the main pass.
+                    glm::mat4 reflViewProj = reflectedCamera.getProjectionMatrix(aspectRatio)
+                                           * reflectedCamera.getViewMatrix();
+                    m_foliageManager->getVisibleChunks(reflViewProj, m_scratchVisibleChunks);
+                    if (!m_scratchVisibleChunks.empty())
+                    {
+                        const DirectionalLight* reflDirLight =
+                            m_renderData.hasDirectionalLight ? &m_renderData.directionalLight : nullptr;
+                        m_treeRenderer->msaaActive = false;
+                        m_treeRenderer->render(m_scratchVisibleChunks, reflectedCamera, reflViewProj,
+                                               elapsed, m_renderer->getCascadedShadowMap(),
+                                               reflDirLight, reflClipPlane);
+                    }
+
                     glDisable(GL_CLIP_DISTANCE0);
                 }
 
