@@ -259,9 +259,13 @@ build_and_test_msvc() {
         # inter-DLL deps. Same DLLs vc_redist installs beside a shipped app.
         cp "$msvc_root"/VC/Redist/MSVC/*/x64/Microsoft.VC*.CRT/*.dll build-msvc/bin/ 2>/dev/null || true
         # Only the compiled engine suite runs under Wine; -E excludes the host-Python
-        # data-lint tests (see header) — the Wine emulator can't run host Python.
+        # tests — the Wine emulator mangles their exit code (a passing host-python3
+        # test exits 0 but Wine reports non-zero → false ctest failure). They run
+        # natively in the Linux stages and don't exercise MSVC-compiled code, so
+        # excluding them loses no signal. ANY new host-Python ctest test must be added
+        # here (PerfGate joined LocalizationAudit/ShaderLint when 3D_E-0030 landed).
         "${GL_WRAP[@]}" ctest --test-dir build-msvc --output-on-failure -j "$JOBS" \
-            -E 'LocalizationAudit|ShaderLint' || exit 1
+            -E 'LocalizationAudit|ShaderLint|PerfGate' || exit 1
     )
     local rc=$?
     if [[ $rc -eq 0 ]]; then record "$label" ok $((SECONDS - start)); else record "$label" fail $((SECONDS - start)); fi
