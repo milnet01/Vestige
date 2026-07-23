@@ -358,6 +358,16 @@ void TreeRenderer::drawMeshTier(const std::vector<PrimDraw>& prims,
         m_meshShader.setBool("u_useAlphaTest", useAlphaTest);
         m_meshShader.setFloat("u_alphaCutoff", cutoff);
 
+        // Normal map (unit 1, T8): per-pixel relief on leaf/bark cards so light
+        // plays across the canopy. Bind a fallback sampler2D when absent so unit 1
+        // is never left unbound (Mesa-safe, mirrors the CSM fallback on unit 3).
+        bool hasNormalMap = prim.material && prim.material->hasNormalMap()
+                            && prim.material->getNormalMap();
+        glBindTextureUnit(1, hasNormalMap ? prim.material->getNormalMap()->getId()
+                                          : sharedSamplerFallback().getSampler2D());
+        m_meshShader.setInt("u_normalMap", 1);
+        m_meshShader.setBool("u_hasNormalMap", hasNormalMap);
+
         if (doubleSided)
         {
             glDisable(GL_CULL_FACE);

@@ -6,10 +6,13 @@
 ///        matrix, wind sway, and CSM view depth. (design §4.4/§4.6, 3D_E-0033)
 #version 450 core
 
-// Loaded-mesh vertex attributes (Mesh::upload layout: 0=pos,1=normal,3=texCoord)
+// Loaded-mesh vertex attributes (Mesh::upload layout: 0=pos,1=normal,3=texCoord,
+// 4=tangent,5=bitangent). Tangent/bitangent feed the normal-mapping TBN (T8).
 layout(location = 0) in vec3 a_position;
 layout(location = 1) in vec3 a_normal;
 layout(location = 3) in vec2 a_texCoord;
+layout(location = 4) in vec3 a_tangent;
+layout(location = 5) in vec3 a_bitangent;
 
 // Per-instance: model mat4 @6-9 (binding 1), crossfade alpha @12 (binding 3)
 layout(location = 6) in mat4 i_model;
@@ -25,10 +28,21 @@ uniform float u_windFrequency;
 uniform vec4 u_clipPlane;       // water clip plane (0 = disabled)
 
 out vec3 v_normal;
+out vec3 v_tangent;
+out vec3 v_bitangent;
 out vec3 v_worldPos;
 out vec2 v_texCoord;
 out float v_alpha;
 out float v_viewDepth;
+
+// Copied from scene.vert (no shared GLSL #include in this engine): normalize
+// unless the vector collapses, then fall back to a world axis so a degenerate
+// synthesized tangent can't produce NaN lighting.
+vec3 safeNormalize(vec3 v, vec3 fallback)
+{
+    float lenSq = dot(v, v);
+    return (lenSq > 1e-12) ? (v * inversesqrt(lenSq)) : fallback;
+}
 
 void main()
 {
@@ -45,6 +59,10 @@ void main()
 
     mat3 nm = mat3(i_model) * mat3(u_nodeMatrix);
     v_normal = normalize(nm * a_normal);
+    // World-space TBN vectors (independent normalize + world-axis fallback,
+    // mirroring scene.vert). Perturbed normal is assembled in the fragment.
+    v_tangent = safeNormalize(nm * a_tangent, vec3(1.0, 0.0, 0.0));
+    v_bitangent = safeNormalize(nm * a_bitangent, vec3(0.0, 1.0, 0.0));
     v_worldPos = world.xyz;
     v_texCoord = a_texCoord;
     v_alpha = i_alpha;

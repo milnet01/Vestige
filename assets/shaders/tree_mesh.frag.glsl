@@ -8,6 +8,8 @@
 #version 450 core
 
 in vec3 v_normal;
+in vec3 v_tangent;
+in vec3 v_bitangent;
 in vec3 v_worldPos;
 in vec2 v_texCoord;
 in float v_alpha;
@@ -20,6 +22,11 @@ uniform vec3 u_albedo;        // fallback flat colour when no texture
 uniform bool u_useAlphaTest;  // leaf cutout
 uniform float u_alphaCutoff;
 uniform vec3 u_cameraPos;
+
+// Normal map (unit 1) — per-pixel surface relief on the flat leaf/bark cards
+// so light plays across the canopy instead of sliding over a flat sheet (T8).
+uniform sampler2D u_normalMap;
+uniform bool u_hasNormalMap;
 
 // Directional light
 uniform bool u_hasDirectionalLight;
@@ -110,7 +117,22 @@ void main()
     vec3 finalColor;
     if (u_hasDirectionalLight)
     {
-        vec3 N = normalize(v_normal);
+        vec3 Ng = normalize(v_normal);
+        // Per-pixel normal from the tangent-space map (T8). No viewer flip: the
+        // leaf term below is abs()-based (two-sided) so a per-pixel N inherits the
+        // "backlit underside never black" guarantee by construction. Leaf cards
+        // fetch one mip coarser (+1 bias) to curb high-frequency shimmer; bark 0.
+        vec3 N;
+        if (u_hasNormalMap)
+        {
+            mat3 TBN = mat3(normalize(v_tangent), normalize(v_bitangent), Ng);
+            vec3 nts = texture(u_normalMap, v_texCoord, u_useAlphaTest ? 1.0 : 0.0).xyz * 2.0 - 1.0;
+            N = normalize(TBN * nts);
+        }
+        else
+        {
+            N = Ng;
+        }
         vec3 L = normalize(-u_lightDirection);
 
         // Leaf cards (u_useAlphaTest) are two-sided stand-ins for a rounded leaf
