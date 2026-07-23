@@ -10680,7 +10680,13 @@ existing cases (``HelpersMatchEvaluatorPrecisely``,
   `PerfGateCatchesRegression` (WILL_FAIL). Design:
   docs/phases/phase_10_perf_regression_gate_design.md (cold-eyes 5 loops).
 
+### Added
+
+- ****Normal-mapped tree leaf cards & bark** — the LOLIPOP tree packs' shipped normal maps now drive per-pixel canopy lighting (they were loaded into each material but never bound in the tree draw path), so leaves and bark catch light with surface relief instead of reading as flat cards up close (3D_E-0033, T8).**
+
 ### Changed
+
+- ****Tree LOD transitions are now a dithered screen-door dissolve** instead of an alpha blend — trees no longer ghost-fade or pop as they switch detail levels, and the ground shadow dissolves in lockstep at both tier boundaries. Leaf-cutout edges are softened via coverage-preservation (holds canopy density at distance) plus alpha-to-coverage anti-aliasing in MSAA 4× (3D_E-0033, T9/T10).**
 
 - **Meadow now renders realistic artist trees via a revived TreeRenderer (3D_E-0033 T2/T3)**
   Replaced the low-poly Kenney tree props with real game-ready LOLIPOP CC-BY
@@ -10705,6 +10711,10 @@ existing cases (``HelpersMatchEvaluatorPrecisely``,
   deleted.
 
 ### Fixed
+
+- ****Windows (msvc-wine) local-CI false-failed on `PerfGateSelftest`.** The Wine emulator mangles host-Python ctest exit codes (a passing test prints OK but reports non-zero); the PerfGate Python tests added by 3D_E-0030 are now excluded from the Wine ctest stage like the pre-existing `LocalizationAudit`/`ShaderLint` tests.**
+
+- ****Maple and pine tree leaf clusters rendered near-black up close.** Their foliage atlases are tagged `BLEND` (only fir is `MASK`), so they fell through to the one-sided bark lighting path and went dark once normal-mapped. All non-OPAQUE tree materials now use two-sided cutout leaf lighting and cast leaf-shaped (not solid-block) shadows (3D_E-0033).**
 
 - **Build: ship the X11 GLFW backend so the Linux release artifact builds**
   The external-deps refactor bumped GLFW to 3.4, which enables a Wayland

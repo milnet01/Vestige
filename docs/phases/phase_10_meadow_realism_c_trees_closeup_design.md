@@ -444,3 +444,30 @@ _(each loop dispatched cold, no prior-loop briefing — global rule 14 / project
 
 **Signed off** (cold-eyes converged, 2026-07-23) — per the delegated gate (cold-eyes convergence, then
 implement). Build order T8 → T9 → T10, each behind a full `local-ci.sh` + dev-gate capture.
+
+## 13. Implementation notes & deviations (2026-07-23)
+
+All three slices shipped + pushed, each user-confirmed on RX 6600. Deviations from the signed-off
+design, recorded per project Rule 5 / global Rule 13:
+
+- **D-IMPL-1 (T9 dissolve math — corrected).** §4.2/§4.3 specified the dissolve as `if (v_alpha < noise)
+  discard` with complementary alphas `1-t`/`t`. That is **wrong at the per-pixel level**: both tiers then
+  keep the *same* low-noise region (`noise ≤ v_alpha`), so at `t=0.5` they keep the identical 50% of
+  pixels and leave the other 50% as **canopy holes** (background through the tree). "Fractions summing to
+  1" is not a pixel partition. Shipped instead: a **signed complementary partition** — `v_alpha` is `+1`
+  for solid, `+(1-t)` for the outgoing tier (keeps `dither < v`), `-(1-t)` for the incoming tier (keeps
+  `dither ≥ |v|`). Exactly one tier draws per pixel → no holes, no double-draw. Same encoding in the
+  shadow pass. (commit T9; documented in `tree_mesh.frag.glsl`.)
+- **D-IMPL-2 (BLEND leaf-cluster reclassification — not in the design).** T8 exposed a latent bug: the
+  leaf-vs-bark lighting discriminator was `alphaMode == MASK`, but maple/pine leaf clusters are tagged
+  `BLEND` (only fir is `MASK`), so they used the one-sided *bark* lighting → near-black once normal-mapped.
+  Fixed by classifying **any non-OPAQUE material as a two-sided cutout leaf** (`useAlphaTest = alphaMode !=
+  OPAQUE`, `cutoff = 0.4` for BLEND) in both `drawMeshTier` and `drawShadowTier`. Latent since T2; a
+  T8 follow-up commit. Not anticipated by the design (which assumed MASK==leaf).
+- **D-IMPL-3 (T10 A2C enable — whole tree pass).** §4.3 said the A2C `ScopedState` wraps "the leaf-tier
+  draw." Shipped as a `glEnable/glDisable(GL_SAMPLE_ALPHA_TO_COVERAGE)` around the **entire** mesh-tier
+  draw block (all tiers) — bark writes `fragColor.a = 1.0` → full coverage → unaffected, so per-tier
+  scoping was unnecessary complexity. Behaviourally identical, simpler (Rule 2).
+- **Verified as designed:** synthesized tangents (R1) produced good TBNs on fir/pine/maple (no degenerate-
+  tangent artifacts); the two-boundary shadow dissolve (near crossfade + far fade-out + cull extension)
+  works; coverage-preservation + A2C soften edges in MSAA_4X. No slice needed its rollback bar.
