@@ -121,7 +121,10 @@ Files: `engine/renderer/tree_renderer.{h,cpp}`, `assets/shaders/tree_mesh.{vert,
   used for the normal: `safeNormalize` each of `nm * a_tangent` and `nm * a_bitangent` with a
   world-axis fallback, mirroring `scene.vert`'s TBN build (`scene.vert.glsl:223-226`, which
   independently normalizes T/B/N — no Gram-Schmidt — with a fallback so a degenerate synthesized
-  tangent can't produce NaN lighting); emit `v_tangent`, `v_bitangent` alongside `v_normal`.
+  tangent can't produce NaN lighting); emit `v_tangent`, `v_bitangent` alongside `v_normal`. Note
+  `safeNormalize` must be **copied into** `tree_mesh.vert` — there is no shared GLSL `#include`; the
+  helper is duplicated per shader today (`scene.vert.glsl:96`), the same copy the shadow dissolve makes
+  for `interleavedGradientNoise` (§4.2).
 
 **Fragment (`tree_mesh.frag.glsl`):**
 - New uniforms: `uniform sampler2D u_normalMap; uniform bool u_hasNormalMap;` on unit **1**
@@ -175,7 +178,8 @@ T9), and it is why the dissolve is slice 9, not slice 10.
   2. *(CPU)* `TreeRenderer::renderShadow` computes a per-instance fade alpha in its bucketing instead of
      hard-pushing `{model, 1.0f}` (`tree_renderer.cpp:607/611`), mirroring `render()`'s band logic:
      - **45–60 m (LOD0↔mid): a two-caster crossfade** — feed **both** LOD0 (alpha `1-t`) and mid
-       (alpha `t`) through the band.
+       (alpha `t`) through the band. (A mid-less species inherits `render()`'s handling — both buckets
+       are LOD0, so the near band stays ~constant-coverage LOD0+LOD0, benign.)
      - **180–195 m (near-tier→nothing): a single-caster fade-out** — feed the active near-tier caster
        (mid for most species; LOD0 for a species whose mid tier collapsed, `sp.midPrims.empty()` at
        `:605`) alpha `1-t` so it **dissolves to nothing** by 195 m. This requires extending the caster
@@ -233,9 +237,10 @@ shading maths that a GPU path must match).
 ## 6. Testing (project TESTING.md + Rule 4 audit)
 
 Rendering-shader changes have no pure-function CPU spec to unit-test; coverage is
-build + visual-regression + perf, consistent with how T1–T7 were verified. Items 3–5 are **manual
-dev-machine gates** (subjective visual capture on the RX 6600), not automated CI gates — the same
-class the parent doc uses for its perf/visual acceptance.
+build + visual-regression + perf, consistent with how T1–T7 were verified. Items 3–6 are **manual
+dev-machine visual gates** (subjective capture on the RX 6600) and item 7 is the **objective
+dev-machine perf gate** — none are automated CI gates, the same class the parent doc uses for its
+perf/visual acceptance.
 
 1. **Build + existing-suite gate** *(CI)* — `local-ci.sh` (full, no `--quick`): builds clean and all
    existing ctest green. The **meadow GL-error walk** (0 GL errors at LOD0/mid/impostor distances) is a
@@ -263,12 +268,15 @@ class the parent doc uses for its perf/visual acceptance.
    (screenshot pair, coverage-preservation on vs off): the canopy holds its leaf density into the
    distance and doesn't thin/sparkle (the T10 mip-thinning fix, goal 2). Distinct from item 4's
    crossfade-band pulse — this is steady-state distance thinning, a different mechanism.
+7. **Perf gate** *(dev-machine, objective)* — `--profile-log` before/after **each** slice (cross-cutting,
+   like item 1): 60 FPS locked and the combined Tree + tree-shadow GPU pass ≤ 2.0 ms on the RX 6600
+   (§7 budget). This is the enumerated home of the perf criterion the rollback bar keys on.
 
 **Rollback bar (per slice).** Each slice ships behind its gate; if the gate shows a regression, revert
 *that slice's* change and reassess before the next slice — do not stack a fix on a regressed base.
 Concretely: **T8** reverts if item 3 shows any backlit underside darker than ambient; **T9** reverts to
 the current blend if the dissolve reads "sparkly" and widening `fadeRange` (R4) doesn't resolve it;
-**T10** reverts (or gates A2C behind the High/Ultra tree tier, §7) if the item-1 perf gate drops below
+**T10** reverts (or gates A2C behind the High/Ultra tree tier, §7) if the item-7 perf gate drops below
 60 FPS / the Tree pass exceeds 2.0 ms, or item 5 shows a hard-cutout regression in a non-MSAA mode —
 and drops just the coverage rescale if item 6 shows the canopy thinning with distance.
 
@@ -284,8 +292,9 @@ and drops just the coverage rescale if item 6 shows the canopy thinning with dis
   45–60 m band doubles the tree depth-only draws *for trees in that band only* (today it hard-switches
   to one tier); (b) the far fade-out extends the mid-caster cull from `billboardDistance` to
   `billboardDistance + fadeRange`, adding the mid casters in the thin 180–195 m ring that are culled
-  today. Depth-only casters are cheap (position + wind + cutout, no shading), but both deltas are real
-  and currently unbudgeted — include the shadow pass in the `--profile-log` before/after and keep the
+  today. The caster fragments are cheap RSM-flux writes (position + wind + cutout + a single N·L flux
+  write, `tree_shadow.frag:43-46` — no CSM sampling or light loop), but both deltas are real and
+  currently unbudgeted — include the shadow pass in the `--profile-log` before/after and keep the
   combined Tree + tree-shadow cost inside the frame budget.
 - Risk: the mip-coarser normal fetch (T8) and coverage rescale (T10) both touch every canopy pixel;
   measure with `--profile-log` before/after and hold the ≤ 2.0 ms cap. If A2C in `MSAA_4X` costs
@@ -302,16 +311,16 @@ and drops just the coverage rescale if item 6 shows the canopy thinning with dis
 
 - **T8 — Normal-mapped leaf cards & bark.** Bind `getNormalMap()`→unit 1 in `drawMeshTier` (shadow
   tier stays diffuse-only); add tangent/bitangent + TBN to `tree_mesh.vert`; sample + perturb in
-  `tree_mesh.frag` (no flip, D2); leaf-only mip-bias the fetch. Verify: §6 items 1, 2, 3.
+  `tree_mesh.frag` (no flip, D2); leaf-only mip-bias the fetch. Verify: §6 items 1, 2, 3, 7.
 - **T9 — Dithered dissolve crossfade.** Screen-door dissolve `discard` in `tree_mesh.frag`; drop the
   cutout-tier blend and write opaque `fragColor.a`; plumb `i_alpha` + a copied
   `interleavedGradientNoise` + matching dissolve into `tree_shadow.*`; compute shadow-pass crossfade
   alpha in `renderShadow` + upload it in `drawShadowTier`; feed both casters through the LOD0↔mid band
   only (mid fades to nothing at the far boundary via extending the caster cull to
-  `billboardDistance + fadeRange` — no billboard caster). Verify: §6 items 1, 4.
+  `billboardDistance + fadeRange` — no billboard caster). Verify: §6 items 1, 4, 7.
 - **T10 — Soft leaf-card edges.** Coverage-preservation + fwidth coverage in `tree_mesh.frag`;
   change T9's opaque `fragColor.a` write to the mode-selected `cov`/`1.0`; A2C `ScopedState` around
-  the leaf draw gated on the new `msaaActive` flag. Verify: §6 items 1, 5, 6.
+  the leaf draw gated on the new `msaaActive` flag. Verify: §6 items 1, 5, 6, 7.
 
 Order is strict: T8 (biggest payoff, self-contained) → T9 (dissolve — removes the crossfade blend,
 freeing the alpha channel) → T10 (soft edges — claims that alpha channel for A2C, so it **depends on
@@ -336,7 +345,9 @@ T9**). Each slice ships behind a full `local-ci.sh` + a dev-gate visual capture 
 - **R4:** If the dithered dissolve reads as "sparkly" at the default `fadeRange = 15 m`, widen the
   band (D6) rather than switching back to blend. Capture before/after; don't tune blind.
 - **Scope caps:** no PBR metallic/roughness (D7); no LOD-threshold changes unless D6 triggers; no
-  change to species table, placement, or asset pipeline; birch stays dropped.
+  change to species table, placement, or asset pipeline; birch stays dropped. The far-fade shadow-caster
+  cull extension to `billboardDistance + fadeRange` (§4.2) is a mechanism byproduct derived from existing
+  constants — **not** a retune of `lodDistance`/`billboardDistance`/`maxDistance`.
 
 ## 11. Cited sources
 
@@ -413,4 +424,17 @@ _(each loop dispatched cold, no prior-loop briefing — global rule 14 / project
   split (`:605` switch / `:594` cull); §4.3 `msaaActive` pointer split §2-field/§5-upload; §9 notes the
   cull extension. INFO left: "no artist TANGENT" is verifiable only on local git-ignored assets
   (conclusion holds either way; TBN-quality caveat already present).
-- Loop 5 — pending (cold re-read of the edited doc).
+- **Loop 5 (2 lanes, cold re-read).**
+  Tally: CRITICAL 0 · HIGH 0 · MEDIUM 1 · LOW 2 · INFO 3 (verified 6 / unverified 0). Both lanes
+  returned essentially sound ("substantially sound" / "implementable as-is") — every cited `file:line`
+  re-verified exact, no new code-claim errors. Fixed: (1) the T10 rollback cited an "item-1 perf gate"
+  but item 1 (CI build) holds no FPS/ms criterion — added §6 **item 7** (objective dev-machine perf
+  gate, `--profile-log` 60 FPS / ≤2.0 ms) as the enumerated home and re-pointed the rollback; item 7
+  added to all §9 verify maps. (2) §4.1 told the implementer to call `safeNormalize` in `tree_mesh.vert`
+  without noting it must be **copied in** (no shared GLSL `#include`; helper duplicated per shader) —
+  added, matching the `interleavedGradientNoise` copy note. (3) §7 "no shading" corrected — the caster is
+  an RSM-flux pass doing N·L (`tree_shadow.frag:43-46`). Polish: intro range 3–5→3–6+item 7; near-band
+  no-mid-species clause (LOD0+LOD0, benign); scope-cap disclaimer that the cull extension isn't a
+  threshold retune.
+- Loop 6 — pending (final convergence confirmation; loop 5 still carried a MEDIUM, so one more cold
+  read to confirm the fix batch holds before sign-off).
