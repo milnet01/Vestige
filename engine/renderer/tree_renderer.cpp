@@ -15,7 +15,6 @@
 #include "renderer/tree_renderer.h"
 #include "renderer/cascaded_shadow_map.h"
 #include "renderer/sampler_fallback.h"
-#include "renderer/scoped_blend_state.h"
 #include "renderer/scoped_cull_face.h"
 #include "resource/model.h"
 #include "resource/resource_manager.h"
@@ -445,6 +444,10 @@ void TreeRenderer::render(const std::vector<const FoliageChunk*>& chunks,
             const float nearSwitch = lodDistance;
             const float farSwitch = hasMid ? billboardDistance : lodDistance;
 
+            // v_alpha is the SIGNED screen-door dissolve (tree_mesh.frag §T9):
+            // +1 solid; OUTGOING tier +(1-t) keeps dither<v; INCOMING tier -(1-t)
+            // keeps dither>=|v|. The two form a complementary dither partition —
+            // exactly one draws per pixel, so the crossfade has no holes/double-draw.
             if (dist < nearSwitch)
             {
                 pushLod0(1.0f);
@@ -452,8 +455,8 @@ void TreeRenderer::render(const std::vector<const FoliageChunk*>& chunks,
             else if (hasMid && dist < nearSwitch + fadeRange)
             {
                 const float t = (dist - nearSwitch) / fadeRange;
-                pushLod0(1.0f - t);
-                pushMid(t);
+                pushLod0(1.0f - t);   // outgoing
+                pushMid(t - 1.0f);    // incoming = -(1-t)
             }
             else if (dist < farSwitch)
             {
@@ -464,9 +467,9 @@ void TreeRenderer::render(const std::vector<const FoliageChunk*>& chunks,
             {
                 // Crossfade the last mesh tier (mid if present, else LOD0) → billboard.
                 const float t = (dist - farSwitch) / fadeRange;
-                if (hasMid) { pushMid(1.0f - t); }
+                if (hasMid) { pushMid(1.0f - t); }   // outgoing
                 else { pushLod0(1.0f - t); }
-                pushBB(t);
+                pushBB(t - 1.0f);                     // incoming = -(1-t)
             }
             else if (hasBB)
             {
@@ -497,10 +500,9 @@ void TreeRenderer::render(const std::vector<const FoliageChunk*>& chunks,
     setLightingUniforms(m_meshShader, csm, dirLight);
 
     {
-        // Blend on for the crossfade bands; cull toggled per-material inside.
-        // All three tiers are meshes; the far impostor forces an alpha-cutout
-        // (its atlas is BLEND — cutout is order-independent, no halo).
-        ScopedBlendState blendGuard{true, GL_SRC_ALPHA, GL_ONE_MINUS_SRC_ALPHA};
+        // T9: no blend — the crossfade is a screen-door dissolve (opaque fragments,
+        // proper depth), so tiers z-sort correctly and there's no sorting/halo. Cull
+        // is toggled per-material inside drawMeshTier (two-sided leaves disable it).
         ScopedCullFace cullGuard{true};
         for (size_t si = 0; si < m_species.size(); ++si)
         {
@@ -521,15 +523,19 @@ void TreeRenderer::drawShadowTier(const std::vector<PrimDraw>& prims,
     int count = static_cast<int>(bucket.size());
     ensureInstanceCapacity(count);
 
-    // Depth pass needs only the model matrices (no crossfade alpha — @12 is
-    // unread by tree_shadow.vert).
+    // T9: upload the model matrices AND the signed crossfade-dissolve alpha (@12)
+    // so the depth pass dissolves in lockstep with the visible canopy (tree_shadow.*).
     m_matScratch.resize(bucket.size());
+    m_alphaScratch.resize(bucket.size());
     for (size_t i = 0; i < bucket.size(); ++i)
     {
         m_matScratch[i] = bucket[i].model;
+        m_alphaScratch[i] = bucket[i].alpha;
     }
     glNamedBufferSubData(m_meshInstanceVbo, 0,
                          count * static_cast<GLsizeiptr>(sizeof(glm::mat4)), m_matScratch.data());
+    glNamedBufferSubData(m_meshAlphaVbo, 0,
+                         count * static_cast<GLsizeiptr>(sizeof(float)), m_alphaScratch.data());
 
     for (const PrimDraw& prim : prims)
     {
@@ -555,8 +561,11 @@ void TreeRenderer::drawShadowTier(const std::vector<PrimDraw>& prims,
                          ? prim.material->getAlbedo()
                          : prim.material->getDiffuseColor();
             doubleSided = prim.material->isDoubleSided();
-            useAlphaTest = (prim.material->getAlphaMode() == AlphaMode::MASK);
-            cutoff = prim.material->getAlphaCutoff();
+            // Same leaf discriminator as drawMeshTier: BLEND clusters (maple/pine)
+            // must cut out too, or they cast solid-block shadows instead of leaf-shaped.
+            AlphaMode am = prim.material->getAlphaMode();
+            useAlphaTest = (am != AlphaMode::OPAQUE);
+            cutoff = (am == AlphaMode::MASK) ? prim.material->getAlphaCutoff() : 0.4f;
         }
         m_shadowShader.setBool("u_hasTexture", hasTex);
         m_shadowShader.setVec3("u_albedoFactor", albedo);
@@ -597,10 +606,15 @@ void TreeRenderer::renderShadow(const std::vector<const FoliageChunk*>& chunks,
     for (auto& v : m_shadowLod0BySpecies) { v.clear(); }
     for (auto& v : m_shadowMidBySpecies) { v.clear(); }
 
-    // Bucket casters by camera distance into the SAME mesh tier the viewer sees
-    // (LOD0 near, mid beyond) so the shadow tracks the drawn mesh. Trees past
-    // billboardDistance are impostor-tier and do NOT cast (D4). No crossfade in
-    // depth — the dominant tier casts across the transition band.
+    // Bucket casters into the SAME mesh tier the viewer sees, with the SAME signed
+    // screen-door dissolve as the visible pass (T9) so the ground shadow tracks the
+    // canopy through both tier transitions instead of snapping:
+    //   • LOD0↔mid band (lodDistance): two-caster crossfade (LOD0 +(1-t), mid -(1-t)).
+    //   • far boundary (billboardDistance): the active near-tier caster fades to
+    //     nothing over [billboardDistance, billboardDistance+fadeRange] — the impostor
+    //     never casts (D4), so this is a single-caster fade-out, not a crossfade.
+    // A no-mid species casts LOD0 across the whole range (skips the near crossfade).
+    const float shadowCull = billboardDistance + fadeRange;
     for (const FoliageChunk* chunk : chunks)
     {
         for (const TreeInstance& tree : chunk->getTrees())
@@ -610,7 +624,7 @@ void TreeRenderer::renderShadow(const std::vector<const FoliageChunk*>& chunks,
                 continue;
             }
             const float dist = glm::distance(camPos, tree.position);
-            if (dist > billboardDistance)
+            if (dist > shadowCull)
             {
                 continue;
             }
@@ -621,13 +635,29 @@ void TreeRenderer::renderShadow(const std::vector<const FoliageChunk*>& chunks,
             model = glm::rotate(model, tree.rotation, glm::vec3(0.0f, 1.0f, 0.0f));
             model = glm::scale(model, glm::vec3(tree.scale));
 
-            if (dist < lodDistance || sp.midPrims.empty())
+            const bool hasMid = !sp.midPrims.empty();
+            auto pushSL = [&](float a) { m_shadowLod0BySpecies[si].push_back({model, a}); };
+            auto pushSM = [&](float a) { m_shadowMidBySpecies[si].push_back({model, a}); };
+
+            if (dist < lodDistance)
             {
-                m_shadowLod0BySpecies[si].push_back({model, 1.0f});
+                pushSL(1.0f);
+            }
+            else if (hasMid && dist < lodDistance + fadeRange)
+            {
+                const float t = (dist - lodDistance) / fadeRange;
+                pushSL(1.0f - t);   // outgoing LOD0
+                pushSM(t - 1.0f);   // incoming mid = -(1-t)
+            }
+            else if (dist < billboardDistance)
+            {
+                if (hasMid) { pushSM(1.0f); } else { pushSL(1.0f); }
             }
             else
             {
-                m_shadowMidBySpecies[si].push_back({model, 1.0f});
+                // Far fade-out to nothing (dist in [billboardDistance, shadowCull]).
+                const float t = (dist - billboardDistance) / fadeRange;
+                if (hasMid) { pushSM(1.0f - t); } else { pushSL(1.0f - t); }
             }
         }
     }

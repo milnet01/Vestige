@@ -12,9 +12,10 @@ layout(location = 0) in vec3 a_position;
 layout(location = 1) in vec3 a_normal;
 layout(location = 3) in vec2 a_texCoord;
 
-// Per-instance: model mat4 @6-9 (binding 1). The crossfade alpha @12 (binding 3)
-// the VAO also carries is unused here — depth casting has no LOD crossfade.
+// Per-instance: model mat4 @6-9 (binding 1) + signed crossfade-dissolve alpha @12
+// (binding 3). T9: the depth pass dissolves in lockstep with the visible canopy.
 layout(location = 6) in mat4 i_model;
+layout(location = 12) in float i_alpha;
 
 uniform mat4 u_lightSpaceMatrix;
 uniform mat4 u_nodeMatrix;      // baked node world transform for this primitive
@@ -25,6 +26,7 @@ uniform float u_windFrequency;
 
 out vec2 v_texCoord;
 out vec3 v_worldNormal;
+out float v_alpha;
 
 void main()
 {
@@ -41,6 +43,7 @@ void main()
     mat3 nm = mat3(i_model) * mat3(u_nodeMatrix);
     v_worldNormal = normalize(nm * a_normal);
     v_texCoord = a_texCoord;
+    v_alpha = i_alpha;
 
     gl_Position = u_lightSpaceMatrix * world;
 }

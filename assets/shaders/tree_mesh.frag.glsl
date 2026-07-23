@@ -99,6 +99,23 @@ float calcTreeShadow()
 
 void main()
 {
+    // T9 — screen-door LOD crossfade (replaces the old alpha blend). v_alpha is a
+    // SIGNED dissolve: +1 = solid (never discards). During a crossfade band the two
+    // tiers form a COMPLEMENTARY partition of the dither so exactly one draws per
+    // pixel (no holes, no double-draw): the OUTGOING tier carries +(1-t) and keeps
+    // noise < v_alpha; the INCOMING tier carries -(1-t) and keeps noise >= |v_alpha|.
+    // (Design §4.2's "keep if v_alpha<noise, alphas 1-t/t" nests both keep-regions in
+    //  the low-noise band → ~50% holes at t=0.5; the signed partition fixes that.)
+    float dither = interleavedGradientNoise(gl_FragCoord.xy);
+    if (v_alpha >= 0.0)
+    {
+        if (dither >= v_alpha) discard;   // outgoing / solid: keep noise < v_alpha
+    }
+    else
+    {
+        if (dither < -v_alpha) discard;   // incoming: keep noise >= |v_alpha|
+    }
+
     vec3 base;
     float texAlpha = 1.0;
     if (u_hasTexture)
@@ -162,7 +179,6 @@ void main()
         finalColor = base;
     }
 
-    fragColor = vec4(finalColor, v_alpha);
-    if (fragColor.a < 0.01)
-        discard;
+    // Opaque: the dissolve (above) carries the crossfade, not the alpha channel.
+    fragColor = vec4(finalColor, 1.0);
 }

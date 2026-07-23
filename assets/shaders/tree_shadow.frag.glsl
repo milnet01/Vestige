@@ -10,6 +10,7 @@
 
 in vec2 v_texCoord;
 in vec3 v_worldNormal;
+in float v_alpha;   // signed crossfade dissolve (T9)
 
 // Albedo (unit 0, like the scene/foliage caster): factor × optional texture.
 uniform sampler2D u_texture;
@@ -25,8 +26,27 @@ uniform vec3 u_lightDir;
 // RSM flux: albedo · radiance · max(0,N·L). RGB = flux, A = coverage marker.
 layout(location = 0) out vec4 fluxOut;
 
+// Copied from tree_mesh.frag (no shared GLSL #include) — the SAME dither the
+// visible pass uses, so the shadow dissolves in lockstep with the canopy.
+float interleavedGradientNoise(vec2 p)
+{
+    return fract(52.9829189 * fract(dot(p, vec2(0.06711056, 0.00583715))));
+}
+
 void main()
 {
+    // T9 signed screen-door dissolve — matches tree_mesh.frag so the ground shadow
+    // crossfades/fades with the drawn canopy instead of snapping at tier boundaries.
+    float dither = interleavedGradientNoise(gl_FragCoord.xy);
+    if (v_alpha >= 0.0)
+    {
+        if (dither >= v_alpha) discard;   // outgoing / solid: keep noise < v_alpha
+    }
+    else
+    {
+        if (dither < -v_alpha) discard;   // incoming: keep noise >= |v_alpha|
+    }
+
     vec3 albedo = u_albedoFactor;
     if (u_hasTexture)
     {
