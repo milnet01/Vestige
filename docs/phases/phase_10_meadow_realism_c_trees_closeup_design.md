@@ -1,6 +1,6 @@
 # Phase 10 — Meadow Realism C: Close-Up Tree Quality (3D_E-0033, slices T8–T10)
 
-**Status:** Draft — awaiting cold-eyes convergence.
+**Status:** Signed off — cold-eyes converged at loop 6 (2026-07-23). Ready to implement T8 → T9 → T10.
 **Parent:** `phase_10_meadow_realism_c_trees_plants_design.md` (T1–T7). This doc adds a
 close-up quality pass on the already-shipped TreeRenderer. It does **not** change the
 LOD bucketing, species table, placement, or asset pipeline — those are done and verified.
@@ -436,5 +436,11 @@ _(each loop dispatched cold, no prior-loop briefing — global rule 14 / project
   an RSM-flux pass doing N·L (`tree_shadow.frag:43-46`). Polish: intro range 3–5→3–6+item 7; near-band
   no-mid-species clause (LOD0+LOD0, benign); scope-cap disclaimer that the cull extension isn't a
   threshold retune.
-- Loop 6 — pending (final convergence confirmation; loop 5 still carried a MEDIUM, so one more cold
-  read to confirm the fix batch holds before sign-off).
+- **Loop 6 (single combined convergence lane, cold).** Tally: CRITICAL 0 · HIGH 0 · MEDIUM 0 · LOW 0 ·
+  INFO 0 — **CONVERGED.** Zero substantive defects and no polish nits; every spot-checked `file:line`
+  exact (including the two most error-prone: `tree_shadow.frag` does N·L RSM flux not depth-only, and
+  `scene.vert:223-226` uses independent normalize not Gram-Schmidt), all cross-references resolve, every
+  slice gated. Decay across loops: HIGH 3 → 2 → 1 → 0 → 0 → 0.
+
+**Signed off** (cold-eyes converged, 2026-07-23) — per the delegated gate (cold-eyes convergence, then
+implement). Build order T8 → T9 → T10, each behind a full `local-ci.sh` + dev-gate capture.
