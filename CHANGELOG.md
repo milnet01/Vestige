@@ -49,6 +49,24 @@ read more strongly at low sun angles once a time-of-day system lands.
 - **Performance (RX 6600, Release).** Tree GPU pass 0.12–0.22 ms, 0 GL errors,
   full test suite green.
 
+### 2026-07-23 Fixed — Tree canopy undersides no longer render near-black up close (3D_E-0033)
+
+Standing under a tree and looking up, the leaves on the underside of the canopy
+went almost black — the trees looked great from a distance but bad up close. The
+tree shader was flipping each leaf's surface normal to face the camera, so a leaf
+seen from below with the sun overhead was lit as if it faced away from the sun,
+collapsing its brightness to just the weak ambient term. Real leaves are thin and
+translucent, so a backlit canopy should read as dappled green, not black.
+
+- **Two-sided leaf lighting.** Leaf cards (the alpha-cutout material) are now lit
+  on whichever side faces the sun (`abs(N·L)` half-Lambert), so a backlit
+  underside catches light instead of collapsing to ambient-only. Opaque bark
+  keeps its one-sided signed half-Lambert so its shaded side stays properly dark.
+- **Backlit translucency.** Added the same low-cost backlit glow the grass uses,
+  so leaves with the sun behind them transmit a little light toward the viewer.
+- Removes the fragile `gl_FrontFacing` normal flip entirely (winding/cull-order
+  independent now). No behaviour change for bark or for distant trees.
+
 ### 2026-07-21 Changed — GPU grass is now the meadow grass; billboard grass retired (3D_E-0039, G5)
 
 The GPU blade field graduated from "coexists with the old grass" to being THE

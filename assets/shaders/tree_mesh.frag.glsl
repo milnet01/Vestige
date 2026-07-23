@@ -110,19 +110,30 @@ void main()
     vec3 finalColor;
     if (u_hasDirectionalLight)
     {
-        // Two-sided leaves: flip the normal toward the viewer.
         vec3 N = normalize(v_normal);
-        if (!gl_FrontFacing)
-            N = -N;
-
         vec3 L = normalize(-u_lightDirection);
-        float NdotL = dot(N, L) * 0.5 + 0.5;   // half-Lambert wrap
+
+        // Leaf cards (u_useAlphaTest) are two-sided stand-ins for a rounded leaf
+        // cluster: light whichever side faces the sun so a backlit underside
+        // never collapses to black (a signed N·L drops to ~0 there, leaving only
+        // ambient). Opaque bark is one-sided — keep the signed half-Lambert so
+        // its shaded side stays dark.
+        float NdotL = u_useAlphaTest
+            ? abs(dot(N, L)) * 0.5 + 0.5
+            : dot(N, L) * 0.5 + 0.5;
+
+        // Backlit translucency: thin leaves glow when the sun sits behind them
+        // (mirrors foliage.frag). Bark is opaque — no transmission.
+        vec3 V = normalize(u_cameraPos - v_worldPos);
+        float backlit = pow(max(dot(V, -L), 0.0), 3.0);
+        float trans = u_useAlphaTest ? backlit * 0.4 : 0.0;
 
         float shadow = u_hasShadows ? calcTreeShadow() : 0.0;
 
         vec3 ambient = base * u_ambientColor;
         vec3 direct = base * NdotL * u_lightColor;
-        finalColor = ambient + direct * (1.0 - shadow * 0.65);
+        vec3 transmission = base * trans * u_lightColor;
+        finalColor = ambient + (direct + transmission) * (1.0 - shadow * 0.65);
     }
     else
     {
