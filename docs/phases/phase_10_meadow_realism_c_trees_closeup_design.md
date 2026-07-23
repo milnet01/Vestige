@@ -31,7 +31,8 @@ Three things the eye catches when you walk up to a tree today, and what each fix
    away pixel-by-pixel) instead of the current cross-blend that swaps whole silhouettes,
    and apply the same dissolve to the tree's ground shadow so the shadow stops snapping.
 
-No new assets, no new subsystem. All three are edits to the existing tree draw path and
+In slice terms: goal 1 → T8, goal 2 → T10, goal 3 → T9 (build order T8 → T9 → T10, for the
+dependency reason in §9). No new assets, no new subsystem. All three are edits to the existing tree draw path and
 its two shader pairs.
 
 ## 2. Current state (verified against source 2026-07-23)
@@ -88,9 +89,10 @@ Files: `engine/renderer/tree_renderer.{h,cpp}`, `assets/shaders/tree_mesh.{vert,
   only produces true edge AA in `MSAA_4X` — the design must not depend on it in the other four modes.
 - **The AA mode is not on `TreeRenderer` today.** It lives on the renderer
   (`renderer.h:292 getAntiAliasMode()`); the tree pass is invoked from `engine.cpp:1653` where
-  `m_renderer` is in scope. T9 plumbs it in as a public `bool msaaActive` field on `TreeRenderer`,
+  `m_renderer` is in scope. **T10** plumbs it in as a public `bool msaaActive` field on `TreeRenderer`,
   set at that call site (`m_renderer->getAntiAliasMode()==MSAA_4X`) exactly like the existing
-  public `windDirection`/`windAmplitude` fields set at `engine.cpp:1651-1652`.
+  public `windDirection`/`windAmplitude` fields set at `engine.cpp:1651-1652`. (T10, not T9 — the flag
+  exists only to gate T10's A2C; §5.)
 
 ## 3. Design decisions & rationale
 
@@ -98,7 +100,7 @@ Files: `engine/renderer/tree_renderer.{h,cpp}`, `assets/shaders/tree_mesh.{vert,
 |---|----------|-----|
 | D1 | **Bind the already-loaded normal map to a new unit and add a TBN to `tree_mesh.*`.** Reuse the `scene.*` TBN + normal-sample pattern; don't invent one. | Normals are on disk and in `Material` for free (§2). This is the single highest-payoff close-up change. Global rule 3 (reuse). |
 | D2 | **The sampled normal replaces the geometric `N` inside the *existing* leaf/bark lighting — no viewer-flip is introduced.** | Leaf diffuse is already two-sided `abs(dot(N,L))` (never black on a backlit underside); a per-pixel `N` inherits that guarantee, so the 52f4b4d fix can't regress and no extra flip logic is needed. Simplest correct (rule 2). |
-| D3 | **Soft edges = coverage-preservation (all modes) + fwidth sharpen (all modes) + `GL_SAMPLE_ALPHA_TO_COVERAGE` only when `MSAA_4X`.** | Coverage/sharpen are per-pixel math that work everywhere and cost ~nothing; genuine edge AA needs multisample, which only `MSAA_4X` has (§2). TAA/SMAA/FXAA soften the sharpened edge in their own modes. Ben Golus. |
+| D3 | **Soft edges = coverage-preservation (all modes) + fwidth sharpen (all modes) + `GL_SAMPLE_ALPHA_TO_COVERAGE` only when `MSAA_4X`.** Sequenced as T10, *after* the dissolve (D4). | Coverage/sharpen are per-pixel math that work everywhere and cost ~nothing; genuine edge AA needs multisample, which only `MSAA_4X` has (§2). TAA/SMAA/FXAA soften the sharpened edge in their own modes. A2C needs the crossfade blend gone first (it claims the alpha channel), so this **depends on D4's dissolve** landing first. Ben Golus. |
 | D4 | **Crossfade becomes a *dithered dissolve* for cutout tiers, driven by the existing `interleavedGradientNoise`.** Discard leaf fragments where `v_alpha < noise(gl_FragCoord)`. | Fixes root cause #1: a fading tier truly thins pixel-by-pixel instead of cross-blending whole silhouettes. The noise function already exists in the frag shader (shadow PCF). |
 | D5 | **Apply the same dissolve threshold in `tree_shadow.frag` and give the shadow pass the crossfade alpha.** | Fixes root cause #3 — the ground shadow dissolves in lockstep with the canopy instead of snapping. |
 | D6 | **Keep the LOD thresholds and `fadeRange` as-is for now; widen only if the dissolve alone doesn't settle it.** Do not retune blindly. | Global rule 2/11 (shortest correct, stay in lane). The dither dissolve is the mechanism fix; band-width is a tuning knob, changed only with a before/after in hand. |
@@ -140,15 +142,15 @@ Files: `engine/renderer/tree_renderer.{h,cpp}`, `assets/shaders/tree_mesh.{vert,
 
 ### 4.2 T9 — Dithered dissolve crossfade (canopy + shadow)
 
-**T9 must precede T10.** It converts the LOD crossfade from an alpha *blend* (which reads
-`fragColor.a = v_alpha`, `tree_mesh.frag:143-145`) into a screen-door *dissolve*, which frees the
+**T9 must precede T10.** It converts the LOD crossfade from an alpha *blend* (which reads the shader's
+`fragColor.a = v_alpha` write at `tree_mesh.frag:143`) into a screen-door *dissolve*, which frees the
 alpha channel so T10 can put A2C edge-coverage there. A2C and the crossfade blend cannot share the
 alpha channel, so the blend has to go first — this is the real dependency direction (T10 depends on
 T9), and it is why the dissolve is slice 9, not slice 10.
 
 - **Canopy** (`tree_mesh.frag.glsl`): for cutout tiers, add a screen-door dissolve *before* the
   cutout discard: `if (v_alpha < interleavedGradientNoise(gl_FragCoord.xy)) discard;`, then keep the
-  existing `texAlpha < cutoff` discard. **Drop the `ScopedBlendState`** for cutout tiers (kept only if
+  existing `texAlpha < u_alphaCutoff` discard. **Drop the `ScopedBlendState`** for cutout tiers (kept only if
   a genuine `BLEND` material survives — none in the current species set) and **write
   `fragColor.a = 1.0`** (opaque) for the surviving fragments: the dissolve, not the alpha channel, now
   carries the crossfade, replacing the pre-existing `fragColor.a = v_alpha` blend dependency. The two
@@ -162,21 +164,26 @@ T9), and it is why the dissolve is slice 9, not slice 10.
   blend.
 - **Impostor symmetry (root cause #2):** the impostor is already a cutout, so it now dissolves on the
   *same* discard mechanism as the mid mesh — the mid→far fade stops being "smooth blend vs hard cutout".
-- **Shadow** — the dissolve applies to the **LOD0↔mid band only**, the sole band with two casters:
+- **Shadow** — the ground shadow snaps at **both** tier boundaries today (§2 root cause #3: the caster
+  hard-switches LOD0→mid at `lodDistance` and hard-culls at `billboardDistance`), so the dissolve is
+  applied at both, using the same `v_alpha`-vs-noise discard:
   1. *(shader)* `tree_shadow.vert.glsl` reads `i_alpha` (binding 3 / loc 12) → `v_alpha`;
      `tree_shadow.frag.glsl` gets its **own copy** of `interleavedGradientNoise` (it has none today)
      and applies the same `if (v_alpha < noise) discard;` before its cutout discard.
-  2. *(CPU)* `TreeRenderer::renderShadow` must compute per-instance crossfade alpha in its bucketing
-     instead of hard-pushing `{model, 1.0f}` (`tree_renderer.cpp:607/611`), mirroring `render()`'s band
-     logic, and feed **both** LOD0 and mid casters through the 45–60 m band.
-  3. *(CPU)* `drawShadowTier` must upload that alpha to the binding-3 VBO — today it uploads **only**
-     the model-matrix VBO and the comment at `tree_renderer.cpp:505-506` states "@12 is unread"; that
-     comment and gap are removed here.
+  2. *(CPU)* `TreeRenderer::renderShadow` computes a per-instance fade alpha in its bucketing instead of
+     hard-pushing `{model, 1.0f}` (`tree_renderer.cpp:607/611`), mirroring `render()`'s band logic:
+     - **45–60 m (LOD0↔mid): a two-caster crossfade** — feed **both** LOD0 (alpha `1-t`) and mid
+       (alpha `t`) through the band.
+     - **180–195 m (mid→nothing): a single-caster fade-out** — feed the mid caster alpha `1-t` so it
+       **dissolves to nothing** by 195 m. This requires extending the caster cull from the current hard
+       `dist > billboardDistance` cut (`tree_renderer.cpp:594`) out to `billboardDistance + fadeRange`.
+       The impostor still does **not** cast (D4 / parent T4) — no billboard caster is added; the far band
+       is a mid-caster fade-out, not a two-tier crossfade (holds the D4 scope cap).
+  3. *(CPU)* `drawShadowTier` uploads that alpha to the binding-3 VBO — today it uploads **only** the
+     model-matrix VBO and the comment at `tree_renderer.cpp:505-506` states "@12 is unread"; that comment
+     and gap are removed here.
 
-  At the **mid→far boundary the impostor does not cast** (D4 / parent T4 culls casters past
-  `billboardDistance`), so there is no second caster there — the correct behaviour is the mid caster
-  **dissolving to nothing** as its `t`→0, *not* a two-tier crossfade and **not** a new billboard caster
-  (holds the D4 scope cap). (D5, root cause #3.)
+  (D5, root cause #3 — now fixed at both boundaries, matching the §6 item 4 acceptance.)
 
 ### 4.3 T10 — Soft leaf-card edges
 
@@ -264,10 +271,12 @@ the current blend if the dissolve reads "sparkly" and widening `fadeRange` (R4) 
   texture-bound. T9's dissolve replaces a blend with a `discard` — dropping the leaf-tier blend can
   *reduce* overdraw cost during the band (no dst read). T10 adds a `fwidth` + coverage rescale + a
   couple of ALU ops per canopy pixel.
-- **Shadow-pass delta (T9):** feeding both LOD0 + mid casters through the 45–60 m band doubles the
-  tree depth-only draws *for trees in that band only* (today the pass hard-switches to one tier).
-  Depth-only casters are cheap (position + wind + cutout, no shading), but the doubling is real and
-  currently unbudgeted — include the shadow pass in the `--profile-log` before/after and keep the
+- **Shadow-pass delta (T9):** two small additions — (a) both LOD0 + mid casters drawn through the
+  45–60 m band doubles the tree depth-only draws *for trees in that band only* (today it hard-switches
+  to one tier); (b) the far fade-out extends the mid-caster cull from `billboardDistance` to
+  `billboardDistance + fadeRange`, adding the mid casters in the thin 180–195 m ring that are culled
+  today. Depth-only casters are cheap (position + wind + cutout, no shading), but both deltas are real
+  and currently unbudgeted — include the shadow pass in the `--profile-log` before/after and keep the
   combined Tree + tree-shadow cost inside the frame budget.
 - Risk: the mip-coarser normal fetch (T8) and coverage rescale (T10) both touch every canopy pixel;
   measure with `--profile-log` before/after and hold the ≤ 2.0 ms cap. If A2C in `MSAA_4X` costs
@@ -372,4 +381,14 @@ _(each loop dispatched cold, no prior-loop briefing — global rule 14 / project
   acceptance clarified (single caster); normal-fetch shown once with an explicit leaf-only mip bias;
   `calcMipLevel`/`texSize` expressions given; `u_msaaActive` upload step named; §11 offset-curve line
   marked described-not-adopted; `taa.h` line range 19-26→19-27; loop-1 log "CPU-side" mislabel fixed.
-- Loop 3 — pending (cold re-read of the edited doc).
+- **Loop 3 (2 lanes, cold re-read of the reordered doc).**
+  Tally: CRITICAL 0 · HIGH 1 · MEDIUM 1 · LOW 2 · INFO 3 (verified 7 / unverified 0). The doc-vs-code
+  lane returned **SOUND** — every cited `file:line` re-verified exact, no substantive defect. The
+  implementability lane caught the reorder's two residues: (1) §2 still attributed the `msaaActive`
+  plumbing to T9 (the one section the loop-2 reorder missed) — every other section says T10; fixed. (2)
+  the shadow dissolve was scoped to the LOD0↔mid band only, but §6 item 4 (and §2 root cause #3) require
+  the **far** boundary fixed too — the mid caster hard-culls at `billboardDistance` today; §4.2 now
+  applies the dissolve at both boundaries (two-caster crossfade near, single-caster fade-out far with the
+  cull extended to `billboardDistance + fadeRange`), §7 budgets the extra ring. Polish: D3 dependency
+  note, §1 goal→slice map, `texAlpha < u_alphaCutoff` naming, §4.2 write/read phrasing.
+- Loop 4 — pending (cold re-read of the edited doc).
