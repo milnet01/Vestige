@@ -289,7 +289,8 @@ bool CascadedShadowMap::hasDepthBounds() const
     return m_hasDepthBounds;
 }
 
-void CascadedShadowMap::update(const DirectionalLight& light, const Camera& camera, float aspectRatio)
+void CascadedShadowMap::update(const DirectionalLight& light, const Camera& camera,
+                               float aspectRatio, uint32_t cascadeMask)
 {
     float cameraNear = 0.1f;
     float shadowFar = m_config.shadowDistance;
@@ -328,6 +329,11 @@ void CascadedShadowMap::update(const DirectionalLight& light, const Camera& came
     // Compute a tight light-space matrix for each cascade
     for (int i = 0; i < m_config.cascadeCount; i++)
     {
+        // A cascade the caller is not re-rasterising this frame keeps the matrix
+        // that produced its stored depth (see the header) — recomputing it here
+        // would desynchronise the two.
+        if ((cascadeMask & cascadeBit(i)) == 0) continue;
+
         float near = (i == 0) ? cameraNear : m_cascadeSplits[static_cast<size_t>(i - 1)];
         float far = m_cascadeSplits[static_cast<size_t>(i)];
 

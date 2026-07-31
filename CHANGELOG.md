@@ -22,6 +22,25 @@ may change any interface without notice.
 
 ## [Unreleased]
 
+### 2026-07-31 Changed — Distant shadows are rebuilt less often, and a shadow-alignment bug is fixed (3D_E-0029)
+
+Shadows are drawn in four "cascades" — four shells around you, the near
+one detailed, the far ones covering huge distances. The two far shells
+were being redrawn far more often than anyone can see, so they now
+refresh on a rotating four-frame schedule, never both in the same frame.
+
+On the meadow benchmark that is 13.92 ms down to 12.66 ms per frame —
+72.7 to 80.5 FPS.
+
+- **Fixed: a throttled shadow cascade could be sampled through the wrong matrix** (3D_E-0029)
+  Skipping a cascade's redraw is only safe if the maths describing where that shadow map sits is frozen alongside it. It was not — every cascade's matrix was recomputed each frame while the far one was redrawn only every other frame, so it was read through a description of a volume it no longer matched. That is the classic cause of shadows appearing to slide against the ground as you walk. `update()` now takes a mask and leaves a skipped cascade untouched, and a single rule decides both what is redrawn and what is recomputed so the two cannot disagree.
+
+- **Known limitation: the temporal artifact is not yet verified**
+  Whether a less-frequently-updated cascade produces visible shadow lag can only be judged with a moving camera, and the automated visual-test harness takes static captures. This has not been ruled out. The measured speed-up is also non-linear in a way that is repeatable but unexplained, so the figure warrants an independent re-check.
+
+- **Not implemented: caching static-geometry shadow maps**
+  The other half of the original item. With a continuously moving camera the cascade matrices change almost every frame, so a cache of unmoving casters would invalidate immediately — high complexity for little gain in this scene. Worth revisiting for scenes with a mostly-stationary camera.
+
 ### 2026-07-31 Changed — The scene is no longer drawn twice for water you cannot see (3D_E-0028)
 
 Water reflects its surroundings by secretly drawing the whole world a
@@ -30,8 +49,8 @@ what is under the surface. Both were happening whenever a scene simply
 *had* water in it — even with the pond behind you and not a pixel of it
 on screen. Now they only run when some water is actually in view.
 
-On the meadow benchmark, looking away from the pond, that is 11.94 ms
-down to 10.78 ms per frame — 83.6 to 93.5 FPS, a 12% gain for free.
+On the meadow benchmark, looking away from the pond, that is 13.92 ms
+down to 12.32 ms per frame — 72.7 to 82.6 FPS, a 13.6% gain for free.
 Nothing changes when you are looking at the water.
 
 - **The cull is a per-pass decision, not a change to the scene** (3D_E-0028)

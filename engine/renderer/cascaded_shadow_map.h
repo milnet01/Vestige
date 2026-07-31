@@ -12,6 +12,7 @@
 #include <glad/gl.h>
 
 #include <array>
+#include <cstdint>
 #include <vector>
 
 namespace Vestige
@@ -41,11 +42,26 @@ public:
     CascadedShadowMap(CascadedShadowMap&& other) noexcept;
     CascadedShadowMap& operator=(CascadedShadowMap&& other) noexcept;
 
-    /// @brief Updates all cascade light-space matrices from the camera frustum.
+    /// @brief Bit for cascade @p c in @ref update's cascadeMask.
+    static constexpr uint32_t cascadeBit(int c) { return 1u << c; }
+
+    /// @brief Every cascade refreshes — @ref update's default.
+    static constexpr uint32_t ALL_CASCADES = ~0u;
+
+    /// @brief Updates cascade light-space matrices from the camera frustum.
     /// @param light The directional light source.
     /// @param camera The main camera (defines the view frustum).
     /// @param aspectRatio Window aspect ratio for projection.
-    void update(const DirectionalLight& light, const Camera& camera, float aspectRatio);
+    /// @param cascadeMask Bitmask of cascades to recompute (see @ref cascadeBit);
+    ///        a cascade whose bit is clear keeps its current matrix and texel size.
+    /// @details A throttled cascade is re-rasterised only every N frames, so its
+    /// depth layer holds geometry from an earlier frame. Recomputing its matrix on
+    /// the frames in between would leave the sampling matrix describing a different
+    /// volume than the depth it samples, which reads as shadows swimming against
+    /// the geometry. Callers that stagger cascades must therefore clear the bit for
+    /// every cascade they skip, so matrix and depth stay in lockstep (3D_E-0029).
+    void update(const DirectionalLight& light, const Camera& camera, float aspectRatio,
+                uint32_t cascadeMask = ALL_CASCADES);
 
     /// @brief Sets tight depth bounds from SDSM analysis to optimize cascade distribution.
     /// When set, cascade splits are computed within [near, far] instead of

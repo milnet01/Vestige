@@ -3796,8 +3796,33 @@ void Renderer::renderShadowPass(const std::vector<SceneRenderData::RenderItem>& 
     // state is preserved.
     ScopedShadowDepthState shadowDepthState;
 
-    // Update all cascade light-space matrices from the camera frustum
-    m_cascadedShadowMap->update(m_directionalLight, camera, aspectRatio);
+    int cascadeCount = m_cascadedShadowMap->getCascadeCount();
+    m_shadowFrameCount++;
+
+    // 3D_E-0029. Which cascades re-rasterise this frame. Cascades 0-1 carry the
+    // near detail the eye tracks, so they rebuild every frame; 2 and 3 cover large,
+    // distant volumes where a few frames of staleness is invisible, so they are
+    // staggered on a 4-frame cycle that never rebuilds both in the same frame
+    // (docs/engine/renderer/spec.md — "1 cascade per frame on a 4-frame cycle for
+    // cascades 2/3"). Until now the code skipped only cascade 3, and only on odd
+    // frames, while its comment claimed a cadence it did not implement.
+    //
+    // The first frames are forced: a cascade that has never been rasterised holds
+    // undefined depth, and staggering would leave cascade 2 unwritten until frame 4.
+    const auto cascadeRebuildsThisFrame = [this, cascadeCount](int c) {
+        if (c < 2 || m_shadowFrameCount <= static_cast<uint32_t>(cascadeCount)) return true;
+        return (c == 2) ? (m_shadowFrameCount % 4) == 0
+                        : (m_shadowFrameCount % 4) == 2;
+    };
+
+    // Recompute light-space matrices for exactly the cascades being rebuilt, so a
+    // stale cascade's matrix still describes the depth it holds.
+    uint32_t cascadeMask = 0;
+    for (int c = 0; c < cascadeCount; c++)
+    {
+        if (cascadeRebuildsThisFrame(c)) cascadeMask |= CascadedShadowMap::cascadeBit(c);
+    }
+    m_cascadedShadowMap->update(m_directionalLight, camera, aspectRatio, cascadeMask);
 
     m_shadowDepthShader.use();
     // Phase 13 G1: directional radiance + travel direction for the RSM flux term
@@ -3806,18 +3831,13 @@ void Renderer::renderShadowPass(const std::vector<SceneRenderData::RenderItem>& 
     m_shadowDepthShader.setVec3("u_lightDir", m_directionalLight.direction);
 
     // Render geometry into each cascade layer with per-cascade frustum culling.
-    // Far cascades update less frequently to reduce shadow pass cost:
-    //   Cascade 0-1: every frame (near detail)
-    //   Cascade 2:   every 2nd frame
-    //   Cascade 3:   every 4th frame
-    int cascadeCount = m_cascadedShadowMap->getCascadeCount();
     int totalCascadeCulled = 0;
-    m_shadowFrameCount++;
 
     for (int c = 0; c < cascadeCount; c++)
     {
-        // Skip the farthest cascade on alternating frames (its shadow map persists)
-        if (c == 3 && (m_shadowFrameCount % 2) != 0) continue;
+        // Same predicate that built cascadeMask above — a skipped cascade keeps
+        // both its depth layer and its matrix from the frame that wrote them.
+        if (!cascadeRebuildsThisFrame(c)) continue;
         const glm::mat4& lightSpaceMatrix = m_cascadedShadowMap->getLightSpaceMatrix(c);
 
         // Extract frustum planes from the cascade's orthographic light-space matrix

@@ -1729,7 +1729,7 @@ void Engine::run()
                 // whole scene into an off-screen FBO, and until now both ran whenever
                 // the scene merely *contained* water — not when any was on screen.
                 // Measured on the meadow benchmark, uncapped: culling the pair takes
-                // the frame from 11.94 to 10.78 ms (83.6 -> 93.5 FPS, +12%), so facing
+                // the frame from 13.92 to 12.32 ms (72.7 -> 82.6 FPS, +13.6%), so facing
                 // away from the pond was paying for textures nothing sampled.
                 // Cull the pair against the camera frustum. waterSurfaceWorldBounds is
                 // deliberately conservative, so a surface is never culled while it can
