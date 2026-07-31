@@ -52,6 +52,10 @@ void printUsage(const char* argv0)
         << "                          (default: vestige_profile_<ts>.csv in the\n"
         << "                          current directory). For bottleneck\n"
         << "                          analysis of the benchmark scene.\n"
+        << "  --no-vsync              Disable vertical sync so the frame rate runs\n"
+        << "                          uncapped. For benchmarking: with vsync on,\n"
+        << "                          FPS reports the display's refresh rate, not\n"
+        << "                          what the frame actually costs.\n"
         << "  --material-demo         Open the legacy material-test-cube demo\n"
         << "                          (PBR / glass / emissive / skeletal-\n"
         << "                          animation bench) instead of the default\n"
@@ -153,6 +157,15 @@ bool parseArgs(int argc, char* argv[], EngineConfig& config, int& exitCode)
                 return false;
             }
             Logger::info("Profiler CSV logging enabled: " + config.profileLogPath);
+        }
+        else if (std::strcmp(arg, "--no-vsync") == 0)
+        {
+            // Benchmarking aid: vsync pins the frame to the display's refresh, so
+            // frame/FPS numbers in the --profile-log CSV read as the cap rather than
+            // as what the frame actually costs. Uncapped, a pass optimisation shows
+            // up in FPS instead of only in the per-pass GPU timings.
+            config.window.isVsyncEnabled = false;
+            Logger::info("VSync disabled via CLI (uncapped frame rate)");
         }
         else if (std::strcmp(arg, "--biblical-demo") == 0)
         {

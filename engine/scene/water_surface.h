@@ -6,11 +6,13 @@
 #pragma once
 
 #include "scene/component.h"
+#include "utils/aabb.h"
 
 #include <glm/glm.hpp>
 #include <glad/gl.h>
 
 #include <algorithm>
+#include <cmath>
 #include <memory>
 
 namespace Vestige
@@ -98,6 +100,35 @@ inline float waterWindRippleScale(float windSpeedMetersPerSec)
         (windSpeedMetersPerSec - WATER_WIND_CALM) / (WATER_WIND_FULL - WATER_WIND_CALM),
         0.0f, 1.0f);
     return t * t * (3.0f - 2.0f * t);   // smoothstep
+}
+
+/// @brief World-space bounds of a water surface, for frustum culling its
+///        reflection/refraction passes (3D_E-0028).
+/// @details The mesh is built centred on the component's local origin,
+/// spanning ±width/2 in X and ±depth/2 in Z at local Y = 0 (see
+/// WaterSurfaceComponent::buildMesh), so the box is that rectangle inflated
+/// vertically by the summed wave crest plus a fixed margin and pushed through
+/// the world matrix. Deliberately conservative: culling a surface one frame
+/// too early would let the water shader sample a stale reflection texture, so
+/// the box errs large. Pure + GL-free so it is unit-testable.
+inline AABB waterSurfaceWorldBounds(const WaterSurfaceConfig& config,
+                                    const glm::mat4& worldMatrix)
+{
+    /// Vertical slack beyond the wave crest (metres) — absorbs normal/dudv
+    /// distortion and any small terrain-follow offset at the shoreline.
+    constexpr float WATER_BOUNDS_MARGIN = 0.5f;
+
+    float crest = WATER_BOUNDS_MARGIN;
+    const int waveCount = std::clamp(config.numWaves, 0, WaterSurfaceConfig::MAX_WAVES);
+    for (int i = 0; i < waveCount; ++i)
+    {
+        crest += std::abs(config.waves[i].amplitude);
+    }
+
+    const float halfW = config.width * 0.5f;
+    const float halfD = config.depth * 0.5f;
+    const AABB local{glm::vec3(-halfW, -crest, -halfD), glm::vec3(halfW, crest, halfD)};
+    return local.transformed(worldMatrix);
 }
 
 /// @brief Entity component that manages a water surface mesh and its parameters.

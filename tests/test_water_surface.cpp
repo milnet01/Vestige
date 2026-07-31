@@ -9,10 +9,12 @@
 ///       null context. Only CPU-side state (config defaults, animation phase,
 ///       displacement math) is exercised here.
 #include "scene/water_surface.h"
+#include "utils/frustum.h"
 
 #include <gtest/gtest.h>
 #include <glm/glm.hpp>
 #include <glm/gtc/constants.hpp>
+#include <glm/gtc/matrix_transform.hpp>
 
 using namespace Vestige;
 
@@ -202,4 +204,100 @@ TEST(WaterSurfaceComponentTest, ClonePreservesConfig)
     EXPECT_FLOAT_EQ(clonedConfig.waves[0].amplitude, 0.05f);
     EXPECT_FLOAT_EQ(clonedConfig.shallowColor.r, 0.2f);
     EXPECT_FALSE(clonedWater->isEnabled());
+}
+
+// ---------------------------------------------------------------------------
+// waterSurfaceWorldBounds + reflection-pass culling (3D_E-0028)
+// ---------------------------------------------------------------------------
+//
+// The reflection and refraction passes each re-render the whole scene into an
+// off-screen FBO, so the render loop skips both when no water surface lies in
+// the camera frustum. These lock the two halves of that decision: the bounds
+// must cover the mesh the component actually builds, and the frustum test must
+// reject a pond behind the camera while accepting one in front.
+
+TEST(WaterSurfaceBoundsTest, CoversMeshExtentAtIdentity)
+{
+    WaterSurfaceConfig config;   // 10 x 10, 2 waves @ 0.02 + 0.01 amplitude
+    const AABB bounds = waterSurfaceWorldBounds(config, glm::mat4(1.0f));
+
+    // Spans the full mesh footprint: buildMesh lays vertices over +/- width/2
+    // in X and +/- depth/2 in Z.
+    EXPECT_FLOAT_EQ(bounds.min.x, -5.0f);
+    EXPECT_FLOAT_EQ(bounds.max.x, 5.0f);
+    EXPECT_FLOAT_EQ(bounds.min.z, -5.0f);
+    EXPECT_FLOAT_EQ(bounds.max.z, 5.0f);
+
+    // Vertically inflated by the summed wave crest plus the fixed margin, so a
+    // surface is never culled while a wave peak could still rasterise.
+    EXPECT_GT(bounds.max.y, 0.03f);
+    EXPECT_LT(bounds.min.y, -0.03f);
+    EXPECT_FLOAT_EQ(bounds.max.y, -bounds.min.y);
+}
+
+TEST(WaterSurfaceBoundsTest, FollowsWorldTransform)
+{
+    WaterSurfaceConfig config;
+    const glm::mat4 world = glm::translate(glm::mat4(1.0f), glm::vec3(100.0f, 7.0f, -40.0f));
+    const AABB bounds = waterSurfaceWorldBounds(config, world);
+
+    EXPECT_NEAR(bounds.getCenter().x, 100.0f, 1e-4f);
+    EXPECT_NEAR(bounds.getCenter().y, 7.0f, 1e-4f);
+    EXPECT_NEAR(bounds.getCenter().z, -40.0f, 1e-4f);
+}
+
+TEST(WaterSurfaceBoundsTest, ClampsOutOfRangeWaveCount)
+{
+    // numWaves is a plain int on a serialized config, so a bad scene file can
+    // put it outside [0, MAX_WAVES]. Neither extreme may read past the array.
+    WaterSurfaceConfig tooMany;
+    tooMany.numWaves = 99;
+    const AABB high = waterSurfaceWorldBounds(tooMany, glm::mat4(1.0f));
+
+    WaterSurfaceConfig negative;
+    negative.numWaves = -3;
+    const AABB low = waterSurfaceWorldBounds(negative, glm::mat4(1.0f));
+
+    EXPECT_GT(high.max.y, 0.0f);
+    EXPECT_GT(low.max.y, 0.0f);
+    EXPECT_GE(high.max.y, low.max.y);
+}
+
+TEST(WaterSurfaceCullTest, PondInFrontIsVisibleAndPondBehindIsCulled)
+{
+    // Mirrors the render loop's gate: a 20 x 20 pond 30 m along -Z, a camera at
+    // the origin. Facing the pond it must render; turned 180 degrees away it
+    // must be culled -- that turn is what the open_meadow visual-test viewpoint
+    // exercises in-engine.
+    WaterSurfaceConfig config;
+    config.width = 20.0f;
+    config.depth = 20.0f;
+    const glm::mat4 pondWorld =
+        glm::translate(glm::mat4(1.0f), glm::vec3(0.0f, 0.0f, -30.0f));
+    const AABB pond = waterSurfaceWorldBounds(config, pondWorld);
+
+    const glm::mat4 proj = glm::perspective(glm::radians(60.0f), 16.0f / 9.0f, 0.1f, 500.0f);
+
+    const glm::mat4 lookAtPond =
+        glm::lookAt(glm::vec3(0.0f), glm::vec3(0.0f, 0.0f, -1.0f), glm::vec3(0.0f, 1.0f, 0.0f));
+    EXPECT_TRUE(isAabbInFrustum(pond, extractFrustumPlanes(proj * lookAtPond)));
+
+    const glm::mat4 lookAway =
+        glm::lookAt(glm::vec3(0.0f), glm::vec3(0.0f, 0.0f, 1.0f), glm::vec3(0.0f, 1.0f, 0.0f));
+    EXPECT_FALSE(isAabbInFrustum(pond, extractFrustumPlanes(proj * lookAway)));
+}
+
+TEST(WaterSurfaceCullTest, PondBeyondFarPlaneIsCulled)
+{
+    WaterSurfaceConfig config;
+    config.width = 20.0f;
+    config.depth = 20.0f;
+    const AABB farPond = waterSurfaceWorldBounds(
+        config, glm::translate(glm::mat4(1.0f), glm::vec3(0.0f, 0.0f, -4000.0f)));
+
+    const glm::mat4 proj = glm::perspective(glm::radians(60.0f), 16.0f / 9.0f, 0.1f, 500.0f);
+    const glm::mat4 view =
+        glm::lookAt(glm::vec3(0.0f), glm::vec3(0.0f, 0.0f, -1.0f), glm::vec3(0.0f, 1.0f, 0.0f));
+
+    EXPECT_FALSE(isAabbInFrustum(farPond, extractFrustumPlanes(proj * view)));
 }

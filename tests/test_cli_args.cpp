@@ -120,6 +120,13 @@ TEST(CliArgs, SceneFlagTakesPathValue)
     EXPECT_EQ(r.config.startupScene, "my.scene");
 }
 
+TEST(CliArgs, NoVsyncFlagDisablesVsync)
+{
+    auto r = run({"--no-vsync"});
+    EXPECT_TRUE(r.ok);
+    EXPECT_FALSE(r.config.window.isVsyncEnabled);
+}
+
 TEST(CliArgs, UnknownFlagFailsWithExit2)
 {
     auto r = run({"--nope"});

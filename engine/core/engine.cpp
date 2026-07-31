@@ -54,6 +54,7 @@
 #include "renderer/frame_diagnostics.h"
 #include "renderer/debug_draw.h"
 #include "renderer/light_utils.h"
+#include "utils/frustum.h"
 #include "editor/tools/brush_tool.h"
 #include "editor/scene_serializer.h"
 #include "profiler/cpu_profiler.h"
@@ -1724,75 +1725,112 @@ void Engine::run()
 
                 float elapsed = static_cast<float>(m_timer->getElapsedTime());
 
-                // Save renderer view state (geometryOnly passes overwrite m_lastProjection etc.)
-                m_renderer->saveViewState();
-
-                // --- Refraction pass: render scene below water ---
+                // 3D_E-0028: the refraction and reflection passes each re-render the
+                // whole scene into an off-screen FBO, and until now both ran whenever
+                // the scene merely *contained* water — not when any was on screen.
+                // Measured on the meadow benchmark, uncapped: culling the pair takes
+                // the frame from 11.94 to 10.78 ms (83.6 -> 93.5 FPS, +12%), so facing
+                // away from the pond was paying for textures nothing sampled.
+                // Cull the pair against the camera frustum. waterSurfaceWorldBounds is
+                // deliberately conservative, so a surface is never culled while it can
+                // still rasterise — which is what keeps the shader off a stale texture.
+                const FrustumPlanes cameraPlanes = extractFrustumPlanes(
+                    m_camera->getProjectionMatrix(aspectRatio) * m_camera->getViewMatrix());
+                bool anyWaterVisible = false;
+                for (const auto& item : waterItems)
                 {
-                    VESTIGE_PROFILE_SCOPE("WaterRefraction");
-                    glm::vec4 refrClipPlane(0.0f, -1.0f, 0.0f, waterY + 0.1f);
-                    glEnable(GL_CLIP_DISTANCE0);
-
-                    m_waterFbo->bindRefraction();
-                    m_renderer->renderScene(m_renderData, *m_camera, aspectRatio, refrClipPlane, true);
-
-                    if (m_terrainEnabled && m_terrain->isInitialized())
+                    if (isAabbInFrustum(
+                            waterSurfaceWorldBounds(item.component->getConfig(), item.worldMatrix),
+                            cameraPlanes))
                     {
-                        m_terrainRenderer->render(*m_terrain, *m_camera, aspectRatio, m_renderData,
-                                                 m_renderer->getCascadedShadowMap(), refrClipPlane);
+                        anyWaterVisible = true;
+                        break;
                     }
-
-                    glDisable(GL_CLIP_DISTANCE0);
                 }
 
-                // --- Reflection pass: render scene above water with reflected camera ---
+                // Gate instrument (mirrors the Grass LOD one above): the visual-test
+                // viewpoints straddle the decision — pond_overview faces the water,
+                // open_meadow faces away — so a --visual-test run shows the cull
+                // actually firing rather than merely compiling. Visual-test only.
+                if (m_visualTestMode)
                 {
-                    VESTIGE_PROFILE_SCOPE("WaterReflection");
-                    glm::vec4 reflClipPlane(0.0f, 1.0f, 0.0f, -waterY + 0.1f);
-
-                    // Create reflected camera: mirror position and pitch around water plane
-                    Camera reflectedCamera = *m_camera;
-                    glm::vec3 camPos = m_camera->getPosition();
-                    float reflectedY = 2.0f * waterY - camPos.y;
-                    reflectedCamera.setPosition(glm::vec3(camPos.x, reflectedY, camPos.z));
-                    reflectedCamera.setPitch(-m_camera->getPitch());
-
-                    glEnable(GL_CLIP_DISTANCE0);
-
-                    m_waterFbo->bindReflection();
-                    m_renderer->renderScene(m_renderData, reflectedCamera, aspectRatio, reflClipPlane, true);
-
-                    if (m_terrainEnabled && m_terrain->isInitialized())
-                    {
-                        m_terrainRenderer->render(*m_terrain, reflectedCamera, aspectRatio, m_renderData,
-                                                 m_renderer->getCascadedShadowMap(), reflClipPlane);
-                    }
-
-                    // Trees in the reflection (T5, 3D_E-0033): mirror the treeline into
-                    // the pond with the reflected camera + clip plane. Cull against the
-                    // reflected frustum — the main tree pass already consumed
-                    // m_scratchVisibleChunks this frame, so reusing it here is safe.
-                    // msaaActive off: the reflection FBO is single-sample, so leave
-                    // A2C soft leaf edges to the main pass.
-                    glm::mat4 reflViewProj = reflectedCamera.getProjectionMatrix(aspectRatio)
-                                           * reflectedCamera.getViewMatrix();
-                    m_foliageManager->getVisibleChunks(reflViewProj, m_scratchVisibleChunks);
-                    if (!m_scratchVisibleChunks.empty())
-                    {
-                        const DirectionalLight* reflDirLight =
-                            m_renderData.hasDirectionalLight ? &m_renderData.directionalLight : nullptr;
-                        m_treeRenderer->msaaActive = false;
-                        m_treeRenderer->render(m_scratchVisibleChunks, reflectedCamera, reflViewProj,
-                                               elapsed, m_renderer->getCascadedShadowMap(),
-                                               reflDirLight, reflClipPlane);
-                    }
-
-                    glDisable(GL_CLIP_DISTANCE0);
+                    Logger::info(std::string("Water passes: ")
+                        + (anyWaterVisible ? "rendered (surface in frustum)"
+                                           : "SKIPPED (no surface in frustum)"));
                 }
 
-                // Restore main scene FBO and view state after water passes
-                m_renderer->rebindSceneFbo();
-                m_renderer->restoreViewState();
+                if (anyWaterVisible)
+                {
+                    // Save renderer view state (geometryOnly passes overwrite m_lastProjection etc.)
+                    m_renderer->saveViewState();
+
+                    // --- Refraction pass: render scene below water ---
+                    {
+                        VESTIGE_PROFILE_SCOPE("WaterRefraction");
+                        glm::vec4 refrClipPlane(0.0f, -1.0f, 0.0f, waterY + 0.1f);
+                        glEnable(GL_CLIP_DISTANCE0);
+
+                        m_waterFbo->bindRefraction();
+                        m_renderer->renderScene(m_renderData, *m_camera, aspectRatio, refrClipPlane, true);
+
+                        if (m_terrainEnabled && m_terrain->isInitialized())
+                        {
+                            m_terrainRenderer->render(*m_terrain, *m_camera, aspectRatio, m_renderData,
+                                                     m_renderer->getCascadedShadowMap(), refrClipPlane);
+                        }
+
+                        glDisable(GL_CLIP_DISTANCE0);
+                    }
+
+                    // --- Reflection pass: render scene above water with reflected camera ---
+                    {
+                        VESTIGE_PROFILE_SCOPE("WaterReflection");
+                        glm::vec4 reflClipPlane(0.0f, 1.0f, 0.0f, -waterY + 0.1f);
+
+                        // Create reflected camera: mirror position and pitch around water plane
+                        Camera reflectedCamera = *m_camera;
+                        glm::vec3 camPos = m_camera->getPosition();
+                        float reflectedY = 2.0f * waterY - camPos.y;
+                        reflectedCamera.setPosition(glm::vec3(camPos.x, reflectedY, camPos.z));
+                        reflectedCamera.setPitch(-m_camera->getPitch());
+
+                        glEnable(GL_CLIP_DISTANCE0);
+
+                        m_waterFbo->bindReflection();
+                        m_renderer->renderScene(m_renderData, reflectedCamera, aspectRatio, reflClipPlane, true);
+
+                        if (m_terrainEnabled && m_terrain->isInitialized())
+                        {
+                            m_terrainRenderer->render(*m_terrain, reflectedCamera, aspectRatio, m_renderData,
+                                                     m_renderer->getCascadedShadowMap(), reflClipPlane);
+                        }
+
+                        // Trees in the reflection (T5, 3D_E-0033): mirror the treeline into
+                        // the pond with the reflected camera + clip plane. Cull against the
+                        // reflected frustum — the main tree pass already consumed
+                        // m_scratchVisibleChunks this frame, so reusing it here is safe.
+                        // msaaActive off: the reflection FBO is single-sample, so leave
+                        // A2C soft leaf edges to the main pass.
+                        glm::mat4 reflViewProj = reflectedCamera.getProjectionMatrix(aspectRatio)
+                                               * reflectedCamera.getViewMatrix();
+                        m_foliageManager->getVisibleChunks(reflViewProj, m_scratchVisibleChunks);
+                        if (!m_scratchVisibleChunks.empty())
+                        {
+                            const DirectionalLight* reflDirLight =
+                                m_renderData.hasDirectionalLight ? &m_renderData.directionalLight : nullptr;
+                            m_treeRenderer->msaaActive = false;
+                            m_treeRenderer->render(m_scratchVisibleChunks, reflectedCamera, reflViewProj,
+                                                   elapsed, m_renderer->getCascadedShadowMap(),
+                                                   reflDirLight, reflClipPlane);
+                        }
+
+                        glDisable(GL_CLIP_DISTANCE0);
+                    }
+
+                    // Restore main scene FBO and view state after water passes
+                    m_renderer->rebindSceneFbo();
+                    m_renderer->restoreViewState();
+                }
 
                 // Get reflection/refraction textures from water FBOs
                 GLuint reflTex = m_waterFbo->getReflectionTexture();

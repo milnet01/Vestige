@@ -22,6 +22,27 @@ may change any interface without notice.
 
 ## [Unreleased]
 
+### 2026-07-31 Changed — The scene is no longer drawn twice for water you cannot see (3D_E-0028)
+
+Water reflects its surroundings by secretly drawing the whole world a
+second time into a hidden image, and refraction does it a third time for
+what is under the surface. Both were happening whenever a scene simply
+*had* water in it — even with the pond behind you and not a pixel of it
+on screen. Now they only run when some water is actually in view.
+
+On the meadow benchmark, looking away from the pond, that is 11.94 ms
+down to 10.78 ms per frame — 83.6 to 93.5 FPS, a 12% gain for free.
+Nothing changes when you are looking at the water.
+
+- **The cull is a per-pass decision, not a change to the scene** (3D_E-0028)
+  The check lives in the render loop and decides only whether to *run* a pass; no geometry is removed from the scene data. That distinction matters for the planned ray-tracing work, where reflections must be able to see geometry behind the camera — a future ray-traced path still has every object available to it. Culling at scene-build time instead would have quietly broken that.
+
+- **Verified by unit tests and an in-engine instrument, not by inspection**
+  Five new tests cover the bounds and the cull decision (water in front / behind / beyond the far plane, and a malformed wave count). A `--visual-test` log line reports each frame's decision: 66 of 193 sampled frames culled the passes across the six meadow viewpoints, which rotate 360 degrees and so straddle the decision.
+
+- **`--no-vsync` flag added for uncapped benchmarking**
+  With vsync on, the profiler CSV reports the display's refresh rate instead of what a frame actually costs, which hides exactly this kind of win. Note a compositor can re-impose vsync on top of the flag; on Mesa, `vblank_mode=0` overrides it.
+
 ### 2026-07-31 Changed — Realistic lotus plants replace the cartoon lily pads on the pond (3D_E-0033, T6) — closes Meadow realism C
 
 The pond's flat cartoon lily pads are gone, replaced by proper leafy
