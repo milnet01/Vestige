@@ -101,13 +101,13 @@ jobs:
             -DVESTIGE_FETCH_ASSETS=OFF
 
       - name: Build
-        run: cmake --build build -j $(nproc)
+        run: cmake --build build -j "$(nproc)"
 
       - name: Run tests
         run: |
           # xvfb-run provides a virtual X display so tests that incidentally
           # touch GLFW/GL don't fail in the headless runner.
-          xvfb-run --auto-servernum ctest --test-dir build --output-on-failure -j $(nproc)
+          xvfb-run --auto-servernum ctest --test-dir build --output-on-failure -j "$(nproc)"
 
       - name: Upload test logs on failure
         if: failure()
@@ -229,7 +229,7 @@ jobs:
         # Running the build here as a native CI step — no internal timeout —
         # means audit.py's subsequent `cmake --build` is a warm no-op and the
         # test binary exists so Tier 1's test step sees all 1768 tests.
-        run: cmake --build build -j $(nproc)
+        run: cmake --build build -j "$(nproc)"
 
       - name: Run audit Tier 1
         # --ci: emit ::error/::warning annotations per finding + write
@@ -333,11 +333,11 @@ jobs:
             -DVESTIGE_FETCH_ASSETS=OFF
 
       - name: Build
-        run: cmake --build build -j $(nproc)
+        run: cmake --build build -j "$(nproc)"
 
       - name: Run tests
         run: |
-          xvfb-run --auto-servernum ctest --test-dir build --output-on-failure -j $(nproc)
+          xvfb-run --auto-servernum ctest --test-dir build --output-on-failure -j "$(nproc)"
 
   # Secret-scanning job — runs gitleaks against the repo and the full
   # git history every push and PR. Catches accidentally-committed

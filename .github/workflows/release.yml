@@ -122,7 +122,7 @@ jobs:
             -DVESTIGE_FETCH_ASSETS=OFF
 
       - name: Build
-        run: cmake --build build -j $(nproc)
+        run: cmake --build build -j "$(nproc)"
 
       - name: Resolve version string
         id: version
@@ -170,6 +170,12 @@ jobs:
             find build/_deps/openal-soft-build -maxdepth 3 -name 'libopenal.so*' -exec cp -av {} "$STAGE/lib/" \;
           fi
           # Repoint the binary's RUNPATH so the bundled .so is found.
+          # SC2016 is a FALSE POSITIVE here and must not be "fixed": $ORIGIN is
+          # expanded by the dynamic linker at load time, not by the shell, so it
+          # has to reach patchelf literally. Double-quoting would expand it to
+          # the empty string and every shipped Linux tarball would fail to find
+          # its bundled libopenal at runtime.
+          # shellcheck disable=SC2016
           patchelf --set-rpath '$ORIGIN/lib' "$STAGE/vestige"
 
           # Shipped demo assets + license/notice docs.

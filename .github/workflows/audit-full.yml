@@ -75,7 +75,7 @@ jobs:
       - name: Build
         # Warm the build so the audit's internal `cmake --build` is a no-op and
         # compile_commands.json exists for clang-tidy.
-        run: cmake --build build -j $(nproc)
+        run: cmake --build build -j "$(nproc)"
 
       - name: Run full audit (all tiers)
         # No -t → every tier runs. --no-tests: the per-push Debug job is the
