@@ -597,6 +597,43 @@ Full spatial audio pipeline with dynamic mixing, occlusion, and adaptive music. 
   Kind: feature.
   Source: user-request-2026-07-11.
 
+- 📋 [3D_E-0040] **Procedural vegetation generator — grow plants (and their textures) in-engine instead of downloading them.**
+  Raised while sourcing a lily-pad model for 3D_E-0033 T6: every realistic
+  plant so far has been a third-party download (Kenney CC0 props, LOLIPOP
+  CC-BY trees, a CC-BY lotus), each costing a search, a licence obligation
+  and a git-ignored asset the public repo cannot ship.
+
+  The engine already generates *geometry* procedurally and well — GPU
+  Bezier grass blades (3D_E-0039), billboard star-mesh wildflowers, the
+  meadow terrain itself. The gap is the **texture**: a lily pad's realism
+  is almost entirely its mottled green, radial veins, wet sheen and
+  browned edges, not its silhouette, and there is no generator for that
+  today. So the question this item exists to answer is whether a
+  procedural pipeline can close the texture gap, not the mesh gap.
+
+  Scope to research (design doc before any code, project Rule 1):
+  - **Structure:** an L-system / space-colonisation branch generator
+    feeding the existing TreeRenderer LOD tiers, so generated plants reuse
+    the shipped instancing + crossfade + CSM path rather than a new one.
+  - **Surfaces:** procedural leaf/bark albedo + normal + roughness, either
+    baked once at load into a texture array or evaluated in-shader. This
+    is the load-bearing unknown — cheap noise reads as plastic, and the
+    Formula Workbench (Rule 6) is the intended home for fitting the
+    colour/vein curves against reference photos.
+  - **Determinism + budget:** one seed reproduces one plant exactly; the
+    generated LOD0 must land in the same triangle budget the artist packs
+    do (~8-22 k), or it re-creates the photoscan problem the v2 tree
+    design already rejected.
+
+  Payoff if it works: unlimited species variety from a seed, no licence
+  rows, no git-ignored assets, and a public repo that ships its own
+  vegetation. Payoff if it half-works: still useful for the *filler*
+  layer (undergrowth, pond weed, shore reeds) where per-plant realism
+  matters least, with downloaded assets kept for hero plants.
+  **Layman:** Instead of hunting for free plant models online, teach the engine to grow its own plants — trunk, branches, leaves and the leaf pictures too.
+  Kind: research.
+  Source: user-request-2026-07-31 (raised during 3D_E-0033 T6 lily sourcing).
+
 ### Fog, Mist, and Volumetric Lighting
 - [x] Distance fog (linear, exponential, exponential-squared) — pure-function primitives shipped in `engine/renderer/fog.{h,cpp}`. `FogMode` enum (`None` / `Linear` / `Exponential` / `ExponentialSquared`) + `FogParams` (linear-RGB colour, start, end, density). `computeFogFactor(mode, params, distance)` implements the three canonical forms: Linear `(end-d)/(end-start)`, GL_EXP `exp(-density·d)`, GL_EXP2 `exp(-(density·d)²)` — returns *surface visibility* in [0,1], matches OpenGL Red Book §9 / D3D9 fog-formulas. Guards every degenerate param (zero span, negative density, sub-camera distance) with pass-through behaviour. 15 unit tests cover knees, monotonicity, and edge cases.
 - [x] Height fog — exponential fog that thickens below a configurable altitude (ground-hugging mist, valley fog). `HeightFogParams` (colour, fogHeight, groundDensity, heightFalloff, maxOpacity) + closed-form `computeHeightFogTransmittance(params, cameraY, rayDirY, rayLength)` — Quílez 2010 analytic integral of `d(y) = a·exp(-b·(y - fogHeight))` along a view ray. Uses `expm1` for numerical stability near horizontal rays; separate `|rd.y| < 1e-5` branch collapses to Beer-Lambert so the horizon line stays smooth. `maxOpacity` clamp mirrors UE `FogMaxOpacity` so the sky doesn't fully vanish on long sightlines. 7 unit tests cover zero-length, zero-density, monotonic decay, horizontal ↔ Beer-Lambert equivalence, altitude thinning, maxOpacity floor, small-angle ↔ horizontal-branch agreement. **Desert heat haze** variant (subtle distortion) is a follow-up.

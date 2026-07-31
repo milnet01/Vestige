@@ -22,6 +22,27 @@ may change any interface without notice.
 
 ## [Unreleased]
 
+### 2026-07-31 Added — Tree detail now scales with the graphics quality setting (3D_E-0033, T7)
+
+Weaker graphics cards can now draw the detailed tree models only close to
+you, swapping to cheaper stand-ins sooner — while the distant treeline
+along the horizon stays exactly where it is on every setting. That last
+part is deliberate: the far treeline is what hides the blurry edge of the
+sky image, and it is almost free to draw, so cutting it would have made
+the scene look worse for no real speed-up.
+
+- **`TreeQuality` {Low, Medium, High} tier on the `RendererQualitySink` preset path** (3D_E-0033)
+  Mirrors the shipped `GrassQuality` / `FoliageQuality` / `TerrainGroundQuality` tiers — same `QualityPreset` → sink route, free-standing enum so `settings_apply.h` forward-declares it, and the sink no-ops when the scene has no `TreeRenderer` (as it already does for grass). `TreeRenderer::setQuality` dials the three LOD switch distances; preset→tier unit test extended.
+
+- **Tier shaping: pull the expensive boundaries in, keep the cheap far cull long**
+  Low/Medium pull `lodDistance` + `billboardDistance` in hard but hold `maxDistance` out. The cost is the LOD0/mid meshes, not the far impostor, and that impostor treeline masks the 1K-HDRI horizon across a ~255 m meadow. Pulling `billboardDistance` in also shortens the tree shadow pass, which culls at `billboardDistance + fadeRange`. Every tier keeps `billboardDistance + fadeRange <= maxDistance`, so the far crossfade always completes before the cull.
+
+- **Perf gate measured on an RX 6600 (Release, meadow at High, 1280x720)**
+  Tree GPU pass 0.110 ms against a 2.0 ms budget; GPU total 11.513 ms of the 16.67 ms vsync budget (~31% headroom); 60.0 FPS across 26 sampled intervals with 69 trees placed. Under `--visual-test` the tree pass measures 0.206 ms.
+
+- **CC-BY 4.0 attribution rows for the LOLIPOP tree packs**
+  Added to `ASSET_LICENSES.md` + `THIRD_PARTY_NOTICES.md` (design §6.3). A forward record — the packs are git-ignored today, so the rows take effect when the trees ship via a release or the assets repo. Unlike every CC0 row beside them this attribution is a licence condition, not a courtesy.
+
 ### 2026-07-23 Added — Meadow trees now cast ground shadows (3D_E-0033, T4)
 
 The trees no longer float on the grass with no shadow beneath them — each one

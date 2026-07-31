@@ -59,14 +59,19 @@ def _get(url: str, token: str | None = None) -> bytes:
         return r.read()
 
 
-def fetch_pack(folder: str, uid: str, page: str, token: str) -> dict:
-    """Resolve the temporary glTF download URL, fetch the zip, extract into the library."""
+def fetch_pack(folder: str, uid: str, page: str, token: str,
+               out_root: pathlib.Path = LIB_TREES) -> dict:
+    """Resolve the temporary glTF download URL, fetch the zip, extract into the library.
+
+    out_root selects the library category directory — Trees/ by default; the
+    sibling fetch_sketchfab_water_plants.py passes Plants/ and reuses the rest.
+    """
     info = json.loads(_get(DOWNLOAD_API.format(uid), token))
     if "gltf" not in info:
         raise RuntimeError(f"{folder}: no glTF download offered (keys: {list(info)})")
     zip_bytes = _get(info["gltf"]["url"])  # signed URL, no auth header needed
 
-    out_dir = LIB_TREES / f"{folder}_sketchfab_gltf"
+    out_dir = out_root / f"{folder}_sketchfab_gltf"
     out_dir.mkdir(parents=True, exist_ok=True)
     with tempfile.NamedTemporaryFile(suffix=".zip") as tmp:
         tmp.write(zip_bytes)
