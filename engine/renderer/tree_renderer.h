@@ -27,6 +27,19 @@ class Model;
 class Mesh;
 class Material;
 
+/// @brief Tree quality tier (3D_E-0033 T7 / design D7), driven by the graphics
+///        `QualityPreset` via `RendererQualitySink` — the same path
+///        `GrassQuality` / `FoliageQuality` / `TerrainGroundQuality` use.
+///        Free-standing (not nested) so `settings_apply.h` can forward-declare it
+///        without including this header. The tier only dials the CPU-side LOD
+///        switch distances, so its integer values carry no wire contract.
+enum class TreeQuality
+{
+    Low,     ///< Nearest switch distances — fewest heavy LOD0 meshes on screen.
+    Medium,  ///< Mid switch distances.
+    High     ///< Full switch distances (the TreeRenderer defaults below).
+};
+
 /// @brief Renders trees placed in FoliageManager chunks (design §4, 3D_E-0033).
 ///
 /// Each species carries three artist LOD tiers loaded from glTF via
@@ -108,6 +121,13 @@ public:
                       float time,
                       const glm::vec3& lightRadiance,
                       const glm::vec3& lightDir);
+
+    /// @brief Applies a quality tier (design D7 / T7): dials the three LOD switch
+    ///        distances so weaker GPUs draw fewer heavy LOD0/mid meshes. High = the
+    ///        defaults below; Medium/Low pull every boundary in together. Every tier
+    ///        keeps `billboardDistance + fadeRange <= maxDistance`, so the far
+    ///        crossfade always completes before the cull (no pop-out).
+    void setQuality(TreeQuality quality);
 
     /// @brief Distance at which LOD0 → mid transition begins (m).
     float lodDistance = 45.0f;

@@ -137,6 +137,27 @@ Source: <https://kenney.nl/assets/nature-kit> (Nature Kit 2.1)
   required. Created/distributed by Kenney (<https://www.kenney.nl>);
   the credit above is included as a courtesy, not an obligation.
 
+### Realistic trees — `assets/models/nature_local/gameready/` (not committed)
+
+Source: <https://sketchfab.com/lolipop_1707>
+
+- **LOLIPOP game-ready tree packs** (pine, fir, maple, birch) — the
+  realistic meadow treeline (3D_E-0033). Each pack ships the artist's
+  LOD0–2 meshes plus a billboard impostor, PBR-textured at a game
+  triangle budget. Licensed under **CC-BY 4.0 International**.
+  Required attribution, reproduced verbatim:
+
+  > 3D tree models by **LOLIPOP** (sketchfab.com/lolipop_1707),
+  > licensed under CC BY 4.0.
+
+  Attribution here is a **licence condition**, not a courtesy — this
+  line must appear wherever the built application credits its assets.
+  The packs themselves are git-ignored (fetched into the external asset
+  library by `tools/asset_prep/fetch_sketchfab_trees.py` and symlinked
+  into `assets/models/nature_local/`), so this notice is a forward
+  record that takes effect when the trees ship via a release or the
+  assets repo.
+
 ### HDRIs — `assets/hdri/`
 
 Source: <https://polyhaven.com/a/syferfontein_0d_clear>

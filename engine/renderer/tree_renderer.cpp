@@ -92,6 +92,39 @@ void TreeRenderer::shutdown()
     m_initialized = false;
 }
 
+void TreeRenderer::setQuality(TreeQuality quality)
+{
+    // High is the header's default tuning. The cheaper tiers pull the two
+    // EXPENSIVE boundaries in hard (lodDistance, billboardDistance) but keep
+    // maxDistance long: the cost is the LOD0/mid meshes, whereas the far tier is
+    // the cheap impostor, and that impostor treeline is what masks the blurry
+    // 1K-HDRI horizon. Shortening maxDistance to "save" it would cull the
+    // silhouette and buy almost no frame time — a visible cliff for nothing.
+    // The shadow caster culls at billboardDistance + fadeRange, so pulling that
+    // boundary in also shortens the tree shadow pass — the real saving.
+    switch (quality)
+    {
+    case TreeQuality::Low:
+        lodDistance = 18.0f;
+        billboardDistance = 55.0f;
+        fadeRange = 10.0f;
+        maxDistance = 260.0f;
+        break;
+    case TreeQuality::Medium:
+        lodDistance = 30.0f;
+        billboardDistance = 110.0f;
+        fadeRange = 12.0f;
+        maxDistance = 300.0f;
+        break;
+    case TreeQuality::High:
+        lodDistance = 45.0f;
+        billboardDistance = 180.0f;
+        fadeRange = 15.0f;
+        maxDistance = 350.0f;
+        break;
+    }
+}
+
 void TreeRenderer::buildDrawList(const Model& model, std::vector<PrimDraw>& out) const
 {
     out.clear();

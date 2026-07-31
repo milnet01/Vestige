@@ -53,6 +53,20 @@ textures; ~244 KB total) for the meadow benchmark scene
 overrides drop in via the git-ignored `assets/models/nature_local/`
 directory and are never committed.
 
+### Realistic trees — `assets/models/nature_local/gameready/` (not committed)
+
+| Files | Source | License | Attribution required |
+|-------|--------|---------|----------------------|
+| `gameready/{pine,fir,maple,birch}/*_{lod0,lod2,billboard}.gltf` — game-ready tree packs with artist LOD0–2 meshes + billboards | LOLIPOP on Sketchfab ([pine](https://sketchfab.com/3d-models/pine-trees-pack-lowpoly-game-ready-lods-e1e9c07b8e2e445c943fec660beefba2), [fir](https://sketchfab.com/3d-models/realistic-fir-trees-pack-lods-gameready-f58e8b6d733e4b0586e5b7db847b89e7), [maple](https://sketchfab.com/3d-models/maple-trees-pack-lowpoly-game-ready-lods-b5d2833c258f4054a01ee2b4ef85adf0), [birch](https://sketchfab.com/3d-models/five-birch-trees-pack-lowpoly-lods-08fe5117138e4fdaa7ca440ef1201e07)) | **CC-BY 4.0** | **Yes** — "3D tree models by LOLIPOP (sketchfab.com/lolipop_1707), licensed under CC BY 4.0." |
+
+**Forward record (3D_E-0033 §6.3).** This file's charter is assets that
+*ship* in the public repo; these packs are git-ignored today (fetched via
+`tools/asset_prep/fetch_sketchfab_trees.py` into the external asset
+library and symlinked into `nature_local/`). The row is recorded here in
+advance so the obligation is already tracked when the trees ship via a
+release or the assets repo. Attribution is **required** — unlike every
+CC0 row above, this one is a licence condition, not a courtesy.
+
 ---
 
 ## HDRIs — `assets/hdri/`

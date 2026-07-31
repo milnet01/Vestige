@@ -21,6 +21,7 @@
 #include "renderer/terrain_renderer.h"   // TerrainGroundQuality (Tier-1 A5)
 #include "renderer/foliage_renderer.h"   // FoliageQuality (Tier-1 B3)
 #include "renderer/grass_renderer.h"     // GrassQuality (3D_E-0039 G5)
+#include "renderer/tree_renderer.h"      // TreeQuality (3D_E-0033 T7)
 #include "utils/atomic_write.h"
 #include "utils/config_path.h"
 
@@ -1202,6 +1203,7 @@ public:
     TerrainGroundQuality ground = TerrainGroundQuality::High;  // sentinel
     FoliageQuality foliage = FoliageQuality::High;             // sentinel
     GrassQuality  grass    = GrassQuality::High;               // sentinel
+    TreeQuality   tree     = TreeQuality::High;                // sentinel
     int           calls     = 0;
 
     void setAntiAliasMode(AntiAliasMode m) override { aa = m; ++calls; }
@@ -1211,6 +1213,7 @@ public:
     void setTerrainGroundQuality(TerrainGroundQuality q) override { ground = q; ++calls; }
     void setFoliageQuality(FoliageQuality q) override { foliage = q; ++calls; }
     void setGrassQuality(GrassQuality q) override   { grass = q; ++calls; }
+    void setTreeQuality(TreeQuality q) override     { tree = q; ++calls; }
 };
 
 class RecordingSubtitleSink final : public SubtitleApplySink
@@ -1369,7 +1372,8 @@ TEST(SettingsApply, QualityPresetLowUsesFxaaHalfScaleAndDropsHeavyPost)
     EXPECT_EQ(sink.ground, TerrainGroundQuality::Low);   // A5: cheapest terrain path
     EXPECT_EQ(sink.foliage, FoliageQuality::Low);        // B3: short grass distance, no shadows
     EXPECT_EQ(sink.grass, GrassQuality::Low);            // G5: short GPU-grass draw distance
-    EXPECT_EQ(sink.calls, 7);                            // 4 toggles + terrain + foliage + grass tier
+    EXPECT_EQ(sink.tree, TreeQuality::Low);              // T7: nearest tree LOD switch distances
+    EXPECT_EQ(sink.calls, 8);                            // 4 toggles + terrain/foliage/grass/tree tiers
 }
 
 TEST(SettingsApply, QualityPresetMediumKeepsSsaoBloomButStillFxaaAndNoHeavyPost)
@@ -1386,6 +1390,7 @@ TEST(SettingsApply, QualityPresetMediumKeepsSsaoBloomButStillFxaaAndNoHeavyPost)
     EXPECT_EQ(sink.ground, TerrainGroundQuality::Medium);  // A5: drops distance-tiling
     EXPECT_EQ(sink.foliage, FoliageQuality::Medium);       // B3: mid grass distance
     EXPECT_EQ(sink.grass, GrassQuality::Medium);           // G5: mid GPU-grass draw distance
+    EXPECT_EQ(sink.tree, TreeQuality::Medium);             // T7: mid tree LOD switch distances
 }
 
 TEST(SettingsApply, QualityPresetHighAndUltraRenderIdenticallyInWave1)
@@ -1406,6 +1411,8 @@ TEST(SettingsApply, QualityPresetHighAndUltraRenderIdenticallyInWave1)
         EXPECT_EQ(sink.foliage, FoliageQuality::High)       // B3: full grass distance + shadows
             << "preset " << qualityPresetLabel(p);
         EXPECT_EQ(sink.grass, GrassQuality::High)           // G5: full GPU-grass draw distance
+            << "preset " << qualityPresetLabel(p);
+        EXPECT_EQ(sink.tree, TreeQuality::High)             // T7: full tree LOD switch distances
             << "preset " << qualityPresetLabel(p);
     }
 }

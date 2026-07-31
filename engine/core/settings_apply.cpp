@@ -15,6 +15,7 @@
 #include "renderer/grass_renderer.h"
 #include "renderer/renderer.h"
 #include "renderer/terrain_renderer.h"
+#include "renderer/tree_renderer.h"
 #include "systems/ui_system.h"
 #include "ui/subtitle.h"
 
@@ -49,11 +50,13 @@ void applyDisplay(const DisplaySettings& display, DisplayApplySink& sink)
 RendererQualityApplySinkImpl::RendererQualityApplySinkImpl(Renderer& renderer,
                                                            TerrainRenderer& terrain,
                                                            FoliageRenderer& foliage,
-                                                           GrassRenderer* grass)
+                                                           GrassRenderer* grass,
+                                                           TreeRenderer* tree)
     : m_renderer(renderer)
     , m_terrain(terrain)
     , m_foliage(foliage)
     , m_grass(grass)
+    , m_tree(tree)
 {
 }
 
@@ -96,6 +99,15 @@ void RendererQualityApplySinkImpl::setGrassQuality(GrassQuality quality)
     }
 }
 
+void RendererQualityApplySinkImpl::setTreeQuality(TreeQuality quality)
+{
+    // Trees are an optional subsystem (an indoor scene has no tree renderer).
+    if (m_tree != nullptr)
+    {
+        m_tree->setQuality(quality);
+    }
+}
+
 void applyQualityPreset(QualityPreset preset, DisplaySettings& display,
                         RendererQualitySink& sink)
 {
@@ -114,6 +126,7 @@ void applyQualityPreset(QualityPreset preset, DisplaySettings& display,
         TerrainGroundQuality ground;      // PBR terrain ground-texture tier (A5)
         FoliageQuality       foliage;     // grass distance + shadow tier (B3)
         GrassQuality         grass;       // GPU-grass LOD distance tier (G5)
+        TreeQuality          tree;        // Tree LOD switch-distance tier (T7)
     };
 
     // Zero-init so the compiler sees a defined value on every path — a
@@ -124,17 +137,20 @@ void applyQualityPreset(QualityPreset preset, DisplaySettings& display,
     {
     case QualityPreset::Low:
         row = {0.66f, AntiAliasMode::FXAA, false, false, false,
-               TerrainGroundQuality::Low, FoliageQuality::Low, GrassQuality::Low};
+               TerrainGroundQuality::Low, FoliageQuality::Low, GrassQuality::Low,
+               TreeQuality::Low};
         break;
     case QualityPreset::Medium:
         row = {0.75f, AntiAliasMode::FXAA, true, true, false,
-               TerrainGroundQuality::Medium, FoliageQuality::Medium, GrassQuality::Medium};
+               TerrainGroundQuality::Medium, FoliageQuality::Medium, GrassQuality::Medium,
+               TreeQuality::Medium};
         break;
     case QualityPreset::High:
     case QualityPreset::Ultra:
         // Ultra renders identically to High in wave 1 (design §6), terrain + grass included.
         row = {1.0f, AntiAliasMode::TAA, true, true, true,
-               TerrainGroundQuality::High, FoliageQuality::High, GrassQuality::High};
+               TerrainGroundQuality::High, FoliageQuality::High, GrassQuality::High,
+               TreeQuality::High};
         break;
     case QualityPreset::Custom:
         // Custom applies nothing — the player's hand-tuned knobs stand.
@@ -149,6 +165,7 @@ void applyQualityPreset(QualityPreset preset, DisplaySettings& display,
     sink.setTerrainGroundQuality(row.ground);
     sink.setFoliageQuality(row.foliage);
     sink.setGrassQuality(row.grass);
+    sink.setTreeQuality(row.tree);
 }
 
 // ================================================================

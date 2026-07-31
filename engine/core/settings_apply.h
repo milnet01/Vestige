@@ -45,6 +45,8 @@ enum class FoliageQuality;       // renderer/foliage_renderer.h
 class FoliageRenderer;           // renderer/foliage_renderer.h
 enum class GrassQuality;         // renderer/grass_renderer.h
 class GrassRenderer;             // renderer/grass_renderer.h
+enum class TreeQuality;          // renderer/tree_renderer.h
+class TreeRenderer;              // renderer/tree_renderer.h
 struct AudioSettings;            // core/settings.h
 struct AccessibilitySettings;    // core/settings.h
 struct LocalizationSettings;     // core/settings.h
@@ -130,6 +132,9 @@ public:
     /// GPU-grass LOD distance tier (3D_E-0039 G5). Forwarded to the `GrassRenderer`
     /// (may be absent — see `RendererQualityApplySinkImpl`, which no-ops if null).
     virtual void setGrassQuality(GrassQuality quality) = 0;
+    /// Tree LOD switch-distance tier (3D_E-0033 T7). Forwarded to the `TreeRenderer`
+    /// (may be absent — see `RendererQualityApplySinkImpl`, which no-ops if null).
+    virtual void setTreeQuality(TreeQuality quality) = 0;
 };
 
 /// @brief Production sink wrapping the live `Renderer` + `TerrainRenderer`. Thin
@@ -141,8 +146,11 @@ class RendererQualityApplySinkImpl final : public RendererQualitySink
 public:
     /// @param grass The GPU-grass renderer, or nullptr when the scene has none —
     ///        `setGrassQuality` then no-ops (grass is an optional subsystem).
+    /// @param tree The tree renderer, or nullptr when the scene has none —
+    ///        `setTreeQuality` then no-ops (trees are an optional subsystem).
     RendererQualityApplySinkImpl(Renderer& renderer, TerrainRenderer& terrain,
-                                 FoliageRenderer& foliage, GrassRenderer* grass);
+                                 FoliageRenderer& foliage, GrassRenderer* grass,
+                                 TreeRenderer* tree);
     void setAntiAliasMode(AntiAliasMode mode) override;
     void setSsaoEnabled(bool enabled) override;
     void setBloomEnabled(bool enabled) override;
@@ -150,12 +158,14 @@ public:
     void setTerrainGroundQuality(TerrainGroundQuality quality) override;
     void setFoliageQuality(FoliageQuality quality) override;
     void setGrassQuality(GrassQuality quality) override;
+    void setTreeQuality(TreeQuality quality) override;
 
 private:
     Renderer& m_renderer;
     TerrainRenderer& m_terrain;
     FoliageRenderer& m_foliage;
     GrassRenderer* m_grass;   ///< Optional — nullptr in scenes with no GPU grass.
+    TreeRenderer* m_tree;     ///< Optional — nullptr in scenes with no trees.
 };
 
 /// @brief Applies a quality preset (design §4.1). Writes the preset's

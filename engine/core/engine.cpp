@@ -442,12 +442,14 @@ bool Engine::initialize(const EngineConfig& config)
 
             // Tier-1 quality preset → AA/SSAO/bloom/heavy-post toggles + the PBR
             // terrain ground-texture tier (A5, on the TerrainRenderer) + the grass
-            // distance/shadow tier (B3, on the FoliageRenderer). renderScale is
+            // distance/shadow tier (B3, on the FoliageRenderer) + the tree LOD
+            // switch-distance tier (T7, on the TreeRenderer). renderScale is
             // reconciled into the pending DisplaySettings, which the play-mode
             // resize reads per frame.
             m_rendererQualitySink =
                 std::make_unique<RendererQualityApplySinkImpl>(
-                    *m_renderer, *m_terrainRenderer, *m_foliageRenderer, m_grassRenderer);
+                    *m_renderer, *m_terrainRenderer, *m_foliageRenderer,
+                    m_grassRenderer, m_treeRenderer);
             targets.rendererQuality = m_rendererQualitySink.get();
         }
         if (UISystem* ui = m_systemRegistry.getSystem<UISystem>())
