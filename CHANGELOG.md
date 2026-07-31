@@ -22,6 +22,30 @@ may change any interface without notice.
 
 ## [Unreleased]
 
+### 2026-07-31 Changed — Realistic lotus plants replace the cartoon lily pads on the pond (3D_E-0033, T6) — closes Meadow realism C
+
+The pond's flat cartoon lily pads are gone, replaced by proper leafy
+lotus clusters with pink blooms that reflect in the water and cast
+shadows onto the pond bed. The blooms are deliberately occasional rather
+than on every pad — a flower on every leaf reads as fake. This was the
+last outstanding piece of the "realistic trees and plants" work, so that
+whole item is now finished.
+
+- **Two CC-BY lotus packs, fetched and decimated to a game budget** (3D_E-0033)
+  New `tools/asset_prep/fetch_sketchfab_water_plants.py` (reuses the tree fetcher's machinery via an `out_root` parameter) and `split_water_plants.py` (Blender headless): 467 038 → 18 194 tris for the pads, 485 838 → 9 401 for the flowers, joined per pack, recentred base-at-origin, exported glTF-separate into `gameready/water/` with maps capped at 1024 px. Decimation is safe on these dense uniform surfaces in a way it is not on leaf-card trees — the detail lives in the baked maps, not the silhouette.
+
+- **The Blender pass also converts a material extension the engine cannot read**
+  Both packs list `KHR_materials_pbrSpecularGlossiness` in `extensionsRequired`; the loader does not implement it, so a raw drop-in would not have rendered correctly. The import/export round-trip emits standard metallic-roughness — verified `extensionsRequired` is absent from the exported glTFs.
+
+- **Fixed: pond props could be placed on dry land**
+  The scatter region is a square while the water is a disc, and it was sized off `POND_SIZE` — the sheet extent, which includes the dry edge pad — so its corners put plants on the bank. Now inscribed in `pondFill.floodRadius`. Pre-existing with the low-poly pads; conspicuous once the props became this visible.
+
+- **Fixed: no visual-test viewpoint could see the pond**
+  Every meadow viewpoint sits at eye level inside the ~1 m GPU grass, and the pond is a ~4.5 m depression, so the water never entered a capture — leaving this slice's own acceptance check unobservable. Added a raised, down-pitched `pond_surface` viewpoint, which is what verified the change.
+
+- **Provenance recorded: the lotus packs are AI-generated, not photoscans**
+  Noted in `ASSET_LICENSES.md` + `THIRD_PARTY_NOTICES.md` alongside the required CC-BY credit. No photoreal CC-licensed water lily was found; everything else downloadable is hand-painted or stylised. Follow-on 3D_E-0040 filed to grow vegetation procedurally instead.
+
 ### 2026-07-31 Added — Tree detail now scales with the graphics quality setting (3D_E-0033, T7)
 
 Weaker graphics cards can now draw the detailed tree models only close to

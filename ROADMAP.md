@@ -569,7 +569,7 @@ Full spatial audio pipeline with dynamic mixing, occlusion, and adaptive music. 
   Kind: feature.
   Source: user-request-2026-07-19 (meadow GPU grass; fixture 3D_E-0027).
 
-- 🚧 [3D_E-0033] **Meadow realism C — realistic trees & plants.**
+- ✅ [3D_E-0033] **Meadow realism C — realistic trees & plants.**
   Replace the low-poly Kenney props with realistic vegetation: use the engine's existing tree LOD-billboard system and/or biome presets, or photo-textured / billboard-imposter trees (real tree photos on crossed cards for the mid/far treeline). Large committed models stay out of the public repo via the existing git-ignored `nature_local/` override hook. The clustered treeline should reflect in the pond. Phase C — the hardest realism piece; user deferred it behind A/B.
   **Layman:** Swap the cartoon trees for realistic-looking ones — the treeline you keep pointing at.
   Kind: feature.
@@ -578,6 +578,29 @@ Full spatial audio pipeline with dynamic mixing, occlusion, and adaptive music. 
   Progress (2026-07-22): T1 (asset prep) + T2 (TreeRenderer revive) + T3 (meadow placement) shipped. TreeRenderer now loads a 9-species table (6 field + 3 hero) from the LOLIPOP gameready glTFs, draws per-material LOD0 + mid (LOD2) meshes via a per-node model-matrix uniform (deviation from design §4.4 flatten-into-vertices, which the Mesh API cannot support — same rendered result, full ResourceManager reuse) + yaw-billboard cards, 3-bucket LOD with two crossfade bands, foliage-style wind + CSM shadow-receive + directional light. engine.cpp meadow builder places 69 field+hero trees via placeTree (Kenney tree scatterGroup removed); tree render wrapped in its own beginPass("Tree"). Verified on RX 6600 / Mesa 26.1.5: real leafy meshes render, all three tiers draw (lod0/mid/billboard), 0 GL errors. Remaining: T4 shadow-caster, T5 pond reflection, T6 flowers/lilies cleanup, T7 quality tier + perf gate + CC-BY attribution rows.
   Progress (2026-07-23): T4 shipped — trees cast ground shadows. New TreeRenderer::renderShadow() + tree_shadow.{vert,frag}.glsl (mirrors the foliage caster: instanced transform + wind sway → light space, leaf alpha-cutout, RSM flux). Renderer gathers the shared FoliageManager chunks once and feeds foliage + tree casters per cascade (setTreeShadowCaster, wired at engine init). D4 scope cap held: LOD0 + mid cast, far impostor receives-only. Verified RX 6600 / Mesa: 0 GL errors, all 7 ctest green, Tree GPU pass 0.12-0.22 ms. Remaining: T5 pond reflection, T6 flowers/lilies cleanup, T7 quality tier + perf gate + CC-BY credits + ROADMAP flip. Open polish (unchanged): LOD crossfade fade-in/out still perceptible (user OK'd shipping into rc.1).
   Progress (2026-07-23): close-up quality pass T8-T10 shipped+pushed (design docs/phases/phase_10_meadow_realism_c_trees_closeup_design.md, cold-eyes converged 6 loops). T8 normal-mapped leaf cards & bark (bind the already-loaded getNormalMap to unit 1 + TBN; synthesized tangents); T9 dithered screen-door dissolve crossfade replacing the alpha blend (signed complementary partition — corrects a design bug that would have left ~50% canopy holes; two-boundary shadow dissolve with cull extended to billboardDistance+fadeRange); T10 coverage-preservation + alpha-to-coverage soft leaf edges (MSAA_4X). Plus two fixes: maple/pine BLEND leaf clusters rendered near-black (fell through to the bark lighting path → now two-sided cutout leaf lighting, latent since T2); and an msvc-wine local-CI false-fail (PerfGate host-Python tests excluded from the Wine ctest stage). All user-confirmed on RX 6600, full local-ci green. Remaining on this bullet: T5 pond reflection, T6 flowers/lilies cleanup, T7 quality tier + perf gate + CC-BY attribution rows.
+  Resolved (2026-07-31): final slices T6 part 2 + T7 shipped, closing the
+  bullet. T7 (commit c1c0274): `TreeQuality` Low/Med/High on the
+  `RendererQualitySink` preset path (preset→tier unit test), tier shaped to
+  pull the expensive LOD0/mid boundaries in while holding the cheap impostor
+  treeline that masks the 1K-HDRI horizon; perf gate on RX 6600 at High —
+  Tree pass 0.110 ms of a 2.0 ms budget, GPU total 11.513 ms of the 16.67 ms
+  vsync budget, 60.0 FPS, 69 trees; LOLIPOP CC-BY rows added to
+  ASSET_LICENSES.md + THIRD_PARTY_NOTICES.md as a forward record. T6 part 2
+  (commit e855802): Kenney lily_{large,small}.glb replaced by two CC-BY
+  Galaxy Abundant lotus clusters, fetched + Blender-decimated (467k→18k and
+  486k→9k tris) via new fetch_sketchfab_water_plants.py +
+  split_water_plants.py; the Blender pass also converts their REQUIRED
+  KHR_materials_pbrSpecularGlossiness to metallic-roughness, without which
+  the engine's loader could not have rendered them. Recorded honestly: these
+  packs are AI-generated (Tripo), not photogrammetry — no photoreal
+  CC-licensed water lily was found. Two defects the visual check forced:
+  the lily scatter square was sized off the pond SHEET extent so corners
+  placed lotus on dry grass (now inscribed in pondFill.floodRadius), and no
+  visual-test viewpoint could see the pond at all (eye-level cameras sit
+  inside ~1 m GPU grass over a ~4.5 m depression) — added a raised,
+  down-pitched `pond_surface` viewpoint, which is what verified this slice.
+  Follow-on 3D_E-0040 filed: procedural vegetation generator, so future
+  plants need neither a download nor a licence row.
 
 - 📋 [3D_E-0034] **Meadow realism D — sky, water & colour polish.**
   A committed CC0 partly-cloudy day HDRI (blue sky + white clouds), a colour-grade pass for vivid natural greens, and water reflection/refraction tuning so the pond convincingly mirrors the treeline. Mood + reflections to match the reference photos. Phase D — final polish once A–C land.
