@@ -2570,12 +2570,17 @@ void Engine::finalizeMeadowTerrain()
         // looks like. Leaving it at the old ocean blue just made the pond reach
         // a vivid blue sooner — verified against the pond_surface visual-test
         // capture, which is why these two moved together with the turbidity.
-        c.shallowColor = {0.22f, 0.32f, 0.24f, 0.85f};
-        c.deepColor = {0.07f, 0.12f, 0.08f, 1.00f};
+        // deepColor is what the murk itself looks like once the water column is
+        // thick enough to hide the bed — turbidity only sets how fast you get
+        // there. shallowColor is deliberately left near it but is INERT while
+        // refraction is on: water.frag.glsl only reads it in the no-refraction
+        // fallback branch.
+        c.shallowColor = {0.16f, 0.30f, 0.16f, 0.85f};
+        c.deepColor = {0.04f, 0.13f, 0.05f, 1.00f};
         // A meadow pond is standing water over a silt bed, not a swimming pool:
         // enough suspended matter to lose the bottom within a short depth and
         // read green-brown, while still mirroring the sky (user request).
-        c.turbidity = 0.35f;
+        c.turbidity = 0.55f;
         c.reflectionMode = WaterReflectionMode::PLANAR;  // mirrors sky + trees
         c.causticsEnabled = true;
         // Still-unless-windy: the meadow runs at zero base wind, so the pond reads

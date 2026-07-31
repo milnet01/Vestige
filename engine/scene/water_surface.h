@@ -124,7 +124,12 @@ inline float waterWindRippleScale(float windSpeedMetersPerSec)
 inline glm::vec3 waterAbsorptionCoefficients(float turbidity)
 {
     constexpr glm::vec3 CLEAR_WATER(0.4f, 0.2f, 0.1f);
-    constexpr glm::vec3 TURBID_ADD(1.6f, 1.9f, 2.6f);   // blue absorbed hardest
+    // Green is the SMALLEST term: silt and algae absorb blue hardest and red
+    // next, leaving a green transmission window around 550 nm. That window is
+    // the whole reason a real pond reads green rather than brown or blue — an
+    // earlier revision absorbed green harder than red and no amount of tinting
+    // the deep colour could make it look like pond water.
+    constexpr glm::vec3 TURBID_ADD(2.2f, 1.1f, 2.9f);
     return CLEAR_WATER + std::clamp(turbidity, 0.0f, 1.0f) * TURBID_ADD;
 }
 

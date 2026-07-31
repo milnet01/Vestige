@@ -677,6 +677,7 @@ Full spatial audio pipeline with dynamic mixing, occlusion, and adaptive music. 
   **Layman:** Ponds can now look silty and green-brown instead of like a swimming pool.
   Kind: enhancement.
   Source: user-request-2026-07-31.
+  Follow-up (2026-07-31, user): first turbid pond read blue-murky rather than green. Root cause was the absorption curve, not the colours — TURBID_ADD absorbed GREEN harder than red (1.6, 1.9, 2.6), so no deepColor tint could make it look like pond water. Real silt/algae leave a transmission window near 550 nm; corrected to (2.2, 1.1, 2.9) with green the smallest term, pinned by a new test (TurbidWaterTransmitsGreenBest). Pond turbidity 0.35 -> 0.55, deepColor to {0.04,0.13,0.05}. Measured on the pond_surface capture, open-water band: RGB(80,109,90) -> (66,117,79); green-minus-blue +19 -> +38, green-minus-red +29 -> +51. Also noted: shallowColor is INERT whenever refraction is enabled — water.frag.glsl reads it only in the no-refraction fallback branch, so tuning it on a refracting surface does nothing.
 
 - 📋 [3D_E-0042] **GPU grass should cast shadows (cascade 0 only) — it is the only vegetation that does not.**
   Verified 2026-07-31: `m_grassRenderer` is never registered as a shadow

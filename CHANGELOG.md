@@ -22,6 +22,27 @@ may change any interface without notice.
 
 ## [Unreleased]
 
+### 2026-07-31 Fixed — Murky water now goes green rather than blue, and the meadow pond is murkier (3D_E-0041)
+
+The first version of turbidity made water murky but blue-murky. The cause
+was the absorption curve rather than the colours: it absorbed green light
+harder than red, so no amount of re-tinting the deep colour could make it
+read like pond water.
+
+Real silt and algae leave a transmission window in the green, which is
+exactly why ponds look green — so green is now the least-absorbed channel,
+with blue absorbed hardest and red second. The meadow pond was also dialled
+up from 0.35 to 0.55.
+
+- **Green transmission is now pinned by a test** (3D_E-0041)
+  Measured on the automated pond capture: the open-water colour moved from RGB(80,109,90) to RGB(66,117,79) — green's lead over blue went from +19 to +38, and over red from +29 to +51. A new test asserts green stays the least-absorbed channel so the ordering cannot quietly regress.
+
+- **Note: the shallow-water colour has no effect while refraction is on**
+  The water shader reads it only in the fallback path used when refraction is disabled. Tuning it on a normal refracting surface does nothing — the deep colour and turbidity are the two controls that matter. Worth knowing before reaching for the wrong slider.
+
+- **Water still mirrors the sky, so the surface reads blue at glancing angles**
+  That is the reflection, not the water body, and it is correct — a real pond does the same. Looking down into the water shows the green; looking across it at a low angle shows more sky.
+
 ### 2026-07-31 Added — Water can be murky — the meadow pond is now silty rather than crystal-clear (3D_E-0041)
 
 Every water surface in the engine was necessarily transparent: the numbers

@@ -334,6 +334,18 @@ TEST(WaterTurbidityTest, TurbidWaterAbsorbsBlueFastest)
     EXPECT_GT(c.b, c.r);
 }
 
+TEST(WaterTurbidityTest, TurbidWaterTransmitsGreenBest)
+{
+    // The reason a murky pond reads GREEN rather than brown or blue: silt and
+    // algae leave a transmission window around 550 nm, so green must be the
+    // least-absorbed channel once turbidity is up. An earlier revision absorbed
+    // green harder than red, and the water came out blue-brown no matter what
+    // the deep colour was set to — this pins the ordering that fixed it.
+    const glm::vec3 c = waterAbsorptionCoefficients(0.6f);
+    EXPECT_LT(c.g, c.r);
+    EXPECT_LT(c.g, c.b);
+}
+
 TEST(WaterTurbidityTest, AbsorptionRisesMonotonicallyWithTurbidity)
 {
     float prevSum = -1.0f;
