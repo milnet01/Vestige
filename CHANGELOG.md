@@ -22,6 +22,26 @@ may change any interface without notice.
 
 ## [Unreleased]
 
+### 2026-07-31 Fixed — The weekly release train was cancelling its own promotion build every run
+
+Every scheduled release run does two things: promote the RC that has been
+baking into a full release, and cut a fresh RC from main. Both halves call
+the same build workflow — and that workflow grouped its runs by a value
+that was identical for both calls, with "cancel any earlier run in this
+group" switched on. So the second half killed the first, every single time.
+
+The symptom was quiet: the planning step always succeeded, so the version
+tags were created correctly and only the run list showed `cancelled`. The
+v0.1.64 release had been sitting unpublished since 22 July with a
+half-uploaded set of files because its build was killed mid-upload.
+
+The group is now keyed on the version being built, so the two halves no
+longer collide. Verified by re-running the promotion build for v0.1.65:
+both platform builds completed and the release published.
+
+- **Affected the 2026-07-22, -07-29 and -07-31 runs**
+  Under a reusable-workflow call, the ref the group was keyed on is the *caller's* branch (always `main`), not the tag being built — so promote and RC shared one group. All three trigger paths now contribute their own tag, including the manual-dispatch path, where two builds of different versions could also have cancelled each other.
+
 ### 2026-07-31 Fixed — Murky water now goes green rather than blue, and the meadow pond is murkier (3D_E-0041)
 
 The first version of turbidity made water murky but blue-murky. The cause
