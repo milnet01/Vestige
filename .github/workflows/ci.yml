@@ -398,3 +398,59 @@ jobs:
             --config .gitleaks.toml \
             --redact \
             --exit-code 1
+
+  # ─────────────────────────────────────────────────────────────────────
+  # GitHub Actions workflow lint. Mirrored locally by scripts/local-ci.sh
+  # stage 6, so a green here is reproducible before pushing.
+  # ─────────────────────────────────────────────────────────────────────
+  workflow-lint:
+    name: actionlint
+    runs-on: ubuntu-24.04
+    timeout-minutes: 10
+    env:
+      # Pinned version — bump deliberately, not via a floating tag.
+      # Matches the GITLEAKS_VERSION pattern above.
+      ACTIONLINT_VERSION: "1.7.12"
+      # sha256 of actionlint_<ver>_linux_amd64.tar.gz from the release's
+      # checksums.txt. Must be updated together with ACTIONLINT_VERSION.
+      ACTIONLINT_SHA256: "8aca8db96f1b94770f1b0d72b6dddcb1ebb8123cb3712530b08cc387b349a3d8"
+    steps:
+      - name: Checkout
+        uses: actions/checkout@9c091bb21b7c1c1d1991bb908d89e4e9dddfe3e0  # v6
+
+      - name: Verify shellcheck is present
+        # actionlint shells every `run:` block out to shellcheck. Without it
+        # actionlint still exits 0 while silently checking no script at all —
+        # a false pass. ubuntu-24.04 ships shellcheck, so assert rather than
+        # install; if a future runner image drops it, fail loudly here instead
+        # of quietly weakening the gate.
+        run: |
+          set -euo pipefail
+          if ! command -v shellcheck >/dev/null 2>&1; then
+            echo "::error::shellcheck missing from the runner image — actionlint would" \
+                 "skip every run: block and report a meaningless pass. Add an explicit" \
+                 "apt-get install shellcheck step."
+            exit 1
+          fi
+          shellcheck --version
+
+      - name: Install actionlint
+        # Pinned release binary + checksum, following the gitleaks pattern.
+        # No third-party action: this repo was bitten by awalsh128/cache-apt-pkgs-action
+        # silently installing nothing, so tool installs are done explicitly.
+        run: |
+          set -euo pipefail
+          ASSET="actionlint_${ACTIONLINT_VERSION}_linux_amd64.tar.gz"
+          curl -fsSL --retry 3 \
+            -o "$RUNNER_TEMP/actionlint.tar.gz" \
+            "https://github.com/rhysd/actionlint/releases/download/v${ACTIONLINT_VERSION}/${ASSET}"
+          echo "${ACTIONLINT_SHA256}  $RUNNER_TEMP/actionlint.tar.gz" | sha256sum -c -
+          tar -xzf "$RUNNER_TEMP/actionlint.tar.gz" -C "$RUNNER_TEMP" actionlint
+          sudo install -m 0755 "$RUNNER_TEMP/actionlint" /usr/local/bin/actionlint
+          actionlint --version
+
+      - name: Run actionlint
+        # Lints every workflow under .github/workflows: schema, expression syntax,
+        # action reference validity, plus shellcheck over each run: block. Exits
+        # non-zero on any finding, turning CI red — that is the signal.
+        run: actionlint -color

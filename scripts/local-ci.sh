@@ -176,6 +176,13 @@ preflight() {
     ver_line "cppcheck"   cppcheck --version
     ver_line "clang-tidy" clang-tidy --version
     command -v gitleaks >/dev/null 2>&1 && ver_line "gitleaks" gitleaks version || printf '  %-11s %s\n' "gitleaks" "!! MISSING (secret-scan stage will SKIP)"
+    command -v actionlint >/dev/null 2>&1 && ver_line "actionlint" actionlint --version || printf '  %-11s %s\n' "actionlint" "!! MISSING (workflow-lint stage will SKIP)"
+    # actionlint lints each `run:` block by shelling out to the shell linter;
+    # without that tool actionlint still exits 0, so report it separately rather
+    # than let a green actionlint imply the run: blocks were checked.
+    # NB: never begin a comment line with that linter's name + a space — it is
+    # parsed as a directive and errors out with SC1072/SC1073.
+    command -v shellcheck >/dev/null 2>&1 && ver_line "shellcheck" shellcheck --version || printf '  %-11s %s\n' "shellcheck" "!! MISSING (actionlint would skip all run: blocks)"
     if [[ $CLANG_TIDY_OK -eq 0 ]]; then
         echo
         echo "  !! clang-tidy NOT found — the Tier-1 audit will SKIP it. clang-tidy"
@@ -327,6 +334,30 @@ if command -v gitleaks >/dev/null 2>&1; then
 else
     echo "gitleaks not found on PATH — install it to mirror the secret-scan job." >&2
     record "gitleaks" skip 0
+fi
+
+# --- stage 6: actionlint — GitHub Actions workflow lint ----------------------
+# Mirrors ci.yml's `workflow-lint` job. actionlint checks workflow schema, expression
+# syntax and action references, and shells each `run:` block out to shellcheck.
+# That shell linter is therefore a HARD requirement, not a bonus: without it
+# actionlint still exits 0 while silently skipping every `run:` block, which is a
+# false pass of exactly the kind this script exists to prevent. Either tool
+# missing → SKIP, which downgrades the run to PARTIAL / not push-verified.
+start=$SECONDS
+banner "actionlint — GitHub Actions workflow lint"
+if ! command -v actionlint >/dev/null 2>&1; then
+    echo "actionlint not found on PATH — install it to mirror the workflow-lint job." >&2
+    echo "  (no distro package on openSUSE; grab the release binary from" >&2
+    echo "   https://github.com/rhysd/actionlint/releases into ~/.local/bin)" >&2
+    record "actionlint" skip 0
+elif ! command -v shellcheck >/dev/null 2>&1; then
+    echo "shellcheck not found — actionlint would silently skip every run: block," >&2
+    echo "  reporting a green that CI will not reproduce. Install shellcheck." >&2
+    record "actionlint" skip 0
+elif actionlint; then
+    record "actionlint" ok $((SECONDS - start))
+else
+    record "actionlint" fail $((SECONDS - start))
 fi
 
 # --- summary ----------------------------------------------------------------
