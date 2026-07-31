@@ -59,6 +59,19 @@ directory and are never committed.
 |-------|--------|---------|----------------------|
 | `gameready/{pine,fir,maple,birch}/*_{lod0,lod2,billboard}.gltf` — game-ready tree packs with artist LOD0–2 meshes + billboards | LOLIPOP on Sketchfab ([pine](https://sketchfab.com/3d-models/pine-trees-pack-lowpoly-game-ready-lods-e1e9c07b8e2e445c943fec660beefba2), [fir](https://sketchfab.com/3d-models/realistic-fir-trees-pack-lods-gameready-f58e8b6d733e4b0586e5b7db847b89e7), [maple](https://sketchfab.com/3d-models/maple-trees-pack-lowpoly-game-ready-lods-b5d2833c258f4054a01ee2b4ef85adf0), [birch](https://sketchfab.com/3d-models/five-birch-trees-pack-lowpoly-lods-08fe5117138e4fdaa7ca440ef1201e07)) | **CC-BY 4.0** | **Yes** — "3D tree models by LOLIPOP (sketchfab.com/lolipop_1707), licensed under CC BY 4.0." |
 
+### Pond plants — `assets/models/nature_local/gameready/water/` (not committed)
+
+| Files | Source | License | Attribution required |
+|-------|--------|---------|----------------------|
+| `gameready/water/lotus_{pads,flowers}.gltf` — decimated lotus clusters on the meadow pond | Galaxy Abundant on Sketchfab ([leaf cluster](https://sketchfab.com/3d-models/ga-free-201-small-lotus-leaf-cluster--tt-79024211401e4cf1a26f2ef8c71fe1be), [flower cluster](https://sketchfab.com/3d-models/ga-free-151-pink-lotus-flower-cluster-53d081e40cae4b5ebc66c6e06b5f19ef)) | **CC-BY 4.0** | **Yes** — "3D pond-plant models by Galaxy Abundant (sketchfab.com/galaxyabundant), licensed under CC BY 4.0." |
+
+**Provenance note.** Both packs are **AI-generated** (their materials are named
+`tripo_mat_*`, i.e. produced with Tripo), not photogrammetry scans. They are
+used because they are the most realistic-reading pond foliage available under a
+commercially-usable CC licence — no photoreal CC-licensed water lily was found.
+Recorded here so the distinction is not lost: the CC-BY obligation is unchanged,
+but the assets are not scans of real plants.
+
 **Forward record (3D_E-0033 §6.3).** This file's charter is assets that
 *ship* in the public repo; these packs are git-ignored today (fetched via
 `tools/asset_prep/fetch_sketchfab_trees.py` into the external asset

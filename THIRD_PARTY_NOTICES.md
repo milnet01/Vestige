@@ -158,6 +158,26 @@ Source: <https://sketchfab.com/lolipop_1707>
   record that takes effect when the trees ship via a release or the
   assets repo.
 
+### Pond plants — `assets/models/nature_local/gameready/water/` (not committed)
+
+Source: <https://sketchfab.com/galaxyabundant>
+
+- **Galaxy Abundant lotus clusters** (small lotus leaf cluster, pink lotus
+  flower cluster) — the meadow pond's floating foliage (3D_E-0033 T6),
+  decimated from ~470-490 k to ~9-18 k triangles by
+  `tools/asset_prep/split_water_plants.py`. Licensed under
+  **CC-BY 4.0 International**. Required attribution, reproduced verbatim:
+
+  > 3D pond-plant models by **Galaxy Abundant**
+  > (sketchfab.com/galaxyabundant), licensed under CC BY 4.0.
+
+  Attribution here is a **licence condition**, not a courtesy. As with the
+  tree packs above, the source archives are git-ignored and this notice is a
+  forward record that takes effect when the assets ship.
+
+  Provenance: these are **AI-generated** models (Tripo), not photogrammetry
+  scans — noted so the distinction survives in the record.
+
 ### HDRIs — `assets/hdri/`
 
 Source: <https://polyhaven.com/a/syferfontein_0d_clear>
