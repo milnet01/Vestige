@@ -55,9 +55,14 @@ concurrency:
   # cadence run put its promote build and its RC build in one group and
   # cancel-in-progress had the RC kill the promote every time. That silently
   # stranded v0.1.64 as a draft with a half-uploaded asset set, and cancelled
-  # the 2026-07-22, -07-29 and -07-31 runs. inputs.tag is distinct per call;
-  # it is empty on the push/dispatch paths, where github.ref IS the tag.
-  group: release-${{ inputs.tag || github.ref }}
+  # the 2026-07-22, -07-29 and -07-31 runs.
+  #
+  # Each trigger carries the tag under a different name: workflow_call passes
+  # inputs.tag, workflow_dispatch passes inputs.version, and a tag push has it
+  # in github.ref. All three are listed so every path keys on the thing being
+  # built — two manual builds of different tags must not cancel each other
+  # either, which the inputs.tag-only form still got wrong.
+  group: release-${{ inputs.tag || inputs.version || github.ref }}
   cancel-in-progress: true
 
 permissions:
