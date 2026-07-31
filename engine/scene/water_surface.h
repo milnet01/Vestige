@@ -56,6 +56,16 @@ struct WaterSurfaceConfig
     glm::vec4 deepColor = {0.0f, 0.1f, 0.2f, 1.0f};
     float depthDistance = 5.0f;
 
+    /// Suspended sediment / organic matter, 0 = clear, 1 = thick pond scum.
+    /// Drives how fast light is absorbed through the water column: clear water
+    /// is strongly wavelength-selective (red dies within a metre, blue carries
+    /// far, which is why open water reads blue), whereas silt and dissolved
+    /// organics absorb broadly and hit blue hardest — so a murky pond turns
+    /// green-brown and goes opaque within a few centimetres. 0 keeps the
+    /// existing clear-water look for every surface that does not opt in.
+    /// See waterAbsorptionCoefficients().
+    float turbidity = 0.0f;
+
     // Surface detail
     float refractionStrength = 0.02f;
     float normalStrength = 1.0f;
@@ -100,6 +110,22 @@ inline float waterWindRippleScale(float windSpeedMetersPerSec)
         (windSpeedMetersPerSec - WATER_WIND_CALM) / (WATER_WIND_FULL - WATER_WIND_CALM),
         0.0f, 1.0f);
     return t * t * (3.0f - 2.0f * t);   // smoothstep
+}
+
+/// @brief Per-channel Beer's-law absorption coefficients for a turbidity value.
+/// @details The clear-water base (0.4, 0.2, 0.1) is the classic ordering — red
+/// absorbed fastest, blue slowest — which is why deep clear water reads blue.
+/// Turbidity adds a second, blue-weighted term standing in for silt and
+/// dissolved organics, which absorb broadly and strongest at short wavelengths;
+/// the result is the green-brown of a real pond, opaque within a short depth.
+/// Pure + GL-free so it is unit-testable and identical on every call site.
+/// TODO: revisit via Formula Workbench — the turbid term is art-directed, not
+/// fitted against measured attenuation spectra.
+inline glm::vec3 waterAbsorptionCoefficients(float turbidity)
+{
+    constexpr glm::vec3 CLEAR_WATER(0.4f, 0.2f, 0.1f);
+    constexpr glm::vec3 TURBID_ADD(1.6f, 1.9f, 2.6f);   // blue absorbed hardest
+    return CLEAR_WATER + std::clamp(turbidity, 0.0f, 1.0f) * TURBID_ADD;
 }
 
 /// @brief World-space bounds of a water surface, for frustum culling its

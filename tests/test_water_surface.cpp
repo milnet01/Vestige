@@ -301,3 +301,58 @@ TEST(WaterSurfaceCullTest, PondBeyondFarPlaneIsCulled)
 
     EXPECT_FALSE(isAabbInFrustum(farPond, extractFrustumPlanes(proj * view)));
 }
+
+// ---------------------------------------------------------------------------
+// waterAbsorptionCoefficients (turbidity)
+// ---------------------------------------------------------------------------
+
+TEST(WaterTurbidityTest, ZeroTurbidityKeepsClearWaterCoefficients)
+{
+    // Default must reproduce the values the shader used before turbidity
+    // existed, so every water surface that does not opt in looks unchanged.
+    const glm::vec3 c = waterAbsorptionCoefficients(0.0f);
+    EXPECT_FLOAT_EQ(c.r, 0.4f);
+    EXPECT_FLOAT_EQ(c.g, 0.2f);
+    EXPECT_FLOAT_EQ(c.b, 0.1f);
+}
+
+TEST(WaterTurbidityTest, ClearWaterAbsorbsRedFastestAndBlueSlowest)
+{
+    // The ordering that makes deep clear water read blue.
+    const glm::vec3 c = waterAbsorptionCoefficients(0.0f);
+    EXPECT_GT(c.r, c.g);
+    EXPECT_GT(c.g, c.b);
+}
+
+TEST(WaterTurbidityTest, TurbidWaterAbsorbsBlueFastest)
+{
+    // Silt and dissolved organics absorb hardest at short wavelengths, which
+    // is what turns a murky pond green-brown instead of blue. At full turbidity
+    // the blue channel must have overtaken the others.
+    const glm::vec3 c = waterAbsorptionCoefficients(1.0f);
+    EXPECT_GT(c.b, c.g);
+    EXPECT_GT(c.b, c.r);
+}
+
+TEST(WaterTurbidityTest, AbsorptionRisesMonotonicallyWithTurbidity)
+{
+    float prevSum = -1.0f;
+    for (float t = 0.0f; t <= 1.0f; t += 0.1f)
+    {
+        const glm::vec3 c = waterAbsorptionCoefficients(t);
+        const float sum = c.r + c.g + c.b;
+        EXPECT_GT(sum, prevSum);
+        prevSum = sum;
+    }
+}
+
+TEST(WaterTurbidityTest, ClampsOutOfRangeTurbidity)
+{
+    // Serialized scenes and editor sliders can both deliver out-of-range values;
+    // absorption must never go negative (which would amplify light instead of
+    // attenuating it) or run away past the fully-turbid case.
+    EXPECT_FLOAT_EQ(waterAbsorptionCoefficients(-5.0f).r,
+                    waterAbsorptionCoefficients(0.0f).r);
+    EXPECT_FLOAT_EQ(waterAbsorptionCoefficients(7.0f).b,
+                    waterAbsorptionCoefficients(1.0f).b);
+}

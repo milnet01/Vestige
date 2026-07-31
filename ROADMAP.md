@@ -660,6 +660,24 @@ Full spatial audio pipeline with dynamic mixing, occlusion, and adaptive music. 
   Kind: research.
   Source: user-request-2026-07-31 (raised during 3D_E-0033 T6 lily sourcing).
 
+- ✅ [3D_E-0041] **Water turbidity — murky/silty water instead of only crystal-clear.**
+  The Beer's-law absorption coefficients were hardcoded in water.frag.glsl at
+  clear-ocean values (0.4, 0.2, 0.1 — red absorbed fastest, blue carrying
+  furthest), so every water surface in the engine was necessarily crystal
+  clear. New `WaterSurfaceConfig::turbidity` [0,1] (default 0 = unchanged for
+  every existing surface) drives them via the pure, unit-tested
+  `waterAbsorptionCoefficients()`, adding a blue-weighted term standing in for
+  silt and dissolved organics. Serializer round-trip + editor slider + 5 unit
+  tests. The meadow pond is set to 0.35.
+  Trap worth remembering: turbidity only controls how FAST the water column
+  reaches `deepColor` — the first attempt left the pond's ocean-blue deepColor
+  in place and simply made it reach a vivid blue sooner. Caught by diffing the
+  `pond_surface` visual-test capture (mean colour went bluer, not browner), not
+  by the build. shallowColor/deepColor moved to silty green-brown alongside.
+  **Layman:** Ponds can now look silty and green-brown instead of like a swimming pool.
+  Kind: enhancement.
+  Source: user-request-2026-07-31.
+
 ### Fog, Mist, and Volumetric Lighting
 - [x] Distance fog (linear, exponential, exponential-squared) — pure-function primitives shipped in `engine/renderer/fog.{h,cpp}`. `FogMode` enum (`None` / `Linear` / `Exponential` / `ExponentialSquared`) + `FogParams` (linear-RGB colour, start, end, density). `computeFogFactor(mode, params, distance)` implements the three canonical forms: Linear `(end-d)/(end-start)`, GL_EXP `exp(-density·d)`, GL_EXP2 `exp(-(density·d)²)` — returns *surface visibility* in [0,1], matches OpenGL Red Book §9 / D3D9 fog-formulas. Guards every degenerate param (zero span, negative density, sub-camera distance) with pass-through behaviour. 15 unit tests cover knees, monotonicity, and edge cases.
 - [x] Height fog — exponential fog that thickens below a configurable altitude (ground-hugging mist, valley fog). `HeightFogParams` (colour, fogHeight, groundDensity, heightFalloff, maxOpacity) + closed-form `computeHeightFogTransmittance(params, cameraY, rayDirY, rayLength)` — Quílez 2010 analytic integral of `d(y) = a·exp(-b·(y - fogHeight))` along a view ray. Uses `expm1` for numerical stability near horizontal rays; separate `|rd.y| < 1e-5` branch collapses to Beer-Lambert so the horizon line stays smooth. `maxOpacity` clamp mirrors UE `FogMaxOpacity` so the sky doesn't fully vanish on long sightlines. 7 unit tests cover zero-length, zero-density, monotonic decay, horizontal ↔ Beer-Lambert equivalence, altitude thinning, maxOpacity floor, small-angle ↔ horizontal-branch agreement. **Desert heat haze** variant (subtle distortion) is a follow-up.

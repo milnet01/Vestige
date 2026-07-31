@@ -662,6 +662,7 @@ static json serializeWaterSurface(const WaterSurfaceComponent& comp)
     j["causticsScale"] = cfg.causticsScale;
     j["qualityTier"] = cfg.qualityTier;
     j["windDrivenAmplitude"] = cfg.windDrivenAmplitude;
+    j["turbidity"] = cfg.turbidity;
 
     return j;
 }
@@ -704,6 +705,7 @@ static void applyWaterSurface(const json& j, WaterSurfaceComponent& comp)
     cfg.causticsScale = j.value("causticsScale", cfg.causticsScale);
     cfg.qualityTier = j.value("qualityTier", cfg.qualityTier);
     cfg.windDrivenAmplitude = j.value("windDrivenAmplitude", cfg.windDrivenAmplitude);
+    cfg.turbidity = j.value("turbidity", cfg.turbidity);
 }
 
 static void deserializeWaterSurface(const json& j, Entity& entity, ResourceManager&)

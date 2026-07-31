@@ -29,6 +29,7 @@ uniform float u_cameraNear;
 // Water parameters
 uniform vec4 u_shallowColor;
 uniform vec4 u_deepColor;
+uniform vec3 u_absorptionCoeffs;   // per-channel Beer's-law absorption (turbidity)
 uniform float u_dudvStrength;
 uniform float u_normalStrength;
 uniform float u_flowSpeed;
@@ -234,9 +235,10 @@ void main()
         float linearWater = u_cameraNear / max(gl_FragCoord.z, 0.00001);
         waterThickness = max(linearRefract - linearWater, 0.0);
 
-        // Per-channel absorption (red absorbed fastest)
-        vec3 absorptionCoeffs = vec3(0.4, 0.2, 0.1);
-        vec3 absorption = exp(-absorptionCoeffs * waterThickness);
+        // Per-channel absorption. Clear water absorbs red fastest and blue
+        // slowest; turbidity shifts that toward broadband, blue-heavy
+        // absorption (see waterAbsorptionCoefficients on the CPU side).
+        vec3 absorption = exp(-u_absorptionCoeffs * waterThickness);
         refractionColor *= absorption;
         refractionColor = mix(refractionColor, u_deepColor.rgb, 1.0 - absorption.b);
     }

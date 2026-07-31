@@ -1786,6 +1786,11 @@ void InspectorPanel::drawWaterSurface(Entity& entity)
         ImGui::SetItemTooltip("Depth-based underwater coloring.\n"
                               "Disabling saves a full scene render pass.");
 
+        tr.track(ImGui::SliderFloat("Turbidity", &config.turbidity, 0.0f, 1.0f, "%.2f"));
+        ImGui::SetItemTooltip("Suspended silt and organics.\n"
+                              "0 = clear water (blue, see-through);\n"
+                              "higher = green-brown and opaque within a short depth.");
+
         ImGui::Spacing();
         ImGui::Separator();
 

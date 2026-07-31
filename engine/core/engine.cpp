@@ -2565,8 +2565,17 @@ void Engine::finalizeMeadowTerrain()
         c.waves[0] = {0.004f, 3.0f, 0.20f, 20.0f};
         c.waves[1] = {0.003f, 2.0f, 0.15f, 75.0f};
         c.waves[2] = {0.002f, 1.5f, 0.25f, 140.0f};
-        c.shallowColor = {0.15f, 0.45f, 0.50f, 0.80f};
-        c.deepColor = {0.02f, 0.12f, 0.28f, 1.00f};
+        // Silty green-brown, not sea-blue: turbidity below controls how FAST the
+        // water column reaches deepColor, so deepColor is what the murk itself
+        // looks like. Leaving it at the old ocean blue just made the pond reach
+        // a vivid blue sooner — verified against the pond_surface visual-test
+        // capture, which is why these two moved together with the turbidity.
+        c.shallowColor = {0.22f, 0.32f, 0.24f, 0.85f};
+        c.deepColor = {0.07f, 0.12f, 0.08f, 1.00f};
+        // A meadow pond is standing water over a silt bed, not a swimming pool:
+        // enough suspended matter to lose the bottom within a short depth and
+        // read green-brown, while still mirroring the sky (user request).
+        c.turbidity = 0.35f;
         c.reflectionMode = WaterReflectionMode::PLANAR;  // mirrors sky + trees
         c.causticsEnabled = true;
         // Still-unless-windy: the meadow runs at zero base wind, so the pond reads

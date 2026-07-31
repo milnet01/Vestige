@@ -22,6 +22,26 @@ may change any interface without notice.
 
 ## [Unreleased]
 
+### 2026-07-31 Added — Water can be murky — the meadow pond is now silty rather than crystal-clear (3D_E-0041)
+
+Every water surface in the engine was necessarily transparent: the numbers
+controlling how fast light dies as it passes through water were fixed in
+the shader at clear-ocean values, where blue travels furthest — which is
+why open sea reads blue and why the pond read like a swimming pool.
+
+Water surfaces now have a **Turbidity** setting (0 = clear, 1 = thick pond
+scum), with a slider in the inspector. It stands in for suspended silt and
+dissolved organic matter, which absorb light broadly and hit blue hardest,
+so raising it turns water green-brown and hides the bottom within a short
+depth. The meadow pond is set to 0.35 — enough to lose the pond bed while
+still mirroring the sky and trees.
+
+Existing water is unaffected: the default is 0, which reproduces exactly
+the old values.
+
+- **Turbidity controls how *fast* water reaches its deep colour, not what that colour is** (3D_E-0041)
+  Worth knowing before using the slider: the first attempt raised turbidity but left the pond's ocean-blue deep colour alone, which just made it reach a vivid blue sooner rather than looking murky. The deep and shallow colours were moved to silty green-brown alongside. The error was caught by diffing the automated pond capture — the average water colour had gone bluer, not browner — not by the compiler, which was perfectly happy.
+
 ### 2026-07-31 Changed — Distant shadows are rebuilt less often, and a shadow-alignment bug is fixed (3D_E-0029)
 
 Shadows are drawn in four "cascades" — four shells around you, the near

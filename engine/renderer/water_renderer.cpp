@@ -225,6 +225,8 @@ void WaterRenderer::render(const std::vector<WaterRenderItem>& waterItems,
         // Water color and surface parameters
         m_waterShader.setVec4("u_shallowColor", config.shallowColor);
         m_waterShader.setVec4("u_deepColor", config.deepColor);
+        m_waterShader.setVec3("u_absorptionCoeffs",
+                              waterAbsorptionCoefficients(config.turbidity));
         // Scale the procedural normal/dudv distortion by the same wind gate — otherwise
         // the FBM ripple keeps shimmering the reflection even with the waves flattened,
         // so the "calm" pond would not read as a still mirror. flowSpeed (animation rate)
