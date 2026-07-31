@@ -678,6 +678,37 @@ Full spatial audio pipeline with dynamic mixing, occlusion, and adaptive music. 
   Kind: enhancement.
   Source: user-request-2026-07-31.
 
+- 📋 [3D_E-0042] **GPU grass should cast shadows (cascade 0 only) — it is the only vegetation that does not.**
+  Verified 2026-07-31: `m_grassRenderer` is never registered as a shadow
+  caster — `engine.cpp:338/340` register only the foliage billboards
+  (wildflowers, lily pads) and trees. Grass is receive-only, a scope cap taken
+  deliberately in 3D_E-0039 G4. The user noticed exactly this asymmetry.
+  Shape of the work, from the pattern every other caster already follows
+  (`setTreeShadowCaster` / `TreeRenderer::renderShadow` + a dedicated
+  `<type>_shadow.{vert,frag}.glsl` pair writing cascade depth AND the RSM flux
+  attachment the GI inject pass reads):
+    1. `grass_shadow.{vert,frag}.glsl`. The grass vertex shader takes NO vertex
+       attributes — each blade vertex is computed from `gl_VertexID` +
+       `gl_InstanceID` (grass.vert.glsl:6,196) — so the shadow variant must
+       share that Bezier blade-generation maths rather than reuse a generic
+       depth shader. Factor the generation into a shared include so the two
+       cannot drift; a blade whose shadow does not match its silhouette is
+       worse than no shadow.
+    2. `GrassRenderer::renderShadow(...)` + `Renderer::setGrassShadowCaster`,
+       called from `renderShadowPass`.
+    3. **Cascade 0 only.** Grass shadows read as contact shadows; they are
+       invisible in the far cascades and 1.04 M blades x 4 cascades is not
+       affordable. Cull chunks against the light frustum and reuse the existing
+       distance LOD.
+  Cost estimate: the main Grass GPU pass measures ~0.9 ms, so a cascade-0 pass
+  at reduced density should land under that. The 3D_E-0028 + 3D_E-0029 work
+  just freed ~2.8 ms/frame on this scene, so the budget exists.
+  NOT a quick tweak (~200 lines over 4-5 files + a perf gate) — sized like
+  every other caster that was added, hence its own item rather than a drive-by.
+  **Layman:** The long grass is the only thing in the meadow that does not cast a shadow; trees, flowers and lily pads all do.
+  Kind: feature.
+  Source: user-request-2026-07-31 (observed in the meadow).
+
 ### Fog, Mist, and Volumetric Lighting
 - [x] Distance fog (linear, exponential, exponential-squared) — pure-function primitives shipped in `engine/renderer/fog.{h,cpp}`. `FogMode` enum (`None` / `Linear` / `Exponential` / `ExponentialSquared`) + `FogParams` (linear-RGB colour, start, end, density). `computeFogFactor(mode, params, distance)` implements the three canonical forms: Linear `(end-d)/(end-start)`, GL_EXP `exp(-density·d)`, GL_EXP2 `exp(-(density·d)²)` — returns *surface visibility* in [0,1], matches OpenGL Red Book §9 / D3D9 fog-formulas. Guards every degenerate param (zero span, negative density, sub-camera distance) with pass-through behaviour. 15 unit tests cover knees, monotonicity, and edge cases.
 - [x] Height fog — exponential fog that thickens below a configurable altitude (ground-hugging mist, valley fog). `HeightFogParams` (colour, fogHeight, groundDensity, heightFalloff, maxOpacity) + closed-form `computeHeightFogTransmittance(params, cameraY, rayDirY, rayLength)` — Quílez 2010 analytic integral of `d(y) = a·exp(-b·(y - fogHeight))` along a view ray. Uses `expm1` for numerical stability near horizontal rays; separate `|rd.y| < 1e-5` branch collapses to Beer-Lambert so the horizon line stays smooth. `maxOpacity` clamp mirrors UE `FogMaxOpacity` so the sky doesn't fully vanish on long sightlines. 7 unit tests cover zero-length, zero-density, monotonic decay, horizontal ↔ Beer-Lambert equivalence, altitude thinning, maxOpacity floor, small-angle ↔ horizontal-branch agreement. **Desert heat haze** variant (subtle distortion) is a follow-up.
