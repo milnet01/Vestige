@@ -773,6 +773,32 @@ Full spatial audio pipeline with dynamic mixing, occlusion, and adaptive music. 
   Kind: perf.
   Source: in-session-2026-08-13 (hit while measuring 3D_E-0042).
 
+- 📋 [3D_E-0045] **Reconfigure the three build dirs still pinned to the pre-rename project path.**
+  The project directory was renamed 3D_Engine -> Vestige, but a CMake
+  build dir stores its absolute source path in CMakeCache.txt. Every
+  build dir was left pinned to /mnt/Games/Scripts/Linux/3D_Engine, so
+  `cmake --build <dir>` fails outright with "the current CMakeCache.txt
+  directory ... is different than the directory ... where CMakeCache.txt
+  was created", then tries to re-run CMake against the old path and
+  reports the source dir has no CMakeLists.txt. Nothing about the message
+  names the rename, which is what makes it cost time.
+  Fixed 2026-08-13 for `build` and `build-release`.
+  STILL STALE: `build-msvc`, `build-tsan`, `build-win`.
+  Recipe that worked (the _deps sub-caches carry the old path too, so
+  clearing only CMakeCache.txt is not enough, but the *-src dirs are
+  path-independent and worth keeping to avoid re-downloading):
+    rm -rf <dir>/CMakeCache.txt <dir>/CMakeFiles \
+           <dir>/_deps/*-subbuild <dir>/_deps/*-build
+    # then re-run the project's usual configure for that dir
+  `scripts/local-ci.sh` `configure()` holds the canonical flag set for
+  the Linux dirs; build-msvc has its own at :256. Note this is a full
+  rebuild each time (~25 min for the engine + tests on 12 threads), so it
+  is worth doing deliberately rather than discovering it mid-task.
+  Kind: chore.
+  **Layman:** Three of the project's build folders still point at the old project name, so any build command using them fails until they are set up again.
+  Kind: chore.
+  Source: in-session-2026-08-13 (hit while building 3D_E-0042).
+
 ### Fog, Mist, and Volumetric Lighting
 - [x] Distance fog (linear, exponential, exponential-squared) — pure-function primitives shipped in `engine/renderer/fog.{h,cpp}`. `FogMode` enum (`None` / `Linear` / `Exponential` / `ExponentialSquared`) + `FogParams` (linear-RGB colour, start, end, density). `computeFogFactor(mode, params, distance)` implements the three canonical forms: Linear `(end-d)/(end-start)`, GL_EXP `exp(-density·d)`, GL_EXP2 `exp(-(density·d)²)` — returns *surface visibility* in [0,1], matches OpenGL Red Book §9 / D3D9 fog-formulas. Guards every degenerate param (zero span, negative density, sub-camera distance) with pass-through behaviour. 15 unit tests cover knees, monotonicity, and edge cases.
 - [x] Height fog — exponential fog that thickens below a configurable altitude (ground-hugging mist, valley fog). `HeightFogParams` (colour, fogHeight, groundDensity, heightFalloff, maxOpacity) + closed-form `computeHeightFogTransmittance(params, cameraY, rayDirY, rayLength)` — Quílez 2010 analytic integral of `d(y) = a·exp(-b·(y - fogHeight))` along a view ray. Uses `expm1` for numerical stability near horizontal rays; separate `|rd.y| < 1e-5` branch collapses to Beer-Lambert so the horizon line stays smooth. `maxOpacity` clamp mirrors UE `FogMaxOpacity` so the sky doesn't fully vanish on long sightlines. 7 unit tests cover zero-length, zero-density, monotonic decay, horizontal ↔ Beer-Lambert equivalence, altitude thinning, maxOpacity floor, small-angle ↔ horizontal-branch agreement. **Desert heat haze** variant (subtle distortion) is a follow-up.
