@@ -10879,6 +10879,15 @@ existing cases (``HelpersMatchEvaluatorPrecisely``,
 
 ### Fixed
 
+- **ARCHITECTURE.md source-tree diagram named the pre-rename repo root**
+  The tree diagram still labelled the repo root `3D_Engine/` after the
+  directory was renamed to `Vestige/`. Swept the rest of the rename
+  fallout at the same time: a dead `core.hooksPath` in `.git/config`
+  pointing at the retired `/mnt/Storage` drive, stale absolute paths in
+  `.claude/settings.local.json`, and the desktop launcher's `Exec`/`Path`.
+  Archived audit reports and run logs keep the old path deliberately —
+  they are historical records.
+
 - ****Windows (msvc-wine) local-CI false-failed on `PerfGateSelftest`.** The Wine emulator mangles host-Python ctest exit codes (a passing test prints OK but reports non-zero); the PerfGate Python tests added by 3D_E-0030 are now excluded from the Wine ctest stage like the pre-existing `LocalizationAudit`/`ShaderLint` tests.**
 
 - ****Maple and pine tree leaf clusters rendered near-black up close.** Their foliage atlases are tagged `BLEND` (only fir is `MASK`), so they fell through to the one-sided bark lighting path and went dark once normal-mapped. All non-OPAQUE tree materials now use two-sided cutout leaf lighting and cast leaf-shaped (not solid-block) shadows (3D_E-0033).**

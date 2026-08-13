@@ -111,7 +111,7 @@ Scene
 ## 7. Folder Structure
 
 ```
-3D_Engine/                            # repo root (the Vestige source tree)
+Vestige/                              # repo root (the Vestige source tree)
 ├── CMakeLists.txt · CLAUDE.md · ROADMAP.md · CHANGELOG.md · VERSION
 ├── CODING_STANDARDS.md · ARCHITECTURE.md · SECURITY.md · CONTRIBUTING.md
 ├── LICENSE · ASSET_LICENSES.md · THIRD_PARTY_NOTICES.md
