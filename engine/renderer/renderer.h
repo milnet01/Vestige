@@ -527,6 +527,13 @@ public:
     /// @param treeRenderer Pointer to the tree renderer (must outlive Renderer).
     void setTreeShadowCaster(class TreeRenderer* treeRenderer) { m_treeShadowCaster = treeRenderer; }
 
+    /// @brief Sets the GPU-grass renderer as a shadow caster (3D_E-0042). Grass keeps its
+    ///        own chunk store (not the FoliageManager's), so it needs no manager pointer.
+    ///        It casts into cascade 0 ONLY — grass shadows read as contact shadows and are
+    ///        invisible further out. nullptr disables grass shadow casting.
+    /// @param grassRenderer Pointer to the grass renderer (must outlive Renderer).
+    void setGrassShadowCaster(class GrassRenderer* grassRenderer) { m_grassShadowCaster = grassRenderer; }
+
     /// @brief Gets the resolved depth texture ID for soft particles and effects.
     /// @return OpenGL texture ID, or 0 if not available.
     GLuint getResolvedDepthTexture() const;
@@ -654,6 +661,7 @@ private:
     class FoliageRenderer* m_foliageShadowCaster = nullptr;
     class FoliageManager* m_foliageShadowManager = nullptr;
     class TreeRenderer* m_treeShadowCaster = nullptr;  ///< Trees cast via the shared FoliageManager chunks (T4).
+    class GrassRenderer* m_grassShadowCaster = nullptr;  ///< GPU grass casts into cascade 0 only (3D_E-0042).
     float m_foliageShadowTime = 0.0f;  ///< Elapsed time for wind sync in shadow pass (shared by foliage + trees).
     // Scratch vector for the per-cascade foliage-chunk list — its capacity is
     // preserved across frames so the shadow pass doesn't heap-alloc. (AUDIT H9.)

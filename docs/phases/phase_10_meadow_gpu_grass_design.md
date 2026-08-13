@@ -151,7 +151,9 @@ The engine already ships every GPU primitive; the grass system assembles them.
   caster via `Renderer::setFoliageShadowCaster` (`renderer.cpp:2793`) and cast into
   every cascade over all chunks (`renderer.cpp:3897-3915`), and receives by binding
   the cascade array (`foliage_renderer.cpp:184-206`). New grass reuses the receive
-  path (it does not cast in v1 — §5.4).
+  path (it does not cast in v1 — §5.4). **Superseded 2026-08-13 (3D_E-0042):** the
+  v1 cap was lifted — grass now also casts, into cascade 0 only, via
+  `Renderer::setGrassShadowCaster` + `GrassRenderer::renderShadow`.
 - **Billboard `FoliageRenderer` (being replaced for grass).** 3-quad star card
   (0.26×0.4 m), `FoliageInstance` VBO (pos/rot/scale/tint), `glDrawArraysInstanced`,
   **CPU** per-chunk+per-instance distance cull, no GPU cull/indirect. Preserve its
@@ -651,7 +653,9 @@ Each slice commits locally; the phase pushes when G5 lands green.
 - **Grass shadow casting in v1 — confirm-only.** Already **decided**: grass receives
   but does not cast in v1 (§5.4, Rule-5 logged in the G4 commit). Listed here only so
   the reviewer can object; not a re-open. (A High/Ultra-only cast is the later
-  candidate.)
+  candidate.) **Resolved 2026-08-13 by 3D_E-0042** — the later candidate landed as a
+  cascade-0-only cast for every quality tier, cheaper than the High/Ultra gate this
+  anticipated because an opaque Bézier blade needs no alpha test in the caster.
 - **Chunk size / near-density / draw-distance** starting values — pin in G2/G5 by
   visual + perf read (art-directed; `TODO: revisit via Formula Workbench`).
 - **Far-field grass — resolved:** GPU grass covers the field all the way to the fade

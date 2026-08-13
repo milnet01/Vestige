@@ -7,6 +7,7 @@
 #include "renderer/gi_math.h"  // GI_ALPHA / GI_DECAY / GI_STRENGTH_DEFAULT (Slice R4)
 #include "renderer/dynamic_mesh.h"
 #include "renderer/foliage_renderer.h"
+#include "renderer/grass_renderer.h"
 #include "renderer/tree_renderer.h"
 #include "renderer/motion_overlay_prev_world.h"
 #include "renderer/normal_matrix.h"
@@ -3917,6 +3918,7 @@ void Renderer::renderShadowPass(const std::vector<SceneRenderData::RenderItem>& 
         // visible area. Grass/foliage and trees share the FoliageManager chunk
         // store, so gather once and feed both casters; each does its own distance
         // cull to keep the drawn count bounded.
+        bool vegetationCast = false;
         if (m_foliageShadowManager && (m_foliageShadowCaster || m_treeShadowCaster))
         {
             // Reuse the scratch vector across cascades to avoid per-cascade
@@ -3939,13 +3941,33 @@ void Renderer::renderShadowPass(const std::vector<SceneRenderData::RenderItem>& 
                         m_foliageShadowTime,
                         m_directionalLight.diffuse, m_directionalLight.direction);
                 }
-                // Restore shadow depth shader — the vegetation casters bind their
-                // own shaders. Re-set the flux light uniforms their program use()
-                // replaced (albedo is re-bound per batch on the next cascade).
-                m_shadowDepthShader.use();
-                m_shadowDepthShader.setVec3("u_lightRadiance", m_directionalLight.diffuse);
-                m_shadowDepthShader.setVec3("u_lightDir", m_directionalLight.direction);
+                vegetationCast = true;
             }
+        }
+
+        // GPU grass, cascade 0 ONLY (3D_E-0042). Grass shadows are contact-scale
+        // detail: past cascade 0 a blade is thinner than a shadow texel, so the
+        // far cascades would pay for the whole 1 M-blade field and show nothing.
+        // Casting stops at cascade 0's far split — exactly where receivers stop
+        // sampling cascade 0 — so no second visible boundary is introduced. Grass
+        // keeps its own chunk store, hence no FoliageManager gather here.
+        if (c == 0 && m_grassShadowCaster != nullptr)
+        {
+            m_grassShadowCaster->renderShadow(
+                camera, lightSpaceMatrix, m_foliageShadowTime,
+                m_directionalLight.diffuse, m_directionalLight.direction,
+                m_cascadedShadowMap->getCascadeSplit(0));
+            vegetationCast = true;
+        }
+
+        if (vegetationCast)
+        {
+            // Restore shadow depth shader — the vegetation casters bind their
+            // own shaders. Re-set the flux light uniforms their program use()
+            // replaced (albedo is re-bound per batch on the next cascade).
+            m_shadowDepthShader.use();
+            m_shadowDepthShader.setVec3("u_lightRadiance", m_directionalLight.diffuse);
+            m_shadowDepthShader.setVec3("u_lightDir", m_directionalLight.direction);
         }
 
         m_cascadedShadowMap->endCascade();

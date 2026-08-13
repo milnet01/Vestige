@@ -679,7 +679,7 @@ Full spatial audio pipeline with dynamic mixing, occlusion, and adaptive music. 
   Source: user-request-2026-07-31.
   Follow-up (2026-07-31, user): first turbid pond read blue-murky rather than green. Root cause was the absorption curve, not the colours — TURBID_ADD absorbed GREEN harder than red (1.6, 1.9, 2.6), so no deepColor tint could make it look like pond water. Real silt/algae leave a transmission window near 550 nm; corrected to (2.2, 1.1, 2.9) with green the smallest term, pinned by a new test (TurbidWaterTransmitsGreenBest). Pond turbidity 0.35 -> 0.55, deepColor to {0.04,0.13,0.05}. Measured on the pond_surface capture, open-water band: RGB(80,109,90) -> (66,117,79); green-minus-blue +19 -> +38, green-minus-red +29 -> +51. Also noted: shallowColor is INERT whenever refraction is enabled — water.frag.glsl reads it only in the no-refraction fallback branch, so tuning it on a refracting surface does nothing.
 
-- 📋 [3D_E-0042] **GPU grass should cast shadows (cascade 0 only) — it is the only vegetation that does not.**
+- ✅ [3D_E-0042] **GPU grass should cast shadows (cascade 0 only) — it is the only vegetation that does not.**
   Verified 2026-07-31: `m_grassRenderer` is never registered as a shadow
   caster — `engine.cpp:338/340` register only the foliage billboards
   (wildflowers, lily pads) and trees. Grass is receive-only, a scope cap taken
@@ -709,6 +709,69 @@ Full spatial audio pipeline with dynamic mixing, occlusion, and adaptive music. 
   **Layman:** The long grass is the only thing in the meadow that does not cast a shadow; trees, flowers and lily pads all do.
   Kind: feature.
   Source: user-request-2026-07-31 (observed in the meadow).
+  Progress (2026-08-13): implementing. Deviates from step 1 of the plan
+  above, and for the better: the project has NO GLSL #include mechanism
+  (tree_shadow.frag.glsl says so in as many words), so "factor the blade
+  generation into a shared include" was not available. Instead the shadow
+  program links the UNMODIFIED grass.vert.glsl against a new
+  grass_shadow.frag.glsl — same vertex stage, different fragment stage.
+  There is exactly one blade generator, so drift is structurally
+  impossible rather than merely guarded, and no maths was copied.
+  Second deviation: no alpha test. The research doc's §2.2/§7.4 cost
+  model assumes textured billboard cards needing `discard`; a GPU-grass
+  blade is real opaque Bezier ribbon geometry, so the caster is a pure
+  depth + RSM-flux write and early-Z survives the shadow pass.
+  Resolved (2026-08-13). Grass casts into cascade 0 only, capped at
+  cascade 0's far split. Shipped smaller than the ~200-line/4-5-file
+  estimate above because the shadow program links the UNMODIFIED
+  grass.vert.glsl against a new grass_shadow.frag.glsl (42 lines) — one
+  blade generator, so no shared-include machinery and no copied maths.
+  Files: assets/shaders/grass_shadow.frag.glsl (new),
+  grass_renderer.{h,cpp} (renderShadow + a drawField helper both passes
+  share), renderer.{h,cpp} (setGrassShadowCaster + the c==0 call site),
+  engine.cpp (wire-up + wind sync + an --isolate-feature=grass-shadow
+  A/B switch), tests/test_grass_shadow_parity.cpp (new).
+  Wind moved to public GrassRenderer::windDir/windStrength fields set by
+  the engine, matching FoliageRenderer/TreeRenderer: the shadow pass runs
+  BEFORE the visible pass, so the sway could not stay a render() argument
+  if both passes were to agree on where a blade is.
+  Verified RX 6600 / Mesa, Release build: 0 GL errors; ctest 7/7 and 3906
+  gtest assertions green (Debug 3900 + 4 skipped, also green); shader
+  lint clean over 92 shaders. Visual A/B against
+  --isolate-feature=grass-shadow: 34,855 changed pixels (1.68% of a
+  1920x1080 frame) on the grass-lookdown viewpoint, 15k-22k on the eight
+  eye-level viewpoints — ground between blades and blade bases darken.
+  PERF: +0.331 ms GPU (gpu,total median 11.03 ms with the cast vs 10.70
+  ms without, n=4 uncontended runs each; two further runs per config were
+  discarded as contended at 35 FPS / 23 ms). Comfortably inside the
+  16.67 ms 60 FPS budget (~5.6 ms headroom) and under this bullet's own
+  "under 0.9 ms" estimate. Caveat: the two ranges overlap (ON
+  10.71-11.38, OFF 10.31-11.06), so +0.331 ms is a median difference, not
+  a cleanly separated one — see 3D_E-0044 for why it could not be
+  isolated further.
+
+- 📋 [3D_E-0044] **Give the shadow pass its own GPU-timer pass — its cost is currently unmeasurable.**
+  Found while perf-gating 3D_E-0042. `Renderer::renderShadowPass` is not
+  wrapped in a `GpuTimer` pass, so `--profile-log` emits no `gpu,Shadow`
+  row — the Terrain, Foliage, Tree, Grass and Water passes all have one
+  (`m_profiler.getGpuTimer().beginPass("Grass")` etc. in engine.cpp).
+  Consequence, measured: the only way to price a shadow-pass change is
+  `gpu,total`, where a sub-millisecond effect sits inside the run-to-run
+  spread. 3D_E-0042's cast came out at +0.331 ms as a median over 4
+  uncontended runs per configuration, but the ON and OFF ranges overlap
+  (10.71-11.38 vs 10.31-11.06), so the number is weaker evidence than it
+  should need to be. A dedicated pass would have answered it in one run.
+  Worth splitting per cascade if cheap — cascade 0 now carries grass,
+  foliage and trees while 2/3 are staggered (3D_E-0029), so a single
+  aggregate number would still mix four different workloads.
+  Note the committed perf baseline already gates a `gpu,shadow` metric
+  (`tests/fixtures/perf_gate/baseline.json`), so the gate is written
+  against a row the engine never emits — that metric can only ever report
+  MISSING today.
+  Kind: perf.
+  **Layman:** We can't see how long drawing shadows takes, so we can only guess whether a change to them made things slower.
+  Kind: perf.
+  Source: in-session-2026-08-13 (hit while measuring 3D_E-0042).
 
 ### Fog, Mist, and Volumetric Lighting
 - [x] Distance fog (linear, exponential, exponential-squared) — pure-function primitives shipped in `engine/renderer/fog.{h,cpp}`. `FogMode` enum (`None` / `Linear` / `Exponential` / `ExponentialSquared`) + `FogParams` (linear-RGB colour, start, end, density). `computeFogFactor(mode, params, distance)` implements the three canonical forms: Linear `(end-d)/(end-start)`, GL_EXP `exp(-density·d)`, GL_EXP2 `exp(-(density·d)²)` — returns *surface visibility* in [0,1], matches OpenGL Red Book §9 / D3D9 fog-formulas. Guards every degenerate param (zero span, negative density, sub-camera distance) with pass-through behaviour. 15 unit tests cover knees, monotonicity, and edge cases.

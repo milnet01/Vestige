@@ -10828,6 +10828,27 @@ existing cases (``HelpersMatchEvaluatorPrecisely``,
 
 ### Added
 
+- **GPU grass now casts shadows** — it was the only vegetation in the meadow that did not (trees, wildflowers and lily pads all did). (3D_E-0042)
+  Grass casts into shadow cascade 0 only, capped at that cascade's far
+  split, so the cast stops exactly where receivers stop sampling cascade
+  0 and no second visible boundary is introduced. Chunks are culled
+  against the light frustum while the distance LOD still keys on the
+  camera, so every blade that casts is the blade the viewer sees.
+
+  The caster links the UNMODIFIED `grass.vert.glsl` against a new
+  `grass_shadow.frag.glsl` — same vertex stage, different fragment stage
+  — rather than duplicating the Bezier blade-generation maths into a
+  second vertex shader. There is exactly one blade generator, so a
+  blade's shadow cannot drift from its silhouette. Three text-parity
+  tests pin that contract, because a mismatch fails silently: the shadow
+  program would fail to link at runtime and the field would simply stop
+  casting, with no build error and no crash.
+
+  No alpha test in the caster: a GPU-grass blade is real opaque Bezier
+  ribbon geometry rather than a cut-out card, so there is nothing to
+  discard and early-Z survives the shadow pass.
+  `--isolate-feature=grass-shadow` turns the cast off for A/B bisection.
+
 - ****Normal-mapped tree leaf cards & bark** — the LOLIPOP tree packs' shipped normal maps now drive per-pixel canopy lighting (they were loaded into each material but never bound in the tree draw path), so leaves and bark catch light with surface relief instead of reading as flat cards up close (3D_E-0033, T8).**
 
 ### Changed

@@ -338,6 +338,8 @@ bool Engine::initialize(const EngineConfig& config)
     m_renderer->setFoliageShadowCaster(m_foliageRenderer, m_foliageManager);
     // Trees cast too (T4, 3D_E-0033) — reuses the foliage manager's chunk store.
     m_renderer->setTreeShadowCaster(m_treeRenderer);
+    // GPU grass casts into cascade 0 (3D_E-0042) — its own chunk store, so no manager.
+    m_renderer->setGrassShadowCaster(m_grassRenderer);
 
     // Give the editor access to the resource manager and foliage manager
     if (m_editor)
@@ -1124,11 +1126,18 @@ bool Engine::initialize(const EngineConfig& config)
         {
             m_renderer->setShGridForceDisabled(true);
         }
+        else if (f == "grass-shadow")
+        {
+            // 3D_E-0042 — the A/B baseline for the grass shadow cast. Grass still
+            // RECEIVES shadows with this off; only its contribution to cascade 0
+            // goes away, which is exactly the pixel delta the feature is worth.
+            m_renderer->setGrassShadowCaster(nullptr);
+        }
         else
         {
             Logger::warning("Unknown --isolate-feature value: '" + f +
                 "' (expected: motion-overlay, bloom, ssao, ibl, "
-                "ibl-diffuse, ibl-specular, sh-grid)");
+                "ibl-diffuse, ibl-specular, sh-grid, grass-shadow)");
         }
     }
 
@@ -1562,6 +1571,18 @@ void Engine::run()
             // Sync foliage wind time for shadow pass (must match main foliage pass)
             m_renderer->setFoliageShadowTime(static_cast<float>(m_timer->getElapsedTime()));
 
+            // Same sync for the GPU grass (3D_E-0042): the shadow pass runs BEFORE the
+            // visible pass, so the sway that bends a blade cannot be an argument to
+            // GrassRenderer::render — both passes read these fields, as foliage and trees
+            // already do with their own windDirection/windAmplitude.
+            if (m_grassRenderer && m_environmentForces && m_camera)
+            {
+                const glm::vec3 grassWindDir = m_environmentForces->getBaseWindDirection();
+                m_grassRenderer->windDir = glm::vec2(grassWindDir.x, grassWindDir.z);
+                m_grassRenderer->windStrength =
+                    m_environmentForces->getWindSpeed(m_camera->getPosition());
+            }
+
             // Set caustics params if water exists (used by scene + terrain shaders)
             if (!m_renderData.waterSurfaces.empty())
             {
@@ -1668,17 +1689,14 @@ void Engine::run()
                 {
                     m_profiler.getGpuTimer().beginPass("Grass");
                     // Re-fetch light + shadow map (the foliage block's locals are scoped to
-                    // its !visibleChunks.empty() branch above). Sample the shared wind at the
-                    // camera so the GPU grass sways with the same EnvironmentForces as the
-                    // billboard foliage — meadow default wind 0 ⇒ still field.
+                    // its !visibleChunks.empty() branch above). The shared wind was sampled
+                    // into m_grassRenderer->windDir/windStrength before the render call, so
+                    // the shadow pass bends each blade exactly as this pass does.
                     CascadedShadowMap* grassCsm = m_renderer->getCascadedShadowMap();
                     const DirectionalLight* grassLight =
                         m_renderData.hasDirectionalLight ? &m_renderData.directionalLight : nullptr;
-                    const glm::vec3 windDir3 = m_environmentForces->getBaseWindDirection();
-                    const float grassWind = m_environmentForces->getWindSpeed(m_camera->getPosition());
                     m_grassRenderer->render(viewProj, m_camera->getViewMatrix(),
                                             m_camera->getPosition(), elapsed,
-                                            glm::vec2(windDir3.x, windDir3.z), grassWind,
                                             grassLight, grassCsm);
                     m_profiler.getGpuTimer().endPass();
                     // G3 drawn-chunk instrument (§10): confirm frustum + distance cull are
@@ -2102,11 +2120,12 @@ void Engine::shutdown()
         m_window->saveWindowState();
     }
 
-    // Clear foliage + tree shadow pointers before destroying those renderers
+    // Clear foliage, tree + grass shadow pointers before destroying those renderers
     if (m_renderer)
     {
         m_renderer->setFoliageShadowCaster(nullptr, nullptr);
         m_renderer->setTreeShadowCaster(nullptr);
+        m_renderer->setGrassShadowCaster(nullptr);
     }
 
     // Tear down the music player BEFORE the system registry. It borrows

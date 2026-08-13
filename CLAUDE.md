@@ -28,6 +28,7 @@ All rules in `~/.claude/CLAUDE.md` are in force here and are not repeated below 
 ## Coding standards (summary)
 - Files `snake_case.{cpp,h}` · Classes `PascalCase` · Functions `camelCase` · Members `m_camelCase` · Constants `UPPER_SNAKE_CASE`
 - Allman braces · 4-space indent · one class per file · `#pragma once`
+- **There is no GLSL `#include`** — the shader loader does no preprocessing, so two shaders cannot share source the obvious way. Two options, in this order: (a) **link the same stage file into both programs** where the stages genuinely agree — the grass shadow caster pairs the unmodified `grass.vert.glsl` with `grass_shadow.frag.glsl`, so there is one blade generator and drift is impossible (3D_E-0042); (b) **copy the function and pin it with a text-parity test** where the stages must differ — `tree_shadow.frag.glsl` copies its dither from `tree_mesh.frag.glsl` this way. Never copy without the parity test: a shader mismatch fails **silently at link time in a warning**, not at build time, so the feature just stops working.
 
 ## See also
 ARCHITECTURE.md (Subsystem + Event Bus) · CODING_STANDARDS.md · SECURITY.md · AUDIT_STANDARDS.md · DEPENDENCY_STANDARDS.md · TESTING.md · CONTRIBUTING.md · ROADMAP.md · CHANGELOG.md.
