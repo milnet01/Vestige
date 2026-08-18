@@ -1042,6 +1042,58 @@ Full spatial audio pipeline with dynamic mixing, occlusion, and adaptive music. 
   **Layman:** The new roadmap database only captured the headlines of most of our roadmap, not the detail, so we have not made it the master copy yet.
   Kind: chore.
   Source: in-session-2026-08-18 (user asked for the roadmap-DB migration).
+  CORRECTION (2026-08-18, same day) to the body above. The claim that the
+  store drops ~464 KB / 78% of content is WRONG and is withdrawn. It
+  compared the store's `body` column against the WHOLE FILE's byte count,
+  and ROADMAP.md's 598 KB is mostly headings, the TOC, blank lines,
+  section prose and the bullet HEADLINES -- and headlines live in their own
+  column, not `body`.
+
+  Measured properly, parsing each bullet with its indented continuation:
+    file : 1026 bullets, 164 with a body, 862 with none, 122,075 body bytes
+    store: 1025 items,   208 with a body, 817 with none, 134,776 body bytes
+  The store holds MORE body content than the file's continuations contain.
+  Body capture is FAITHFUL. The 862 bodyless items are genuinely one-line
+  GFM bullets -- e.g. ROADMAP.md:255 `- [x] Spatial audio -- 3D positioned
+  sound sources with distance attenuation (...)` has no continuation, so a
+  NULL body for it is correct.
+
+  So the reason for holding is NOT data loss. The real blockers are two,
+  both still live:
+
+  1. `github-task-list` is a second-class source_format. migrate accepts it,
+     then neither serves nor renders it: roadmap_query still answers
+     source:"markdown" here while the DOOM_Ants control answers
+     source:"store", and ROADMAP.md is never rewritten. Vestige is the only
+     one of 15 projects not on ants-v1. The failure is silent -- ok:true
+     with healthy counts is indistinguishable from success.
+
+  2. The GFM parser reads a leading **bold** span as the ID. ROADMAP.md:226
+     is `- [x] **Terrain System** -- wrap environment/terrain, ...`, where
+     the bold text is the HEADLINE; the store filed "Terrain System" as the
+     id. 427 of 1026 items carry such a pseudo-id ("Audit X1",
+     "FW W5 (cont.)", "Water & Fluid System"). A render today would write
+     all 427 back into the file as ids, plus 566 synthesised ones that are
+     positional artefacts. That is ID POLLUTION, not content loss -- and it
+     is why (2) must be fixed before (1)'s render is implemented.
+
+  Minor, confirmed: `source` is the literal "planned" on 989 items (a
+  lifecycle word in a provenance column -- DOOM_Ants shows real values like
+  "user-request-2026-06-29", so it is a bad default, not a convention), and
+  `kind` was defaulted to 'implement' on the same 989.
+
+  The id-collision trap in the body above STANDS unchanged and is the one
+  thing to settle before any promotion.
+
+  WHAT "DONE" LOOKS LIKE: an Ants MCP release that (a) stops reading a bold
+  span as an id, (b) reserves synthesis outside the live counter range, and
+  (c) converts a github-task-list project to canonical ants-v1 -- render the
+  file, allocate real ids for the 862 id-less bullets, set source_format.
+  That single capability standardises the project AND produces the
+  ROADMAP.md rewrite the rollout expects. Filed upstream with repros;
+  deliberately not hand-rolled here, because under a one-standard-across-
+  projects goal the conversion belongs in the tool, once, not in each
+  project by hand.
 
 ### Fog, Mist, and Volumetric Lighting
 - [x] Distance fog (linear, exponential, exponential-squared) — pure-function primitives shipped in `engine/renderer/fog.{h,cpp}`. `FogMode` enum (`None` / `Linear` / `Exponential` / `ExponentialSquared`) + `FogParams` (linear-RGB colour, start, end, density). `computeFogFactor(mode, params, distance)` implements the three canonical forms: Linear `(end-d)/(end-start)`, GL_EXP `exp(-density·d)`, GL_EXP2 `exp(-(density·d)²)` — returns *surface visibility* in [0,1], matches OpenGL Red Book §9 / D3D9 fog-formulas. Guards every degenerate param (zero span, negative density, sub-camera distance) with pass-through behaviour. 15 unit tests cover knees, monotonicity, and edge cases.
