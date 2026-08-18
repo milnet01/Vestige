@@ -772,8 +772,56 @@ Full spatial audio pipeline with dynamic mixing, occlusion, and adaptive music. 
   **Layman:** We can't see how long drawing shadows takes, so we can only guess whether a change to them made things slower.
   Kind: perf.
   Source: in-session-2026-08-13 (hit while measuring 3D_E-0042).
+  CORRECTION (2026-08-18) to the closing Note above, before anyone builds
+  on it. `tests/fixtures/perf_gate/baseline.json` does NOT gate gpu,shadow
+  and that metric does NOT report MISSING. Three checks:
+    - Its `gate` list is ["frame,total","gpu,total","cpu,total","mem,gpu_mb",
+      "gpu,tiny"]. gpu,shadow is absent, i.e. present-but-NON-gated.
+    - That is deliberate and load-bearing: perf_gate.py:289 is the INV-4
+      self-check asserting gpu,shadow "should be present and non-gated" and
+      that its FAIL verdict leaves the exit code at EXIT_PASS. It is the
+      witness that a non-gated regression cannot fail the gate. Gating it
+      would break the selftest.
+    - Every fixture CSV (ok/warn/regressed/improved/floor/short/missing.csv)
+      already carries gpu,shadow rows, so it resolves, never MISSING.
+  That file is a SYNTHETIC FIXTURE ("hardware": "synthetic-fixture") and is
+  the only baseline in the repo -- consumed by `perf_gate.py --selftest` and
+  one ctest fed regressed.csv (tests/CMakeLists.txt:415-427). So there is no
+  real perf baseline to satisfy, the metric name is unconstrained, and the
+  new pass should follow the existing capitalised convention ("Shadow", like
+  Terrain/Foliage/Tree/Grass) rather than the fixture's lowercase string.
+  Adding the pass requires NO perf_gate or baseline.json change.
 
-- 📋 [3D_E-0045] **Reconfigure the three build dirs still pinned to the pre-rename project path.**
+  BLOCKER found while scoping, and it is why this is not a one-line change.
+  GpuTimer cannot nest. beginPass() stamps the name + start query into slot
+  m_passCount; endPass() stamps the end query into the same slot and only
+  then increments (gpu_timer.cpp:51-65). So a beginPass inside an open pass
+  overwrites the outer pass's name and start stamp, and the outer endPass
+  then closes a slot whose start query was never written this frame --
+  two corrupt rows, no error. All 8 existing passes are flat siblings in
+  engine.cpp. And renderShadowPass is called from Renderer::renderScene
+  (renderer.cpp:3222), which already sits inside beginPass("Scene")
+  (engine.cpp:1627-1632). Renderer holds no profiler/GpuTimer reference at
+  all -- renderer.h names neither.
+
+  DECISION (user, 2026-08-18): split the existing "Scene" pass in two rather
+  than nest, hoist renderShadowPass out, or teach GpuTimer nesting. Inject a
+  GpuTimer into Renderer; Engine stops wrapping renderScene; renderScene
+  emits "Shadow" around the shadow block and then "Scene" around the rest,
+  as two flat siblings. Chosen because it keeps the flat convention every
+  existing pass and the CSV/perf-gate reader already assume, adds no
+  hierarchy the log cannot express, and is arithmetically checkable:
+  gpu,Shadow + gpu,Scene must equal today's gpu,Scene. Rejected: nesting
+  (the log and perf_gate have no parent/child notion, so totals would
+  double-count); hoisting the call into Engine (renderShadowPass depends on
+  m_hasDirectionalLight set at :3144, m_shadowCasterItems built at
+  :3174-3180 and the SDSM depth bounds at :3204, all computed inside
+  renderScene, so it means splitting that function).
+
+  Per-cascade split stays out of scope for the first cut -- get one honest
+  Shadow number first, then decide if the four workloads need separating.
+
+- ✅ [3D_E-0045] **Reconfigure the three build dirs still pinned to the pre-rename project path.**
   The project directory was renamed 3D_Engine -> Vestige, but a CMake
   build dir stores its absolute source path in CMakeCache.txt. Every
   build dir was left pinned to /mnt/Games/Scripts/Linux/3D_Engine, so
@@ -798,6 +846,74 @@ Full spatial audio pipeline with dynamic mixing, occlusion, and adaptive music. 
   **Layman:** Three of the project's build folders still point at the old project name, so any build command using them fails until they are set up again.
   Kind: chore.
   Source: in-session-2026-08-13 (hit while building 3D_E-0042).
+  Resolved 2026-08-18. All remaining build dirs now resolve to
+  /mnt/Games/Scripts/Linux/Vestige; verified by reading CMAKE_HOME_DIRECTORY
+  out of each CMakeCache.txt after the fact, not by the configure exiting 0.
+
+  build-tsan: cleared per the recipe above and reconfigured by hand (it is
+  NOT a local-ci dir -- its recorded cache carried ENGINE_TSAN=ON and no
+  CMAKE_EXPORT_COMPILE_COMMANDS, so configure() at :195 was never what
+  built it). Restored to its own recorded flag set rather than local-ci's.
+  Full build 1115/1115 exit 0; a second `cmake --build` is a no-op, which
+  is what proves the cache coherent; ENGINE_TSAN=ON and libvestige_engine.a
+  carries __tsan_func_entry, so the instrumentation is really on.
+
+  build-msvc: stale cache cleared, then handed to `scripts/local-ci.sh`
+  itself rather than a hand-rolled repeat of the :256 block -- the stage
+  owns that flag set, and letting it configure proves the flags AND the
+  stage in one run. Windows MSVC build+test PASS (638s) in a full run that
+  also went Debug PASS / Release PASS / Tier-1 PASS / gitleaks PASS /
+  actionlint PASS -- "safe to push".
+
+  build-win: DELETED, not reconfigured (user-approved 2026-08-18). It was a
+  month-older duplicate of build-msvc (same Windows cross-build, same
+  compiler, minus CMAKE_CROSSCOMPILING_EMULATOR and the CMP0141/Embedded
+  debug-info flags) and `git grep build-win` matched nothing in the tree
+  except this bullet -- no script, no doc, no CI job drove it. Reconfiguring
+  it would have cost a ~25 min rebuild and kept 1.3 GB to keep a second copy
+  of a stage local-ci already owns. It is gitignored (.gitignore:3
+  `build-*/`), so nothing tracked changed; if it is ever wanted again it is
+  one configure away.
+
+  Correction to the recipe above for the next reader: clearing
+  `_deps/*-subbuild` and `_deps/*-build` while keeping `_deps/*-src` worked
+  exactly as described (17 *-src dirs survived in build-msvc, no
+  re-download). The ~25 min estimate held for build-tsan; build-msvc came in
+  at 638s because ccache was warm.
+
+- 📋 [3D_E-0046] **Run the Windows GL tests on real hardware via the `wintest` box.**
+  A real Windows machine is reachable and was previously unknown to this
+  project. `~/.ssh/config` already carries the host:
+
+    Host wintest -> 192.168.0.102, User Ant, IdentityFile ~/.ssh/win-test
+
+  Verified 2026-08-18: Windows 10 22H2 (10.0.19045.7663), GTX 1050 with
+  driver 32.0.15.6094 (GL 4.6 capable) plus an Intel HD 4400. It has NO
+  cmake / ninja / git / cl, so it is a RUN box, not a build box.
+
+  Why this matters. `scripts/local-ci.sh` `build_and_test_msvc()` cross-
+  builds with msvc-wine and then runs ctest under Wine, where the GL tests
+  SELF-SKIP -- the function's own comment says "GL tests self-skip (no GL
+  4.5 context under Wine), same as the GH windows-2022 runner". So no GL
+  test has ever executed on Windows, on CI or locally. Staging
+  `build-msvc/bin` to the box over scp and running ctest there would be the
+  first real-hardware Windows GL coverage this project has had.
+
+  Second use, independent of the first: the GTX 1050 is a genuine weak-HW
+  perf target for the Tier-1 scalability program, against the RX 6600 the
+  60 FPS budget is currently measured on.
+
+  Prior art for the mechanics is DOOM_Ants, which already stages to
+  C:\doom-ants-test\ and drives the box with a PowerShell runner over
+  `ssh wintest`; its ROADMAP records two traps worth reading first --
+  `set VAR=value && app` in cmd puts the trailing SPACE into the value,
+  and a windowed app launched over SSH has no interactive desktop.
+
+  Scope note: this bullet is the harness (stage + run + report), not any
+  individual test. Kind: test.
+  **Layman:** We can now test the Windows build on a real Windows PC instead of an emulator, which is the only way to check the graphics actually work there.
+  Kind: test.
+  Source: in-session-2026-08-18 (user surfaced the Windows box while 3D_E-0045 was building).
 
 ### Fog, Mist, and Volumetric Lighting
 - [x] Distance fog (linear, exponential, exponential-squared) — pure-function primitives shipped in `engine/renderer/fog.{h,cpp}`. `FogMode` enum (`None` / `Linear` / `Exponential` / `ExponentialSquared`) + `FogParams` (linear-RGB colour, start, end, density). `computeFogFactor(mode, params, distance)` implements the three canonical forms: Linear `(end-d)/(end-start)`, GL_EXP `exp(-density·d)`, GL_EXP2 `exp(-(density·d)²)` — returns *surface visibility* in [0,1], matches OpenGL Red Book §9 / D3D9 fog-formulas. Guards every degenerate param (zero span, negative density, sub-camera distance) with pass-through behaviour. 15 unit tests cover knees, monotonicity, and edge cases.
