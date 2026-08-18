@@ -510,6 +510,17 @@ public:
     /// @return Pointer to the CSM, or nullptr if not initialized.
     CascadedShadowMap* getCascadedShadowMap() const;
 
+    /// @brief Supplies the GPU timer so renderScene can emit its own timer passes.
+    /// @param gpuTimer Pointer to the engine's GpuTimer (must outlive Renderer), or
+    ///        nullptr to disable timing.
+    ///
+    /// 3D_E-0044. The shadow pass runs *inside* renderScene, and GpuTimer is flat —
+    /// beginPass stamps into slot m_passCount and only endPass increments it — so a
+    /// pass nested inside an outer one silently corrupts both. Engine therefore stops
+    /// wrapping renderScene and renderScene emits "Shadow" and "Scene" as two flat
+    /// siblings instead. Their sum is what the single "Scene" pass used to report.
+    void setGpuTimer(class GpuTimer* gpuTimer) { m_gpuTimer = gpuTimer; }
+
     /// @brief Sets the foliage renderer for shadow casting during the shadow pass.
     /// @param foliageRenderer Pointer to the foliage renderer (must outlive Renderer).
     /// @param foliageManager Pointer to the foliage manager for chunk access.
@@ -663,6 +674,7 @@ private:
     class TreeRenderer* m_treeShadowCaster = nullptr;  ///< Trees cast via the shared FoliageManager chunks (T4).
     class GrassRenderer* m_grassShadowCaster = nullptr;  ///< GPU grass casts into cascade 0 only (3D_E-0042).
     float m_foliageShadowTime = 0.0f;  ///< Elapsed time for wind sync in shadow pass (shared by foliage + trees).
+    class GpuTimer* m_gpuTimer = nullptr;  ///< Non-owning; set by Engine. Null disables pass timing (3D_E-0044).
     // Scratch vector for the per-cascade foliage-chunk list — its capacity is
     // preserved across frames so the shadow pass doesn't heap-alloc. (AUDIT H9.)
     mutable std::vector<const class FoliageChunk*> m_scratchFoliageChunks;

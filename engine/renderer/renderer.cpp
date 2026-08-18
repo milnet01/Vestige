@@ -16,6 +16,7 @@
 #include "renderer/scoped_shadow_depth_state.h"
 #include "animation/skeleton.h"
 #include "environment/foliage_manager.h"
+#include "profiler/gpu_timer.h"
 #include "scene/scene.h"
 #include "core/logger.h"
 #include "utils/frustum.h"
@@ -3170,6 +3171,13 @@ void Renderer::renderScene(const SceneRenderData& renderData, const Camera& came
 
     if (!geometryOnly)
     {
+        // 3D_E-0044: everything in this block is shadow work — caster list, SDSM
+        // bounds, the directional cascade pass and the point-light cube passes — so
+        // it is exactly the "Shadow" GPU scope. It and the "Scene" scope opened
+        // below partition renderScene, which is why gpu,Shadow + gpu,Scene reports
+        // what the single gpu,Scene pass reported before the split.
+        if (m_gpuTimer) m_gpuTimer->beginPass("Shadow");
+
         // Build shadow caster list (filter out non-casting items like ground planes)
         m_shadowCasterItems.clear();
         m_shadowCasterItems.reserve(renderData.renderItems.size());
@@ -3225,7 +3233,14 @@ void Renderer::renderScene(const SceneRenderData& renderData, const Camera& came
         // --- Point light shadow pass (uses all shadow casters — omnidirectional) ---
         buildInstanceBatches(m_shadowCasterItems);
         renderPointShadowPass(m_shadowCasters);
+
+        if (m_gpuTimer) m_gpuTimer->endPass();
     }
+
+    // Opened here rather than at the top of renderScene so it does not enclose the
+    // "Shadow" scope above — GpuTimer cannot nest (3D_E-0044). Closed at the end of
+    // the function; renderScene has no early return, so the pair cannot be skipped.
+    if (!geometryOnly && m_gpuTimer) m_gpuTimer->beginPass("Scene");
 
     // --- Frustum cull for scene pass ---
     // Use the standard (non-reverse-Z) projection for frustum extraction so all
@@ -3777,6 +3792,9 @@ void Renderer::renderScene(const SceneRenderData& renderData, const Camera& came
     glColorMaski(1, GL_TRUE, GL_TRUE, GL_TRUE, GL_TRUE);
     glColorMaski(2, GL_TRUE, GL_TRUE, GL_TRUE, GL_TRUE);
     glColorMaski(3, GL_TRUE, GL_TRUE, GL_TRUE, GL_TRUE);
+
+    // Closes the "Scene" scope opened before the frustum cull (3D_E-0044).
+    if (!geometryOnly && m_gpuTimer) m_gpuTimer->endPass();
 }
 
 void Renderer::renderShadowPass(const std::vector<SceneRenderData::RenderItem>& shadowCasterItems,

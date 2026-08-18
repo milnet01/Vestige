@@ -102,6 +102,14 @@ bool Engine::initialize(const EngineConfig& config)
     // Create renderer
     m_renderer = std::make_unique<Renderer>(m_eventBus);
 
+    // 3D_E-0044: renderScene emits its own "Shadow" / "Scene" GPU-timer scopes.
+    // Lifetime: m_profiler is a direct member declared AFTER m_renderer (engine.h
+    // :189 vs :204), so it is destroyed FIRST and this pointer dangles during
+    // ~Renderer. That is safe only because Renderer dereferences it nowhere but
+    // renderScene, which cannot run during teardown. Do not add a m_gpuTimer use
+    // to ~Renderer or to anything it calls.
+    m_renderer->setGpuTimer(&m_profiler.getGpuTimer());
+
     // Load shaders
     if (!m_renderer->loadShaders(config.assetPath))
     {
@@ -1624,12 +1632,14 @@ void Engine::run()
                 m_terrainRenderer->setCausticsParams(false, 0.0f, 0.0f, 0);
             }
 
-            m_profiler.getGpuTimer().beginPass("Scene");
+            // 3D_E-0044: renderScene now opens its own "Shadow" and "Scene" GPU
+            // scopes internally (the shadow pass runs inside it, and GpuTimer cannot
+            // nest), so there is deliberately no beginPass wrapper here. The two
+            // scopes it emits sum to what the single "Scene" pass reported before.
             {
                 VESTIGE_PROFILE_SCOPE("RenderScene");
                 m_renderer->renderScene(m_renderData, *m_camera, aspectRatio);
             }
-            m_profiler.getGpuTimer().endPass();
 
             // Render terrain (after opaques, before foliage/water)
             if (m_terrainEnabled && m_terrain->isInitialized())

@@ -22,6 +22,44 @@ may change any interface without notice.
 
 ## [Unreleased]
 
+### 2026-08-18 Added — The shadow pass now has its own GPU timer, and it turns out to be the most expensive pass in the frame (3D_E-0044)
+
+`--profile-log` gains a `gpu,Shadow` row. Until now the shadow pass was the
+only major pass with no timer of its own, so the only way to price a change
+to it was `gpu,total`, where a sub-millisecond effect disappears into
+run-to-run spread.
+
+Measured on the meadow at 1920x1080 (RX 6600, Release, `--play --no-vsync`,
+median of a ~25 s capture, three repeat runs): **Shadow is 4.49 ms of an
+11.78 ms GPU frame — 38%, the largest single pass**, ahead of PostProcess
+(2.89 ms) and Terrain (2.21 ms). Nothing had shown that before.
+
+The obstacle was that the shadow pass runs *inside* `Renderer::renderScene`,
+and `GpuTimer` is flat: `beginPass` stamps its start into slot `m_passCount`
+and only `endPass` increments it. So a pass opened inside another overwrites
+the outer one's name and start stamp, and the outer `endPass` then closes a
+slot whose start was never written this frame — two corrupt rows, no error.
+`renderScene` could not simply be wrapped from within.
+
+Instead the existing `Scene` pass is split in two. `Engine` no longer wraps
+`renderScene`; `renderScene` opens `Shadow` around its shadow block (caster
+list, SDSM bounds, the directional cascade pass and the point-light cube
+passes) and `Scene` around everything after it, as two flat siblings. The
+two partition the function, so their sum is what the single `Scene` pass
+reported before: 5.32 ms after against 5.23 ms before, with `gpu,total`
+moving 11.757 → 11.777 ms (+0.17%, inside noise).
+
+**`gpu,Scene` now means something narrower than it did** — 0.83 ms rather
+than 5.23 ms — because shadow cost has moved out of it into `gpu,Shadow`. A
+saved comparison against an older `gpu,Scene` figure is not comparing like
+with like.
+
+No perf-gate change was needed, and the roadmap bullet's claim that one was
+is corrected in place. `tests/fixtures/perf_gate/baseline.json` is a
+synthetic selftest fixture rather than a real baseline, and its `gpu,shadow`
+entry is deliberately *non*-gated: `perf_gate.py` asserts exactly that, using
+it as the witness that a non-gated regression cannot change the exit code.
+
 ### 2026-07-31 Fixed — The weekly release train was cancelling its own promotion build every run
 
 Every scheduled release run does two things: promote the RC that has been

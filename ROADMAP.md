@@ -750,7 +750,7 @@ Full spatial audio pipeline with dynamic mixing, occlusion, and adaptive music. 
   a cleanly separated one — see 3D_E-0044 for why it could not be
   isolated further.
 
-- 📋 [3D_E-0044] **Give the shadow pass its own GPU-timer pass — its cost is currently unmeasurable.**
+- ✅ [3D_E-0044] **Give the shadow pass its own GPU-timer pass — its cost is currently unmeasurable.**
   Found while perf-gating 3D_E-0042. `Renderer::renderShadowPass` is not
   wrapped in a `GpuTimer` pass, so `--profile-log` emits no `gpu,Shadow`
   row — the Terrain, Foliage, Tree, Grass and Water passes all have one
@@ -820,6 +820,69 @@ Full spatial audio pipeline with dynamic mixing, occlusion, and adaptive music. 
 
   Per-cascade split stays out of scope for the first cut -- get one honest
   Shadow number first, then decide if the four workloads need separating.
+  Resolved 2026-08-18. Implemented as the DECISION above: "Scene" split into
+  two flat siblings inside renderScene, no nesting, no hoist.
+
+  Changes: renderer.h gains setGpuTimer() + a non-owning `class GpuTimer*
+  m_gpuTimer` (matching the existing `class FoliageRenderer*` forward-decl
+  idiom in the same member block, so the header needs no new include);
+  renderer.cpp opens "Shadow" at the top of the !geometryOnly shadow block
+  and closes it at that block's end, then opens "Scene" before the frustum
+  cull and closes it at the end of the function; engine.cpp drops its
+  beginPass("Scene") wrapper and calls setGpuTimer() right after
+  constructing the Renderer. 42 insertions, 2 deletions across 3 files.
+
+  Both scopes are guarded on !geometryOnly. That is what keeps it to one
+  pass pair per frame: of the five renderScene call sites, only
+  engine.cpp:1630 passes geometryOnly=false -- the water refraction/
+  reflection pair (engine.cpp:1792/1818) and the two cubemap capture sites
+  (renderer.cpp:2497/2648) all pass true. renderScene has no early return,
+  so the begin/end pairs cannot be skipped; grep confirms 9 begin and 9
+  end across the two files, and MAX_PASSES is 16.
+
+  MEASURED (RX 6600, Release, --play --no-vsync, ~25 s capture, medians;
+  machine confirmed quiet, no stray vestige instance):
+
+    gpu,Shadow       4.49 ms   <- new, and the LARGEST pass in the frame
+    gpu,PostProcess  2.89
+    gpu,Terrain      2.21
+    gpu,Foliage      0.93
+    gpu,Grass        0.92
+    gpu,Scene        0.83      <- was 5.23 before the split
+    gpu,Tree         0.09
+    gpu,Water        0.02
+    gpu,total       11.78
+
+  So the shadow pass is ~38% of GPU frame time and nothing had ever shown
+  it. That reframes the perf work: 3D_E-0042 measured the grass cast at
+  +0.331 ms against a pass now known to cost 4.49 ms.
+
+  Partition invariant checked against a stashed rebuild of the pre-change
+  tree rather than assumed: before gpu,Scene = 5.234 ms; after
+  gpu,Shadow + gpu,Scene = 5.317 ms (median of 3 runs: 5.334 / 5.317 /
+  5.287). gpu,total 11.757 -> 11.777 ms, +0.17%, i.e. the extra timer pair
+  is free. A first capture read 12.527 ms total and was discarded as a cold
+  run -- every untouched pass was inflated in it too (Foliage +0.36), which
+  is what identified it as run-level drift rather than a cost of the split.
+
+  Corrections to the ORIGINAL bullet text above, both already annotated:
+  its closing Note about baseline.json gating a MISSING gpu,shadow is
+  wrong on both counts, and no perf_gate or baseline change was made or
+  needed. The per-cascade split it floats is deliberately still not done --
+  one honest aggregate number first.
+
+  Gate: Debug build clean (no warnings), ctest 7/7, then full
+  scripts/local-ci.sh. Naming follows the existing capitalised convention
+  ("Shadow", like Terrain/Foliage/Tree/Grass), NOT the fixture's lowercase
+  "gpu,shadow" string.
+
+  Follow-ups deliberately NOT taken here: point-light shadow cost is inside
+  "Shadow" rather than split out; and docs/phases/
+  phase_10_meadow_gpu_grass_design.md:146 enumerates the pass list as
+  "Scene -> Terrain -> Foliage -> Water -> Particles -> PostProcess ...
+  Shadow pass runs in beginFrame", which was already stale before this
+  change (it omits Tree, and the shadow pass never ran in beginFrame). Left
+  as the dated design record it is rather than half-corrected.
 
 - ✅ [3D_E-0045] **Reconfigure the three build dirs still pinned to the pre-rename project path.**
   The project directory was renamed 3D_Engine -> Vestige, but a CMake
