@@ -2900,7 +2900,7 @@ The same vehicle entity supports two physics tiers selectable per-vehicle in the
 - [ ] **Livery system** — UV-painted vehicle skin with multi-layer compositor (paint → decals → text → number). Editor preview with paint brush + decal placement.
 
 ### Photo mode + share
-- [ ] **Photo mode** — same shape as Phase 25's open-world photo mode but with vehicle-focused camera presets (low chase, hood, drift-perspective).
+- [ ] **Vehicle photo mode** — same shape as Phase 25's open-world photo mode but with vehicle-focused camera presets (low chase, hood, drift-perspective).
 - [ ] **Replay export** — render replay to MP4 via offline-rendering pass at user-chosen quality. Pairs with Phase 11A.
 
 ### Reference projects
