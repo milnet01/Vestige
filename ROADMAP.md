@@ -1094,6 +1094,65 @@ Full spatial audio pipeline with dynamic mixing, occlusion, and adaptive music. 
   deliberately not hand-rolled here, because under a one-standard-across-
   projects goal the conversion belongs in the tool, once, not in each
   project by hand.
+  UPDATE (2026-08-18, later same day). The body above says "the counter was
+  deliberately NOT bumped past 611". That is no longer the state -- the
+  allocator bumped it itself, and then got the boundary wrong.
+
+  Filing the next bullet returned id 3D_E-0612 with a new envelope field
+  `counter_advanced_to: 612`. So roadmap_log HAS gained store-high-water
+  awareness since this morning (earlier today it allocated 0047 straight
+  off the counter, ignoring the store) -- the requested fix has landed, one
+  short. The store's highest id for project 13 IS 3D_E-0612, so advancing
+  TO 612 and then issuing 612 handed out an id already held by the
+  synthesised "Spatial audio" bullet. Two different items, same id.
+
+  Worked around: the new bullet was renumbered to 3D_E-0613 and
+  .roadmap-counter set to 613 (0613 confirmed absent from the store). So
+  our live ids are now 0044-0047 and 0613, with 0048-0612 skipped -- that
+  gap is deliberate and belongs to the synthesised range; do not "tidy" it.
+
+  Consequence for the next session: expect the next append to land near
+  0614, not 0048. If an append ever returns an id at or below 612, it has
+  regressed -- check the store before accepting it.
+
+  Filed upstream as its own finding with the repro; expected behaviour is
+  advance to max(existing, counter) + 1, plus a pre-return assert that the
+  issued id is absent from the store.
+
+- 📋 [3D_E-0613] **Move 3D_E-0042's CHANGELOG entry out of the legacy flat region into a dated topic.**
+  CHANGELOG.md's `## [Unreleased]` spans lines 23-10970 and has TWO layouts:
+  lines 25-~10511 are newest-first DATED topics (`### 2026-07-31 Fixed -- ...`,
+  several hundred of them), and ~10664-10970 is a legacy Keep-a-Changelog tail
+  (`### Documentation`, `### Added`, `### Changed`, `### Fixed`, `### Security`)
+  left from before the project switched conventions.
+
+  The 3D_E-0042 entry (GPU grass casts shadows, 2026-08-13) was written under
+  the legacy `### Added` at line 10831 -- i.e. into the April-era tail, ~10,800
+  lines below the newest entry, where nobody reading the changelog top-down will
+  find it. The T8 tree-normal-map entry immediately below it (line 10852) is in
+  the same place and has a doubled `**` at both ends of its headline.
+
+  Fix: move both into dated `### <date> <Category> -- <headline>` blocks at the
+  TOP of [Unreleased], matching the live convention, and fix the T8 bold
+  markers. 3D_E-0044's entry (2026-08-18) was written correctly at the top on
+  2026-08-18 and is the shape to copy.
+
+  Deliberately NOT done in the 3D_E-0044 commit: relocating another session's
+  changelog entry is a judgement call about the record rather than part of that
+  feature, and it was offered to the user without an answer. Low risk, ~25 lines
+  moved.
+
+  Knock-on worth knowing: this mixture is why `changelog_log op:"add_subsection"`
+  refuses on this file with code `flat_section` -- it finds the first flat
+  `### Added` and declares the whole section flat, then advises `op:"add"`, which
+  would append yet another entry into the legacy tail. So every session hits this
+  and, following the advice, makes it worse. Filed upstream in
+  /mnt/Games/Scripts/Linux/Vestige_Ants_MCP_Feedback.md. Emptying the tail is
+  also what would let add_subsection work again.
+  Kind: doc-fix.
+  **Layman:** A recent entry was written into the old part of the changelog among April items, so it reads as if it happened months ago.
+  Kind: doc-fix.
+  Source: in-session-2026-08-18 (found while writing the 3D_E-0044 changelog entry).
 
 ### Fog, Mist, and Volumetric Lighting
 - [x] Distance fog (linear, exponential, exponential-squared) — pure-function primitives shipped in `engine/renderer/fog.{h,cpp}`. `FogMode` enum (`None` / `Linear` / `Exponential` / `ExponentialSquared`) + `FogParams` (linear-RGB colour, start, end, density). `computeFogFactor(mode, params, distance)` implements the three canonical forms: Linear `(end-d)/(end-start)`, GL_EXP `exp(-density·d)`, GL_EXP2 `exp(-(density·d)²)` — returns *surface visibility* in [0,1], matches OpenGL Red Book §9 / D3D9 fog-formulas. Guards every degenerate param (zero span, negative density, sub-camera distance) with pass-through behaviour. 15 unit tests cover knees, monotonicity, and edge cases.
