@@ -978,6 +978,71 @@ Full spatial audio pipeline with dynamic mixing, occlusion, and adaptive music. 
   Kind: test.
   Source: in-session-2026-08-18 (user surfaced the Windows box while 3D_E-0045 was building).
 
+- 📋 [3D_E-0047] **Finish the roadmap-DB migration once the GFM body parser is fixed — blocked, and DELIBERATELY not promoted.**
+  roadmap_migrate was run 2026-08-18 and reports ok:true. Vestige IS in the
+  store (project_id 13, export_slug "vestige", 1025 items, 236 sections, no
+  duplicate ids) and today's items agree with the file. But the store is a
+  LOSSY capture and must not become the source of truth in this state.
+
+  MEASURED, not assumed:
+    - 817 of 1025 items have body NULL. Only 208 captured any prose.
+    - Store holds 134,776 bytes of body against ROADMAP.md's 598,572 --
+      ~78% of the content, ~464 KB, is not in the store. On this file that
+      is every Progress/Resolved note, measurement and rationale.
+    - source = the literal string "planned" on 989 items (the status word
+      parsed into the provenance column).
+    - kind defaulted to 'implement' on those same 989 (NOT NULL + CHECK, so
+      it could not be left blank) -- invented categories, indistinguishable
+      from declared ones.
+    - id provenance: 32 parsed, 566 synthesised, 427 quarantined. The
+      quarantined ones took a bold label as their id ("Terrain System",
+      "Audit X1", "FW W5 (cont.)").
+
+  ROOT CAUSE is our file, not just the verb: ROADMAP.md is MIXED format --
+  989 GFM task-list bullets (`- [x]`, the historical bulk) against 36
+  ants-v1 emoji bullets (the ones roadmap_log writes). The migrator picked
+  "github-task-list" by majority and said nothing about the mixture. The
+  208 items that captured a body map onto the ants-v1 bullets, so it is
+  specifically the GFM path that drops continuation blocks.
+
+  CONSEQUENCE: the store does not serve. roadmap_query still answers
+  `"source":"markdown"` for this project, while the control (DOOM_Ants,
+  ants-v1) answers `"source":"store"`. Vestige is the only one of 15
+  projects with source_format='github-task-list'. ROADMAP.md was NOT
+  rewritten -- byte-identical md5 across the migration -- so there is
+  nothing in the repo to show for it. That non-serving is currently the
+  only thing PREVENTING a render from deleting the 464 KB.
+
+  DECISION 2026-08-18: hold. Do not hand-convert the 989 GFM bullets to
+  ants-v1 just to satisfy the format check -- that would assign 989 new
+  ids, blow .roadmap-counter from 46 to ~1035, rewrite ~590 KB of project
+  history in one commit, and it is the migrator's job under the stated goal
+  of enforcing one standard across projects. Filed upstream instead, in
+  /mnt/Games/Scripts/Linux/Vestige_Ants_MCP_Feedback.md (three findings:
+  the silent 78% body loss, the non-engaging store switch, and mixed-format
+  classification + id synthesis).
+
+  TRAP for whoever resumes this. Id synthesis draws from our LIVE id space
+  without reserving it: synthesised ids run to 3D_E-0611 while
+  .roadmap-counter sits at 46, so the next ~565 roadmap_log allocations
+  each collide with a synthesised store id. It already happened once --
+  3D_E-0046 was synthesised onto an unrelated audio bullet before we
+  allocated it for the wintest item; re-migration resolved it correctly
+  (ours kept 0046, the audio bullet moved to 0047). The counter was
+  deliberately NOT bumped past 611, because the store is not authoritative
+  so the collision is currently inert, and a permanent 0047-0700 gap to
+  dodge a bug under repair is not worth it. If the DB is ever promoted,
+  settle the id namespace FIRST.
+
+  Re-check trigger: an Ants MCP release that reports items_without_body /
+  captured-byte fidelity, or that refuses rather than returning ok:true on
+  an unsupported source_format. Then re-run roadmap_migrate dry_run:true
+  and compare the body counts above before promoting anything.
+  Kind: chore.
+  **Layman:** The new roadmap database only captured the headlines of most of our roadmap, not the detail, so we have not made it the master copy yet.
+  Kind: chore.
+  Source: in-session-2026-08-18 (user asked for the roadmap-DB migration).
+
 ### Fog, Mist, and Volumetric Lighting
 - [x] Distance fog (linear, exponential, exponential-squared) — pure-function primitives shipped in `engine/renderer/fog.{h,cpp}`. `FogMode` enum (`None` / `Linear` / `Exponential` / `ExponentialSquared`) + `FogParams` (linear-RGB colour, start, end, density). `computeFogFactor(mode, params, distance)` implements the three canonical forms: Linear `(end-d)/(end-start)`, GL_EXP `exp(-density·d)`, GL_EXP2 `exp(-(density·d)²)` — returns *surface visibility* in [0,1], matches OpenGL Red Book §9 / D3D9 fog-formulas. Guards every degenerate param (zero span, negative density, sub-camera distance) with pass-through behaviour. 15 unit tests cover knees, monotonicity, and edge cases.
 - [x] Height fog — exponential fog that thickens below a configurable altitude (ground-hugging mist, valley fog). `HeightFogParams` (colour, fogHeight, groundDensity, heightFalloff, maxOpacity) + closed-form `computeHeightFogTransmittance(params, cameraY, rayDirY, rayLength)` — Quílez 2010 analytic integral of `d(y) = a·exp(-b·(y - fogHeight))` along a view ray. Uses `expm1` for numerical stability near horizontal rays; separate `|rd.y| < 1e-5` branch collapses to Beer-Lambert so the horizon line stays smooth. `maxOpacity` clamp mirrors UE `FogMaxOpacity` so the sky doesn't fully vanish on long sightlines. 7 unit tests cover zero-length, zero-density, monotonic decay, horizontal ↔ Beer-Lambert equivalence, altitude thinning, maxOpacity floor, small-angle ↔ horizontal-branch agreement. **Desert heat haze** variant (subtle distortion) is a follow-up.
