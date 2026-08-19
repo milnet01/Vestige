@@ -12,7 +12,7 @@
 # and already in ~/.ssh/config. It is a RUN box — no cmake, ninja, git or cl —
 # so this stages the binaries built here and drives them remotely.
 #
-# Two traps this script exists to handle. Neither is optional and both are
+# Three traps this script exists to handle. None is optional and all are
 # silent: each one produces a run that LOOKS clean.
 #
 #   1. Windows OpenSSH runs its shell in session 0, which has no interactive
@@ -34,6 +34,19 @@
 #      /mnt/Games/... is staged to C:\mnt\Games\..., so a baked path resolves
 #      exactly as it does at home. Windows treats a leading "/" as relative to
 #      the current drive, which is what makes the mirror work.
+#
+#   3. The interactive session the tests run in is UNPRIVILEGED, and differs
+#      from the ssh session in ways beyond the desktop. Measured 2026-08-19
+#      (3D_E-0614): `whoami /priv` over ssh lists SeCreateSymbolicLinkPrivilege
+#      as Enabled; the same command through the scheduled task below does not
+#      list it at all, and `mklink` there answers "You do not have sufficient
+#      privilege". So a capability probe that passes when you test it by hand
+#      over ssh can still fail under the harness. Worse, MSVC's THROWING
+#      std::filesystem overloads turn that particular refusal into a __fastfail
+#      (exit 0xC0000409) that no catch can see, killing the whole suite mid-run
+#      — which is how one test silently cost ~3250 others. Probe a filesystem
+#      capability with the std::error_code overload, never with try/catch, and
+#      never conclude anything about this box from an ssh-only check.
 #
 # Usage:
 #   scripts/wintest.sh                       # stage + run the whole suite
