@@ -169,6 +169,47 @@ Source of truth: [`docs/research/self_learning_roadmap.md`](docs/research/self_l
   unconfigured so workflows cannot be run locally. The failure this closes was
   latent rather than live, so the proof is the absence of the call plus the
   package-set parity, not a green run.
+  Correction + verification (2026-08-19). The note above said the fix was the
+  one already applied to release.yml -- plain `sudo apt-get install` -- and
+  that the proof was package-set parity because nothing could be run locally.
+  Pushing it proved that wrong. CI run 32295428461 stalled every one of the
+  five apt jobs: the runner's azure.archive.ubuntu.com mirror was unreachable,
+  apt logged 130 Ign: retries, fell back to archive.ubuntu.com, then emitted
+  nothing for 26 minutes until the run was cancelled. apt applies no network
+  timeout by default, so a silent mirror is an unbounded hang, not an error.
+
+  The warning was in the comment that commit deleted: the cache action
+  "replaces the previous nick-fields/retry wrapper around apt-get: cache hits
+  don't touch the mirror so the transient 4xx/5xx errors the retry was working
+  around are mostly avoided". This repo already knew bare apt-get was not
+  enough here, and ci.yml had been passing only because cache hits skipped the
+  mirror. Copying release.yml ignored the difference in exposure: rare tag
+  pushes where a re-run is cheap, versus every push and PR across five
+  concurrent jobs.
+
+  Corrected in commit ad39371 with a composite action at
+  .github/actions/apt-install: Acquire::http/https::Timeout=20 (the
+  load-bearing part -- it turns a stalled mirror into a bounded failure),
+  Acquire::Retries=3, a 3-attempt retry loop with backoff around both update
+  and install, and timeout-minutes: 12 on each calling step as the outer
+  bound. One implementation across all four call sites rather than four pasted
+  copies. The package list crosses as an env var rather than being
+  interpolated into the script body, so the input is not a script-injection
+  surface.
+
+  Verified: CI run 32298219369 green, all 8 jobs, on the same repository and
+  runner image that had just hung. The five apt install steps completed in 12
+  to 112 seconds each, against the 26-minute stall. Package sets re-checked as
+  sets against the original cache-action lists at HEAD~2: identical at all
+  four sites.
+
+  Still not verified, and it cannot be from a green run: that the retry
+  actually rescues a transient mirror outage. The outage was not present on
+  the passing run, so what is proven is that the normal path works and that a
+  stall is now bounded and named, rather than that the recovery path was
+  exercised. The retry helper's three behaviours -- success, three attempts
+  then a named error, recovery on the third -- were unit-tested locally
+  instead.
 
 - ✅ [3D_E-0619] **release.yml's header comment says there is no AppImage, and the same file builds one.**
   The header block still reads "No AppImage yet. Follow-on: use

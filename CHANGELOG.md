@@ -34,8 +34,10 @@ name the cause -- GLFW configuring with no development libraries present,
 surfacing as a missing wayland-scanner or a missing X11 and shifting
 between runs.
 
-- **Convert every remaining cache-apt-pkgs-action call site to plain apt-get** (3D_E-0618)
-  Four sites, not the three the roadmap bullet counted: ci.yml's Linux build, its Tier-1 audit job and its cmake-compat job, plus a fourth in audit-full.yml that the bullet missed. Each package set is byte-identical to the list it replaces. No workflow in this repository uses the action any more.
+- **Convert every remaining cache-apt-pkgs-action call site to a bounded, retrying apt install** (3D_E-0618)
+  Four sites, not the three the roadmap bullet counted: ci.yml's Linux build, its Tier-1 audit job and its cmake-compat job, plus a fourth in audit-full.yml that the bullet missed. Each package set is byte-identical to the list it replaces, and no workflow in this repository uses the action any more.
+
+  The first attempt simply copied release.yml's plain `apt-get`, and that hung: with the runner's Azure mirror unreachable, apt fell back and then produced no output for 26 minutes, because it applies no network timeout by default. The shipped fix is a composite action at `.github/actions/apt-install` -- explicit Acquire timeouts so a stalled mirror fails in bounded time instead of hanging, three retries with backoff so a transient failure passes, and a per-step ceiling as the outer bound. One implementation shared by all four call sites.
 
 - **Correct release.yml's header comment, which denied the AppImage the same file builds** (3D_E-0619)
   The header listed only the tarball and the Windows zip, and proposed building an AppImage with linuxdeploy as future work -- which the workflow's own Build AppImage step has been doing. It now lists all four published artifacts and describes the step as it stands.
