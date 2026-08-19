@@ -131,7 +131,7 @@ Source of truth: [`docs/research/self_learning_roadmap.md`](docs/research/self_l
 
 ---
 
-- 📋 [3D_E-0618] **ci.yml still uses the cache-apt-pkgs-action that is known broken, on a cache that will eventually expire.**
+- ✅ [3D_E-0618] **ci.yml still uses the cache-apt-pkgs-action that is known broken, on a cache that will eventually expire.**
   release.yml was moved off `awalsh128/cache-apt-pkgs-action@v1.6.3` on
   2026-07-22 (commit eb52f19) because on ubuntu-24.04 its manifest parser
   errors, installs 0 packages, and then CACHES the empty result --
@@ -152,8 +152,25 @@ Source of truth: [`docs/research/self_learning_roadmap.md`](docs/research/self_l
   Kind: fix.
   Lanes: ci.
   Source: in-session-2026-08-19 (release 0.1.70 pre-flight).
+  Resolved (2026-08-19): all four call sites converted to plain `sudo apt-get
+  install`, mirroring release.yml's fix. The bullet said ci.yml called the action
+  in three places and that was the whole exposure; there was a FOURTH live call
+  site in audit-full.yml ("Install audit tool dependencies", cache key
+  audit-full-1), which the bullet did not count and which carried the identical
+  latent failure. It is converted too, so no workflow in this repo now uses
+  awalsh128/cache-apt-pkgs-action.
 
-- 📋 [3D_E-0619] **release.yml's header comment says there is no AppImage, and the same file builds one.**
+  Package sets verified byte-identical to the pre-fix `packages:` lists at every
+  one of the four sites (set comparison against git HEAD, no member added or
+  dropped). actionlint clean on all four workflows; yamllint is not a CI gate and
+  its error count on ci.yml fell 31 -> 29.
+
+  NOT verified: no CI run has executed against the change yet, and `act` is still
+  unconfigured so workflows cannot be run locally. The failure this closes was
+  latent rather than live, so the proof is the absence of the call plus the
+  package-set parity, not a green run.
+
+- ✅ [3D_E-0619] **release.yml's header comment says there is no AppImage, and the same file builds one.**
   The header block still reads "No AppImage yet. Follow-on: use
   linuxdeploy + the existing packaging/vestige-editor.desktop to produce a
   single-file AppImage" and lists only the tarball and the Windows zip as
@@ -170,6 +187,12 @@ Source of truth: [`docs/research/self_learning_roadmap.md`](docs/research/self_l
   Kind: doc-fix.
   Lanes: ci, docs.
   Source: in-session-2026-08-19 (release 0.1.70 pre-flight).
+  Resolved (2026-08-19): release.yml's header now lists all four published
+  artifacts (tarball, AppImage, .zsync, Windows zip) and the "No AppImage yet"
+  follow-on paragraph is replaced by a description of what the Build AppImage
+  step actually does -- linuxdeploy plus packaging/vestige-editor.desktop, with
+  embedded zsync update info. Artifact names taken from the workflow's own
+  release-upload globs rather than from the previous comment.
 
 ### Path-tracer formula coverage (DOOM_Ants Workbench requests, 2026-06-16)
 

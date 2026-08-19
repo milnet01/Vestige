@@ -42,11 +42,18 @@ jobs:
         uses: actions/checkout@9c091bb21b7c1c1d1991bb908d89e4e9dddfe3e0  # v6
 
       - name: Install audit tool dependencies
-        # Same package set + pin as ci.yml's audit job.
-        uses: awalsh128/cache-apt-pkgs-action@553a35bb8ebd9fcabcb1c9451aa4c98e1b4ca8a9  # v1.6.3
-        with:
-          packages: cppcheck clang-tidy python3 python3-pip python3-xmltodict python3-yaml python3-flask build-essential cmake ninja-build xvfb libgl1-mesa-dev libglu1-mesa-dev libx11-dev libxrandr-dev libxinerama-dev libxcursor-dev libxi-dev libxxf86vm-dev libwayland-dev libxkbcommon-dev
-          version: audit-full-1
+        # Same package set as ci.yml's audit job. Plain apt-get — see the comment
+        # on ci.yml's "Install build dependencies" step for why
+        # awalsh128/cache-apt-pkgs-action is not used.
+        run: |
+          sudo apt-get update
+          sudo apt-get install -y \
+            build-essential cmake ninja-build \
+            libgl1-mesa-dev libglu1-mesa-dev \
+            libx11-dev libxrandr-dev libxinerama-dev libxcursor-dev libxi-dev libxxf86vm-dev \
+            libwayland-dev libxkbcommon-dev \
+            xvfb cppcheck clang-tidy \
+            python3 python3-pip python3-xmltodict python3-yaml python3-flask
 
       - name: Set up ccache
         uses: hendrikmuhs/ccache-action@d62db5f07c26379fc4b4e0916f098a92573c3b03  # v1.2.23

@@ -23,6 +23,23 @@ may change any interface without notice.
 
 ## [Unreleased]
 
+### 2026-08-19 Fixed — CI no longer depends on a package-install action that installs nothing (3D_E-0618, 3D_E-0619)
+
+release.yml was moved off awalsh128/cache-apt-pkgs-action on 2026-07-22
+because on ubuntu-24.04 its manifest parser errors, installs 0 packages,
+and then caches the empty result. The other workflows still called it.
+They passed only because they were riding an older healthy cache, and
+would have gone red on the first eviction with a symptom that does not
+name the cause -- GLFW configuring with no development libraries present,
+surfacing as a missing wayland-scanner or a missing X11 and shifting
+between runs.
+
+- **Convert every remaining cache-apt-pkgs-action call site to plain apt-get** (3D_E-0618)
+  Four sites, not the three the roadmap bullet counted: ci.yml's Linux build, its Tier-1 audit job and its cmake-compat job, plus a fourth in audit-full.yml that the bullet missed. Each package set is byte-identical to the list it replaces. No workflow in this repository uses the action any more.
+
+- **Correct release.yml's header comment, which denied the AppImage the same file builds** (3D_E-0619)
+  The header listed only the tarball and the Windows zip, and proposed building an AppImage with linuxdeploy as future work -- which the workflow's own Build AppImage step has been doing. It now lists all four published artifacts and describes the step as it stands.
+
 ## [0.1.70] - 2026-08-19
 
 > **Note on this section's size.** This is the accumulated engine changelog

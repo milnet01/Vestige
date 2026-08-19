@@ -3,18 +3,20 @@
 # Triggered by pushing a tag matching v* (e.g. v0.1.4-preview, v1.0.0) or
 # by manual workflow_dispatch. Produces:
 #   - Linux:   vestige-<version>-linux-x86_64.tar.gz
+#   - Linux:   Vestige-<version>-x86_64.AppImage (+ .zsync update file)
 #   - Windows: vestige-<version>-windows-x86_64.zip
-# and attaches both to a GitHub Release for the triggering tag. Testers
+# and attaches all four to a GitHub Release for the triggering tag. Testers
 # (see TESTING.md) get a "download, extract, run" path without a build
 # environment.
 #
 # This workflow is deliberately minimal for the first cut:
 #   - x86_64 only. ARM64 (Linux + Windows-on-ARM) is a follow-on.
-#   - No AppImage yet. Follow-on: use linuxdeploy + the existing
-#     packaging/vestige-editor.desktop to produce a single-file AppImage.
-#     The current Linux artifact is a relocatable tarball that assumes
-#     the user has working OpenGL 4.5 drivers + X11/Wayland/ALSA on the
-#     host (which is every modern desktop Linux install).
+#   - The tarball is relocatable but assumes the host has working OpenGL
+#     4.5 drivers + X11/Wayland/ALSA (which is every modern desktop Linux
+#     install). The AppImage — built by the "Build AppImage" step with
+#     linuxdeploy + packaging/vestige-editor.desktop — bundles those
+#     dependencies into one file and embeds zsync update info, so
+#     AppImageUpdate can pull the latest stable release in place.
 #   - Windows binary is unsigned. Code-signing needs a cert; out of
 #     scope for a pre-1.0 tester build. A SmartScreen warning on first
 #     run is expected and documented in TESTING.md.
