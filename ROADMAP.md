@@ -235,6 +235,47 @@ Source of truth: [`docs/research/self_learning_roadmap.md`](docs/research/self_l
   embedded zsync update info. Artifact names taken from the workflow's own
   release-upload globs rather than from the previous comment.
 
+- 🚧 [3D_E-0621] **A degraded (not dead) apt mirror defeats the Acquire timeouts and only the step ceiling catches it.**
+  Follow-on to 3D_E-0618, found by the run immediately after it landed.
+  Run 32299868963 (commit 11928ae, which changed ROADMAP.md and CHANGELOG.md
+  ONLY -- no workflow edit) went red on 3 of 5 apt jobs, where run
+  32298337094 on the previous commit was green with identical workflows.
+  So this is mirror weather, not a code regression.
+
+  What the log shows: azure.archive.ubuntu.com was reachable and serving,
+  just crawling. `cmake-data` (2.1 MB) took ~5m45s and `cmake` (11.2 MB)
+  another ~5m. `timeout-minutes: 12` then fired at 732s.
+
+  Why the Acquire timeouts did not help, and this is the lesson worth
+  keeping: `Acquire::http::Timeout` is an inactivity/connect timeout. A
+  mirror that is slow but continuously delivering bytes never trips it. It
+  catches the SILENT mirror from 3D_E-0618 and nothing else. The two
+  failure modes are different and only one of them was closed.
+
+  The step ceiling did its job -- bounded, named, 12 minutes instead of
+  the 26-minute silent stall. But the run is still red, so the ceiling is
+  a floor on damage, not a fix.
+
+  Likely fix, NOT yet applied or verified: drop the azure mirror from the
+  runner's mirrorlist so apt goes straight to archive.ubuntu.com, which
+  was fast in both runs (in the 3D_E-0618 hang it was the fallback that
+  finally answered, and in the green run it served everything). The
+  runner's sources use `mirror+file:/etc/apt/apt-mirrors.txt` with azure
+  first and archive second, so a guarded `sed` deleting the azure lines --
+  guarded, because an emptied mirrorlist breaks apt outright -- is the
+  whole change. Alternative if that proves unreliable: keep the mirrorlist
+  and raise `timeout-minutes`, which trades red runs for slow ones.
+
+  Cannot be verified on demand: reproducing needs the mirror to be
+  degraded again. A green run after the change proves only that the change
+  did not break the normal path. Judge it on the mirror actually used in
+  the log (`Get:` lines should name archive.ubuntu.com, not azure), which
+  IS checkable on any run.
+  **Layman:** The package server CI downloads from went slow rather than down, which the new safeguards were not built to catch.
+  Kind: fix.
+  Lanes: ci.
+  Source: in-session-2026-08-19 (CI run 32299868963).
+
 ### Path-tracer formula coverage (DOOM_Ants Workbench requests, 2026-06-16)
 
 Library-coverage and integration-path requests raised by the DOOM_Ants project

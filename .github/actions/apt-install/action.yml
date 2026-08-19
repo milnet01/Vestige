@@ -38,6 +38,26 @@ runs:
       run: |
         set -euo pipefail
 
+        # Prefer archive.ubuntu.com over the runner's azure mirror. The
+        # Acquire timeouts below catch a SILENT mirror; they cannot catch a
+        # slow one, because a trickle of bytes never trips an inactivity
+        # timeout. Measured 2026-08-19 (run 32299868963): azure served
+        # cmake-data at roughly 2 MB per 6 minutes and the step hit its
+        # ceiling, while archive.ubuntu.com served the same packages in
+        # seconds on the runs either side of it (3D_E-0621).
+        MIRRORS=/etc/apt/apt-mirrors.txt
+        if [ -f "$MIRRORS" ] && grep -q 'azure\.archive\.ubuntu\.com' "$MIRRORS"; then
+          # Guarded: an emptied mirrorlist breaks apt outright, so drop the
+          # azure entries only if something else is left to fetch from.
+          if grep -v 'azure\.archive\.ubuntu\.com' "$MIRRORS" | grep -q '[^[:space:]]'; then
+            sudo sed -i '/azure\.archive\.ubuntu\.com/d' "$MIRRORS"
+            echo "Dropped azure mirror; remaining:"
+            cat "$MIRRORS"
+          else
+            echo "azure is the only mirror listed; keeping it" >&2
+          fi
+        fi
+
         # Retries covers a per-file fetch failure; the Timeouts are the ones
         # that matter here -- without them a silent mirror never returns.
         APT_OPTS=(-o Acquire::Retries=3
