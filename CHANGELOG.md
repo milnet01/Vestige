@@ -60,6 +60,31 @@ synthetic selftest fixture rather than a real baseline, and its `gpu,shadow`
 entry is deliberately *non*-gated: `perf_gate.py` asserts exactly that, using
 it as the witness that a non-gated regression cannot change the exit code.
 
+### 2026-08-13 Added — GPU grass now casts shadows (3D_E-0042)
+
+It was the only vegetation in the meadow that did not — trees, wildflowers
+and lily pads all cast already.
+
+Grass casts into shadow cascade 0 only, capped at that cascade's far split,
+so the cast stops exactly where receivers stop sampling cascade 0 and no
+second visible boundary is introduced. Chunks are culled against the light
+frustum while the distance LOD still keys on the camera, so every blade that
+casts is the blade the viewer sees.
+
+The caster links the UNMODIFIED `grass.vert.glsl` against a new
+`grass_shadow.frag.glsl` — same vertex stage, different fragment stage —
+rather than duplicating the Bezier blade-generation maths into a second
+vertex shader. There is exactly one blade generator, so a blade's shadow
+cannot drift from its silhouette. Three text-parity tests pin that contract,
+because a mismatch fails silently: the shadow program would fail to link at
+runtime and the field would simply stop casting, with no build error and no
+crash.
+
+No alpha test in the caster: a GPU-grass blade is real opaque Bezier ribbon
+geometry rather than a cut-out card, so there is nothing to discard and
+early-Z survives the shadow pass. `--isolate-feature=grass-shadow` turns the
+cast off for A/B bisection.
+
 ### 2026-07-31 Fixed — The weekly release train was cancelling its own promotion build every run
 
 Every scheduled release run does two things: promote the RC that has been
@@ -205,6 +230,13 @@ the scene look worse for no real speed-up.
 
 - **CC-BY 4.0 attribution rows for the LOLIPOP tree packs**
   Added to `ASSET_LICENSES.md` + `THIRD_PARTY_NOTICES.md` (design §6.3). A forward record — the packs are git-ignored today, so the rows take effect when the trees ship via a release or the assets repo. Unlike every CC0 row beside them this attribution is a licence condition, not a courtesy.
+
+### 2026-07-23 Added — Normal-mapped tree leaf cards and bark (3D_E-0033, T8)
+
+The LOLIPOP tree packs' shipped normal maps now drive per-pixel canopy
+lighting — they were loaded into each material but never bound in the tree
+draw path — so leaves and bark catch light with surface relief instead of
+reading as flat cards up close.
 
 ### 2026-07-23 Added — Meadow trees now cast ground shadows (3D_E-0033, T4)
 
@@ -10863,31 +10895,6 @@ existing cases (``HelpersMatchEvaluatorPrecisely``,
   over `tests/fixtures/perf_gate/`. New ctest gates `PerfGateSelftest` +
   `PerfGateCatchesRegression` (WILL_FAIL). Design:
   docs/phases/phase_10_perf_regression_gate_design.md (cold-eyes 5 loops).
-
-### Added
-
-- **GPU grass now casts shadows** — it was the only vegetation in the meadow that did not (trees, wildflowers and lily pads all did). (3D_E-0042)
-  Grass casts into shadow cascade 0 only, capped at that cascade's far
-  split, so the cast stops exactly where receivers stop sampling cascade
-  0 and no second visible boundary is introduced. Chunks are culled
-  against the light frustum while the distance LOD still keys on the
-  camera, so every blade that casts is the blade the viewer sees.
-
-  The caster links the UNMODIFIED `grass.vert.glsl` against a new
-  `grass_shadow.frag.glsl` — same vertex stage, different fragment stage
-  — rather than duplicating the Bezier blade-generation maths into a
-  second vertex shader. There is exactly one blade generator, so a
-  blade's shadow cannot drift from its silhouette. Three text-parity
-  tests pin that contract, because a mismatch fails silently: the shadow
-  program would fail to link at runtime and the field would simply stop
-  casting, with no build error and no crash.
-
-  No alpha test in the caster: a GPU-grass blade is real opaque Bezier
-  ribbon geometry rather than a cut-out card, so there is nothing to
-  discard and early-Z survives the shadow pass.
-  `--isolate-feature=grass-shadow` turns the cast off for A/B bisection.
-
-- ****Normal-mapped tree leaf cards & bark** — the LOLIPOP tree packs' shipped normal maps now drive per-pixel canopy lighting (they were loaded into each material but never bound in the tree draw path), so leaves and bark catch light with surface relief instead of reading as flat cards up close (3D_E-0033, T8).**
 
 ### Changed
 

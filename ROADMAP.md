@@ -1119,7 +1119,7 @@ Full spatial audio pipeline with dynamic mixing, occlusion, and adaptive music. 
   advance to max(existing, counter) + 1, plus a pre-return assert that the
   issued id is absent from the store.
 
-- 📋 [3D_E-0613] **Move 3D_E-0042's CHANGELOG entry out of the legacy flat region into a dated topic.**
+- ✅ [3D_E-0613] **Move 3D_E-0042's CHANGELOG entry out of the legacy flat region into a dated topic.**
   CHANGELOG.md's `## [Unreleased]` spans lines 23-10970 and has TWO layouts:
   lines 25-~10511 are newest-first DATED topics (`### 2026-07-31 Fixed -- ...`,
   several hundred of them), and ~10664-10970 is a legacy Keep-a-Changelog tail
@@ -1153,6 +1153,7 @@ Full spatial audio pipeline with dynamic mixing, occlusion, and adaptive music. 
   **Layman:** A recent entry was written into the old part of the changelog among April items, so it reads as if it happened months ago.
   Kind: doc-fix.
   Source: in-session-2026-08-18 (found while writing the 3D_E-0044 changelog entry).
+  Resolved (2026-08-19): both entries moved out of the legacy flat tail into dated `### <date> <Category> — <headline>` topics, placed in date order rather than literally at the top — the grass entry as `2026-08-13 Added` (after the 2026-08-18 block) and the tree normal-map entry as `2026-07-23 Added` (with the other 2026-07-23 blocks), because newest-first ordering is the live convention and a 2026-07-23 item at the top would break it. The doubled `**` on the T8 headline is gone: the headline is now the heading, so it carries no bold markers at all. The legacy `### Added` heading is deleted, being empty afterwards. NOT done, deliberately out of scope: three further doubled-`**` headlines remain in the legacy tail (CHANGELOG.md T9/T10 under `### Changed`, and two under `### Fixed`), and `changelog_log op:"add_subsection"` still refuses `flat_section` on this file because `### Changed` / `### Fixed` / `### Documentation` / `### Security` are still flat.
 
 ### Fog, Mist, and Volumetric Lighting
 - [x] Distance fog (linear, exponential, exponential-squared) — pure-function primitives shipped in `engine/renderer/fog.{h,cpp}`. `FogMode` enum (`None` / `Linear` / `Exponential` / `ExponentialSquared`) + `FogParams` (linear-RGB colour, start, end, density). `computeFogFactor(mode, params, distance)` implements the three canonical forms: Linear `(end-d)/(end-start)`, GL_EXP `exp(-density·d)`, GL_EXP2 `exp(-(density·d)²)` — returns *surface visibility* in [0,1], matches OpenGL Red Book §9 / D3D9 fog-formulas. Guards every degenerate param (zero span, negative density, sub-camera distance) with pass-through behaviour. 15 unit tests cover knees, monotonicity, and edge cases.
