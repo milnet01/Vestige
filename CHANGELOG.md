@@ -22,6 +22,33 @@ may change any interface without notice.
 
 ## [Unreleased]
 
+### 2026-08-19 Fixed — One test no longer kills the whole Windows test run (3D_E-0614)
+
+The first real-hardware Windows run stopped at test ~470 of 3722. One test
+creates a symbolic link — a shortcut-like file — to check that the glTF
+loader refuses to follow one that points outside its sandbox. On the test
+PC that call did not fail politely; it killed the whole program, so the
+remaining ~3250 tests never ran and the run reported nothing rather than a
+failure.
+
+Creating a symbolic link on Windows needs a specific permission. The test
+box has it over SSH but NOT in the logged-in desktop session — and the
+desktop session is the only place a graphics window can open, so it is the
+one the harness has to use. Proof: the same binary, same machine, same
+path, passes over SSH and dies under the harness, and `mklink` in that
+session answers "You do not have sufficient privilege".
+
+The test already had a guard for exactly this case, but the guard waited
+for an error to be *thrown*, and this refusal arrives as an abrupt process
+kill that nothing can catch. It now uses the non-throwing form of the same
+standard-library call, which hands the refusal back as a plain error value,
+so the test skips with a readable reason instead.
+
+The full unfiltered run now reaches the end: 3718 passed, 3 skipped, 1
+failed. The skip is this test on the box that cannot make symlinks; on
+Linux it still runs for real. The remaining failure is the volumetric fog
+budget (3D_E-0615), which is unrelated.
+
 ### 2026-08-19 Added — The Windows tests can now run on a real Windows PC with a real graphics card (3D_E-0046)
 
 `scripts/wintest.sh` stages the cross-built Windows binaries onto the

@@ -25,6 +25,7 @@
 #include <filesystem>
 #include <fstream>
 #include <string>
+#include <system_error>
 
 #include "test_helpers.h"
 
@@ -166,14 +167,21 @@ TEST_F(GltfFsSandboxTest, SymlinkEscapeBufferUriIsRejected_D2_CV11)
     const std::string secret = "VESTIGE_SECRET_VIA_SYMLINK";  // 26 bytes
     writeBinary(m_outside / "secret.bin", secret);
 
+    // Use the std::error_code overload, never the throwing one. On real
+    // Windows a process without SeCreateSymbolicLinkPrivilege — which is the
+    // normal state of an interactive, non-elevated session, and so the state
+    // scripts/wintest.sh runs in — does not get a catchable filesystem_error
+    // out of the throwing overload: it dies with 0xC0000409 (__fastfail),
+    // taking the remaining ~3250 tests of the suite with it. The noexcept
+    // overload reports the same condition as ERROR_PRIVILEGE_NOT_HELD in `ec`
+    // with no exception machinery involved, so the skip below is reachable
+    // (3D_E-0614). Also covers filesystems with no symlink support at all.
     const fs::path link = m_inner / "link.bin";
-    try
+    std::error_code ec;
+    fs::create_symlink(m_outside / "secret.bin", link, ec);
+    if (ec)
     {
-        fs::create_symlink(m_outside / "secret.bin", link);
-    }
-    catch (const fs::filesystem_error&)
-    {
-        GTEST_SKIP() << "symlinks unsupported on this filesystem";
+        GTEST_SKIP() << "symlinks unavailable here: " << ec.message();
     }
 
     writeGltf(R"({

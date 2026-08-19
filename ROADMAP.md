@@ -1156,7 +1156,7 @@ Full spatial audio pipeline with dynamic mixing, occlusion, and adaptive music. 
   Source: in-session-2026-08-18 (found while writing the 3D_E-0044 changelog entry).
   Resolved (2026-08-19): both entries moved out of the legacy flat tail into dated `### <date> <Category> — <headline>` topics, placed in date order rather than literally at the top — the grass entry as `2026-08-13 Added` (after the 2026-08-18 block) and the tree normal-map entry as `2026-07-23 Added` (with the other 2026-07-23 blocks), because newest-first ordering is the live convention and a 2026-07-23 item at the top would break it. The doubled `**` on the T8 headline is gone: the headline is now the heading, so it carries no bold markers at all. The legacy `### Added` heading is deleted, being empty afterwards. NOT done, deliberately out of scope: three further doubled-`**` headlines remain in the legacy tail (CHANGELOG.md T9/T10 under `### Changed`, and two under `### Fixed`). CORRECTION to what this note first said, and to the bullet body above: `changelog_log op:"add_subsection"` now ACCEPTS this file. I predicted it would still refuse `flat_section` because `### Changed` / `### Fixed` / `### Documentation` / `### Security` are still flat, then measured it: dry_run returns ok:true and would insert at line 25. The guard is POSITIONAL, not exhaustive — it classifies the section by the FIRST `### ` heading under `## [Unreleased]`, so deleting the one legacy `### Added` at the top was enough however many remain 10.8k lines below. So a future session SHOULD reach for add_subsection here; it is the first time in this project's history that it works. `op:"add"` is still the trap — re-measured 2026-08-19, it returns ok:true with an advisory and would insert at line 10947, back in the April-era tail. Both reported upstream in Vestige_Ants_MCP_Feedback.md.
 
-- 📋 [3D_E-0614] **`std::filesystem::create_symlink` hard-kills the test process on real Windows — it does not throw.**
+- ✅ [3D_E-0614] **`std::filesystem::create_symlink` hard-kills the test process on real Windows — it does not throw.**
   Found by the first run of `scripts/wintest.sh` on the `wintest` box. 100%
   reproducible, in isolation as well as in a full run.
 
@@ -1199,6 +1199,38 @@ Full spatial audio pipeline with dynamic mixing, occlusion, and adaptive music. 
   **Layman:** One test crashes the whole Windows test run instead of skipping, so everything after it never runs.
   Kind: fix.
   Source: in-session-2026-08-19 (first real-hardware Windows run, 3D_E-0046)..
+  Resolved (2026-08-19). Root cause pinned by experiment, and it is
+  environmental rather than a defect in what the test asserts. Creating a
+  symlink needs SeCreateSymbolicLinkPrivilege. The ssh session on `wintest`
+  (session 0) holds it; the logged-on interactive session the harness must use
+  — schtasks /IT, the only place a GL context can be created — does not.
+
+  Two measurements settle it. The SAME binary, same box, same temp path, run
+  over plain ssh PASSES the test: the symlink is created and the sandbox
+  rejects the escape. And a probe task launched exactly the way the suite is
+  launched reports no SeCreateSymbolicLinkPrivilege in `whoami /priv`, with
+  `mklink` returning "You do not have sufficient privilege" (ERRORLEVEL 1).
+  So CreateSymbolicLinkW refuses CLEANLY at the Win32 layer, and it is the
+  STL's throwing overload that converts that refusal into a __fastfail
+  instead of a filesystem_error. The catch could never have seen it. No
+  debugger was needed after all.
+
+  Fix: use the std::error_code overload of fs::create_symlink, which is
+  noexcept and reports the same condition in `ec`, so the GTEST_SKIP is
+  reachable. Shorter than the try/catch it replaces, and the only
+  create_symlink call site in the tree.
+
+  Verified three ways. Full local-ci green (Debug 117s / Release 84s /
+  Windows MSVC 85s / Tier-1 / gitleaks / actionlint). Linux still EXECUTES
+  the test rather than skipping it, so the coverage this test exists for is
+  preserved where symlinks work. And the full UNFILTERED wintest.sh run now
+  reaches the end of the suite: 3718 passed, 3 skipped, 1 failed (3722
+  counted, against 3721 for the run that had to exclude this test), the new
+  skip reading `symlinks unavailable here: A required privilege is not held
+  by the client`. The one failure is 3D_E-0615 and is unrelated.
+
+  The `--filter '-GltfFsSandboxTest.SymlinkEscapeBufferUriIsRejected_D2_CV11'`
+  workaround recorded above is no longer needed.
 
 - 📋 [3D_E-0615] **Volumetric fog dispatch is 8% over its 2.0 ms budget on a GTX 1050.**
   `FogBenchmarkTest.VolumetricDispatchUnderBudget` is the ONLY genuine failure
