@@ -1,0 +1,73 @@
+name: Install apt packages
+description: >
+  Install apt packages with mirror-failure protection. Exists because the two
+  obvious alternatives both fail on this repo's runners.
+
+  awalsh128/cache-apt-pkgs-action is broken on ubuntu-24.04: its manifest
+  parser errors, installs 0 packages, then caches the empty result, poisoning
+  every later run (3D_E-0618).
+
+  Bare `sudo apt-get update && sudo apt-get install` is what the cache action
+  had itself replaced, and it hangs. Measured 2026-08-19 on CI run
+  32295428461: the runner's azure.archive.ubuntu.com mirror was unreachable,
+  apt logged 130 Ign: retries, fell back to archive.ubuntu.com, and then
+  produced no output for 26 minutes until the job was cancelled. apt applies
+  no network timeout by default, so a stalled mirror is an unbounded hang
+  rather than an error -- and an unbounded hang eats the whole job budget and
+  reports nothing about why.
+
+  So: explicit Acquire timeouts turn a stalled mirror into a bounded failure,
+  and the retry loop turns a transient failure into a pass. Pair this with a
+  `timeout-minutes` on the calling step so the ceiling is enforced even if apt
+  finds a way to hang below the Acquire layer.
+
+inputs:
+  packages:
+    description: Whitespace-separated list of packages to install.
+    required: true
+
+runs:
+  using: composite
+  steps:
+    - shell: bash
+      env:
+        # Not interpolated into the script body: an input spliced into a shell
+        # command is a script-injection surface. It crosses as an env var.
+        PACKAGES: ${{ inputs.packages }}
+        DEBIAN_FRONTEND: noninteractive
+      run: |
+        set -euo pipefail
+
+        # Retries covers a per-file fetch failure; the Timeouts are the ones
+        # that matter here -- without them a silent mirror never returns.
+        APT_OPTS=(-o Acquire::Retries=3
+                  -o Acquire::http::Timeout=20
+                  -o Acquire::https::Timeout=20)
+
+        run_apt() {
+          local what="$1"; shift
+          local attempt
+          for attempt in 1 2 3; do
+            if "$@"; then
+              return 0
+            fi
+            if [ "$attempt" -eq 3 ]; then
+              echo "::error::apt-get $what failed after 3 attempts" >&2
+              return 1
+            fi
+            echo "apt-get $what failed (attempt $attempt/3); retrying" >&2
+            sleep $((attempt * 10))
+          done
+        }
+
+        run_apt update sudo apt-get "${APT_OPTS[@]}" update
+
+        # xargs rather than an unquoted expansion: it splits the list on any
+        # whitespace, newlines included, without a shellcheck suppression.
+        install_pkgs() {
+          printf '%s' "$PACKAGES" \
+            | xargs sudo apt-get "${APT_OPTS[@]}" install -y
+        }
+        run_apt install install_pkgs
+
+        echo "Installed: $(printf '%s' "$PACKAGES" | xargs -n1 | wc -l) packages"

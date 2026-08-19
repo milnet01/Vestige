@@ -46,23 +46,20 @@ jobs:
         uses: actions/checkout@9c091bb21b7c1c1d1991bb908d89e4e9dddfe3e0  # v6
 
       - name: Install build dependencies
-        # Plain apt-get, NOT awalsh128/cache-apt-pkgs-action: that action is
-        # broken on the current ubuntu-24.04 runner — its manifest parser errors
-        # ("substring expression < 0"), installs 0 packages, then caches the
-        # empty result (poisoning every later run). release.yml was moved off it
-        # on 2026-07-22 (eb52f19); this pipeline kept passing only because it was
-        # riding an older healthy cache, and would have gone red on the first
-        # eviction with a symptom that does not name the cause (GLFW configuring
-        # with no dev libs present). Correctness wins over the ~30-60 s a cache
-        # hit used to save.
-        run: |
-          sudo apt-get update
-          sudo apt-get install -y \
-            build-essential cmake ninja-build pkg-config \
-            libgl1-mesa-dev libglu1-mesa-dev \
-            libx11-dev libxrandr-dev libxinerama-dev libxcursor-dev libxi-dev libxxf86vm-dev \
-            libwayland-dev libxkbcommon-dev \
-            xvfb cppcheck \
+        # Retrying, timeout-bounded apt install — see
+        # .github/actions/apt-install/action.yml for why neither the cache
+        # action nor a bare apt-get is used. timeout-minutes is the outer
+        # bound: the Acquire timeouts in the action cover a stalled mirror,
+        # this covers anything that hangs below them.
+        timeout-minutes: 12
+        uses: ./.github/actions/apt-install
+        with:
+          packages: |
+            build-essential cmake ninja-build pkg-config
+            libgl1-mesa-dev libglu1-mesa-dev
+            libx11-dev libxrandr-dev libxinerama-dev libxcursor-dev libxi-dev libxxf86vm-dev
+            libwayland-dev libxkbcommon-dev
+            xvfb cppcheck
             python3 python3-pip python3-xmltodict python3-yaml python3-flask
 
       - name: Set up ccache
@@ -187,16 +184,20 @@ jobs:
         uses: actions/checkout@9c091bb21b7c1c1d1991bb908d89e4e9dddfe3e0  # v6
 
       - name: Install audit tool dependencies
-        # Plain apt-get — see the comment on linux-build-test's "Install build
-        # dependencies" step for why the cache action is not used.
-        run: |
-          sudo apt-get update
-          sudo apt-get install -y \
-            build-essential cmake ninja-build \
-            libgl1-mesa-dev libglu1-mesa-dev \
-            libx11-dev libxrandr-dev libxinerama-dev libxcursor-dev libxi-dev libxxf86vm-dev \
-            libwayland-dev libxkbcommon-dev \
-            xvfb cppcheck clang-tidy \
+        # Retrying, timeout-bounded apt install — see
+        # .github/actions/apt-install/action.yml for why neither the cache
+        # action nor a bare apt-get is used. timeout-minutes is the outer
+        # bound: the Acquire timeouts in the action cover a stalled mirror,
+        # this covers anything that hangs below them.
+        timeout-minutes: 12
+        uses: ./.github/actions/apt-install
+        with:
+          packages: |
+            build-essential cmake ninja-build
+            libgl1-mesa-dev libglu1-mesa-dev
+            libx11-dev libxrandr-dev libxinerama-dev libxcursor-dev libxi-dev libxxf86vm-dev
+            libwayland-dev libxkbcommon-dev
+            xvfb cppcheck clang-tidy
             python3 python3-pip python3-xmltodict python3-yaml python3-flask
 
       - name: Set up ccache
@@ -297,17 +298,20 @@ jobs:
         uses: actions/checkout@9c091bb21b7c1c1d1991bb908d89e4e9dddfe3e0  # v6
 
       - name: Install build dependencies
-        # Plain apt-get — see the comment on linux-build-test's "Install build
-        # dependencies" step for why the cache action is not used. cmake itself
-        # is installed by the next step (matrix-versioned), so it is not in this
-        # package list.
-        run: |
-          sudo apt-get update
-          sudo apt-get install -y \
-            build-essential ninja-build pkg-config \
-            libgl1-mesa-dev libglu1-mesa-dev \
-            libx11-dev libxrandr-dev libxinerama-dev libxcursor-dev libxi-dev libxxf86vm-dev \
-            libwayland-dev libxkbcommon-dev \
+        # Retrying, timeout-bounded apt install — see
+        # .github/actions/apt-install/action.yml for why neither the cache
+        # action nor a bare apt-get is used. timeout-minutes is the outer
+        # bound: the Acquire timeouts in the action cover a stalled mirror,
+        # this covers anything that hangs below them.
+        # cmake itself is installed by the next step (matrix-versioned).
+        timeout-minutes: 12
+        uses: ./.github/actions/apt-install
+        with:
+          packages: |
+            build-essential ninja-build pkg-config
+            libgl1-mesa-dev libglu1-mesa-dev
+            libx11-dev libxrandr-dev libxinerama-dev libxcursor-dev libxi-dev libxxf86vm-dev
+            libwayland-dev libxkbcommon-dev
             xvfb
 
       - name: Install CMake ${{ matrix.cmake }}

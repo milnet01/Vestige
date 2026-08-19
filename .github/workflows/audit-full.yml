@@ -42,17 +42,21 @@ jobs:
         uses: actions/checkout@9c091bb21b7c1c1d1991bb908d89e4e9dddfe3e0  # v6
 
       - name: Install audit tool dependencies
-        # Same package set as ci.yml's audit job. Plain apt-get — see the comment
-        # on ci.yml's "Install build dependencies" step for why
-        # awalsh128/cache-apt-pkgs-action is not used.
-        run: |
-          sudo apt-get update
-          sudo apt-get install -y \
-            build-essential cmake ninja-build \
-            libgl1-mesa-dev libglu1-mesa-dev \
-            libx11-dev libxrandr-dev libxinerama-dev libxcursor-dev libxi-dev libxxf86vm-dev \
-            libwayland-dev libxkbcommon-dev \
-            xvfb cppcheck clang-tidy \
+        # Same package set as ci.yml's audit job.
+        # Retrying, timeout-bounded apt install — see
+        # .github/actions/apt-install/action.yml for why neither the cache
+        # action nor a bare apt-get is used. timeout-minutes is the outer
+        # bound: the Acquire timeouts in the action cover a stalled mirror,
+        # this covers anything that hangs below them.
+        timeout-minutes: 12
+        uses: ./.github/actions/apt-install
+        with:
+          packages: |
+            build-essential cmake ninja-build
+            libgl1-mesa-dev libglu1-mesa-dev
+            libx11-dev libxrandr-dev libxinerama-dev libxcursor-dev libxi-dev libxxf86vm-dev
+            libwayland-dev libxkbcommon-dev
+            xvfb cppcheck clang-tidy
             python3 python3-pip python3-xmltodict python3-yaml python3-flask
 
       - name: Set up ccache
