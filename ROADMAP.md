@@ -235,7 +235,7 @@ Source of truth: [`docs/research/self_learning_roadmap.md`](docs/research/self_l
   embedded zsync update info. Artifact names taken from the workflow's own
   release-upload globs rather than from the previous comment.
 
-- 🚧 [3D_E-0621] **A degraded (not dead) apt mirror defeats the Acquire timeouts and only the step ceiling catches it.**
+- ✅ [3D_E-0621] **A degraded (not dead) apt mirror defeats the Acquire timeouts and only the step ceiling catches it.**
   Follow-on to 3D_E-0618, found by the run immediately after it landed.
   Run 32299868963 (commit 11928ae, which changed ROADMAP.md and CHANGELOG.md
   ONLY -- no workflow edit) went red on 3 of 5 apt jobs, where run
@@ -275,6 +275,28 @@ Source of truth: [`docs/research/self_learning_roadmap.md`](docs/research/self_l
   Kind: fix.
   Lanes: ci.
   Source: in-session-2026-08-19 (CI run 32299868963).
+  Resolved (2026-08-19), commit 6d207c3. CI run 32301945705 green, all 8
+  jobs, including the Windows build and the Tier-1 audit.
+
+  The checkable signal this bullet named -- which host the Get: lines
+  report -- came back unambiguous: 351 package fetches from
+  archive.ubuntu.com and 0 from azure.archive.ubuntu.com, with the
+  action's "Dropped azure mirror" line firing at 21:04:13. So the guarded
+  sed does fire on the real runner and apt no longer touches the mirror
+  that stalled runs 32295428461 and 32299868963.
+
+  What is NOT proven, and cannot be on demand: that this rescues a
+  DEGRADED mirror. That fault was absent on this run. Removing azure from
+  the mirrorlist sidesteps the failure mode rather than surviving it. If
+  archive.ubuntu.com itself ever degrades the same way, nothing here
+  helps and the step ceiling is the only remaining defence -- the run
+  goes red at 12 minutes, bounded and named, but red. That is a known
+  limit of this fix, not an oversight to re-open.
+
+  The two apt failure modes and their different defences are recorded in
+  the header of .github/actions/apt-install/action.yml, which is where a
+  future session should read them rather than re-deriving them from these
+  run numbers.
 
 ### Path-tracer formula coverage (DOOM_Ants Workbench requests, 2026-06-16)
 

@@ -39,6 +39,11 @@ between runs.
 
   The first attempt simply copied release.yml's plain `apt-get`, and that hung: with the runner's Azure mirror unreachable, apt fell back and then produced no output for 26 minutes, because it applies no network timeout by default. The shipped fix is a composite action at `.github/actions/apt-install` -- explicit Acquire timeouts so a stalled mirror fails in bounded time instead of hanging, three retries with backoff so a transient failure passes, and a per-step ceiling as the outer bound. One implementation shared by all four call sites.
 
+- **Send CI's package downloads to archive.ubuntu.com rather than the runner's Azure mirror** (3D_E-0621)
+  Those timeouts catch a package server that goes silent. They cannot catch one that merely goes slow, because a steady trickle of bytes never trips an inactivity timeout -- an 11 MB download took five minutes and the job hit its ceiling instead. CI now drops the Azure mirror in favour of archive.ubuntu.com, which was fast on every run either side of the failure. Guarded, so it can never leave the mirror list empty. Verified on a green run: 351 package fetches from archive.ubuntu.com, none from Azure.
+
+  What this does not do is survive a slow mirror -- it avoids the one that was slow. If archive.ubuntu.com ever degrades the same way, the per-step ceiling is the only remaining defence, and the run fails bounded rather than passing.
+
 - **Correct release.yml's header comment, which denied the AppImage the same file builds** (3D_E-0619)
   The header listed only the tarball and the Windows zip, and proposed building an AppImage with linuxdeploy as future work -- which the workflow's own Build AppImage step has been doing. It now lists all four published artifacts and describes the step as it stands.
 
