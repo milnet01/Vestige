@@ -161,6 +161,29 @@ justification) — see `tools/audit/lib/suppress.py`. If the audit
 flags something that is intentional but worth tracking, mark it
 verified via `--verified-add <key>` instead.
 
+### Windows GL coverage on real hardware
+
+`local-ci.sh --windows` runs the Windows suite under Wine, where there is no
+GL 4.5 context, so **every GL test self-skips** — same as the GitHub
+`windows-2022` runner. A green Windows stage therefore says nothing about the
+graphics code.
+
+To actually exercise it, run the cross-built binaries on the `wintest` box (a
+real Windows 10 machine with a GTX 1050, in `~/.ssh/config`):
+
+```bash
+scripts/local-ci.sh --windows          # build first — wintest.sh does not build
+scripts/wintest.sh                     # stage + run the whole suite + report
+scripts/wintest.sh --filter 'IBL*'     # a gtest filter
+scripts/wintest.sh --no-stage          # reuse what is already on the box
+```
+
+A user must be logged in at the console on that box: Windows OpenSSH runs in
+session 0, which has no interactive desktop, and GL context creation fails
+there. The script checks, launches the run into the logged-on session, and
+warns loudly rather than reporting a green run in which everything skipped.
+Its header comment records the rest of the mechanics.
+
 ---
 
 ## DCO sign-off

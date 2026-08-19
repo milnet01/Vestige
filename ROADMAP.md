@@ -944,7 +944,7 @@ Full spatial audio pipeline with dynamic mixing, occlusion, and adaptive music. 
   re-download). The ~25 min estimate held for build-tsan; build-msvc came in
   at 638s because ccache was warm.
 
-- 📋 [3D_E-0046] **Run the Windows GL tests on real hardware via the `wintest` box.**
+- ✅ [3D_E-0046] **Run the Windows GL tests on real hardware via the `wintest` box.**
   A real Windows machine is reachable and was previously unknown to this
   project. `~/.ssh/config` already carries the host:
 
@@ -977,6 +977,7 @@ Full spatial audio pipeline with dynamic mixing, occlusion, and adaptive music. 
   **Layman:** We can now test the Windows build on a real Windows PC instead of an emulator, which is the only way to check the graphics actually work there.
   Kind: test.
   Source: in-session-2026-08-18 (user surfaced the Windows box while 3D_E-0045 was building).
+  Resolved (2026-08-19). Harness is `scripts/wintest.sh` (stage + run + report; it does NOT build — `./scripts/local-ci.sh --windows` first). First real-hardware Windows GL coverage this project has had: 3718 passed, 2 skipped, 1 failed, against `4.5.0 NVIDIA 560.94 on NVIDIA GeForce GTX 1050/PCIe/SSE2`. Both traps the bullet warned about were real, and a third was not anticipated. (1) Windows OpenSSH runs its shell in session 0, which has no interactive desktop: `glfwInit()` succeeds, `glfwCreateWindow()` fails, and a plain `ssh wintest vestige_tests.exe` reports every GL test SKIPPED and exits 0 — a clean-looking run proving nothing. The harness launches through a scheduled task with /IT so the tests run in the logged-on user's session; a user must therefore be logged in at the console. (2) The cmd trailing-space trap is avoided by never using `set VAR=value && app`. (3) UNANTICIPATED, and the larger one: six test data directories are baked into the binary at configure time as absolute paths under ${CMAKE_SOURCE_DIR} — VESTIGE_SHADER_DIR, VESTIGE_FONT_DIR, VESTIGE_LOCALIZATION_DIR, VESTIGE_AUDIO_FIXTURES_DIR, VESTIGE_SCENE_FIXTURES_DIR, VESTIGE_REFERENCE_CASES_DIR — so ~90 tests failed on a missing file rather than on behaviour. Rather than teach every consumer to relocate, the harness MIRRORS the source tree at the matching Windows path (/mnt/Games/... -> C:\mnt\Games\..., which works because Windows reads a leading "/" as relative to the current drive), so a baked path resolves exactly as it does at home. 38 MB staged; models (1.8 GB) and textures (581 MB) are deliberately excluded since no test reads them. Two findings filed rather than fixed here, this bullet being the harness and not any individual test: 3D_E-0614 (fs::create_symlink hard-kills the process on real Windows, taking the rest of the suite with it — the run above excludes that one test) and 3D_E-0615 (volumetric fog dispatch 2163 us against its 2000 us budget on the GTX 1050).
 
 - 📋 [3D_E-0047] **Finish the roadmap-DB migration once the GFM body parser is fixed — blocked, and DELIBERATELY not promoted.**
   roadmap_migrate was run 2026-08-18 and reports ok:true. Vestige IS in the
@@ -1154,6 +1155,77 @@ Full spatial audio pipeline with dynamic mixing, occlusion, and adaptive music. 
   Kind: doc-fix.
   Source: in-session-2026-08-18 (found while writing the 3D_E-0044 changelog entry).
   Resolved (2026-08-19): both entries moved out of the legacy flat tail into dated `### <date> <Category> — <headline>` topics, placed in date order rather than literally at the top — the grass entry as `2026-08-13 Added` (after the 2026-08-18 block) and the tree normal-map entry as `2026-07-23 Added` (with the other 2026-07-23 blocks), because newest-first ordering is the live convention and a 2026-07-23 item at the top would break it. The doubled `**` on the T8 headline is gone: the headline is now the heading, so it carries no bold markers at all. The legacy `### Added` heading is deleted, being empty afterwards. NOT done, deliberately out of scope: three further doubled-`**` headlines remain in the legacy tail (CHANGELOG.md T9/T10 under `### Changed`, and two under `### Fixed`), and `changelog_log op:"add_subsection"` still refuses `flat_section` on this file because `### Changed` / `### Fixed` / `### Documentation` / `### Security` are still flat.
+
+- 📋 [3D_E-0614] **`std::filesystem::create_symlink` hard-kills the test process on real Windows — it does not throw.**
+  Found by the first run of `scripts/wintest.sh` on the `wintest` box. 100%
+  reproducible, in isolation as well as in a full run.
+
+  `GltfFsSandboxTest.SymlinkEscapeBufferUriIsRejected_D2_CV11` terminates the
+  WHOLE process with exit -1073740791 (0xC0000409, STATUS_STACK_BUFFER_OVERRUN
+  / __fastfail). It is test ~470 of 3719, so every test after it is silently
+  not run — the suite reports nothing at all, not a failure.
+
+  Localised, not guessed. TearDown never runs on a fail-fast, so the scratch
+  dir survives the crash. After a run it contains `escape\secret.bin` (written
+  immediately before the try block) and an EMPTY `inner\` — no `link.bin`. So
+  the process dies INSIDE `fs::create_symlink` at test_gltf_fs_sandbox.cpp:172,
+  before the link exists and before `writeGltf` and `GltfLoader::load` are
+  reached.
+
+  Why the existing guard does not catch it: the call is wrapped in
+  `try { ... } catch (const fs::filesystem_error&) { GTEST_SKIP(); }`, added
+  exactly so a filesystem without symlink support skips cleanly. That guard
+  assumes failure arrives as a C++ exception. It does not here — gtest
+  demonstrably reports thrown exceptions rather than dying (see
+  `ClothCollisionShader.PlaneBlockHasNoMarginInPenetration_Sh2` in the same
+  run, which prints `C++ exception with description "invalid string position"`
+  and carries on), so this is a fail-fast the catch can never see.
+
+  Why nobody hit it before: under Wine the test passes, so `local-ci.sh
+  --windows` and the GitHub windows-2022 runner are both clean. Only a real
+  Windows box reaches it.
+
+  Not yet known, and what to look at next: whether the trigger is the missing
+  SeCreateSymbolicLinkPrivilege in a non-elevated interactive session. Note
+  `New-Item -ItemType SymbolicLink` SUCCEEDS on the same box over ssh, so it is
+  not a blanket policy denial — the ssh shell and the scheduled task differ in
+  session and elevation. Needs a debugger on the box to settle; the exit code
+  alone cannot distinguish a /GS cookie violation from a CRT __fastfail.
+
+  Workaround until fixed:
+    scripts/wintest.sh --filter '-GltfFsSandboxTest.SymlinkEscapeBufferUriIsRejected_D2_CV11'
+  which is how the 3718-pass run was obtained. The harness detects the death
+  and prints that exact re-run line rather than reporting a partial pass.
+  **Layman:** One test crashes the whole Windows test run instead of skipping, so everything after it never runs.
+  Kind: fix.
+  Source: in-session-2026-08-19 (first real-hardware Windows run, 3D_E-0046)..
+
+- 📋 [3D_E-0615] **Volumetric fog dispatch is 8% over its 2.0 ms budget on a GTX 1050.**
+  `FogBenchmarkTest.VolumetricDispatchUnderBudget` is the ONLY genuine failure
+  in the first real-hardware Windows run (3718 passed, 2 skipped, 1 failed):
+
+    volumetric froxel dispatch (160x90x64) median 2163.4 us exceeds the
+    2000 us fog-stack budget
+
+  This is the second use the 3D_E-0046 bullet anticipated: the GTX 1050 is a
+  genuine weak-hardware target, and the 60 FPS budget is measured on an
+  RX 6600. The test passes on the RX 6600 and under llvmpipe on CI, so nothing
+  had ever contradicted the budget before.
+
+  Three ways this could go, and the choice is a real one rather than a fix:
+    (a) the budget is right and the dispatch needs optimising for weak GPUs;
+    (b) the budget is an RX-6600 figure and should scale with the quality tier
+        the Tier-1 scalability program already sets;
+    (c) 160x90x64 froxels is itself a tier-0 figure a GTX 1050 should not be
+        running at.
+  Decide before touching either number. Belongs with the weak-HW perf program
+  rather than being closed as a one-line budget bump.
+
+  Reproduce:
+    scripts/wintest.sh --filter 'FogBenchmarkTest.*'
+  **Layman:** On the weaker test PC the fog effect takes slightly longer than the time we allow it, so the frame-rate budget does not hold there.
+  Kind: perf.
+  Source: in-session-2026-08-19 (first real-hardware Windows run, 3D_E-0046)..
 
 ### Fog, Mist, and Volumetric Lighting
 - [x] Distance fog (linear, exponential, exponential-squared) — pure-function primitives shipped in `engine/renderer/fog.{h,cpp}`. `FogMode` enum (`None` / `Linear` / `Exponential` / `ExponentialSquared`) + `FogParams` (linear-RGB colour, start, end, density). `computeFogFactor(mode, params, distance)` implements the three canonical forms: Linear `(end-d)/(end-start)`, GL_EXP `exp(-density·d)`, GL_EXP2 `exp(-(density·d)²)` — returns *surface visibility* in [0,1], matches OpenGL Red Book §9 / D3D9 fog-formulas. Guards every degenerate param (zero span, negative density, sub-camera distance) with pass-through behaviour. 15 unit tests cover knees, monotonicity, and edge cases.

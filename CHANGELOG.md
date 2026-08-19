@@ -22,6 +22,52 @@ may change any interface without notice.
 
 ## [Unreleased]
 
+### 2026-08-19 Added — The Windows tests can now run on a real Windows PC with a real graphics card (3D_E-0046)
+
+`scripts/wintest.sh` stages the cross-built Windows binaries onto the
+`wintest` box — a Windows 10 machine with a GTX 1050, reachable over ssh —
+runs them there, and reports.
+
+This is the first time any GL test has executed on Windows. `local-ci.sh
+--windows` cross-builds with msvc-wine and runs the suite under Wine, where
+there is no GL 4.5 context, so every GL test self-skips; the GitHub
+windows-2022 runner does the same. Both were green while proving nothing
+about the graphics code. The first real run: **3718 passed, 2 skipped, 1
+failed**, against `4.5.0 NVIDIA 560.94 on NVIDIA GeForce GTX 1050/PCIe/SSE2`.
+
+Three obstacles, and each one produces a run that *looks* clean, which is
+why the script handles them rather than documenting them.
+
+Windows OpenSSH runs its shell in session 0, which has no interactive
+desktop. `glfwInit()` succeeds there and `glfwCreateWindow()` fails, so a
+plain `ssh wintest vestige_tests.exe` skips every GL test and exits 0. The
+harness launches the run through a scheduled task with `/IT`, which puts it
+in the logged-on user's session — so a user must be logged in at the console,
+and the script says so if nobody is.
+
+Six test data directories are baked into the binary at configure time as
+absolute paths under the build machine's source tree — shaders, fonts,
+localization, audio fixtures, scene fixtures, reference cases. On another
+machine none of those paths exist and about ninety tests fail on a missing
+file rather than on behaviour. Rather than teach every consumer to relocate,
+the harness mirrors the source tree at the matching Windows path: a repo at
+`/mnt/Games/...` is staged to `C:\mnt\Games\...`, which resolves because
+Windows reads a leading `/` as relative to the current drive. 38 MB is
+staged; `models` (1.8 GB) and `textures` (581 MB) are excluded because no
+test reads them.
+
+And `set VAR=value && app` in cmd puts the trailing space into the value, so
+the generated runner never uses that form.
+
+Two findings came out of the first run and are filed rather than fixed here,
+this being the harness and not any individual test.
+`fs::create_symlink` hard-kills the test process on real Windows instead of
+throwing — the guard around it catches `filesystem_error`, and this arrives
+as a fail-fast no catch can see, so the rest of the suite silently never runs
+(3D_E-0614; the run above excludes that one test). And the volumetric fog
+dispatch measures 2163 µs against its 2000 µs budget on the GTX 1050 — the
+first hardware to contradict a budget set on an RX 6600 (3D_E-0615).
+
 ### 2026-08-18 Added — The shadow pass now has its own GPU timer, and it turns out to be the most expensive pass in the frame (3D_E-0044)
 
 `--profile-log` gains a `gpu,Shadow` row. Until now the shadow pass was the
