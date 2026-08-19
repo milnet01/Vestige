@@ -11,6 +11,7 @@ may change any interface without notice.
 <summary><strong>Table of Contents</strong> (versions)</summary>
 
 - [[Unreleased]](#unreleased)
+- [[0.1.70] - 2026-08-19](#0170---2026-08-19)
 - [[0.1.5] - 2026-04-18](#015---2026-04-18)
 - [[0.1.4] - 2026-04-17](#014---2026-04-17)
 - [[0.1.3] - 2026-04-15](#013---2026-04-15)
@@ -21,6 +22,18 @@ may change any interface without notice.
 </details>
 
 ## [Unreleased]
+
+## [0.1.70] - 2026-08-19
+
+> **Note on this section's size.** This is the accumulated engine changelog
+> from 2026-04-18 to 2026-08-19. Tags v0.1.6 through v0.1.69-rc.1 were cut
+> by the weekly release automation without their `[Unreleased]` content ever
+> being promoted into a dated section, so entries below describe work that
+> reached users across many of those tags rather than in this release alone.
+> Rather than guess retroactively which entry belongs to which tag, the whole
+> record is published here, dated honestly, and the practice is corrected
+> from this release forward. The last release with its own dated section was
+> [0.1.5].
 
 ### 2026-08-19 Fixed — Light shafts restored on the Low and Medium quality presets (3D_E-0617)
 
@@ -36,8 +49,8 @@ the only technique available.
 - **God rays now gate on the same predicate as the volumetric pass** (3D_E-0617)
   Both conditions moved to pure predicates in engine/renderer/volumetric_fog.h -- isVolumetricFogPassActive and isGodRaysActive -- with the god-ray one calling the volumetric one rather than recomputing it. Both renderer call sites gate on those, so a second divergent copy is no longer expressible. Locked by 8 cases in tests/test_volumetric_fog.cpp, proven red before the fix and green after.
 
-- **Corrected the premise of the Medium fog-budget item** (3D_E-0616)
-  3D_E-0616 assumed Medium and High dispatch the same 160x90x64 grid. Tier-1 design 4.1's preset table drops the pass at Low and Medium alike, so Medium needs no volumetric budget and the tier skip 3D_E-0615 added is permanent. Its real budget is fog design 8's screen-space god-ray row, 0.3-0.6 ms, which nothing yet gates.
+- **Corrected the premise of the Medium fog-budget item**
+  3D_E-0616 (still planned, not shipped by this release) assumed Medium and High dispatch the same 160x90x64 grid. Tier-1 design 4.1's preset table drops the pass at Low and Medium alike, so Medium needs no volumetric budget and the tier skip 3D_E-0615 added is permanent. Its real budget is fog design 8's screen-space god-ray row, 0.3-0.6 ms, which nothing yet gates.
 
 ### 2026-08-19 Fixed — The fog speed limit now belongs to a quality level instead of applying to every PC (3D_E-0615)
 
@@ -10932,8 +10945,9 @@ existing cases (``HelpersMatchEvaluatorPrecisely``,
   can't route buses to separate devices without a multi-context
   rearchitecture; tracked as a follow-up.
 
-- **World-space GI G1 — RSM flux attachment on the shadow maps** (3D_E-0021)
-  First slice of the world-space dynamic GI (DDGI-lite, design
+- **World-space GI G1 — RSM flux attachment on the shadow maps**
+  First slice of 3D_E-0021, the world-space dynamic GI (DDGI-lite,
+  still in progress as a whole; design
   docs/phases/phase_13_worldspace_gi_design.md). The directional CSM
   and point-light shadow framebuffers gain an RGBA16F flux colour
   attachment; the mesh + foliage shadow shaders now write
