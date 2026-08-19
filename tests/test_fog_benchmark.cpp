@@ -99,9 +99,14 @@ QualityPreset gatedPreset()
 }
 
 // design § 8 gives a volumetric figure for the High row only. Ultra is High's
-// froxel grid or larger, so the High budget is still the floor it must beat;
-// below High there is no published number, and Tier-1 design § 4.2 drops the
-// pass entirely at Low.
+// froxel grid or larger, so the High budget is still the floor it must beat.
+// Below High there is no published volumetric number and there should not be:
+// Tier-1 design § 4.1's preset table drops the pass at BOTH Low and Medium
+// (§ 4.2 describes the shared mechanism; § 4.1's table is what assigns it per
+// preset), so those tiers never dispatch a froxel grid to measure. Their
+// published budget is design § 8's screen-space god-ray row, 0.3-0.6 ms, and
+// gating that is 3D_E-0616 -- not a volumetric figure for Medium, which would
+// police a pass that does not run.
 bool budgetApplies(QualityPreset q)
 {
     return q == QualityPreset::High || q == QualityPreset::Ultra;

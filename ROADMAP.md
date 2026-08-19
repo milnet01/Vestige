@@ -1336,6 +1336,92 @@ Full spatial audio pipeline with dynamic mixing, occlusion, and adaptive music. 
   **Layman:** The weaker test PC currently has no speed limit for the fog effect at all — we need to work out what a fair one is for that class of machine.
   Kind: perf.
   Source: in-session-2026-08-19 (3D_E-0615 follow-up).
+  Correction (2026-08-19): the premise above is wrong, and steps (a)-(c)
+  are withdrawn. No second weak GPU is needed and no Medium volumetric
+  budget should ever be published.
+
+  "Today Medium and High dispatch the same 160x90x64 grid" is true only of
+  the BENCHMARK, which constructs a VolumetricFogPass directly. It is false
+  of the shipped renderer: Tier-1 design § 4.1's preset table gives
+  heavyPost = off to Low AND Medium, settings_apply.cpp implements exactly
+  that, and renderer.cpp ANDs it into the volumetric gate. Medium runs no
+  froxel fog at all. The second claim, that "§ 4.2 only gives Low a drop
+  switch", reads § 4.2 -- which describes the shared mechanism. § 4.1's
+  table is what assigns it per preset, and it assigns off to both.
+
+  So the tier skip 3D_E-0615 added for Medium is correct and PERMANENT, not
+  a debt this bullet was created to pay down. Medium's fog budget is not
+  missing: fog design § 8 publishes it as the "God rays, screen-space
+  (Low/Med)" row at 0.3-0.6 ms, for the technique Medium actually uses.
+  That figure is research-derived (§ 8 cites research § 7), so gating on it
+  does NOT fit a budget to the single machine it polices -- the objection
+  that blocked this bullet does not apply to it.
+
+  The goal stands and the work is now one slice: nothing benchmarks the
+  screen-space god-ray pass, so gate it against § 8's existing 0.3-0.6 ms
+  Low/Med row, the way test_fog_benchmark.cpp gates the froxel dispatch
+  against the High row.
+
+  Blocked until 3D_E-0617 lands: the god rays do not currently run below
+  High at all, so there is nothing on Medium to measure yet.
+
+- ✅ [3D_E-0617] **God rays suppress themselves on every tier below High, so weak hardware gets no light shafts at all.**
+  Found while investigating 3D_E-0616, and it is the reason that bullet
+  looked unresolvable.
+
+  Renderer::endFrame held TWO copies of the condition "is the volumetric
+  froxel pass running this frame". The authoritative one (the volumetric
+  dispatch block) is three terms: accessibility volumetricFogEnabled AND
+  m_qualityHeavyPostEnabled AND the pass being initialised. The god-rays
+  block, ~210 lines earlier in the same function, recomputed it locally
+  with only the first and third. Nothing between the two sites mutates any
+  of the three inputs, so the copies simply disagreed.
+
+  Consequence. Tier-1 design § 4.1's preset table gives heavyPost = off to
+  BOTH Low and Medium, and settings_apply.cpp implements that faithfully.
+  So below High the volumetric pass does not run — and the god rays, whose
+  whole job is to be the cheap substitute there, read their stale copy,
+  concluded the froxel pass was already producing shafts, and suppressed
+  themselves under the anti-double-shaft rule. Low and Medium therefore
+  shipped with NEITHER technique. Fog design § 8 assigns screen-space god
+  rays to the Low/Med row at 0.3-0.6 ms; that row has never actually run.
+
+  Why nothing caught it. The Tier-1 preset design does not mention god rays
+  at any point, so no document connects the tier that drops volumetric fog
+  to the fallback that is supposed to replace it. The two renderer copies
+  were each locally consistent with their own neighbourhood.
+
+  Fix. Both conditions moved to pure predicates in volumetric_fog.h --
+  isVolumetricFogPassActive and isGodRaysActive -- and the god-rays one
+  calls the volumetric one instead of recomputing it. Both renderer sites
+  now gate on those, so a second divergent copy is no longer expressible.
+  Regression test: tests/test_volumetric_fog.cpp, VolumetricFogActiveGate
+  and VolumetricFogGodRaysActiveGate (8 cases). Proven red before the fix
+  on the central case and green after, with the test file untouched
+  between the two runs.
+  **Layman:** On lower graphics settings the sunbeam effect switched itself off by mistake, leaving nothing in its place.
+  Kind: fix.
+  Lanes: renderer, fog.
+  Source: in-session-2026-08-19.
+  Resolved (2026-08-19). Both renderer gates now call the shared
+  predicates; the god-ray one delegates to isVolumetricFogPassActive rather
+  than recomputing it, so the two cannot diverge again.
+
+  Verified: the central regression case ran RED before the fix (expected
+  true, actual false) and GREEN after, with tests/test_volumetric_fog.cpp
+  untouched between the two runs -- the signature was deliberately left at
+  four parameters so the fix could not reach the assertion. Full local-ci
+  green on the final tree: Debug 71s, Release 82s, Windows MSVC 110s,
+  Tier-1 audit, gitleaks, actionlint. Full suite 3911 passed / 0 failed.
+
+  NOT verified: nobody has looked at a Medium-preset frame and seen the
+  shafts. The proof here is the gate contract, not the image. The god-ray
+  shaders have their own compile+link test
+  (VolumetricFogGpuTest.GodRaysShadersCompileAndLink) and the pass itself
+  predates this bullet, so the untested step is narrow -- that the restored
+  gate produces a visible result -- but it is untested. 3D_E-0616's
+  benchmark slice is where that stops being true, since it has to measure
+  the pass actually running.
 
 ### Fog, Mist, and Volumetric Lighting
 - [x] Distance fog (linear, exponential, exponential-squared) — pure-function primitives shipped in `engine/renderer/fog.{h,cpp}`. `FogMode` enum (`None` / `Linear` / `Exponential` / `ExponentialSquared`) + `FogParams` (linear-RGB colour, start, end, density). `computeFogFactor(mode, params, distance)` implements the three canonical forms: Linear `(end-d)/(end-start)`, GL_EXP `exp(-density·d)`, GL_EXP2 `exp(-(density·d)²)` — returns *surface visibility* in [0,1], matches OpenGL Red Book §9 / D3D9 fog-formulas. Guards every degenerate param (zero span, negative density, sub-camera distance) with pass-through behaviour. 15 unit tests cover knees, monotonicity, and edge cases.

@@ -1117,10 +1117,14 @@ void Renderer::endFrame(float deltaTime)
     // exposure; gated off when volumetric fog is active (that path gives god
     // rays for free via per-froxel sun shadowing) to avoid double shafts.
     {
-        const bool volumetricActive =
-            m_postProcessAccessibility.volumetricFogEnabled
-            && m_volumetricFogPass.isInitialized();
-        if (m_postProcessAccessibility.godRaysEnabled && !volumetricActive
+        // Gate on isGodRaysActive rather than a local copy of "is the
+        // volumetric pass running" — the copy that used to live here never
+        // gained the quality-tier term, so below High it suppressed the god
+        // rays those tiers rely on (3D_E-0617).
+        if (isGodRaysActive(m_postProcessAccessibility.godRaysEnabled,
+                            m_postProcessAccessibility.volumetricFogEnabled,
+                            m_qualityHeavyPostEnabled,
+                            m_volumetricFogPass.isInitialized())
             && m_hasDirectionalLight && m_godRaysFbo && m_resolveDepthFbo)
         {
             // Edge fade + artist gain authored per scene by the Fog panel
@@ -1329,9 +1333,10 @@ void Renderer::endFrame(float deltaTime)
     // that binding and the screen-quad draw would sample a sampler2D against a
     // depth array (GL_INVALID_OPERATION). The integrated volume is sampled in
     // the composite uniform block further down.
-    const bool volumetricActive = m_postProcessAccessibility.volumetricFogEnabled
-                                  && m_qualityHeavyPostEnabled
-                                  && m_volumetricFogPass.isInitialized();
+    const bool volumetricActive = isVolumetricFogPassActive(
+        m_postProcessAccessibility.volumetricFogEnabled,
+        m_qualityHeavyPostEnabled,
+        m_volumetricFogPass.isInitialized());
     if (volumetricActive)
     {
         VolumetricFogPass::FrameParams fp;

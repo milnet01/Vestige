@@ -290,4 +290,35 @@ GodRaySunScreen godRaysSunScreenInfo(const glm::mat4& view,
     return out;
 }
 
+bool isVolumetricFogPassActive(bool volumetricFogEnabled,
+                               bool qualityHeavyPostEnabled,
+                               bool volumetricPassInitialized)
+{
+    // Verbatim copy of the authoritative gate at Renderer::endFrame
+    // (renderer.cpp, the volumetric-dispatch block) — all three terms
+    // required.
+    return volumetricFogEnabled
+        && qualityHeavyPostEnabled
+        && volumetricPassInitialized;
+}
+
+bool isGodRaysActive(bool godRaysEnabled,
+                     bool volumetricFogEnabled,
+                     bool qualityHeavyPostEnabled,
+                     bool volumetricPassInitialized)
+{
+    // Anti-double-shaft: the froxel pass already produces light shafts via
+    // per-froxel sun shadowing, so the screen-space fallback runs only when
+    // that pass does NOT. Delegate to the single definition of "the
+    // volumetric pass runs" rather than recomputing it here — the two-copy
+    // form of this condition drifted once already (3D_E-0617): the copy at
+    // the god-rays call site never gained the quality-tier term, so on every
+    // tier below High it reported a pass that was not running and suppressed
+    // the only light-shaft technique those tiers have.
+    return godRaysEnabled
+        && !isVolumetricFogPassActive(volumetricFogEnabled,
+                                      qualityHeavyPostEnabled,
+                                      volumetricPassInitialized);
+}
+
 } // namespace Vestige

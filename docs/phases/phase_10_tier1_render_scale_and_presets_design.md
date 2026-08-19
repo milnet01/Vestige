@@ -177,6 +177,13 @@ the render-scale value:
 | Ultra | 1.0 | `TAA` | on | on | on |
 | Custom | *(nothing applied)* | *(nothing)* | *(nothing)* | *(nothing)* | *(nothing)* |
 
+**What the `off` cells mean for light shafts (added 2026-08-19, 3D_E-0617).** Dropping vol-fog at
+Low/Medium does *not* leave those tiers with no light shafts: the fog design's §8 budget table
+assigns them the **screen-space god rays** row (0.3–0.6 ms), which the renderer runs precisely when
+the froxel pass does not. That fallback is the fog design's to specify and this table's to trigger —
+recorded here because this doc named the trigger and never the fallback, and a renderer gate
+consequently suppressed both techniques below High with no document contradicted.
+
 The cheap tiers use **FXAA** (§3.4) — cheap post-AA ideal for weak/handheld GPUs, paired with CAS
 (§3.2); High/Ultra use **TAA** (temporal, best quality). This supersedes the parent strategy
 doc's §5 T1b `None/SMAA` for the cheap tiers (reason: FXAA gives Low actual anti-aliasing at ~½ MSAA

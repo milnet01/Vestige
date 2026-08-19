@@ -535,3 +535,118 @@ TEST(VolumetricFogGodRays, ZeroMarginIsHardCut)
     EXPECT_FALSE(pastEdge.visible);
     EXPECT_FLOAT_EQ(pastEdge.intensity, 0.0f);
 }
+
+// ---------------------------------------------------------------------------
+// isVolumetricFogPassActive / isGodRaysActive — anti-double-shaft contract
+// (slice 11.5). Locks Renderer::endFrame's two light-shaft gates — the god
+// rays block and the volumetric-dispatch block — to agree on whether the
+// volumetric pass is active, given the SAME inputs each frame.
+//
+// Regression history: the god-rays gate's local copy of "is volumetric
+// active" was a stale two-term expression (volumetricFogEnabled &&
+// initialized) that predated the quality-tier gate on the volumetric block
+// and was never updated to include qualityHeavyPostEnabled (3D_E-0617). Under the Low/Medium presets
+// (settings_apply.cpp sets qualityHeavyPostEnabled = false) the volumetric
+// pass correctly stops running, but the god-rays gate still believes it is
+// active — so the cheap screen-space fallback never engages either, and
+// weak hardware gets no light-shaft technique at all.
+// ---------------------------------------------------------------------------
+
+// --- isVolumetricFogPassActive: the authoritative three-term gate. ---
+
+TEST(VolumetricFogActiveGate, RunsOnlyWhenAllThreeTermsHold)
+{
+    EXPECT_TRUE(isVolumetricFogPassActive(
+        /*volumetricFogEnabled=*/true, /*qualityHeavyPostEnabled=*/true,
+        /*volumetricPassInitialized=*/true));
+}
+
+TEST(VolumetricFogActiveGate, AccessibilityOffMeansInactiveRegardlessOfTier)
+{
+    // volumetricFogEnabled=false must not be overridden by a high tier or an
+    // initialized pass — accessibility is authoritative.
+    EXPECT_FALSE(isVolumetricFogPassActive(
+        /*volumetricFogEnabled=*/false, /*qualityHeavyPostEnabled=*/true,
+        /*volumetricPassInitialized=*/true));
+}
+
+TEST(VolumetricFogActiveGate, LowTierDisablesTheVolumetricPass)
+{
+    // The Low/Medium presets set qualityHeavyPostEnabled=false
+    // (settings_apply.cpp) — the volumetric pass must not run even though
+    // accessibility and initialization both allow it.
+    EXPECT_FALSE(isVolumetricFogPassActive(
+        /*volumetricFogEnabled=*/true, /*qualityHeavyPostEnabled=*/false,
+        /*volumetricPassInitialized=*/true));
+}
+
+TEST(VolumetricFogActiveGate, UninitializedPassIsInactive)
+{
+    EXPECT_FALSE(isVolumetricFogPassActive(
+        /*volumetricFogEnabled=*/true, /*qualityHeavyPostEnabled=*/true,
+        /*volumetricPassInitialized=*/false));
+}
+
+// --- isGodRaysActive: accessibility, and the anti-double-shaft contract. ---
+
+TEST(VolumetricFogGodRaysActiveGate, AccessibilityOffMeansInactiveRegardlessOfTier)
+{
+    // godRaysEnabled=false must win no matter what the quality tier or the
+    // volumetric pass state say.
+    EXPECT_FALSE(isGodRaysActive(
+        /*godRaysEnabled=*/false, /*volumetricFogEnabled=*/true,
+        /*qualityHeavyPostEnabled=*/false, /*volumetricPassInitialized=*/false));
+    EXPECT_FALSE(isGodRaysActive(
+        /*godRaysEnabled=*/false, /*volumetricFogEnabled=*/false,
+        /*qualityHeavyPostEnabled=*/true, /*volumetricPassInitialized=*/true));
+}
+
+TEST(VolumetricFogGodRaysActiveGate, InactiveWhenVolumetricPassIsActive)
+{
+    // Anti-double-shaft rule: the volumetric froxel path already produces
+    // light shafts for free, so the screen-space fallback must not also run.
+    ASSERT_TRUE(isVolumetricFogPassActive(
+        /*volumetricFogEnabled=*/true, /*qualityHeavyPostEnabled=*/true,
+        /*volumetricPassInitialized=*/true))
+        << "test setup: this scenario must have the volumetric pass active";
+    EXPECT_FALSE(isGodRaysActive(
+        /*godRaysEnabled=*/true, /*volumetricFogEnabled=*/true,
+        /*qualityHeavyPostEnabled=*/true, /*volumetricPassInitialized=*/true));
+}
+
+TEST(VolumetricFogGodRaysActiveGate, RunsAsTheFallbackWhenTheVolumetricPassIsNotActive_LowTier)
+{
+    // THE CENTRAL REGRESSION CASE. godRaysEnabled=true, volumetricFogEnabled
+    // =true, but qualityHeavyPostEnabled=false (Low/Medium preset) — the
+    // volumetric pass is confirmed NOT running, so the cheap screen-space
+    // god-rays fallback MUST engage. This is the case weak hardware hits
+    // every frame under the Low/Medium presets.
+    const bool godRaysEnabled              = true;
+    const bool volumetricFogEnabled        = true;
+    const bool qualityHeavyPostEnabled     = false; // Low/Medium preset
+    const bool volumetricPassInitialized   = true;
+
+    ASSERT_FALSE(isVolumetricFogPassActive(
+        volumetricFogEnabled, qualityHeavyPostEnabled, volumetricPassInitialized))
+        << "test setup: this scenario must have the volumetric pass INACTIVE "
+           "(that's what makes the fallback obligatory)";
+
+    EXPECT_TRUE(isGodRaysActive(godRaysEnabled, volumetricFogEnabled,
+                                qualityHeavyPostEnabled, volumetricPassInitialized))
+        << "God rays must run as the fallback when the volumetric pass is "
+           "not actually running (heavyPost=false), so weak hardware still "
+           "gets a light-shaft technique. If this fails, some copy of "
+           "\"is the volumetric pass active\" has again dropped the "
+           "qualityHeavyPostEnabled term and is reporting a pass that is "
+           "not running -- which suppresses god rays too (3D_E-0617).";
+}
+
+TEST(VolumetricFogGodRaysActiveGate, RunsWhenVolumetricAccessibilityIsOff)
+{
+    // volumetricFogEnabled=false must not let the quality tier switch the
+    // volumetric pass back on — god rays are the only technique available
+    // and must engage.
+    EXPECT_TRUE(isGodRaysActive(
+        /*godRaysEnabled=*/true, /*volumetricFogEnabled=*/false,
+        /*qualityHeavyPostEnabled=*/true, /*volumetricPassInitialized=*/true));
+}

@@ -194,6 +194,44 @@ GodRaySunScreen godRaysSunScreenInfo(const glm::mat4& view,
                                      const glm::vec3& lightDirection,
                                      float edgeMargin);
 
+/// @brief Whether the froxel volumetric fog pass actually runs this frame —
+///        the authoritative gate at `Renderer::endFrame` (renderer.cpp,
+///        the volumetric-dispatch block). This is the CPU spec that pins
+///        that call site, and the god-rays anti-double-shaft gate below is
+///        required to agree with it — see @ref isGodRaysActive.
+///
+/// All three terms are required: accessibility (`volumetricFogEnabled`),
+/// the active quality tier (`qualityHeavyPostEnabled` — the Low and Medium
+/// presets disable heavy post-processing, `settings_apply.cpp`), and
+/// whether the GPU pass object has completed its one-time setup
+/// (`volumetricPassInitialized`).
+bool isVolumetricFogPassActive(bool volumetricFogEnabled,
+                               bool qualityHeavyPostEnabled,
+                               bool volumetricPassInitialized);
+
+/// @brief Whether the screen-space god-rays fallback (slice 11.5) should run
+///        this frame — the gate at `Renderer::endFrame`'s god-rays block
+///        (renderer.cpp, immediately above the volumetric-dispatch block
+///        this same frame reaches a few lines later).
+///
+/// God rays are accessibility-gated (`godRaysEnabled`) and, by the
+/// anti-double-shaft rule, must NOT run when the volumetric froxel pass is
+/// (or would be) active — that path already gives light shafts for free via
+/// per-froxel sun shadowing, so running both double-counts them.
+///
+/// Because the two conditions must agree, this predicate does not recompute
+/// "is the volumetric pass active" — it calls @ref isVolumetricFogPassActive.
+/// A second, independently-maintained copy of that condition is exactly the
+/// defect 3D_E-0617 fixed: the copy at the god-rays call site never gained the
+/// quality-tier term, so under the Low and Medium presets
+/// (`qualityHeavyPostEnabled == false`) it reported the froxel pass as running
+/// when it was not, and suppressed the god rays those tiers depend on. Both
+/// renderer call sites gate on these two functions for that reason.
+bool isGodRaysActive(bool godRaysEnabled,
+                     bool volumetricFogEnabled,
+                     bool qualityHeavyPostEnabled,
+                     bool volumetricPassInitialized);
+
 /// @brief Authored per-scene parameters for the froxel volumetric medium
 ///        (slice 11.10 — exposed by the editor FogPanel).
 ///

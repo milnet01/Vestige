@@ -22,6 +22,23 @@ may change any interface without notice.
 
 ## [Unreleased]
 
+### 2026-08-19 Fixed — Light shafts restored on the Low and Medium quality presets (3D_E-0617)
+
+Below the High preset the engine rendered no light shafts of any kind.
+`Renderer::endFrame` carried two copies of the condition "is the
+volumetric froxel pass running this frame", and the copy guarding the
+screen-space god rays was missing the quality-tier term. Low and Medium
+switch the froxel pass off by design, so that copy reported a pass which
+was not running, and the god rays suppressed themselves under the
+anti-double-shaft rule — removing the cheap fallback exactly where it is
+the only technique available.
+
+- **God rays now gate on the same predicate as the volumetric pass** (3D_E-0617)
+  Both conditions moved to pure predicates in engine/renderer/volumetric_fog.h -- isVolumetricFogPassActive and isGodRaysActive -- with the god-ray one calling the volumetric one rather than recomputing it. Both renderer call sites gate on those, so a second divergent copy is no longer expressible. Locked by 8 cases in tests/test_volumetric_fog.cpp, proven red before the fix and green after.
+
+- **Corrected the premise of the Medium fog-budget item** (3D_E-0616)
+  3D_E-0616 assumed Medium and High dispatch the same 160x90x64 grid. Tier-1 design 4.1's preset table drops the pass at Low and Medium alike, so Medium needs no volumetric budget and the tier skip 3D_E-0615 added is permanent. Its real budget is fog design 8's screen-space god-ray row, 0.3-0.6 ms, which nothing yet gates.
+
 ### 2026-08-19 Fixed — The fog speed limit now belongs to a quality level instead of applying to every PC (3D_E-0615)
 
 The volumetric fog effect has a time budget — 2.0 ms per frame — that
