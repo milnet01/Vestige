@@ -1232,7 +1232,7 @@ Full spatial audio pipeline with dynamic mixing, occlusion, and adaptive music. 
   The `--filter '-GltfFsSandboxTest.SymlinkEscapeBufferUriIsRejected_D2_CV11'`
   workaround recorded above is no longer needed.
 
-- 📋 [3D_E-0615] **Volumetric fog dispatch is 8% over its 2.0 ms budget on a GTX 1050.**
+- ✅ [3D_E-0615] **Volumetric fog dispatch is 8% over its 2.0 ms budget on a GTX 1050.**
   `FogBenchmarkTest.VolumetricDispatchUnderBudget` is the ONLY genuine failure
   in the first real-hardware Windows run (3718 passed, 2 skipped, 1 failed):
 
@@ -1258,6 +1258,84 @@ Full spatial audio pipeline with dynamic mixing, occlusion, and adaptive music. 
   **Layman:** On the weaker test PC the fog effect takes slightly longer than the time we allow it, so the frame-rate budget does not hold there.
   Kind: perf.
   Source: in-session-2026-08-19 (first real-hardware Windows run, 3D_E-0046)..
+  Resolved (2026-08-19). Resolution (b), chosen by the user: the budget is
+  an RX-6600 figure and moves with the quality tier.
+
+  The design already said so and nothing had read it that way. Design § 8's
+  budget table is a table PER PRESET, and the 2.0 ms figure is its "Stack
+  total, High preset" row, measured on the dev rig; god rays are its Low/Med
+  technique. No volumetric figure is published below High at all, and the
+  Tier-1 design § 4.2 has Low drop the pass outright for performance. So the
+  test was asserting a High-preset number unconditionally, on every machine.
+  This needed no new constant — it needed the gate to know which tier it was
+  gating for.
+
+  Change. tests/test_fog_benchmark.cpp reads the preset from
+  VESTIGE_QUALITY_PRESET, DEFAULTING TO HIGH, so the dev rig and CI are
+  byte-identical in behaviour. Below High it reports the measured median and
+  skips — the same shape as the software-renderer guard already in that file,
+  and an environment guard rather than a workaround. Applied to the GI-inject
+  gate in the same file too: both constants are dev-rig High figures, and
+  leaving one tier-aware and the other not is the inconsistency that bites on
+  the next weak box. scripts/wintest.sh declares that box `medium`, with
+  VESTIGE_WINTEST_QUALITY_PRESET=high to override.
+
+  One defect caught before building, by the write-code string/value check:
+  qualityPresetFromString matches LOWERCASE ONLY and silently returns its
+  fallback otherwise, so an env value spelled "Medium" would have parsed as
+  High and the gate would have fired anyway — a change that looks right and
+  does nothing. The test folds case itself now.
+
+  Verified. Full local-ci green (Debug 132s / Release 70s / Windows MSVC 98s
+  / Tier-1 / gitleaks / actionlint). Both branches exercised on the RX 6600:
+  default gates and PASSES at 771.9 us against 2000; VESTIGE_QUALITY_PRESET=
+  medium SKIPS with the median reported. And the full wintest.sh run on the
+  GTX 1050 returns REMOTE EXIT CODE 0 — 3717 passed, 5 skipped, 0 failed,
+  the first fully green Windows run on real hardware this project has had.
+  The fog skip records `volumetric dispatch median 2161.5 us recorded, not
+  gated`, consistent with the 2163.4 us that opened this bullet.
+
+  What this costs, recorded rather than glossed: the GTX 1050 now asserts
+  nothing about fog performance. A Medium-row budget cannot honestly be
+  fitted to the single machine it would police, so it is filed as 3D_E-0616
+  against the weak-HW perf program rather than invented here.
+
+- 📋 [3D_E-0616] **Publish a volumetric-fog budget for the Medium preset, so weak hardware has a gate again.**
+  3D_E-0615 made the fog and GI perf gates tier-aware: design § 8's
+  budget table is a per-preset table and both figures are its High row,
+  so a machine below High is no longer held to them. That is correct,
+  and it has a cost this bullet exists to record — the GTX 1050 box now
+  runs the fog benchmark and asserts NOTHING against it.
+
+  What is missing is a Medium row in design § 8. It cannot honestly be
+  derived from what we have: the only Medium-class measurement in
+  existence is the GTX 1050's own 2161.5 us median, and fitting a budget
+  to the one machine it is meant to police makes the gate vacuous by
+  construction. CLAUDE.md Rule 6 points the same way — a number with no
+  reference data behind it is a hand-coded magic constant.
+
+  What it needs, in order:
+    (a) a second weak-GPU data point, so the figure describes a class
+        rather than a box;
+    (b) a decision on what the Medium preset actually CONFIGURES for the
+        fog stack. Today Medium and High dispatch the same 160x90x64
+        grid, and the Tier-1 design § 4.2 only gives Low a drop switch.
+        If Medium ends up with a smaller froxel volume, its budget falls
+        out of that choice rather than being chosen separately.
+    (c) then the row, and drop the tier skip in
+        tests/test_fog_benchmark.cpp for Medium.
+
+  Belongs with the weak-HW perf program (Tier-1 slices 2-6), not with
+  the fog bundle. Until it lands, `VESTIGE_WINTEST_QUALITY_PRESET=high
+  scripts/wintest.sh` holds the 1050 to the dev-rig numbers on purpose
+  and is the way to watch the figure move.
+
+  Measured for the record, GTX 1050 / 4.5.0 NVIDIA 560.94, Release:
+  volumetric froxel dispatch (160x90x64) median 2161.5 us; GI inject
+  median well inside its 400 us High-preset gate.
+  **Layman:** The weaker test PC currently has no speed limit for the fog effect at all — we need to work out what a fair one is for that class of machine.
+  Kind: perf.
+  Source: in-session-2026-08-19 (3D_E-0615 follow-up).
 
 ### Fog, Mist, and Volumetric Lighting
 - [x] Distance fog (linear, exponential, exponential-squared) — pure-function primitives shipped in `engine/renderer/fog.{h,cpp}`. `FogMode` enum (`None` / `Linear` / `Exponential` / `ExponentialSquared`) + `FogParams` (linear-RGB colour, start, end, density). `computeFogFactor(mode, params, distance)` implements the three canonical forms: Linear `(end-d)/(end-start)`, GL_EXP `exp(-density·d)`, GL_EXP2 `exp(-(density·d)²)` — returns *surface visibility* in [0,1], matches OpenGL Red Book §9 / D3D9 fog-formulas. Guards every degenerate param (zero span, negative density, sub-camera distance) with pass-through behaviour. 15 unit tests cover knees, monotonicity, and edge cases.

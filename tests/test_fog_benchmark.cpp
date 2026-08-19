@@ -20,9 +20,22 @@
 /// a software renderer the test SKIPs after logging the measured median. This
 /// is an environment guard, not a workaround — the gate is real wherever a real
 /// GPU exists.
+///
+/// **Quality-tier guard (3D_E-0615).** Design § 8's budget table is per preset,
+/// and both figures below are its **High** row — measured on the RX 6600 dev
+/// rig. The table states no volumetric figure below High, and the Tier-1
+/// scalability design § 4.2 has Low drop the pass for performance outright, so
+/// there is no number to hold a lower-tier machine to. The preset being gated
+/// for is read from `VESTIGE_QUALITY_PRESET` and defaults to High, so the dev
+/// rig and CI are unchanged; a machine the preset system would not run at High
+/// declares itself (see `scripts/wintest.sh`) and gets the median reported
+/// rather than asserted. Same shape as the software-renderer guard above: an
+/// environment guard, not a workaround.
 #include <gtest/gtest.h>
 
 #include "renderer/volumetric_fog_pass.h"
+
+#include "core/settings.h"
 
 #include "gl_test_fixture.h"
 #include "lsan_guard.h"
@@ -34,6 +47,7 @@
 #include <algorithm>
 #include <cctype>
 #include <chrono>
+#include <cstdlib>
 #include <string>
 #include <vector>
 
@@ -64,6 +78,33 @@ bool isSoftwareRenderer()
         || s.find("softpipe") != std::string::npos
         || s.find("swrast")   != std::string::npos
         || s.find("software") != std::string::npos;
+}
+
+// The quality preset these budgets are being gated for. Defaults to High, the
+// preset design § 8's table states them for, so an ordinary run on the dev rig
+// or in CI behaves exactly as before. A machine the preset system would not run
+// at High sets VESTIGE_QUALITY_PRESET to say so.
+QualityPreset gatedPreset()
+{
+    const char* env = std::getenv("VESTIGE_QUALITY_PRESET");
+    if (!env || !*env) return QualityPreset::High;
+    // qualityPresetFromString matches lowercase only, and silently returns the
+    // fallback otherwise — so an env value spelled "Medium" would read as High
+    // and the gate would fire anyway. Fold the case here rather than making the
+    // caller remember.
+    std::string name(env);
+    std::transform(name.begin(), name.end(), name.begin(),
+                   [](unsigned char c) { return static_cast<char>(::tolower(c)); });
+    return qualityPresetFromString(name, QualityPreset::High);
+}
+
+// design § 8 gives a volumetric figure for the High row only. Ultra is High's
+// froxel grid or larger, so the High budget is still the floor it must beat;
+// below High there is no published number, and Tier-1 design § 4.2 drops the
+// pass entirely at Low.
+bool budgetApplies(QualityPreset q)
+{
+    return q == QualityPreset::High || q == QualityPreset::Ultra;
 }
 
 // 1×1 lit depth array so the benchmark times the shadowed (god-ray) scatter
@@ -195,6 +236,16 @@ TEST_F(FogBenchmarkTest, VolumetricDispatchUnderBudget)
                      << " µs GPU budget.";
     }
 
+    if (!budgetApplies(gatedPreset()))
+    {
+        GTEST_SKIP() << "quality preset " << qualityPresetLabel(gatedPreset())
+                     << " — " << kVolumetricBudgetMicros
+                     << " µs is design § 8's High-preset stack budget and no"
+                        " volumetric figure is published below High; volumetric"
+                        " dispatch median " << medianMicros
+                     << " µs recorded, not gated.";
+    }
+
     EXPECT_LE(medianMicros, kVolumetricBudgetMicros)
         << "volumetric froxel dispatch (160×90×64) median " << medianMicros
         << " µs exceeds the " << kVolumetricBudgetMicros << " µs fog-stack budget";
@@ -259,6 +310,14 @@ TEST_F(FogBenchmarkTest, GiInjectDispatchUnderBudget)
                      << ") — GI inject dispatch median " << medianMicros
                      << " µs not gated against the " << kGiInjectBudgetMicros
                      << " µs GPU budget.";
+    }
+
+    if (!budgetApplies(gatedPreset()))
+    {
+        GTEST_SKIP() << "quality preset " << qualityPresetLabel(gatedPreset())
+                     << " — " << kGiInjectBudgetMicros
+                     << " µs is design § 11.2's High-preset gate; GI inject"
+                        " median " << medianMicros << " µs recorded, not gated.";
     }
 
     EXPECT_LE(medianMicros, kGiInjectBudgetMicros)
