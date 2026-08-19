@@ -1638,6 +1638,51 @@ Three user-facing features wire the editor to its own GitHub repo: bug reporter,
   Kind: feature.
   Source: user-request-2026-07-10.
 
+- 📋 [3D_E-0620] **Nothing in the engine or its README points at the funding links the repo already publishes.**
+  Add a Donate surface pointing at the three destinations in
+  `.github/FUNDING.yml`. That file already exists here and is the standard
+  one shared by 16 of the 17 sibling projects, so nothing needs copying
+  (RetroArch is the lone outlier, being an upstream fork). It publishes:
+
+      github:  milnet01         -> https://github.com/sponsors/milnet01
+      patreon: AntsProjectsHub  -> https://www.patreon.com/c/AntsProjectsHub
+      custom:  https://paybru.co.za/tip/ants-projects-hub
+
+  FUNDING.yml only drives the Sponsor button on the GitHub repo page. A
+  user who downloaded a release and is running the editor, or who is
+  reading README.md, is shown nothing.
+
+  Two surfaces. The editor: this section's existing bullets already put
+  their entries under `Help ->`, and the Help menu is at
+  `engine/editor/editor.cpp:1022`. Ants_Terminal instead gives Donate its
+  own rightmost menu (`src/mainwindow.cpp:2130`, `setupDonateMenu`) --
+  worth following rather than re-deciding. And README.md, which does not
+  mention funding at all.
+
+  The work is NOT the button. Vestige has no way to open a URL: grepping
+  engine/, editor/ and tools/ for xdg-open, ShellExecute or any open-URL
+  helper returns nothing, and unlike Ants_Terminal there is no Qt here to
+  supply QDesktopServices. So this needs a small platform shim (xdg-open
+  on Linux, ShellExecute on Windows), and that shim is the design
+  question -- where it lives, and whether spawning a browser from the
+  editor process is acceptable under SECURITY.md. Size the item on the
+  shim, not on the menu entries.
+
+  Note the shim is shared infrastructure with the three features above:
+  the bug reporter and feature tracker both need to send a user to a
+  GitHub URL. If those land first this item is nearly free; if this one
+  lands first it should put the helper where they can reuse it.
+
+  Deliberately not decided: whether the destinations are hardcoded or
+  parsed from FUNDING.yml at build time. Hardcoding duplicates the links
+  in two places; parsing adds a YAML dependency to a build that has no
+  other reason for one. One paragraph of thought before implementing, not
+  a spec.
+  **Layman:** The project has donation links set up, but nobody using the app or reading its front page is ever shown them.
+  Kind: feature.
+  Lanes: editor, docs.
+  Source: user-request-2026-08-19.
+
 ### Milestone
 A person who has never opened Vestige can open it, follow the first-run tour, create a scene, place a few entities, bake a navmesh, export a build — all without reading source code, watching a tutorial, or asking anyone. AI-assisted users get the same surface plus an optional chat panel. Keyboard-only users can drive every action without a mouse. The editor feels responsive even with 10k-entity scenes.
 
