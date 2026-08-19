@@ -5,10 +5,23 @@ and (eventually) game development.**
 
 [![License: MIT](https://img.shields.io/badge/License-MIT-yellow.svg)](LICENSE)
 
-Vestige is a solo-maintained, open-source 3D engine built around a
-subsystem + event-bus architecture. It prioritises a clear codebase, a
-sustainable single-maintainer cadence, and a hard **60 FPS minimum** on
-mid-range hardware (reference: AMD RX 6600 / Ryzen 5 5600).
+### In plain English
+
+Vestige is a program for **walking around 3D spaces on your computer** —
+you move with the keyboard and mouse, in first person, the way you would
+in a video game. It was built to explore reconstructions of historical
+buildings (the Tabernacle and Solomon's Temple were the first targets),
+and it has grown into a general-purpose toolkit for building 3D scenes.
+
+It comes in one piece: an **editor** for arranging a scene, and a
+**walkthrough mode** for stepping inside it. You do not need to write any
+code to look around — see [Just want to look around?](#just-want-to-look-around)
+below.
+
+If you are a developer: it is a solo-maintained, open-source 3D engine
+built around a subsystem + event-bus architecture, prioritising a clear
+codebase, a sustainable single-maintainer cadence, and a hard **60 FPS
+minimum** on mid-range hardware (reference: AMD RX 6600 / Ryzen 5 5600).
 
 > **Project status — early-stage.** API is unstable until 1.0. Expect
 > breaking changes between 0.x minor versions. Contributions and issues
@@ -49,13 +62,20 @@ mid-range hardware (reference: AMD RX 6600 / Ryzen 5 5600).
 
 ## Feature status
 
-Core subsystems are complete through **Phase 9** (domain-driven systems
-+ visual scripting, including the Phase 9E-3 node-graph editor). **Phase 10**
-is in active, multi-track development: localization, accessibility, settings,
-UI/HUD, and audio have shipped, while rendering, multi-threading, and
-editor-usability work proceed across parallel sub-phases (10.5–10.9). See
-[`ROADMAP.md`](ROADMAP.md) for the detailed phase plan and the current
-slice numbering.
+**Short version:** the engine works and you can walk around in it today.
+The parts that make a scene look and sound right — lighting, shadows,
+audio, weather, vegetation — are built. What is still missing is most of
+the *game*-making layer: networking, multiplayer, and a shipping-game
+settings menu.
+
+In roadmap terms, core subsystems are complete through **Phase 9**
+(domain-driven systems + visual scripting, including the Phase 9E-3
+node-graph editor). **Phase 10** is in active, multi-track development:
+localization, accessibility, settings, UI/HUD and audio have shipped, and
+recent work has concentrated on rendering (volumetric fog, screen-space GI,
+GPU grass), multi-threading, and performance on weaker hardware. See
+[`ROADMAP.md`](ROADMAP.md) for the detailed phase plan and current slice
+numbering.
 
 | Area                     | Status        | Notes                                                                 |
 |--------------------------|---------------|-----------------------------------------------------------------------|
@@ -63,19 +83,22 @@ slice numbering.
 | Scene graph / ECS        | Complete      | Entity + component system, parent-child transforms                    |
 | Rendering (forward + PBR)| Complete      | PBR materials, IBL, POM, SSAO, bloom, tone mapping                    |
 | Shadows                  | Complete      | Cascaded shadow maps + point / spot shadows                           |
-| Global illumination      | Partial       | SH probe grid + radiosity shipped; SSGI next (`docs/research/gi_roadmap.md`)   |
+| Global illumination      | Core complete | Baked SH probe grid + radiosity, plus real-time screen-space GI (SSGI) with froxel colour injection. World-space dynamic GI is next (`docs/research/gi_roadmap.md`) |
 | Editor (Phase 5)         | Complete      | Dockable ImGui editor, gizmos, undo/redo, console                     |
 | Particles / effects      | Complete      | GPU-instanced particle system                                         |
 | Animation                | Core complete | Skeletal animation, IK, state machines, morph targets live; motion matching / facial / lip-sync implemented, production wiring tracked in Phase 10.9 |
 | Physics                  | Core complete | Jolt rigid bodies, character controller, joints, XPBD cloth (CPU + GPU) live; ragdoll / fracture / grab implemented, wiring tracked in Phase 10.9 |
-| Audio                    | Complete      | OpenAL Soft spatial audio + streaming music; geometric occlusion / convolution reverb / LOD enhancements in Phase 11 |
+| Audio                    | Complete      | OpenAL Soft 3D audio + streaming music, geometry-driven occlusion (sound is muffled by real walls), convolution reverb with baked per-room acoustics, procedural footsteps/impacts, loudness normalisation |
 | UI / HUD                 | Complete      | Menus, HUD, notifications, theme tokens, in-game screen state machine, interaction prompts |
 | Navigation / pathfinding | Foundation    | Recast navmesh + Detour A*; AI state / editor tooling in follow-ons   |
 | Localization             | Complete      | UTF-8 text, multi-language string table, Hebrew / Greek / Latin with RTL, in-settings language picker |
 | Accessibility            | Complete      | Colour-blind modes, subtitles, remappable input bindings, photosensitive safety, reduce-motion |
 | Visual scripting         | Complete      | Phase 9E-1/9E-2/9E-3 shipped; node-graph editor (imgui-node-editor) with 70 registered node types |
 | Formula Pipeline         | Complete      | Expression trees, workbench, C++/GLSL codegen, quality tiers          |
-| Terrain                  | Core complete | Chunking + streaming pending                                          |
+| Terrain                  | Core complete | Heightmap terrain with PBR ground texturing; chunking + streaming pending |
+| Vegetation               | Core complete | GPU-generated grass (Bézier blades, ~1M blades, casts shadows), tree LOD/impostors; procedural plant growth planned |
+| Atmosphere / fog          | Complete      | Distance + height fog, sun inscatter, screen-space god rays, and volumetric (froxel) fog on the High preset |
+| Performance scaling       | Core complete | Low/Medium/High/Ultra quality presets, render-scale, FXAA + CAS, and a perf-regression gate. Weak-hardware tiers still being widened |
 | AI assistance in editor  | Planned       | Phase 23 — design doc pending                                         |
 | Structural / attachments | Planned       | Phase 24 — design doc drafted                                         |
 | Networking / multiplayer | Planned       | Phase 20                                                              |
@@ -83,7 +106,44 @@ slice numbering.
 
 ---
 
+## Just want to look around?
+
+**You do not need to build anything.** Every
+[GitHub Release](https://github.com/milnet01/Vestige/releases) has ready-to-run
+downloads attached. Grab the one for your system, then:
+
+| Your system | What to download | How to run it |
+|---|---|---|
+| **Windows 10/11 (64-bit)** | `vestige-<version>-windows-x86_64.zip` | unzip it anywhere, then run `vestige.exe` (or `vestige-editor.cmd`) |
+| **Linux (easiest)** | `Vestige-<version>-x86_64.AppImage` | right-click → Properties → tick "allow executing as a program", then double-click it |
+| **Linux (plain archive)** | `vestige-<version>-linux-x86_64.tar.gz` | extract it, then run `./vestige-editor` from inside the extracted folder |
+
+Both are 64-bit Intel/AMD builds. ARM machines (including Raspberry Pi and
+Windows-on-ARM) are not built yet.
+
+**Windows will warn you the first time.** The build is not code-signed — a
+certificate costs money this pre-1.0 project has not spent — so SmartScreen
+shows "Windows protected your PC". Click *More info* → *Run anyway*.
+[`TESTING.md`](TESTING.md) documents this.
+
+Then press **Esc** to drop into the walkthrough and move with **W A S D** and
+the mouse. Press **Esc** again to come back out to the editor. The
+[Controls](#controls) table lists the rest.
+
+**If it will not start**, the usual cause is a graphics driver older than
+OpenGL 4.5. Updating your graphics driver fixes almost every case. If it
+still will not run, please [open an issue](https://github.com/milnet01/Vestige/issues)
+and say what machine and graphics card you have — those reports are genuinely
+useful, see [Testing wanted](#testing-wanted).
+
+macOS is **not** supported: Apple caps OpenGL at 4.1 and Vestige needs 4.5.
+
+---
+
 ## Quick start
+
+*(This section is for building from source. If you only want to run it, use
+[Just want to look around?](#just-want-to-look-around) above.)*
 
 ### Requirements
 
@@ -225,14 +285,23 @@ docs/              Design notes, research documents, automated audit reports
   profiler CSV (captured with the engine's `--profile-log[=PATH]`) to a
   committed baseline and flags per-pass slowdowns. Run it on real GPU
   hardware (timings are meaningless on CI's software renderer):
+  **No baseline is committed** — GPU timings are meaningless across
+  different hardware, so the first step on any machine is to record your
+  own, then compare later runs against it:
   ```bash
-  # capture a fresh run, then check it against the baseline
-  vestige --meadow --visual-test --profile-log=run.csv
-  python3 tools/perf_gate.py --baseline tools/perf_gate/baseline_rx6600.json --current run.csv
-  # first-time: create the baseline on your hardware
-  python3 tools/perf_gate.py --update-baseline --current run.csv \
-      --out tools/perf_gate/baseline_rx6600.json --hardware "RX 6600"
+  # 1. record a reference run on YOUR hardware (do this once)
+  ./build/bin/vestige --visual-test --profile-log=baseline-run.csv
+  python3 tools/perf_gate.py --update-baseline --current baseline-run.csv \
+      --out my-baseline.json --hardware "RX 6600"
+
+  # 2. after a change, capture again and check it against that baseline
+  ./build/bin/vestige --visual-test --profile-log=run.csv
+  python3 tools/perf_gate.py --baseline my-baseline.json --current run.csv
   ```
+  Discard the first capture of a session — it runs cold and reads slow.
+  A self-test over committed fixtures (`tests/fixtures/perf_gate/`) runs
+  as part of `ctest`, so the gate itself is covered even on CI's software
+  renderer.
 
 ---
 
