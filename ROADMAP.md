@@ -131,6 +131,46 @@ Source of truth: [`docs/research/self_learning_roadmap.md`](docs/research/self_l
 
 ---
 
+- 📋 [3D_E-0618] **ci.yml still uses the cache-apt-pkgs-action that is known broken, on a cache that will eventually expire.**
+  release.yml was moved off `awalsh128/cache-apt-pkgs-action@v1.6.3` on
+  2026-07-22 (commit eb52f19) because on ubuntu-24.04 its manifest parser
+  errors, installs 0 packages, and then CACHES the empty result --
+  poisoning every later run. ci.yml still calls it in three places.
+
+  This is LATENT, not currently red: ci.yml rides an older healthy cache,
+  so it passes today (verified green on the v0.1.70 release commit). It
+  goes red the moment that cache is evicted -- 7-day idle, or the 10 GB
+  repo cap. The symptom will not name the cause: GLFW configures with no
+  dev libs present, so it surfaces as a missing wayland-scanner or a
+  missing X11, shape-shifting between runs.
+
+  Fix is the one already applied to release.yml: plain `sudo apt-get
+  install`. Carried in session memory since 2026-07-22 and filed here so
+  it lives in the project's own tracking rather than only in a memory
+  file.
+  **Layman:** A build tool we already replaced in one place is still used in another, and it will start failing when a cache runs out.
+  Kind: fix.
+  Lanes: ci.
+  Source: in-session-2026-08-19 (release 0.1.70 pre-flight).
+
+- 📋 [3D_E-0619] **release.yml's header comment says there is no AppImage, and the same file builds one.**
+  The header block still reads "No AppImage yet. Follow-on: use
+  linuxdeploy + the existing packaging/vestige-editor.desktop to produce a
+  single-file AppImage" and lists only the tarball and the Windows zip as
+  what the workflow produces. The workflow has a Build AppImage step that
+  does exactly what the comment proposes as future work, and v0.1.70
+  shipped Vestige-0.1.70-x86_64.AppImage plus its .zsync alongside the
+  other two.
+
+  Trivial, and worth fixing because it is the first thing read by anyone
+  asking what the release publishes -- the README's download table was
+  written against the staging steps for this reason rather than against
+  this comment.
+  **Layman:** A comment at the top of the release script describes a limitation that no longer exists.
+  Kind: doc-fix.
+  Lanes: ci, docs.
+  Source: in-session-2026-08-19 (release 0.1.70 pre-flight).
+
 ### Path-tracer formula coverage (DOOM_Ants Workbench requests, 2026-06-16)
 
 Library-coverage and integration-path requests raised by the DOOM_Ants project
