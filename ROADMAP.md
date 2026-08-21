@@ -1605,6 +1605,17 @@ Full spatial audio pipeline with dynamic mixing, occlusion, and adaptive music. 
   1's own § 8 over-claim that the benchmark would catch a full-res gather
   -- it would not, the resolution is a hard-coded copy of godRaysConfig.
   Loop log: design doc § 13, amendment 2026-08-21.
+  Decision record (2026-08-21) — do NOT reopen. When the benchmark first
+  measured 694 us against the then-published 600 us budget, three routes were
+  put to the user: (a) correct the budget row, (b) keep 0.3-0.6 ms and make
+  the shader fit it — fewer taps, or restore the classic pre-pass so each tap
+  costs one fetch, (c) measure the GTX 1050 first. **The user chose (a).**
+
+  So the shipped shader is deliberately unchanged. Route (b) would undo
+  design § 5.2's explicit trade — two samples per tap buys the removal of a
+  full-res pre-pass — and would alter how the shafts look. Do not "optimise"
+  the god-ray shader on the strength of the 0.69 ms figure; the figure is
+  inside its corrected budget. Route (c) survives as 3D_E-0624 step (a).
 
 - ✅ [3D_E-0617] **God rays suppress themselves on every tier below High, so weak hardware gets no light shafts at all.**
   Found while investigating 3D_E-0616, and it is the reason that bullet
@@ -1663,6 +1674,17 @@ Full spatial audio pipeline with dynamic mixing, occlusion, and adaptive music. 
   gate produces a visible result -- but it is untested. 3D_E-0616's
   benchmark slice is where that stops being true, since it has to measure
   the pass actually running.
+  Still owed (2026-08-21): the VISUAL confirmation. No test covers what the
+  light shafts actually look like on Medium — the fix is verified by the
+  4-param isGodRaysActive regression test going red then green, which proves
+  the gate opens, not that the shafts render correctly.
+
+  3D_E-0616 was expected to close this as a side effect and does NOT. Its
+  benchmark measures the pass's GPU cost in an offscreen harness; it renders
+  no frame anyone can look at, and on a Medium-declaring box it skips its
+  assertion entirely. So the eyeball check survives 0616 unchanged: run the
+  app at Medium and look at the shafts. Recorded here because the brief
+  carried it as an informal leftover and it would otherwise be lost.
 
 - 📋 [3D_E-0624] **The god-ray benchmark gates the one preset that does not run god rays, and skips the two that do.**
   3D_E-0616 shipped `GodRayPassUnderBudget` and it is a real gate -- mutating
