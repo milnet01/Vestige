@@ -1,0 +1,104 @@
+#!/usr/bin/env bash
+# .githooks/pre-push — run the local CI mirror before anything reaches origin.
+#
+# CI is the authority, but finding a break there costs a red build, a fix commit
+# and a second push. scripts/local-ci.sh reproduces every job in
+# .github/workflows/ci.yml, so a green here means a green there. This hook is what
+# makes that gate automatic rather than remembered.
+#
+# DOCS-ONLY PUSHES SKIP THE GATE. Nothing in ci.yml builds, tests or lints prose:
+# a push touching only .md / LICENSE / docs/ cannot change a job's outcome, and
+# paying a full multi-config build for a typo fix is what teaches people to use
+# --no-verify — which disables the gate for the pushes that DO need it. The path
+# test below is the whole exemption; a single non-doc file in the range arms it.
+#
+# Escape hatches, in order of preference:
+#   VESTIGE_SKIP_LOCAL_CI=1 git push    # deliberate, greppable, self-documenting
+#   git push --no-verify                # bypasses every hook; last resort
+#
+# Installed by: git config core.hooksPath .githooks
+
+set -uo pipefail
+
+REPO_ROOT="$(cd "$(dirname "${BASH_SOURCE[0]}")/.." && pwd)"
+LOCAL_CI="$REPO_ROOT/scripts/local-ci.sh"
+
+if [[ "${VESTIGE_SKIP_LOCAL_CI:-0}" == "1" ]]; then
+    echo "pre-push: VESTIGE_SKIP_LOCAL_CI=1 — local CI gate skipped by request." >&2
+    exit 0
+fi
+
+if [[ ! -x "$LOCAL_CI" ]]; then
+    echo "pre-push: $LOCAL_CI missing or not executable — cannot verify. Refusing." >&2
+    echo "pre-push: use VESTIGE_SKIP_LOCAL_CI=1 to push anyway." >&2
+    exit 1
+fi
+
+# Collect the commit range(s) being pushed. git feeds pre-push one line per ref on
+# stdin: <local ref> <local sha> <remote ref> <remote sha>.
+changed_files=""
+saw_ref=0
+while read -r _local_ref local_sha _remote_ref remote_sha; do
+    # All-zero local sha = a branch deletion; nothing is being added to review.
+    [[ "$local_sha" =~ ^0+$ ]] && continue
+    saw_ref=1
+    if [[ "$remote_sha" =~ ^0+$ ]]; then
+        # New branch on the remote: diff against origin's default branch rather
+        # than listing every file in the repo's history, which would never be
+        # docs-only and so would defeat the exemption on a fresh doc branch.
+        base="$(git merge-base "$local_sha" origin/main 2>/dev/null || true)"
+        [[ -n "$base" ]] || base="$(git rev-list --max-parents=0 "$local_sha" | tail -1)"
+    else
+        base="$remote_sha"
+    fi
+    changed_files+="$(git diff --name-only "$base" "$local_sha" 2>/dev/null)"$'\n'
+done
+
+# No refs on stdin (or nothing but deletions) — nothing to gate.
+[[ $saw_ref -eq 1 ]] || exit 0
+
+# Docs-only test. Anything NOT matching these patterns arms the gate, so a new
+# file type is gated by default rather than silently exempt — the safe direction
+# for a rule whose failure mode is a skipped check.
+non_doc="$(printf '%s' "$changed_files" \
+    | grep -vE '^\s*$' \
+    | grep -vE '(\.(md|markdown|txt|rst)$|^docs/|^LICENSE|^\.gitignore$|(^|/)CODEOWNERS$)' \
+    || true)"
+
+if [[ -z "$non_doc" ]]; then
+    echo "pre-push: documentation-only push — no ci.yml job acts on these paths." >&2
+    echo "pre-push: local CI gate skipped." >&2
+    exit 0
+fi
+
+echo "pre-push: code/build paths in this push — running the full local CI mirror." >&2
+echo "pre-push: (VESTIGE_SKIP_LOCAL_CI=1 to skip; this is the gate that keeps CI green)" >&2
+echo >&2
+
+# No --quick: a partial mirror reports "NOT push-verified" and is exactly the
+# false green this hook exists to prevent.
+"$LOCAL_CI"
+rc=$?
+
+if [[ $rc -eq 0 ]]; then
+    echo >&2
+    echo "pre-push: full local CI mirror passed — pushing." >&2
+    exit 0
+fi
+
+# 2 = every stage that RAN passed, but one was SKIPped (missing msvc-wine, gitleaks,
+# actionlint, the pinned CMake) or clang-tidy was absent. That is not a verified
+# push, but blocking it would punish a box that simply lacks an optional toolchain
+# and would train people into --no-verify. Allow it, loudly, so the gap is a choice
+# rather than a surprise when CI reddens.
+if [[ $rc -eq 2 ]]; then
+    echo >&2
+    echo "pre-push: WARNING — PARTIAL mirror (see skipped stages above)." >&2
+    echo "pre-push: the un-run jobs are NOT verified; CI may still redden. Pushing." >&2
+    exit 0
+fi
+
+echo >&2
+echo "pre-push: local CI FAILED — push refused. Fix the failures above, or use" >&2
+echo "pre-push: VESTIGE_SKIP_LOCAL_CI=1 git push if you accept a red CI run." >&2
+exit 1

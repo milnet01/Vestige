@@ -11,6 +11,8 @@
 #   3. Windows MSVC build+test  ← windows-build-test  [OPT-IN via --windows]
 #   4. Tier-1 static audit      ← audit-tool-tier1  (cppcheck + clang-tidy + warnings)
 #   5. gitleaks secret scan     ← secret-scan       (full git history)
+#   6. actionlint workflow lint ← workflow-lint     (schema + shellcheck over run: blocks)
+#   7. CMake 3.21.0 compat      ← cmake-compat      (declared-minimum CMake, Release)
 #
 # Stage 3 (Windows/MSVC) is OPT-IN via --windows: it cross-compiles the engine with
 # the REAL MSVC toolchain (cl.exe + Windows SDK) under Wine via msvc-wine, then runs
@@ -25,11 +27,15 @@
 # cross-compile emulator can't run host Python and mangles their exit codes; those
 # already run natively in stages 1-2 and don't exercise MSVC-compiled code.
 #
-# NOT mirrored: the cmake-compat job (CMake 3.21 + latest). It guards downstream
-# users on old CMake; reproducing it needs a second CMake install, more than a
-# pre-push gate warrants. It still runs in CI on every push, so the gap is covered
-# remotely. If you ever need it locally, install cmake 3.21 in a venv/container and
-# run ci.yml's cmake-compat Configure+Build+Test by hand.
+# Stage 7 mirrors the cmake-compat job's `3.21.0` matrix leg — the engine's declared
+# `cmake_minimum_required`, and the leg that actually catches regressions (FetchContent
+# and policy semantics have tightened before; see CMP0169). It downloads the pinned
+# Kitware 3.21.0 binary into .ci-tools/ on first use, checksum-verified, then runs that
+# job's Configure+Build+Test verbatim. SKIPs (→ "not push-verified") when the download
+# is unavailable offline. The job's other leg, `latest`, is covered by stage 2: that
+# builds the same Release config with the host cmake, which on a current dev box IS
+# the latest release — preflight prints both versions so drift is visible rather than
+# assumed. Nothing in ci.yml is unmirrored now except the runner image itself.
 #
 # clang-tidy IS part of the Tier-1 audit and its `error`-level findings GATE CI
 # (Severity.HIGH). The audit silently DISABLES clang-tidy when no `clang-tidy` is
@@ -54,15 +60,19 @@
 #                                   # only when msvc-wine/wine is absent.
 #   scripts/local-ci.sh --no-windows # skip the Windows MSVC stage (Linux-only;
 #                                   # reports PARTIAL — not push-verified)
+#   scripts/local-ci.sh --no-cmake-compat # skip the CMake 3.21.0 stage (reports
+#                                   # PARTIAL — not push-verified)
 #   scripts/local-ci.sh --quick     # Debug build+test + gitleaks only (fast smoke,
 #                                   # NOT push-safe: skips the Tier-1 audit + Windows)
 #   scripts/local-ci.sh -j 8        # cap parallel build/test jobs (default: nproc)
 #   scripts/local-ci.sh -h          # this help
 #
-# Exit code: 0 if every run stage passed, 1 if any FAILED. The closing line only
-# reads "safe to push" after a FULL mirror (no SKIPped stage, clang-tidy present)
-# — a --quick or partial run reports "PARTIAL mirror — NOT push-verified" at
-# exit 0 so a smoke green can't be mistaken for the CI push gate. The summary
+# Exit codes: 0 = FULL mirror passed (safe to push), 1 = a stage FAILED,
+# 2 = every run stage passed but the mirror was PARTIAL (a stage SKIPped, or
+# clang-tidy was missing) — "NOT push-verified". 2 is distinct from 0 so a caller
+# can tell a real green from a smoke green without parsing stdout; .githooks/pre-push
+# uses it to warn rather than claim the push was verified. Anything non-zero from a
+# `--quick` run is expected — that mode deliberately skips the push gates. The summary
 # lists each stage's result and timing so a failing push shows everything to fix
 # in one pass (stages run independently; a build failure skips only its own
 # test step, not the other stages).
@@ -80,12 +90,16 @@ QUICK=0
 # cleanly when msvc-wine/wine is absent (→ PARTIAL, not push-verified); --no-windows
 # opts out explicitly; --quick drops it for a fast smoke.
 WINDOWS=1
+# cmake-compat is a required CI job too, so the full mirror runs its 3.21.0 leg by
+# default. It SKIPs cleanly (→ PARTIAL) when the pinned toolchain can't be fetched.
+CMAKE_COMPAT=1
 JOBS="$(nproc)"
 while [[ $# -gt 0 ]]; do
     case "$1" in
-        --quick)      QUICK=1; WINDOWS=0; shift ;;
+        --quick)      QUICK=1; WINDOWS=0; CMAKE_COMPAT=0; shift ;;
         --windows)    WINDOWS=1; shift ;;   # explicit-on (default); kept for muscle memory
         --no-windows) WINDOWS=0; shift ;;
+        --no-cmake-compat) CMAKE_COMPAT=0; shift ;;
         -j)        JOBS="${2:?-j needs a number}"; shift 2 ;;
         -h|--help) awk 'NR>1 && /^#/{sub(/^# ?/,""); print; next} NR>1{exit}' "$0"; exit 0 ;;
         *) echo "unknown argument: $1 (try -h)" >&2; exit 2 ;;
@@ -360,6 +374,81 @@ else
     record "actionlint" fail $((SECONDS - start))
 fi
 
+# --- stage 7: CMake 3.21.0 compat build + test ------------------------------
+# Mirrors ci.yml's `cmake-compat` job at its `3.21.0` matrix leg — the version in
+# this repo's `cmake_minimum_required`. Downstream users on the declared minimum
+# are exactly who this guards, and FetchContent/policy semantics have tightened
+# under us before (CMP0169), so a configure that works on cmake 4.x says nothing
+# about 3.21. The toolchain is a pinned, checksum-verified Kitware binary kept in
+# .ci-tools/ (gitignored) and downloaded once; a box with no network SKIPs the
+# stage rather than silently passing. The job's `latest` leg needs no separate
+# stage — stage 2 already builds that same Release config with the host cmake.
+CMAKE_COMPAT_VERSION="3.21.0"
+CMAKE_COMPAT_SHA256="d54ef6909f519740bc85cec07ff54574cd1e061f9f17357d9ace69f61c6291ce"
+
+# Print the path to the pinned cmake, fetching it on first use. Empty output +
+# non-zero return means "unavailable" — the caller SKIPs.
+ensure_cmake_compat() {
+    local root="$REPO_ROOT/.ci-tools/cmake-$CMAKE_COMPAT_VERSION"
+    local bin="$root/bin/cmake"
+    if [[ -x "$bin" ]]; then printf '%s\n' "$bin"; return 0; fi
+
+    local asset="cmake-$CMAKE_COMPAT_VERSION-linux-x86_64.tar.gz"
+    local url="https://github.com/Kitware/CMake/releases/download/v$CMAKE_COMPAT_VERSION/$asset"
+    local tmp; tmp="$(mktemp -d)" || return 1
+    # A failed mktemp would leave tmp empty and send the download to /, so treat
+    # it as unavailable rather than writing outside the scratch dir.
+    [[ -n "$tmp" && -d "$tmp" ]] || return 1
+    # shellcheck disable=SC2064  # expand tmp NOW: it is a local, and is already
+    # out of scope by the time the RETURN trap fires.
+    trap "rm -rf '$tmp'" RETURN
+    echo "  fetching pinned CMake $CMAKE_COMPAT_VERSION (once) ..." >&2
+    if ! curl -fsSL --retry 3 -o "$tmp/cmake.tar.gz" "$url"; then
+        echo "  download failed (offline?)" >&2; return 1
+    fi
+    # Checksum before extract: an unverified toolchain is a supply-chain hole, and
+    # this follows the pinned-version+sha256 pattern ci.yml uses for actionlint.
+    if ! echo "$CMAKE_COMPAT_SHA256  $tmp/cmake.tar.gz" | sha256sum -c - >/dev/null 2>&1; then
+        echo "  !! sha256 mismatch on $asset — refusing to use it" >&2; return 1
+    fi
+    mkdir -p "$root"
+    tar -xzf "$tmp/cmake.tar.gz" -C "$root" --strip-components=1 || return 1
+    [[ -x "$bin" ]] || return 1
+    printf '%s\n' "$bin"
+}
+
+if [[ $CMAKE_COMPAT -eq 1 ]]; then
+    start=$SECONDS
+    banner "CMake $CMAKE_COMPAT_VERSION compat — configure + build + test (Release)"
+    compat_label="CMake $CMAKE_COMPAT_VERSION compat"
+    if ! compat_cmake="$(ensure_cmake_compat)"; then
+        echo "  pinned CMake $CMAKE_COMPAT_VERSION unavailable — stage SKIPped." >&2
+        record "$compat_label" skip 0
+    else
+        "$compat_cmake" --version | head -1
+        # Same flags as ci.yml's cmake-compat Configure step. Its own build dir so
+        # the 3.21 cache can't collide with the host-cmake stages' build trees.
+        if ! "$compat_cmake" -S . -B build-cmake-compat -G Ninja \
+                -DCMAKE_BUILD_TYPE=Release \
+                -DCMAKE_C_COMPILER_LAUNCHER=ccache \
+                -DCMAKE_CXX_COMPILER_LAUNCHER=ccache \
+                -DCMAKE_EXPORT_COMPILE_COMMANDS=ON \
+                -DVESTIGE_FETCH_ASSETS=OFF; then
+            record "$compat_label" fail $((SECONDS - start))
+        elif ! "$compat_cmake" --build build-cmake-compat -j "$JOBS"; then
+            record "$compat_label" fail $((SECONDS - start))
+        # 3.21's own ctest, not the host's — actions-setup-cmake puts the
+        # matrix version's whole bin/ on PATH in CI, so ctest matches too.
+        elif ! "${GL_WRAP[@]}" "${compat_cmake%/cmake}/ctest" --test-dir build-cmake-compat --output-on-failure -j "$JOBS"; then
+            record "$compat_label" fail $((SECONDS - start))
+        else
+            record "$compat_label" ok $((SECONDS - start))
+        fi
+    fi
+else
+    record "CMake $CMAKE_COMPAT_VERSION compat" skip 0
+fi
+
 # --- summary ----------------------------------------------------------------
 echo
 banner "local-ci summary"
@@ -371,7 +460,7 @@ for i in "${!STAGE_NAMES[@]}"; do
         fail) mark="FAIL"; fails=$((fails + 1)) ;;
         skip) mark="SKIP"; skipped_stages+=("${STAGE_NAMES[$i]}") ;;
     esac
-    printf '  %-22s %-4s  %3ds\n' "${STAGE_NAMES[$i]}" "$mark" "${STAGE_TIMES[$i]}"
+    printf '  %-24s %-4s  %3ds\n' "${STAGE_NAMES[$i]}" "$mark" "${STAGE_TIMES[$i]}"
 done
 hr
 if [[ $fails -gt 0 ]]; then
@@ -389,9 +478,10 @@ if [[ ${#skipped_stages[@]} -gt 0 || $CLANG_TIDY_OK -eq 0 ]]; then
     [[ ${#skipped_stages[@]} -gt 0 ]] && echo "  skipped: ${skipped_stages[*]}"
     [[ $CLANG_TIDY_OK -eq 0 ]] && echo "  clang-tidy unavailable — audit ran without it."
     echo "  Run ./scripts/local-ci.sh (no --quick, full toolchain) before pushing."
-    exit 0
+    exit 2
 fi
 # Reaching here means no stage FAILED and none were SKIPped — so Windows/MSVC
 # actually ran and passed (a skip would have taken the PARTIAL branch above).
-echo "Full CI mirror incl. Windows/MSVC passed — safe to push. (cmake-compat is still CI-only.)"
+echo "Full CI mirror passed (Linux Debug+Release, Windows/MSVC, Tier-1 audit, gitleaks,"
+echo "actionlint, CMake $CMAKE_COMPAT_VERSION compat) — safe to push."
 exit 0

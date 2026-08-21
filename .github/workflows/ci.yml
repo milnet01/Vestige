@@ -285,6 +285,10 @@ jobs:
   # build-and-test (no audit), to keep the cost bounded. PRE_OPEN_SOURCE_AUDIT.md
   # §8 follow-up: the engine's external/CMakeLists.txt SOURCE_SUBDIR pattern
   # depends on FetchContent semantics that have tightened before (CMP0169).
+  #
+  # Mirrored locally by scripts/local-ci.sh stage 7, which runs the `3.21.0`
+  # leg against a pinned Kitware binary. The `latest` leg is covered there by
+  # the Release stage's host cmake, so a green local run reproduces both.
   cmake-compat:
     name: CMake ${{ matrix.cmake }} (Release)
     runs-on: ubuntu-24.04

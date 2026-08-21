@@ -23,6 +23,35 @@ may change any interface without notice.
 
 ## [Unreleased]
 
+### 2026-08-21 Fixed — local-ci.sh now mirrors every CI job, and a pre-push hook runs it (3D_E-0622)
+
+Two gaps sat between the local mirror and the pipeline it claims to
+reproduce: one job had no local stage, and nothing made the mirror run
+before a push at all.
+
+The `cmake-compat` job was the uncovered one. Its deferral was
+deliberate and recorded -- a second CMake install was judged more than
+a pre-push gate warranted -- but that job guards this repo's declared
+`cmake_minimum_required(VERSION 3.21)`, and FetchContent and policy
+semantics have tightened here before (CMP0169). A configure that
+succeeds on a host cmake 4.x is not evidence about 3.21.
+
+There were also no git hooks in this repository at all, and none
+configured globally, so running the mirror was a habit rather than a
+gate -- and a habit is what fails on the push that needed it.
+
+- **Mirror the cmake-compat job's 3.21.0 leg as local-ci stage 7**
+  Downloads the pinned Kitware 3.21.0 binary into the gitignored .ci-tools/ on first use, sha256-verified before extraction, then runs that job's Configure+Build+Test verbatim with its own build dir and its own ctest. The job's other matrix leg, latest, needs no stage: stage 2 already builds that Release config with the host cmake, and preflight prints both versions so the assumption is visible rather than implied. Skips cleanly when the download is unavailable offline.
+
+- **Add .githooks/pre-push, which runs the full mirror before anything reaches origin**
+  Enable per clone with `git config core.hooksPath .githooks`. Documentation-only pushes skip it: no job in ci.yml builds, tests or lints prose, so a push touching only *.md, docs/, LICENSE, .gitignore or CODEOWNERS cannot change a CI outcome, and charging it a multi-config build is what teaches people to reach for --no-verify. A single unrecognised path arms the gate, so a new file type is gated by default rather than silently exempt. VESTIGE_SKIP_LOCAL_CI=1 is the greppable bypass; --no-verify remains the blunt one.
+
+- **Give a PARTIAL local-ci mirror its own exit code (2)**
+  A skipped stage or a missing clang-tidy was already reported as "NOT push-verified" in prose, but it exited 0, so a caller could not tell it from a verified green -- and the new hook is exactly such a caller. It now warns and allows on 2 rather than blocking, since a box that merely lacks msvc-wine should not be stuck. No script branched on this exit code, so nothing downstream changed.
+
+- **Correct the local-ci.sh header, which listed five stages when six existed**
+  actionlint had shipped as stage 6 without being added to the list, while ci.yml's workflow-lint job cites "local-ci.sh stage 6" by number. The header now lists all seven and states that the only remaining divergence from CI is the runner image -- local static-analysis tools are newer than ubuntu-24.04's, so a clean local audit stays a strong signal rather than a guarantee.
+
 ### 2026-08-19 Fixed — CI no longer depends on a package-install action that installs nothing (3D_E-0618, 3D_E-0619)
 
 release.yml was moved off awalsh128/cache-apt-pkgs-action on 2026-07-22

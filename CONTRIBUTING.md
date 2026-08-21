@@ -144,16 +144,67 @@ audit-tool code must also bump the tool's `VERSION` and `CHANGELOG.md`.
 ### One command for the whole CI gate
 
 To run everything CI runs — both build configs, the full test suite, the
-Tier-1 audit, and the gitleaks secret scan — in a single pass before pushing:
+Tier-1 audit, the gitleaks secret scan, the actionlint workflow lint and the
+declared-minimum CMake build — in a single pass before pushing:
 
 ```bash
-scripts/local-ci.sh           # full mirror; exits non-zero if any stage fails
-scripts/local-ci.sh --quick   # Debug build+test + gitleaks only (fast smoke)
+scripts/local-ci.sh                    # full mirror — the push gate
+scripts/local-ci.sh --quick            # Debug build+test + gitleaks (fast smoke)
+scripts/local-ci.sh --no-windows       # skip the MSVC-under-Wine stage
+scripts/local-ci.sh --no-cmake-compat  # skip the CMake 3.21.0 stage
 ```
 
-A clean run means a green push. It mirrors `.github/workflows/ci.yml` except
-the `cmake-compat` job (which needs a separate CMake 3.21 install); CI still
-runs that one remotely.
+Every job in `.github/workflows/ci.yml` now has a local stage, so a clean run
+means a green push:
+
+| local-ci stage | ci.yml job |
+|---|---|
+| Debug build+test | `linux-build-test (Debug)` |
+| Release build+test | `linux-build-test (Release)` |
+| Windows MSVC build+test | `windows-build-test` |
+| Tier-1 audit | `audit-tool-tier1` |
+| gitleaks | `secret-scan` |
+| actionlint | `workflow-lint` |
+| CMake 3.21.0 compat | `cmake-compat` (`3.21.0` leg) |
+
+The `cmake-compat` job's other leg, `latest`, needs no stage of its own — the
+Release stage builds that same config with your host CMake. The pinned 3.21.0
+toolchain is downloaded once, checksum-verified, into the gitignored
+`.ci-tools/`.
+
+**Exit codes.** `0` = full mirror passed (safe to push). `1` = a stage failed.
+`2` = every stage that ran passed, but one was **skipped** (a missing optional
+tool) or clang-tidy was absent — a *partial* mirror, which is not a verified
+push. The distinction matters: a partial green is what once let three
+`containerOutOfBounds` pushes through.
+
+### The pre-push hook
+
+`.githooks/pre-push` runs the full mirror automatically before anything reaches
+`origin`, so the gate is enforced rather than remembered. Enable it once per
+clone:
+
+```bash
+git config core.hooksPath .githooks
+```
+
+**Documentation-only pushes skip it.** No job in `ci.yml` builds, tests or lints
+prose, so a push touching only `*.md`, `docs/`, `LICENSE`, `.gitignore` or
+`CODEOWNERS` cannot change a CI outcome, and charging it a multi-config build is
+what teaches people to reach for `--no-verify`. A single non-doc path in the
+push arms the gate. Anything the pattern does not recognise is treated as code —
+a new file type is gated by default rather than silently exempt.
+
+To bypass deliberately, prefer the greppable form over disabling all hooks:
+
+```bash
+VESTIGE_SKIP_LOCAL_CI=1 git push   # skips this gate only
+git push --no-verify               # skips every hook; last resort
+```
+
+A partial mirror (exit 2) does **not** block the push — a box simply lacking
+msvc-wine should not be stuck — but the hook says so loudly, so the unverified
+gap is a choice rather than a surprise when CI reddens.
 
 If the audit tool flags something in your change that you believe is a
 false positive, you can suppress it via `.audit_suppress` (with

@@ -298,6 +298,50 @@ Source of truth: [`docs/research/self_learning_roadmap.md`](docs/research/self_l
   future session should read them rather than re-deriving them from these
   run numbers.
 
+- ✅ [3D_E-0622] **local-ci.sh mirrored six of the seven CI jobs and nothing made it run before a push.**
+  Two gaps, one in coverage and one in enforcement, found while checking
+  the red run 32299868963.
+
+  Coverage: the `cmake-compat` job had no local stage. Its own header
+  called this a deliberate deferral -- "reproducing needs a second CMake
+  install, more than a pre-push gate warrants" -- but that job guards
+  `cmake_minimum_required(VERSION 3.21)`, and the host cmake here is
+  4.4.2. FetchContent and policy semantics have tightened under this repo
+  before (CMP0169), so a configure that succeeds on 4.x is not evidence
+  about 3.21. Stage 7 now downloads the pinned Kitware 3.21.0 binary into
+  the gitignored `.ci-tools/`, checksum-verified, and runs that job's
+  Configure+Build+Test verbatim. Its other matrix leg, `latest`, needs no
+  stage: stage 2 already builds that Release config with the host cmake.
+  The script header also listed five stages when six existed -- actionlint
+  had shipped as stage 6 and was never added to the list, while ci.yml's
+  workflow-lint job cited "local-ci.sh stage 6" by number.
+
+  Enforcement: there were no git hooks at all -- no repo `core.hooksPath`,
+  no global one, no `init.templateDir`. Running the mirror was a habit, and
+  the habit is what fails on the push that needed it. `.githooks/pre-push`
+  now runs it, with a documentation-only exemption: nothing in ci.yml
+  builds, tests or lints prose, so a push touching only `*.md`, `docs/`,
+  `LICENSE`, `.gitignore` or `CODEOWNERS` cannot change a job outcome, and
+  charging it a multi-config build is what teaches people to reach for
+  `--no-verify`. Unrecognised paths are treated as code, so a new file type
+  is gated by default.
+
+  `local-ci.sh` now exits 2 for a PARTIAL mirror where it exited 0 before.
+  A skipped stage was already reported as "NOT push-verified" in prose, but
+  a caller could not distinguish it from a real green -- and the hook is
+  exactly such a caller. It warns and allows on 2 rather than blocking,
+  because a box that merely lacks msvc-wine should not be stuck. No script
+  branched on this script's exit code, so nothing downstream changed.
+
+  Not closed by this: the runner image itself. Local static-analysis tools
+  are newer than ubuntu-24.04's apt versions, so a clean local audit stays
+  a strong signal rather than a guarantee. That caveat was already in the
+  script header and is unchanged.
+  **Layman:** The pre-push check now covers every test GitHub runs, and it runs itself automatically -- except for pushes that only change documents.
+  Kind: fix.
+  Lanes: ci.
+  Source: user-request-2026-08-21 (CI status check).
+
 ### Path-tracer formula coverage (DOOM_Ants Workbench requests, 2026-06-16)
 
 Library-coverage and integration-path requests raised by the DOOM_Ants project
