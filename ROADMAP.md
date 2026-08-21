@@ -1686,7 +1686,7 @@ Full spatial audio pipeline with dynamic mixing, occlusion, and adaptive music. 
   app at Medium and look at the shafts. Recorded here because the brief
   carried it as an informal leftover and it would otherwise be lost.
 
-- 📋 [3D_E-0624] **The god-ray benchmark gates the one preset that does not run god rays, and skips the two that do.**
+- ✅ [3D_E-0624] **The god-ray benchmark gates the one preset that does not run god rays, and skips the two that do.**
   3D_E-0616 shipped `GodRayPassUnderBudget` and it is a real gate -- mutating
   NUM_SAMPLES to 128 measures 1.21 ms against the 1.2 ms budget and goes red.
   This bullet is the half it could not close.
@@ -1785,6 +1785,141 @@ Full spatial audio pipeline with dynamic mixing, occlusion, and adaptive music. 
   authoring edit that changes direction, so it RE-ARMS CLAUDE.md rule 14 on
   that document. 3D_E-0616's cap was reached by a run, and a run's cap does
   not exempt a later authoring edit.
+  Step (c) done (2026-08-21) — the derived budget and the preset-aware gate.
+
+  No per-pass frame breakdown for Low or Medium exists anywhere in the
+  project, and none was invented. The only per-pass breakdown is the
+  scalability strategy section 3's, which is RX 6600, Debug+ASan, and has no
+  fog row at all. So the budget is an allocation DECISION, and design
+  section 8 now states it as one: 16.6 ms per frame at every tier (strategy
+  section 2, a citation), of which the fog stack gets 2.0 ms / about 12% (a
+  re-scoping of section 1's RX 6600 figure to a share, decided there), less
+  the three always-on analytic ceilings, 0.05 + 0.1 + 0.1 = 0.25 ms.
+
+    2.0 - 0.25 = 1.75 ms, published as design section 8's Low/Med tier row.
+
+  That chain would have produced 1.75 ms before any weak GPU existed, which
+  is what makes the gate capable of failing. Note the subtrahend: section 8's
+  table had MERGED research section 7's distance and height rows and kept only
+  the height row's budget, under-counting the always-on layers by 0.05 ms
+  since before this bullet. Found by the cold-eyes gate, not by me.
+
+  Benchmark. tests/test_fog_benchmark.cpp now selects three ways on
+  VESTIGE_QUALITY_PRESET: Low/Medium assert 1750 us at that preset's own
+  renderScale; High/Ultra (and unset/unparsed, which resolve to High) assert
+  the 1200 us RX 6600 reference row at renderScale 1.0; Custom reports its
+  median at 1.0 so the number stays comparable with the 0.69 and 3.1 ms
+  figures. budgetsApplyToThisMachine is UNTOUCHED and keeps its hardware-class
+  meaning -- the tier branch runs ahead of it, so the volumetric and GI gates
+  are unmoved. renderScale is read back from the shipped applyQualityPreset
+  rather than copied, so a preset-table change moves the benchmark with it.
+  Every scene-res object scales, sources included: this pass is
+  texture-bandwidth-bound on what the gather SAMPLES, so timing a scaled
+  gather against 1080p sources would carry a working set no tier draws.
+
+  CORRECTION to this bullet's step (a) note. The "19% of a 16.7 ms frame"
+  figure is measured at renderScale 1.0, which is High's resolution -- and
+  High is one of the two presets that never run this pass. Tier-1 design
+  section 3.3 scales the god-ray buffers with renderScale, so the real
+  in-game cost is about 8% at Low and 10% at Medium. The 3.1 ms number is
+  right; the frame share drawn from it was not.
+
+  Result: MEASURED, and it does not fit comfortably. Six runs, GTX 1050,
+  Medium: 1696.0 / 1704.8 / 1704.8 / 1728.2 / 1806.5 / 1952.3 us, median
+  1716.5 against 1750 -- inside by 2%, over on 2 of 6. Filed as 3D_E-0625
+  (no headroom on the tier it serves) and 3D_E-0626 (the harness cannot
+  reproduce its own verdict: 526-1097 us on the RX 6600 at one configuration,
+  driven by GPU clock state alone). The budget is NOT to be raised to absorb
+  this.
+
+  Gated under CLAUDE.md rule 14 -- an authoring edit re-arms the gate even
+  though 3D_E-0616 reached this document's cap, because a cap bounds a run
+  and not the document. Two cold loops, 16 verified findings, 16 fixed, 0
+  dismissed, cap reached. Both lanes converged independently on five of loop
+  1's eight. Loop log: design section 13, amendment 2026-08-21 (3D_E-0624).
+
+  Also fixed, pre-existing: Tier-1 design section 4.1 still quoted the
+  0.3-0.6 ms god-ray figure 3D_E-0616 superseded, while naming section 8 as
+  its owner -- a live 3x contradiction that would have produced a 600 us
+  constant. The figure is deleted rather than updated; that table now points
+  at section 8's row, because a copy that has drifted twice will drift again.
+
+  NOT verified: the tier gate has never been seen green-then-red across a
+  real regression at Low/Med, because 3D_E-0626 means a 2% move is below the
+  harness's noise. The proof here is the derivation and the selection
+  contract, not a demonstrated catch.
+
+- 📋 [3D_E-0625] **The god-ray pass has no headroom on the tier it exists for.**
+  Measured 2026-08-21 by 3D_E-0624 step (c)'s new tier gate. Six runs on
+  the GTX 1050 at the Medium preset (renderScale 0.75, 720x405 gather +
+  1440x810 combine), via scripts/wintest.sh:
+
+    1696.0 . 1704.8 . 1704.8 . 1728.2 . 1806.5 . 1952.3 us
+
+  Median 1716.5 us against design section 8's 1750 us Low/Med tier budget --
+  inside by 2%, and over it on 2 of the 6 runs.
+
+  Why that is a problem rather than a pass. The 1750 us budget is already
+  10.5% of a 16.6 ms frame, and it is spent on ATMOSPHERE, on the tier that
+  exists precisely because the hardware is weak. A pass landing within 2% of
+  that ceiling has nothing left for the scene around it, and the tier's whole
+  purpose is to buy headroom back.
+
+  The remedy is pre-authorised and its shape is already decided: a CHEAPER
+  god-ray configuration at Low/Med specifically -- fewer taps, or a
+  quarter-res gather. NOT a raised budget: the budget is the only part of
+  this derived rather than measured (design section 8, "where 1.75 ms comes
+  from"), so fitting it to the measurement is the exact failure 3D_E-0624
+  was filed to prevent.
+
+  Two constraints on whoever takes this. A resolution change MUST move the
+  design section 8 budget row with it -- that row's Technique cell is the
+  cost model and resolution is an input to it, not just tap count. And this
+  is NOT the do-not-reopen ruling under 3D_E-0616: that one covers the
+  RX 6600 figure sitting inside ITS budget and says so explicitly.
+
+  Blocked-by: 3D_E-0626. A cheaper config has to be shown to help, and the
+  current harness cannot resolve a 2% move.
+  **Layman:** On lower graphics settings the sunbeam effect uses up almost its entire time allowance, leaving nothing spare for the rest of the scene.
+  Kind: perf.
+  Lanes: renderer, fog, perf.
+  Source: in-session-2026-08-21 (3D_E-0624 step (c) measurement).
+
+- 📋 [3D_E-0626] **The fog GPU benchmark cannot reproduce its own verdict.**
+  Found 2026-08-21 while measuring 3D_E-0624 step (c). Same binary, same
+  box, same configuration, same preset -- the median moves far more than the
+  thing being gated.
+
+  GTX 1050, Medium, tier gate: red on 2 runs of 6 (1952.3 and 1806.5 us)
+  and green on 4 (1696.0 to 1728.2), against a 1750 us budget.
+
+  RX 6600, Custom, renderScale 1.0: 526 us immediately after other GPU
+  tests had run, ~1000 us from cold, and 812-895 us across six back-to-back
+  runs. That is a 2x span driven by nothing but GPU clock state. Note the
+  warm-regime median (~850 us) is also 23% above the 690 us design section 8
+  records for the same configuration -- so the published figure is itself a
+  single sample from one regime.
+
+  Consequences. A gate that red-flags a third of its runs cannot adjudicate
+  a 2% margin, so 3D_E-0625's verdict is provisional and any "did the fix
+  help" comparison is currently unanswerable. Every per-pass figure in
+  design section 8 and section 11.2 is a single sample with no error bar,
+  and the volumetric and GI gates share this harness.
+
+  Likely direction, not yet investigated: the timing loop is 3 warmup + 8
+  timed frames taking a median of 8, which on a desktop GPU that idles at
+  low clocks is too short to reach a steady clock state. More warmup, more
+  samples, and reporting a spread rather than a bare median would all help.
+  What the gate asserts on should probably be a high percentile across a
+  longer run rather than the median of eight.
+
+  Already done here, and not the fix: the god-ray test now prints its median
+  on every path (it was silent on a passing EXPECT_LE), which is what made
+  the flap visible at all.
+  **Layman:** The speed check gives different answers on different runs, so it cannot be trusted to say whether something got slower.
+  Kind: fix.
+  Lanes: tests, perf.
+  Source: in-session-2026-08-21 (3D_E-0624 step (c) measurement).
 
 ### Fog, Mist, and Volumetric Lighting
 - [x] Distance fog (linear, exponential, exponential-squared) — pure-function primitives shipped in `engine/renderer/fog.{h,cpp}`. `FogMode` enum (`None` / `Linear` / `Exponential` / `ExponentialSquared`) + `FogParams` (linear-RGB colour, start, end, density). `computeFogFactor(mode, params, distance)` implements the three canonical forms: Linear `(end-d)/(end-start)`, GL_EXP `exp(-density·d)`, GL_EXP2 `exp(-(density·d)²)` — returns *surface visibility* in [0,1], matches OpenGL Red Book §9 / D3D9 fog-formulas. Guards every degenerate param (zero span, negative density, sub-camera distance) with pass-through behaviour. 15 unit tests cover knees, monotonicity, and edge cases.

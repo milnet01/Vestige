@@ -179,8 +179,10 @@ the render-scale value:
 
 **What the `off` cells mean for light shafts (added 2026-08-19, 3D_E-0617).** Dropping vol-fog at
 Low/Medium does *not* leave those tiers with no light shafts: the fog design's §8 budget table
-assigns them the **screen-space god rays** row (0.3–0.6 ms), which the renderer runs precisely when
-the froxel pass does not. That fallback is the fog design's to specify and this table's to trigger —
+assigns them the **screen-space god rays** *Low/Med tier budget* row, which the renderer runs
+precisely when the froxel pass does not. That row's figure is deliberately not restated here — it
+has been corrected twice (3D_E-0616, 3D_E-0624) and a copy in this table would drift again.
+That fallback is the fog design's to specify and this table's to trigger —
 recorded here because this doc named the trigger and never the fallback, and a renderer gate
 consequently suppressed both techniques below High with no document contradicted.
 

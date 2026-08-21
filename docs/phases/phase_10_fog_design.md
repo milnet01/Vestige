@@ -263,26 +263,66 @@ Budgets (research §7), enforced by a benchmark harness:
 
 | Layer | Budget | Technique |
 |-------|--------|-----------|
-| Distance + height (shipped) | < 0.1 ms | single `exp` + divide per pixel |
+| Distance fog (shipped) | < 0.05 ms | one `exp` + one mad per pixel |
+| Height fog, exponential analytic (shipped) | < 0.1 ms | one `exp` + one divide per pixel |
 | Sun inscatter (shipped) | < 0.1 ms | single `pow` per pixel |
-| God rays, screen-space (Low/Med) | **0.6–1.2 ms** | 64–128 taps × **2** samples each |
+| God rays, screen-space — RX 6600 reference, `renderScale` 1.0 | **0.6–1.2 ms** | ½-res gather (¼ the pixels) + full-res combine, 64–128 taps × **2** samples each |
+| God rays, screen-space — **Low/Med tier budget** | **1.75 ms** | the same two draws, with every scene-res object at that tier's `renderScale` (3D_E-0624) |
 | Volumetric, 160×90×64, no temporal (High) | **~1.2 ms** | 3 compute dispatches, HG phase, CSM per froxel |
-| **Stack total, High preset** | **~1.4 ms** | inside 2.0 ms budget |
+| **Stack total, High preset** | **~1.45 ms** | the three always-on layers + volumetric; inside 2.0 ms |
+| **Stack total, Low/Med preset** | **≤ 2.0 ms** | the three always-on layers + the 1.75 ms row; no froxel pass at these tiers |
 
 **Why the god-ray row is double research § 7's figure (3D_E-0616).** Research § 7 estimates 0.3–0.6 ms for "64–128 samples × **one tap each**" — the classic Mitchell shape, where a separate pre-pass builds the occlusion buffer and each gather tap then costs one texture sample. Vestige does not ship that shape: § 5.2 deliberately folds the light buffer *into* the gather ("one pass, not a separate masking pass"), so every tap costs **two** samples (depth `texelFetch` + scene fetch), as § 5.8 also states. The imported figure therefore described a different shader than the one that shipped, and doubling it is what makes the row describe this one. The trade is intentional — double the per-tap cost buys the removal of a full-res pre-pass — and it is not a regression to fix.
 
+**The ×2 is one of three shape differences, and the band's real warrant is the measurement.** Research § 7's figure is a *full-resolution* per-frame cost; the shipped pass gathers at **half** res (¼ the pixels, § 5.4 / § 5.8) and adds a full-res combine draw that the research figure does not cost at all. Those two push in the opposite direction to the ×2, so the arithmetic does not in fact reconcile 0.3–0.6 to 0.6–1.2 — what anchors the band is empirical: 0.69 ms measured on the shipped pass, and 1.21 ms when `NUM_SAMPLES` is mutated to its 128-tap ceiling. **Read the Technique cells as the cost model: resolution is an input, not just tap count.** A change to `godRaysConfig`'s ½ — including the quarter-res gather this section names as a remedy below — moves the cost without moving a tap count, and must move the budget with it.
+
 Measured on the RX 6600 at 1080p, the shipped 64-tap variant medians **0.69 ms** with the whole frame sky (every tap pays both samples — the most expensive frame the shader can be handed, and a real one, since the pass only runs with the sun on screen) and **0.48–0.55 ms** with no sky in view (the depth sample alone). Harness sync overhead is 10.6 µs, so these are GPU cost and not measurement noise.
 
-Both sit inside the corrected band, but note the all-sky figure is ~15% above the band's *64-tap end*. The residual is optimism in research § 7's own extrapolation, independent of the sample-count correction: it predicted 0.3 ms for the one-sample case that measures 0.48–0.55 ms. That extrapolation scaled Hillaire's PS4 compute figures by FP32 throughput, and this pass is texture-bandwidth-bound, not compute-bound. **The benchmark therefore gates the band's upper bound (1.2 ms), not its 64-tap end** — the same choice the volumetric gate makes in gating the 2.0 ms stack total rather than the ~1.2 ms pass figure. It catches a raised tap count: mutating `NUM_SAMPLES` to its 128-tap ceiling measures **1.21 ms** and goes red (verified, 3D_E-0616). That works because the benchmark loads `god_rays.frag.glsl` from disk, so the shader is the shipped one. **The gather RESOLUTION is not gated**: the test hard-codes `1920/2 × 1080/2` as a copy of `renderer.cpp`'s `godRaysConfig` rather than reading it, so a `godRaysConfig` changed to full-res would still be timed at half-res and stay green. That is the same two-copy drift shape as 3D_E-0617 one layer up, recorded here because a benchmark that silently misses a regression is worse than no benchmark.
+Both sit inside the corrected band, but note the all-sky figure is ~15% above the band's *64-tap end*. The residual is optimism in research § 7's own extrapolation, independent of the sample-count correction: it predicted 0.3 ms for the one-sample case that measures 0.48–0.55 ms. That extrapolation scaled Hillaire's PS4 compute figures by FP32 throughput, and this pass is texture-bandwidth-bound, not compute-bound. **The benchmark therefore gates the band's upper bound (1.2 ms), not its 64-tap end** — the same choice the volumetric gate makes in gating the 2.0 ms stack total rather than the ~1.2 ms pass figure. It catches a raised tap count: mutating `NUM_SAMPLES` to its 128-tap ceiling measures **1.21 ms** and goes red (verified, 3D_E-0616). That works because the benchmark loads `god_rays.frag.glsl` from disk, so the shader is the shipped one. This row is timed at `renderScale` 1.0; what the gather resolution is and is not pinned against is covered once below, under *What the god-ray gate still does NOT cover*.
 
-**What the god-ray gate does NOT cover.** Like the two budgets above it, this one is an RX 6600 figure, so the benchmark asserts it only where `VESTIGE_QUALITY_PRESET` says the box is that hardware class, and elsewhere reports the median instead. That is the *opposite* of the preset range which actually runs the pass: god rays run only where the froxel pass does not, i.e. Low and Medium. **So the tiers this technique serves get a measurement and not a gate**, and closing that needs a weak-GPU reference point — a second data point, not a number fitted to the one box it would police. Recorded here rather than papered over, because a benchmark that skips looks identical to one that passes (3D_E-0616).
+**The Low/Med tier budget, and where 1.75 ms comes from (3D_E-0624).** The reference row above it is an RX 6600 figure at `renderScale` 1.0 — which is *High's* resolution, and High and Ultra are the two presets that never run this pass (both carry `heavyPost = true`, `settings_apply.cpp`). That is the right number for a dev-rig regression gate and the wrong number for the tiers the technique actually serves. The tier budget is derived from the frame instead. **Two of its three inputs are re-scoped here, and the re-scoping is a decision taken by this section rather than a citation** — § 1 and research § 7 both state their figures for the RX 6600, and neither grants a weak tier anything:
+
+- **The frame budget is 16.6 ms at every tier**, and this one is a citation, not a decision: the scalability strategy § 2 states it identically for all four hardware targets. A weak box earns 60 FPS by rendering less, never by being allowed a longer frame.
+- **The fog stack's 2.0 ms is re-scoped from a figure to a share.** § 1 pins it "on RX 6600 at 1080p … at the High preset". What carries to other tiers is not that measurement but the *share of a 60 FPS frame* the project is willing to spend on air — 2.0 / 16.6 ≈ **12%**, at every tier. That is a decision recorded here; § 1 does not make it and should not be read as authority for it.
+- **The three always-on layers are read as ceilings, not as measurements** — `< 0.05 + < 0.1 + < 0.1 = < 0.25 ms`. They are the only rows in the table written with `<` rather than `~` or a band, and what they cost is one `exp` + mad, one `exp` + divide and one `pow` per pixel folded into the composite — roughly three orders of magnitude less work than the gather's 64 taps × 2 fetches, so the ceiling holds on a weak part for the same reason it holds on a strong one. **None has been measured on weak hardware.** If they breach 0.25 ms combined, the row that fails is the *stack total*, not the god-ray row, and that measurement is owed separately.
+- Low and Medium run **no froxel pass at all** (Tier-1 design § 4.1 / § 4.2, implemented in `settings_apply.cpp`), so the god-ray pass is the only heavy consumer of the remainder.
+
+**2.0 − 0.25 = 1.75 ms.** No step in that chain is a measurement of *this pass* on any box, which is the property that matters: the number would have read 1.75 ms before a weak GPU was ever measured, so a measurement can now *fail* it. A budget fitted to the machine it polices can only ever pass — the objection that made this bullet's predecessor vacuous, and it applies to a budget fitted to a GTX 1050 exactly as it applied to one fitted to an RX 6600.
+
+**Every scene-res object scales, not merely the two draws.** Tier-1 design § 3.3 puts the god-ray buffers among those that scale — they are "½ of the internal res", and internal res is the play-mode size × `renderScale`. The timed region covers two draws: pass A gathers at half the internal res, pass B combines additively at the **full** internal res (§ 5.4). But this pass is texture-bandwidth-bound (see above), and its bandwidth is dominated by what the gather *samples*, not by what it writes — 64 taps, each a depth `texelFetch` plus a scene fetch. In the shipped frame those sources scale too: `resizeRenderTarget` resizes the resolve-depth, resolve and TAA-scene targets to the already-scaled internal res, and the combine viewport is that same res. **So a faithful tier timing scales all of it — gather target, combine target, and the depth and scene source textures the gather reads.** Timing a 633×356 gather against 1080p sources would leave a working set 2.3× larger than any tier draws, and inflate the result against a budget derived for the scaled one. Low renders at 0.66 and Medium at 0.75 (§ 4.1, `settings_apply.cpp`), so the scaled pass carries **0.436×** and **0.563×** the pixels of the `renderScale` 1.0 arrangement the reference gate times.
+
+**What this predicts — a prediction, and a weak one.** The GTX 1050 measures **3.1 ms** for the two draws at `renderScale` 1.0 with 1080p sources (3D_E-0624 step (a)). Scaled by pixel count that is **~1.35 ms at Low** and **~1.74 ms at Medium**, i.e. 8% and 10% of a 60 FPS frame rather than the 19% the uncorrected figure suggests. Low fits with room. **Medium lands at ~1.74 ms against 1.75 ms — a 0.6% margin, which is no margin at all: on this budget Medium is expected to go red, not to pass.** Treat the scaling as indicative only, and for two reasons: per-draw overhead does not scale with pixel count, and the 3.1 ms measurement was taken with *unscaled sources*, so the bandwidth term that dominates this pass changes once they scale — in a direction no arithmetic here settles. The figure that decides it is the preset-aware gate run on that box. **If Medium goes red the answer is a cheaper god-ray configuration at that tier** — fewer taps, or a quarter-res gather, either of which must move the budget row with it per the cost-model note above — and **not** a raised budget; 3D_E-0616's do-not-reopen ruling covers the RX 6600 figure sitting inside *its* budget and says nothing about this one.
+
+**MEASURED (2026-08-21, 3D_E-0624 step (c)) — the prediction held and the verdict is "no headroom".** Six runs of the shipped tier gate on the GTX 1050 at Medium, `renderScale` 0.75, 720×405 gather + 1440×810 combine, via `scripts/wintest.sh`:
+
+`1696.0 · 1704.8 · 1704.8 · 1728.2 · 1806.5 · 1952.3 µs` — **median 1716.5 µs**, against the 1750 µs budget.
+
+Three things this settles, and one it does not. **The scaling model was sound**: 1716.5 µs measured against ~1740 µs predicted is within 2%, even though the prediction scaled a figure taken with *unscaled* source textures. **The budget is doing its job**: it was written and published before this measurement, so it was capable of failing, and it very nearly does. **And the pass has no headroom on the tier it exists for** — 2% under a ceiling that is itself 12% of the frame, on the hardware least able to give any of it back. What it does NOT settle is a verdict, because **the gate exceeds its budget on 2 runs of 6**. A gate that red-flags a third of its runs cannot adjudicate a 2% margin, and that is a defect in the measurement rather than in the budget. Same instrument on the RX 6600 spans 526–1097 µs at `renderScale` 1.0 depending only on how warm the GPU is. Both consequences are filed rather than absorbed here: a cheaper Low/Med god-ray configuration, and the harness's reproducibility. **Do not respond to the flap by raising the budget** — the budget is the one part of this that is derived rather than measured.
+
+**How the two budgets are selected, and what must NOT change.** `budgetsApplyToThisMachine` asks whether the box is the hardware class every figure in the benchmark was measured on. **It stays exactly as it is and keeps its meaning**, and the volumetric and GI gates keep using it unchanged — inverting it or redefining it would silently move those two. The god-ray gate gains a tier branch *ahead* of it rather than replacing it, so the reference row is still protected by the hardware-class question it was measured under:
+
+| Declared preset | Timed at | Asserts |
+|---|---|---|
+| Low, Medium | that preset's `renderScale`, read back from the shipped `applyQualityPreset` | the 1.75 ms tier row |
+| High, Ultra — **and an unset or unrecognised value, which resolve to High** | `renderScale` 1.0 | the 1.2 ms reference row |
+| Custom | `renderScale` 1.0 — the reference resolution | *(nothing — reports its median)* |
+
+`Custom` times at 1.0 rather than skipping before the draws, for two reasons: the file's existing contract is that the path always runs so a crash is still caught, and a median reported at an unstated resolution could not be compared with the 0.69 ms and 3.1 ms figures this project set its budgets from. Unset resolving to High is deliberate: `applyQualityPreset` writes no `renderScale` for `Custom`, so 1.0 is the only defined choice, and an undeclared box is not claiming to be a weak tier.
+
+**The selection splits across the timed region, and this is the one ordering that works.** The resolution half must be resolved **above** the draws — the framebuffer and source-texture sizes are chosen before the timing lambda, so the tier's `renderScale` has to be in hand there. The budget-and-assert half sits **below** the existing Debug and software-renderer guards, whose order is unchanged. Putting the whole tier branch below the guards would time the pass at `renderScale` 1.0 and then judge it against the tier row — 3.1 ms against 1.75 ms on the GTX 1050, permanently red on the one box the tier branch exists for. Hoisting the guards above the timing instead would lose the property the benchmark's header promises, that the path always runs and so still proves it does not crash.
+
+**Both guards apply to the tier row too.** The 1.75 ms figure is derived from a frame budget rather than from a GPU, but the thing measured is still a GPU wall-clock — under llvmpipe the draws rasterise on the CPU and under Debug the build is unoptimised, so both remain meaningless against either budget.
+
+**Where each budget actually gets enforced.** The tier row has an automated home: `scripts/wintest.sh` defaults `VESTIGE_QUALITY_PRESET=medium` and builds Release, so neither guard swallows it on the GTX 1050. **The reference row has none.** `scripts/local-ci.sh` exports `LIBGL_ALWAYS_SOFTWARE=1` unconditionally, so the software-renderer guard skips it in the local mirror exactly as it does on GitHub's GPU-less runners — the 1.2 ms assertion fires only on a hand-run `ctest` against a real driver on the dev rig, which is how 3D_E-0616's 128-tap red was obtained. Recorded because a gate nothing runs automatically looks identical to one that passes.
+
+**What the god-ray gate still does NOT cover.** The `renderScale` half of the resolution is specified above — **it is not yet built; the preset-aware gate is the second half of 3D_E-0624 step (c)**. Even once it is, the benchmark still hard-codes the 1920 × 1080 play-mode base and `godRaysConfig`'s ½: `renderer.cpp` open-codes the half at two sites with no named constant, and the base is not in the renderer at all — it is `Editor::m_playModeWidth/Height`, changeable at runtime. So a `godRaysConfig` changed to full-res would still be timed at half-res and stay green. Same two-copy drift shape as 3D_E-0617 one layer up, narrowed rather than closed, and recorded here because a benchmark that silently misses a regression is worse than no benchmark.
 
 Tests:
 - **11.6** — ✅ *shipped:* benchmark harness (`tests/test_fog_benchmark.cpp`, Release-gated); CPU-spec + GPU-parity tests (`tests/test_volumetric_fog.cpp`, `tests/test_volumetric_fog_gpu.cpp`); **"volumetric off" equivalence** holds byte-for-byte when `volumetricFogEnabled=false`.
 - **11.7** — *dropped (§7).* The scatter pass's existing GLSL `henyeyGreenstein` stays pinned to CPU `henyeyGreensteinPhase` by the shipped parity test in `tests/test_volumetric_fog_gpu.cpp` — no new test.
 - **11.8** — CPU unit tests for `fogDensityNoise` (range `m∈[0,2]`, determinism, animation changes the value, `strength=0 → m≡1`); GPU parity (extract GLSL `fogDensityNoise` + hash helpers via `extractGlslFunction`, single-pixel harness vs CPU — integer-hash layer bit-exact, final value within `1e-4 + 1e-3·|cpu|`); `noiseEnabled=false` byte-identical to the uniform medium (full-dispatch readback); benchmark re-run with noise on stays ≤2 ms (60 FPS gate). Full design + test contract in §11.
 - **11.11** — pure-function `fogVolumeDensity` unit tests (falloff knees, soft-edge monotonicity, static-vs-animated) + GLSL parity. **Over-cap drop is a separate test on the upload path**, not on the pure function: `fogVolumeDensity` takes one `FogVolume` and knows nothing of `MAX_FOG_VOLUMES`, so the cap needs its own case — a 33rd volume is dropped, and logged once per change in the over-cap count (§6.3).
-- **11.5** — screen-space god-ray smoke, plus the GPU benchmark (`GodRayPassUnderBudget`) gating the shipped pair of draws against the band above (3D_E-0616). **"God rays off" equivalence is structural, not a test** (§5.7) — do not write one.
+- **11.5** — screen-space god-ray smoke, plus the GPU benchmark (`GodRayPassUnderBudget`) gating the shipped pair of draws. **Two budgets, selected three ways** (3D_E-0616, 3D_E-0624) — the selection table above is the contract, together with the two paragraphs after it on what scales and where the split falls relative to the timed region. This bullet is a pointer, not a restatement: build from those. **"God rays off" equivalence is structural, not a test** (§5.7) — do not write one.
 
 ---
 
@@ -488,6 +528,72 @@ Per Rule 14 the amendment was re-reviewed cold; loops 2+ ran with no prior-loop 
 
 - **Loop 1** (fresh reviewer, no authoring context): **no CRITICAL / HIGH / MEDIUM.** Verified against disk: all 14 "already present" renderer getters/setters (`renderer.h:107,110,301–328`); the byte-for-byte literals — scattering/extinction `0.005`, anisotropy `0.3` (`renderer.cpp:1285–1287`), noise `{true,0.03,0.5,3}` (`1296–1299`), `windVelocity (0.4,0,0.15)` (`1302`, confirming it differs from the `FogNoiseParams` struct default `0.1` at `volumetric_fog.h:118` — the warning the doc flags), `GOD_RAYS_EDGE_MARGIN 0.3` (`renderer.cpp:1061`); the `FogNoiseParams` field order `{enabled,frequency,strength,octaves,windVelocity}` so the positional aggregate-init is correct; C++17 confirmed (so designated initializers correctly avoided); `u_intensity = sun.intensity` today (`renderer.cpp:1076`) so the artist-gain multiply is a valid minimal change; the `IPanel` four-method surface; the `AudioPanel::removeReverbZone` shift-down semantics the doc says FogPanel mirrors; and the full editor wiring (`m_panelRegistry` member, `registerPanel` in `initialize`, `drawMenuToggle` block, `renderer` in scope at the draw site). 2 LOW (both citation fixes — §12.1 cited `≈1111` for the god-ray margin which is actually `1061`; the F_turb/octave-inlined claim cited §6.3 but that content lives in §6.2). Both verified and fixed. Per the session standing instruction (converge once only verified non-structural polish remains), **convergence reached** — the design is implementation-ready and the byte-for-byte parity contract is sound.
 - **Loop 2 — post-implementation** (fresh reviewer, cold, against the shipped code + diff): **no CRITICAL / HIGH / MEDIUM.** Verified byte-for-byte against the diff that the lift changed only indirection, not values (scattering/extinction `0.005`, anisotropy `0.3`, noise `{true,0.03,0.5,3,(0.4,0,0.15)}`, god-ray gain `1.0`, margin `0.3`); reduce-motion still zeroes `windVelocity` *on top of* the authored value and the per-volume `animSpeed` zeroing is untouched; `GOD_RAYS_EDGE_MARGIN` fully removed (no orphan refs); the `BeginDisabled`/`EndDisabled` pairs balanced on every path; the `FogVolumeShape` Box=0/Sphere=1 combo mapping correct; `removeVolume` a byte-identical mirror of `AudioPanel::removeReverbZone`; editor wiring reachable; the three remaining `TODO 11.10` markers are the *intentionally* deferred sampling/`F_turb` look-constants (§12.2). 1 LOW (the panel never seeded `m_volumes` from `renderer.fogVolumes()`, so opening it would clobber scene-loaded volumes with the empty set) + 1 INFO (the `volEdited` flag was dead — the push ran unconditionally). **Both fixed:** added a one-shot seed-on-open latch (§12.3) and gated the push on actual change. Full debug regression green after the fix. **Convergence reached** — implementation matches the design and is committed.
+
+### Amendment 2026-08-21 (3D_E-0624 — Low/Med god-ray tier budget) — cold-eyes loops
+
+§ 8 gained a Low/Med tier budget row, its derivation, and the contract for a
+preset-aware gate. Gated under CLAUDE.md rule 14: a run's cap bounds that run,
+not the document, so this authoring edit owed a fresh gate. Genre pinned `spec`
+(cap 2). Deterministic layer: `doc_integrity` over this file and the Tier-1
+design, clean on every run.
+
+- **Loop 1** (2 fresh lanes, cold — one against the cited documents, one against
+  the code): **Q1 1 · Q2 3 · Q3 4 · Q4 0 — 8 verified, 8 fixed, 0 dismissed.**
+  **Both lanes independently found five of the eight**, the run's strongest
+  signal. The most consequential: the derivation cited § 1 as authority for a
+  tier-independent 2.0 ms fog allowance, and § 1 double-scopes it "on RX 6600 at
+  1080p … at the High preset" — the cited passage did not carry the proposition
+  the whole 1.8 ms chain hung on. Also converged on: the section claimed the
+  preset-aware gather "**is now** derived from the preset" when nothing was
+  built, so a reader would have closed step (c) without writing the branch;
+  every scaling sentence named only the *gather* while the timed region is two
+  draws and pass B is full-res, so an implementer could have left the combine at
+  1080p and red-flagged a pass inside budget; "any box declaring neither …
+  reports its median" contradicted the shipped `if (!env || !*env) return
+  QualityPreset::High;`, and building it would have retired the only assertion
+  that currently fires; and Tier-1 § 4.1 still quoted the **0.3–0.6 ms** figure
+  3D_E-0616 superseded, while naming § 8 as owner — a live 3× contradiction that
+  would have produced a `600.0` constant, red on the RX 6600's own 0.69 ms. That
+  last was fixed by deleting the figure from the Tier-1 table rather than
+  updating it: it had already drifted twice, and a pointer cannot drift. Lane B
+  alone found the two the implementer would otherwise have invented — that
+  `budgetsApplyToThisMachine` documents itself as a hardware-class check and the
+  new bullet gave `VESTIGE_QUALITY_PRESET` two meanings in one file, and that
+  the Debug/software-renderer guards' placement relative to the tier assertion
+  was unstated, one choice being permanently red under llvmpipe and the other
+  unreachable. Lane A alone found that the 0.2 ms subtrahend was itself an
+  RX 6600 figure with no stated tier scope.
+- **Loop 2** (2 fresh lanes, cold, briefed identically — no prior-loop list):
+  **Q1 3 · Q2 2 · Q3 3 · Q4 0 — 8 verified, 8 fixed, 0 dismissed. Cap reached;
+  the run files nothing further and exits.** **Six of the eight landed in text
+  loop 1 added**, the pattern this log has recorded on every prior run. The best
+  finding moved the headline number: research § 7 publishes **three** always-on
+  analytic rows (`< 0.05` distance, `< 0.1` height, `< 0.1` inscatter = 0.25 ms),
+  and § 8's table had merged distance and height into one row carrying the
+  *height* row's budget — under-counting by 0.05 ms since before this amendment.
+  The honest subtraction is **2.0 − 0.25 = 1.75 ms**, which takes Medium's
+  predicted margin from 3% to 0.6% and changes the section's own verdict from
+  "fits, barely" to "expected to go red". The deepest finding was lane B's: the
+  fix for loop 1's combine-draw finding said "BOTH draws scale" and still left
+  the gather's **source** textures at 1080p — and this pass is
+  texture-bandwidth-bound on exactly those, so a 633×356 gather sampling 1080p
+  sources carries a 2.3× working set, the same inflation loop 1's fix had just
+  forbidden. It also makes the 1.74 ms prediction weaker than stated, since the
+  3.1 ms measurement was taken with unscaled sources. Both lanes converged on the
+  `Custom` row promising a median while its *Timed at* cell said "nothing" — three
+  implementations fit, and only `renderScale` 1.0 keeps the reported median
+  comparable with the 0.69 ms and 3.1 ms figures the project sets budgets from.
+  Three more: loop 1's "the god-ray gate stops using `budgetsApplyToThisMachine`"
+  left the row labelled *RX 6600 reference* asserting on any box declaring High
+  (fixed by adding the tier branch **ahead** of that predicate rather than
+  replacing it); "the one preset that never runs this pass" is two, since Ultra
+  shares High's `heavyPost = true` row, and a literal reading routes Ultra to the
+  looser budget; and the claim that the dev rig and CI are "where the 1.2 ms
+  assertion actually fires" is false in both halves — CI is llvmpipe and
+  `local-ci.sh` exports `LIBGL_ALWAYS_SOFTWARE=1` unconditionally, so that gate
+  fires only on a hand-run `ctest`. Lane A also found the § 8 cost model carried
+  no resolution term while the section proposes a quarter-res gather as its own
+  remedy, so that change would have moved the cost without moving the budget.
 
 ### Amendment 2026-08-21 (3D_E-0616 — god-ray benchmark + § 8 budget correction) — cold-eyes loops
 

@@ -23,6 +23,39 @@ may change any interface without notice.
 
 ## [Unreleased]
 
+### 2026-08-21 Changed — God rays get a derived Low/Medium budget and a preset-aware gate (3D_E-0624)
+
+The GPU benchmark for screen-space god rays previously asserted only on
+High and Ultra — the two presets that never run the pass — and reported a
+bare median on Low and Medium, which are the only tiers that do. It now
+carries two budgets and picks between them.
+
+The Low/Medium budget is derived from what a 60 FPS frame can afford
+rather than fitted to any machine: 16.6 ms per frame at every tier, of
+which the fog stack is allowed 2.0 ms (~12%), less the three always-on
+analytic layers' 0.25 ms ceiling — 1.75 ms. Deriving it first is what
+lets a measurement fail it.
+
+It very nearly does. On a GTX 1050 at Medium the pass medians 1716 µs
+against that 1750 µs budget, and exceeds it on two runs in six. Filed as
+3D_E-0625 (the pass has no headroom on the tier it exists for) and
+3D_E-0626 (the harness cannot reproduce its own verdict).
+
+- **Two budgets, selected three ways on `VESTIGE_QUALITY_PRESET`** (3D_E-0624)
+  Low/Medium assert the 1.75 ms tier row at that preset's own render scale; High/Ultra — and an unset or unrecognised value — assert the 1.2 ms RX 6600 reference row at full scale; Custom reports its median. `budgetsApplyToThisMachine` is untouched and keeps its hardware-class meaning, so the volumetric and GI gates are unmoved.
+
+- **The gate times the resolution the tier actually renders, sources included** (3D_E-0624)
+  The render scale is read back from the shipped `applyQualityPreset` rather than copied, so a preset-table change moves the benchmark with it. The gather's source textures scale too, not just the draw targets — this pass is texture-bandwidth-bound on what it samples, so a scaled gather against 1080p sources would carry a working set no tier draws.
+
+- **Corrected: the always-on fog layers were under-counted by 0.05 ms** (3D_E-0624)
+  The § 8 budget table had merged research § 7's distance and height rows and kept only the height row's ceiling. Split back into three rows totalling 0.25 ms.
+
+- **Corrected: the Tier-1 preset design quoted a superseded god-ray figure** (3D_E-0624)
+  Its § 4.1 still cited 0.3–0.6 ms while naming the fog design as owner — a 3× contradiction that would have produced a 600 µs constant. The copy is deleted rather than updated; that table now points at the owning row.
+
+- **The god-ray benchmark now reports its median on every path** (3D_E-0624)
+  A passing `EXPECT_LE` was silent, so a green run said nothing about how close it came. That silence is what hid the flap.
+
 ### 2026-08-21 Added — Screen-space god rays are benchmarked, and their published budget was wrong (3D_E-0616)
 
 The god-ray pass had no benchmark of any kind — fog design § 5.8 said so
