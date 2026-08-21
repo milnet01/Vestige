@@ -1511,7 +1511,7 @@ Full spatial audio pipeline with dynamic mixing, occlusion, and adaptive music. 
   fitted to the single machine it would police, so it is filed as 3D_E-0616
   against the weak-HW perf program rather than invented here.
 
-- 📋 [3D_E-0616] **Publish a volumetric-fog budget for the Medium preset, so weak hardware has a gate again.**
+- ✅ [3D_E-0616] **Publish a volumetric-fog budget for the Medium preset, so weak hardware has a gate again.**
   3D_E-0615 made the fog and GI perf gates tier-aware: design § 8's
   budget table is a per-preset table and both figures are its High row,
   so a machine below High is no longer held to them. That is correct,
@@ -1575,6 +1575,36 @@ Full spatial audio pipeline with dynamic mixing, occlusion, and adaptive music. 
 
   Blocked until 3D_E-0617 lands: the god rays do not currently run below
   High at all, so there is nothing on Medium to measure yet.
+  Resolved (2026-08-21). The named work shipped: `GodRayPassUnderBudget` in
+  tests/test_fog_benchmark.cpp times the shipped pair of draws (half-res
+  64-tap gather + full-res additive combine) and gates them against design
+  § 8's god-ray row. Mutating NUM_SAMPLES to 128 measures 1.21 ms and goes
+  red, so the gate is not vacuous.
+
+  The § 8 row itself had to be corrected first, and that is the substantive
+  finding. Research § 7's 0.3-0.6 ms assumed "64-128 samples x ONE tap
+  each" -- the classic two-pass Mitchell shape. Design § 5.2 deliberately
+  folds the light buffer INTO the gather, so every tap costs TWO samples.
+  The published figure described a different shader than the one that
+  shipped. Corrected to 0.6-1.2 ms; the pass measures 0.69 ms all-sky and
+  0.48-0.55 ms with no sky, on the RX 6600, harness overhead 10.6 us.
+
+  NOT closed by this, and the headline's actual goal: weak hardware still
+  has no gate. Every budget in that file is an RX 6600 figure, so the
+  benchmark asserts only where VESTIGE_QUALITY_PRESET says the box is that
+  class -- which is the OPPOSITE of the preset range that runs god rays
+  (Low/Med). The tiers this technique serves get a measurement, not a gate.
+  Closing that needs a weak-GPU reference point, not a number fitted to the
+  one box it would police -- the same objection this bullet's own
+  correction raised. Filed as 3D_E-0624.
+
+  Gated under CLAUDE.md rule 14 (the budget row is what a perf gate is
+  written against). Two cold loops, 16 verified findings, all fixed, cap
+  reached. Both loops had both lanes converge independently: loop 1 found
+  the doc listing four shipped slices as remaining work, loop 2 found loop
+  1's own § 8 over-claim that the benchmark would catch a full-res gather
+  -- it would not, the resolution is a hard-coded copy of godRaysConfig.
+  Loop log: design doc § 13, amendment 2026-08-21.
 
 - ✅ [3D_E-0617] **God rays suppress themselves on every tier below High, so weak hardware gets no light shafts at all.**
   Found while investigating 3D_E-0616, and it is the reason that bullet
@@ -1633,6 +1663,53 @@ Full spatial audio pipeline with dynamic mixing, occlusion, and adaptive music. 
   gate produces a visible result -- but it is untested. 3D_E-0616's
   benchmark slice is where that stops being true, since it has to measure
   the pass actually running.
+
+- 📋 [3D_E-0624] **The god-ray benchmark gates the one preset that does not run god rays, and skips the two that do.**
+  3D_E-0616 shipped `GodRayPassUnderBudget` and it is a real gate -- mutating
+  NUM_SAMPLES to 128 measures 1.21 ms against the 1.2 ms budget and goes red.
+  This bullet is the half it could not close.
+
+  Every budget in tests/test_fog_benchmark.cpp is an RX 6600 figure (design
+  § 8 and § 11.2 both cite research § 7, whose table is headed "Performance
+  Targets (RDNA2 / RX 6600)"). So all three gates assert only where
+  `budgetsApplyToThisMachine` says the box is that hardware class, i.e. where
+  VESTIGE_QUALITY_PRESET is High or Ultra.
+
+  For the volumetric and GI gates that is exactly right. For god rays it is
+  inverted: `isGodRaysActive` runs the pass only when the froxel pass does
+  NOT, and settings_apply.cpp turns heavyPost off at Low and Medium -- so god
+  rays run on Low and Medium and not on High. **The benchmark therefore
+  asserts on the one preset that never shows the pass, and reports a bare
+  median on the two presets that do.**
+
+  The pass is not free: 0.69 ms all-sky on an RX 6600, and it runs on the
+  weakest hardware we support. A GTX 1050 is roughly 4x slower on this kind
+  of texture-bandwidth-bound work, which would put it near 2.8 ms -- about
+  17% of a 60 FPS frame, on the machines least able to afford it. That figure
+  is an extrapolation, not a measurement, which is the point of this bullet.
+
+  What it needs, and the order matters:
+    (a) measure the pass on the GTX 1050 via scripts/wintest.sh -- the
+        benchmark already reports the median there, so this is a run, not a
+        code change;
+    (b) a SECOND weak-GPU data point, so the budget describes a class rather
+        than one box. Fitting a budget to the single machine it polices is
+        what made this bullet's predecessor vacuous, and that objection
+        applies here unchanged;
+    (c) then a Low/Med row in design § 8 and a preset-aware gate.
+
+  Do NOT shortcut (b) by writing the 1050's own median into § 8.
+
+  Related, and deliberately separate: the benchmark's gather RESOLUTION is
+  not gated at all. tests/test_fog_benchmark.cpp hard-codes 1920/2 x 1080/2
+  as a copy of renderer.cpp's godRaysConfig rather than reading it, so a
+  godRaysConfig changed to full-res would still be timed at half-res and stay
+  green. Same two-copy drift shape as 3D_E-0617. Pinning it needs the
+  renderer to expose the derivation.
+  **Layman:** The new speed check for light shafts only runs on the powerful dev PC, which never shows those shafts anyway — the weaker machines that do show them are still unmeasured.
+  Kind: perf.
+  Lanes: renderer, fog, perf.
+  Source: in-session-2026-08-21 (3D_E-0616 follow-up, found by the cold-eyes gate).
 
 ### Fog, Mist, and Volumetric Lighting
 - [x] Distance fog (linear, exponential, exponential-squared) — pure-function primitives shipped in `engine/renderer/fog.{h,cpp}`. `FogMode` enum (`None` / `Linear` / `Exponential` / `ExponentialSquared`) + `FogParams` (linear-RGB colour, start, end, density). `computeFogFactor(mode, params, distance)` implements the three canonical forms: Linear `(end-d)/(end-start)`, GL_EXP `exp(-density·d)`, GL_EXP2 `exp(-(density·d)²)` — returns *surface visibility* in [0,1], matches OpenGL Red Book §9 / D3D9 fog-formulas. Guards every degenerate param (zero span, negative density, sub-camera distance) with pass-through behaviour. 15 unit tests cover knees, monotonicity, and edge cases.

@@ -35,6 +35,10 @@
 
 #include "renderer/volumetric_fog_pass.h"
 
+#include "renderer/framebuffer.h"
+#include "renderer/fullscreen_quad.h"
+#include "renderer/shader.h"
+
 #include "core/settings.h"
 
 #include "gl_test_fixture.h"
@@ -64,6 +68,22 @@ constexpr double kVolumetricBudgetMicros = 2000.0;
 // write (~one fog pass). The primary gate R4 controls is the inject dispatch
 // timed in isolation staying ≤ 0.4 ms on the RX 6600 at 1080p (est. ~0.3 ms).
 constexpr double kGiInjectBudgetMicros = 400.0;
+
+// design § 8 row "God rays, screen-space (Low/Med) | 0.6-1.2 ms | 64-128 taps
+// x 2 samples each", which cites research § 7 -- whose table is headed
+// "Performance Targets (RDNA2 / RX 6600)". So this is an RX 6600 @ 1080p figure
+// like the two above, and the "(Low/Med)" label names the presets that USE the
+// technique, not the hardware it was measured on.
+//
+// Gate the band's UPPER bound, the same choice the volumetric gate above makes
+// in taking the 2.0 ms stack total rather than the ~1.2 ms pass figure. The
+// shipped shader is at the band's low tap count (64) but its high per-tap
+// content cost (2 samples), and § 8 records why the 64-tap end alone is too
+// tight: research § 7's extrapolation is itself optimistic by ~1.7x on this
+// texture-bandwidth-bound pass. 1.2 ms is still not slack -- mutating the
+// shader's NUM_SAMPLES to its 128-tap ceiling measures 1.21 ms here and goes
+// red, against 0.69 ms for the shipped 64-tap worst case.
+constexpr double kGodRayBudgetMicros = 1200.0;
 
 // True when the active GL renderer is a software rasteriser (llvmpipe /
 // softpipe / swrast). A wall-clock budget written for a real GPU does not apply.
@@ -98,16 +118,22 @@ QualityPreset gatedPreset()
     return qualityPresetFromString(name, QualityPreset::High);
 }
 
-// design § 8 gives a volumetric figure for the High row only. Ultra is High's
-// froxel grid or larger, so the High budget is still the floor it must beat.
-// Below High there is no published volumetric number and there should not be:
-// Tier-1 design § 4.1's preset table drops the pass at BOTH Low and Medium
-// (§ 4.2 describes the shared mechanism; § 4.1's table is what assigns it per
-// preset), so those tiers never dispatch a froxel grid to measure. Their
-// published budget is design § 8's screen-space god-ray row, 0.3-0.6 ms, and
-// gating that is 3D_E-0616 -- not a volumetric figure for Medium, which would
-// police a pass that does not run.
-bool budgetApplies(QualityPreset q)
+// Whether this MACHINE is the hardware class every budget in this file was
+// measured on. That is the one thing the three gates below share, and it is a
+// question about the GPU rather than about which passes a preset runs.
+//
+// Every figure here -- volumetric, GI inject and god-ray alike -- comes from
+// design § 8 / § 11.2, which cite research § 7, whose table is headed
+// "Performance Targets (RDNA2 / RX 6600)". VESTIGE_QUALITY_PRESET is how a box
+// declares it is NOT that class: a machine the preset system would not run at
+// High (see scripts/wintest.sh) reports its median instead of asserting it.
+// Ultra is High's grid or larger on the same class of GPU, so it qualifies.
+//
+// Read it as a hardware-class check, NOT as "does this preset run this pass"
+// (3D_E-0616). The two questions give OPPOSITE answers for god rays, which run
+// only where the froxel pass does not -- so a predicate meaning the second
+// would have to be inverted between the gates below, and it is not.
+bool budgetsApplyToThisMachine(QualityPreset q)
 {
     return q == QualityPreset::High || q == QualityPreset::Ultra;
 }
@@ -241,14 +267,16 @@ TEST_F(FogBenchmarkTest, VolumetricDispatchUnderBudget)
                      << " µs GPU budget.";
     }
 
-    if (!budgetApplies(gatedPreset()))
+    if (!budgetsApplyToThisMachine(gatedPreset()))
     {
         GTEST_SKIP() << "quality preset " << qualityPresetLabel(gatedPreset())
                      << " — " << kVolumetricBudgetMicros
-                     << " µs is design § 8's High-preset stack budget and no"
-                        " volumetric figure is published below High; volumetric"
-                        " dispatch median " << medianMicros
-                     << " µs recorded, not gated.";
+                     << " µs is design § 8's RX 6600 stack budget, and this box"
+                        " is not that class. (No volumetric figure is published"
+                        " below High either: Tier-1 design § 4.1 drops the pass"
+                        " at Low and Medium, so those tiers dispatch no froxel"
+                        " grid at all.) Volumetric dispatch median "
+                     << medianMicros << " µs recorded, not gated.";
     }
 
     EXPECT_LE(medianMicros, kVolumetricBudgetMicros)
@@ -317,7 +345,7 @@ TEST_F(FogBenchmarkTest, GiInjectDispatchUnderBudget)
                      << " µs GPU budget.";
     }
 
-    if (!budgetApplies(gatedPreset()))
+    if (!budgetsApplyToThisMachine(gatedPreset()))
     {
         GTEST_SKIP() << "quality preset " << qualityPresetLabel(gatedPreset())
                      << " — " << kGiInjectBudgetMicros
@@ -328,4 +356,151 @@ TEST_F(FogBenchmarkTest, GiInjectDispatchUnderBudget)
     EXPECT_LE(medianMicros, kGiInjectBudgetMicros)
         << "GI inject dispatch (160×90×64) median " << medianMicros
         << " µs exceeds the " << kGiInjectBudgetMicros << " µs budget (design § 11.2)";
+}
+
+// 3D_E-0616: the screen-space god-ray pass (slice 11.5) against design § 8's
+// "God rays, screen-space (Low/Med)" row. Nothing benchmarked this pass before
+// — design § 5.8 said so outright ("no standalone subsystem class ... so there
+// is no separate micro-benchmark; its cost rides in the full composite"), which
+// left the one fog technique the lower presets DO run with no gate at all.
+//
+// It has no class to instantiate, so this reconstructs the shipped pair of
+// draws from the same two fragment shaders and the same screen-quad vertex
+// stage the renderer links (`renderer.cpp` § 4.9): pass A gathers 64 radial
+// taps at half-res into an RGBA16F target, pass B additively combines that into
+// the full-res HDR scene. A GLSL regression in either — a raised NUM_SAMPLES, a
+// full-res gather — shows up here as a budget failure.
+//
+// **The gather RESOLUTION is a copy, and is NOT gated.** `gatherCfg` below
+// hard-codes 1920/2 x 1080/2 rather than reading renderer.cpp's godRaysConfig,
+// which has no shared constant to pin against. So this catches a raised
+// NUM_SAMPLES (the shader is loaded from disk) but would NOT catch godRaysConfig
+// being changed to full-res -- it would keep timing a half-res gather and stay
+// green. Same two-copy drift shape as 3D_E-0617, one layer up; stated here and
+// in design § 8 rather than left for a reader to discover.
+//
+// **All-sky worst case, on purpose.** The gather's per-tap cost is one depth
+// texelFetch plus a scene fetch taken only where the pixel is sky (reverse-Z
+// depth ≈ 0). Clearing the depth to 0 makes every tap pay both fetches with no
+// branch divergence — the most expensive frame the shader can be handed, and a
+// deterministic one. A gate the worst case passes, every real frame passes.
+TEST_F(FogBenchmarkTest, GodRayPassUnderBudget)
+{
+    const std::string vert = std::string(VESTIGE_SHADER_DIR) + "/screen_quad.vert.glsl";
+
+    Shader gather;
+    ASSERT_TRUE(gather.loadFromFiles(
+        vert, std::string(VESTIGE_SHADER_DIR) + "/god_rays.frag.glsl"));
+    Shader combine;
+    ASSERT_TRUE(combine.loadFromFiles(
+        vert, std::string(VESTIGE_SHADER_DIR) + "/god_rays_combine.frag.glsl"));
+
+    // Pre-bloom HDR scene + resolved depth, both 1080p, as the renderer binds
+    // them. Depth 0.0 = sky in reverse-Z (see god_rays.frag.glsl `lightAt`).
+    const GLuint sceneTex = makeFullResTex(GL_RGBA16F, GL_RGBA, 1.0f);
+    const GLuint depthTex = makeFullResTex(GL_DEPTH_COMPONENT32F, GL_DEPTH_COMPONENT, 0.0f);
+
+    // Half-res RGBA16F gather target — renderer.cpp's `godRaysConfig`, which is
+    // the SSAO config at width/2 × height/2 with isFloatingPoint set.
+    FramebufferConfig gatherCfg;
+    gatherCfg.width              = 1920 / 2;
+    gatherCfg.height             = 1080 / 2;
+    gatherCfg.samples            = 1;
+    gatherCfg.hasColorAttachment = true;
+    gatherCfg.hasDepthAttachment = false;
+    gatherCfg.isFloatingPoint    = true;
+    Framebuffer godRaysFbo(gatherCfg);
+    ASSERT_TRUE(godRaysFbo.isComplete());
+
+    // The full-res HDR scene FBO pass B blends into.
+    FramebufferConfig sceneCfg = gatherCfg;
+    sceneCfg.width  = 1920;
+    sceneCfg.height = 1080;
+    Framebuffer hdrFbo(sceneCfg);
+    ASSERT_TRUE(hdrFbo.isComplete());
+
+    FullscreenQuad quad;
+
+    // First draw JIT-compiles pipe state the driver never frees — a
+    // process-lifetime third-party allocation, not a Vestige leak.
+    Vestige::Test::ScopedLeakCheckDisable noLeakTracking;
+
+    auto timeGodRays = [&]() -> double
+    {
+        glFinish();  // drain prior GPU work so t0 starts clean
+        const auto t0 = std::chrono::steady_clock::now();
+
+        // Pass A — half-res radial gather.
+        godRaysFbo.bind();
+        glViewport(0, 0, godRaysFbo.getWidth(), godRaysFbo.getHeight());
+        gather.use();
+        glBindTextureUnit(0, sceneTex);
+        gather.setInt("u_sceneTexture", 0);
+        glBindTextureUnit(1, depthTex);
+        gather.setInt("u_depthTexture", 1);
+        gather.setVec2("u_sunUV", glm::vec2(0.5f, 0.5f));
+        gather.setFloat("u_intensity", 1.0f);  // > 0, else the shader early-outs
+        quad.draw();
+
+        // Pass B — full-res additive upsample-combine.
+        glBindFramebuffer(GL_FRAMEBUFFER, hdrFbo.getId());
+        glViewport(0, 0, 1920, 1080);
+        glEnable(GL_BLEND);
+        glBlendFunc(GL_ONE, GL_ONE);
+        combine.use();
+        godRaysFbo.bindColorTexture(0);
+        combine.setInt("u_godRaysTexture", 0);
+        quad.draw();
+        glDisable(GL_BLEND);
+
+        glFinish();  // wait for both draws to complete
+        const auto t1 = std::chrono::steady_clock::now();
+        return std::chrono::duration<double, std::micro>(t1 - t0).count();
+    };
+
+    for (int i = 0; i < 3; ++i) timeGodRays();  // warm the pipeline
+
+    constexpr int kFrames = 8;
+    std::vector<double> micros;
+    micros.reserve(kFrames);
+    for (int f = 0; f < kFrames; ++f) micros.push_back(timeGodRays());
+    std::sort(micros.begin(), micros.end());
+    const double medianMicros = micros[micros.size() / 2];
+
+    Framebuffer::unbind();
+    glDeleteTextures(1, &sceneTex);
+    glDeleteTextures(1, &depthTex);
+
+#if !defined(NDEBUG)
+    GTEST_SKIP() << "non-optimised (Debug) build — god-ray pass median "
+                 << medianMicros << " µs not gated against the "
+                 << kGodRayBudgetMicros
+                 << " µs budget (enforced in optimised builds).";
+#endif
+
+    if (isSoftwareRenderer())
+    {
+        GTEST_SKIP() << "software renderer ("
+                     << reinterpret_cast<const char*>(glGetString(GL_RENDERER))
+                     << ") — god-ray pass median " << medianMicros
+                     << " µs not gated against the " << kGodRayBudgetMicros
+                     << " µs GPU budget.";
+    }
+
+    if (!budgetsApplyToThisMachine(gatedPreset()))
+    {
+        GTEST_SKIP() << "quality preset " << qualityPresetLabel(gatedPreset())
+                     << " — " << kGodRayBudgetMicros
+                     << " µs is research § 7's RX 6600 figure and this box is"
+                        " not that class. NOTE this is the preset range that"
+                        " actually RUNS god rays, so the technique's own tiers"
+                        " get a measurement rather than a gate -- closing that"
+                        " needs a weak-GPU reference point (3D_E-0616). God-ray"
+                        " pass median " << medianMicros << " µs recorded.";
+    }
+
+    EXPECT_LE(medianMicros, kGodRayBudgetMicros)
+        << "screen-space god-ray pass (64-tap gather at 960×540 + full-res"
+           " combine) median " << medianMicros << " µs exceeds design § 8's "
+        << kGodRayBudgetMicros << " µs budget";
 }

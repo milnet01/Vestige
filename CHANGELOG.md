@@ -23,6 +23,29 @@ may change any interface without notice.
 
 ## [Unreleased]
 
+### 2026-08-21 Added — Screen-space god rays are benchmarked, and their published budget was wrong (3D_E-0616)
+
+The god-ray pass had no benchmark of any kind — fog design § 5.8 said so
+outright, on the grounds that the pass has no standalone subsystem class.
+That left the one fog technique the Low and Medium presets actually run
+with no performance gate at all. Writing the gate turned up a defect in
+the budget it was meant to gate against.
+
+- **`GodRayPassUnderBudget` times the shipped pair of draws** (3D_E-0616)
+  Reconstructs the shipped half-res 64-tap gather plus the full-res additive combine from the same two fragment shaders and screen-quad vertex stage the renderer links, so a GLSL regression shows up as a budget failure. Times the all-sky worst case, where every tap pays both texture fetches. Proven non-vacuous: mutating `NUM_SAMPLES` to its 128-tap ceiling measures 1.21 ms against the 1.2 ms budget and goes red.
+
+- **Fog design § 8's god-ray budget described a different shader than the one that shipped** (3D_E-0616)
+  Research § 7 estimated 0.3-0.6 ms for "64-128 samples x ONE tap each" — the classic two-pass Mitchell shape, where a pre-pass builds the occlusion buffer. Design § 5.2 deliberately folds the light buffer into the gather instead, so every tap costs TWO samples. The row is corrected to 0.6-1.2 ms. Measured on the RX 6600 at 1080p: 0.69 ms all-sky, 0.48-0.55 ms with no sky in view, harness sync overhead 10.6 us.
+
+- **Two sections described the god-ray gate in the form 3D_E-0617 removed** (3D_E-0616)
+  Design § 5.6 and § 10 both gave the two-term `volumetricFogEnabled && isInitialized()` gate — the exact defect 3D_E-0617 fixed, where the fallback was suppressed on every tier below High. Both now name the shipped three-term predicates. § 5.6 also called the preset-to-quality mapping "future" when settings_apply.cpp ships it, and claimed safeDefaults() may leave god rays on when it sets them off.
+
+- **The fog design listed four shipped slices as remaining work** (3D_E-0616)
+  Slices 11.5, 11.8, 11.10 and 11.11 have all shipped, but § Scope, § 0, § 1 and § 3 still listed them as work to do. An implementer following § 3's stated order would have built a second screen-space god-ray pass — the double shafts § 5.6's gate exists to prevent. Found independently by two cold review lanes in both loops.
+
+- **Weak hardware still has no god-ray gate, and the benchmark does not check gather resolution** (3D_E-0624)
+  Recorded rather than papered over. Every budget in the file is an RX 6600 figure, so the gate asserts only on that hardware class — which is the opposite of the Low/Med presets that actually run god rays. And the test hard-codes the gather resolution as a copy of renderer.cpp's godRaysConfig, so a full-res regression would stay green. Both stated in design § 8 and in the test header; the weak-GPU reference point is filed as 3D_E-0624.
+
 ### 2026-08-21 Fixed — local-ci.sh now mirrors every CI job, and a pre-push hook runs it (3D_E-0622)
 
 Two gaps sat between the local mirror and the pipeline it claims to
