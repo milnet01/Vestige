@@ -1732,6 +1732,59 @@ Full spatial audio pipeline with dynamic mixing, occlusion, and adaptive music. 
   Kind: perf.
   Lanes: renderer, fog, perf.
   Source: in-session-2026-08-21 (3D_E-0616 follow-up, found by the cold-eyes gate).
+  Step (a) done (2026-08-21) — the GTX 1050 measurement.
+
+  Run: scripts/wintest.sh --filter FogBenchmarkTest.GodRayPassUnderBudget,
+  Windows 10, MSVC Release, GL 4.5 NVIDIA 560.94 on a GeForce GTX 1050,
+  VESTIGE_QUALITY_PRESET=medium (wintest.sh's default), so the gate skipped
+  and reported its median as designed. Three runs: 3158.8, 3061.6 and
+  3072.3 us -- a 3% spread, call it **~3.1 ms**.
+
+  Both boxes time the same hard-coded 1920/2 x 1080/2 gather, so the figures
+  are directly comparable and neither depends on the box's own display mode.
+
+  Against the RX 6600's 0.69 ms that is 4.5x, close to the 4x this bullet
+  guessed -- but the absolute lands at 3.1 ms rather than the extrapolated
+  2.8 ms, i.e. **19% of a 16.7 ms 60 FPS frame**, spent only on the tiers
+  least able to afford it. The extrapolation understated it.
+
+  Step (b) is NOT satisfied by this. One box is one box, and this bullet
+  already says fitting a budget to the single machine it polices is what made
+  the predecessor vacuous. A second weak-GPU reference point is owed before
+  any Low/Med row is written into design § 8.
+  Step (b) REFRAMED (2026-08-21) — decision, not a deferral.
+
+  The estate is two machines, an RX 6600 and the GTX 1050, and the user
+  confirmed there is no third. So step (b) as written -- "a SECOND weak-GPU
+  data point" -- is not blocked pending hardware, it is unsatisfiable. A
+  bullet parked on hardware that will never arrive is a bullet that never
+  closes, so the requirement is restated rather than waited on.
+
+  What (b) was protecting is still right and is kept: **do not fit the budget
+  to the one machine the gate polices.** A second box was one route to that,
+  never the requirement itself. The route that remains is the one 3D_E-0616
+  already used successfully -- when the benchmark measured 690 us against a
+  published 0.3-0.6 ms row, the resolution was to re-derive the row from
+  first principles (design § 5.2 folds the light buffer into the gather, so
+  every tap costs TWO fetches, not research § 7's one) and NOT to fit it to
+  what had just been measured. That discipline needs no second box.
+
+  So (b) becomes: derive the Low/Med budget from what a 60 FPS frame at those
+  tiers can afford, independently of the 3.1 ms figure. The 1050 measurement
+  then CHECKS the budget instead of defining it, which is what makes the gate
+  capable of failing.
+
+  Consequence to expect, flagged rather than assumed: 3.1 ms is 19% of a
+  16.7 ms frame on the tier that exists precisely because the hardware is
+  weak, so there is a real chance it does NOT fit an honestly derived budget.
+  If so the answer is a cheaper god-ray config at Low/Med specifically --
+  which is a different question from 3D_E-0616's do-not-reopen ruling, that
+  one being explicitly about the RX 6600 figure sitting inside ITS budget.
+
+  Note for step (c): a Low/Med row written into fog design § 8 is an
+  authoring edit that changes direction, so it RE-ARMS CLAUDE.md rule 14 on
+  that document. 3D_E-0616's cap was reached by a run, and a run's cap does
+  not exempt a later authoring edit.
 
 ### Fog, Mist, and Volumetric Lighting
 - [x] Distance fog (linear, exponential, exponential-squared) — pure-function primitives shipped in `engine/renderer/fog.{h,cpp}`. `FogMode` enum (`None` / `Linear` / `Exponential` / `ExponentialSquared`) + `FogParams` (linear-RGB colour, start, end, density). `computeFogFactor(mode, params, distance)` implements the three canonical forms: Linear `(end-d)/(end-start)`, GL_EXP `exp(-density·d)`, GL_EXP2 `exp(-(density·d)²)` — returns *surface visibility* in [0,1], matches OpenGL Red Book §9 / D3D9 fog-formulas. Guards every degenerate param (zero span, negative density, sub-camera distance) with pass-through behaviour. 15 unit tests cover knees, monotonicity, and edge cases.

@@ -495,7 +495,7 @@ TEST_F(FogBenchmarkTest, GodRayPassUnderBudget)
                         " not that class. NOTE this is the preset range that"
                         " actually RUNS god rays, so the technique's own tiers"
                         " get a measurement rather than a gate -- closing that"
-                        " needs a weak-GPU reference point (3D_E-0616). God-ray"
+                        " needs a weak-GPU reference point (3D_E-0624). God-ray"
                         " pass median " << medianMicros << " µs recorded.";
     }
 
