@@ -1884,6 +1884,19 @@ Full spatial audio pipeline with dynamic mixing, occlusion, and adaptive music. 
   Kind: perf.
   Lanes: renderer, fog, perf.
   Source: in-session-2026-08-21 (3D_E-0624 step (c) measurement).
+  Why this is a separate bullet and was not just done in 3D_E-0624
+  (recorded 2026-08-21, so it is not reopened as an oversight).
+
+  Two reasons, and only the second is about sequencing. Cutting taps or
+  dropping to a quarter-res gather CHANGES HOW THE SHAFTS LOOK -- it is a
+  visual decision on the tiers whose whole point is that they still get light
+  shafts (3D_E-0617 restored them after they had silently suppressed
+  themselves), so it wants a look at a frame and not just a number. And per
+  Blocked-by above, the current harness cannot show that any such change
+  helped.
+
+  So the order is: fix 3D_E-0626, re-measure to get a trustworthy baseline,
+  then choose a cheaper config against both the number AND the image.
 
 - 📋 [3D_E-0626] **The fog GPU benchmark cannot reproduce its own verdict.**
   Found 2026-08-21 while measuring 3D_E-0624 step (c). Same binary, same
