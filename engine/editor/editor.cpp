@@ -1586,7 +1586,7 @@ void Editor::drawPanels(Renderer* renderer, Scene* scene, Camera* camera,
                         shortcutRow("F4", "Toggle parallax occlusion mapping");
                         shortcutRow("F5", "Toggle bloom");
                         shortcutRow("F6", "Toggle SSAO");
-                        shortcutRow("F7", "Cycle anti-aliasing (None / MSAA / TAA / SMAA)");
+                        shortcutRow("F7", "Cycle anti-aliasing (None / MSAA / TAA / SMAA / FXAA)");
                         shortcutRow("F8", "Cycle color grading presets");
                         shortcutRow("F9", "Toggle cascade shadow map debug");
                         shortcutRow("F10", "Toggle auto-exposure");
