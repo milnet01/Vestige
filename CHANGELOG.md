@@ -23,6 +23,69 @@ may change any interface without notice.
 
 ## [Unreleased]
 
+### 2026-08-31 Fixed — Whole-tree code review remediation — 19 verified defects across renderer, physics, editor, loaders and shaders
+
+A `review-code` sweep over the whole tree (18 subsystem lanes) verified 19
+CRITICAL/HIGH defects against source and fixed them. Deferred MEDIUM/LOW/INFO
+items are filed as 3D_E-0627..0638.
+
+- **Engine start-up no longer aborts on a Window construction failure**
+  `Window`'s constructor throws on GLFW init, monitor query or context creation failure, and nothing in `app/` caught it — a missing display terminated via `std::terminate` with no log line. `main()` now wraps the run in try/catch, logs a fatal and flushes the log file.
+
+- **Asset path sandbox is now installed at start-up**
+  `ResourceManager::setSandboxRoots`, `CubeLoader::setSandboxRoots` and `AudioEngine::setSandboxRoots` existed with zero callers, so every path check they gate was inert. `Engine::initialize` now canonicalises the asset roots and installs them on all three.
+
+- **Depth attachment is no longer invalidated before the blit that reads it**
+  `glInvalidateFramebuffer(GL_DEPTH_ATTACHMENT)` ran eleven lines ahead of the depth resolve, so the resolve read a buffer the driver had been told to discard. Moved after the blit.
+
+- **Instanced shadow casters set u_hasBones**
+  The uniform was set only on the non-instanced branch, so an instanced draw inherited whatever the previous draw left — skinned geometry could be sampled with stale bone matrices in the shadow pass.
+
+- **Auto-exposure survives a NaN luminance sample**
+  `std::max(avgLuminance, 0.001f)` returns its first argument when the comparison is false, so a NaN passed straight through and latched `m_exposure` permanently — the screen stayed black until restart. Now guarded with `std::isfinite`, with a warning.
+
+- **Fourth texture upload path sets GL_UNPACK_ALIGNMENT**
+  Three of the four upload paths bracketed the upload with the alignment reset; the fourth did not, and `generateNormalFromHeight` feeds it three-channel data — the exact diagonal-banding shape recorded against the terrain normal map.
+
+- **Framebuffer resize no longer leaks the fourth colour attachment**
+  `cleanup()` deleted attachments 0-2 and not `m_colorAttachment3` — about 16.6 MB per resize at 1080p.
+
+- **glTF loader bounds-checks buffer views, joints and sampler outputs**
+  A crafted or truncated `.gltf` could read past the end of its buffer: the byteOffset + byteLength test could overflow, and `skin.joints[i]` and `sampler.output` were dereferenced without checking the index against the accessor count.
+
+- **Model node instantiation is depth-limited**
+  A glTF node graph containing a cycle drove `instantiateNode` into unbounded recursion and a stack overflow. Capped at MAX_NODE_DEPTH = 128.
+
+- **CDLOD terrain node selection compares against the child range**
+  The selection test compared the camera distance against the node's own LOD range rather than its children's, so a node subdivided one level later than intended across the whole tree.
+
+- **UI signal emission survives a slot that destroys its owner**
+  A menu button whose slot deletes the UIElement owning the signal left `emit()` iterating a freed vector. The slot list is now copied before dispatch.
+
+- **Paint tools no longer double their first stroke**
+  `CommandHistory::execute()` calls `execute()` on push, and the foliage, scatter and tree paint commands had already applied their instances in the constructor — so every first stroke landed twice. All three now guard with an m_applied flag.
+
+- **GPU cloth friction is no longer arithmetically inert**
+  `applyFriction` derived its normal impulse from the velocity along the normal, and all three call sites zero that component before calling it — so the friction term was always zero. The impulse is now captured before the zeroing and passed in.
+
+- **TAA history rejects a degenerate previous-frame normal**
+  `normalize(nPrev)` on a zero vector yields NaN, which the history buffer then carries forever. Both normals are length-checked before the comparison.
+
+- **Curve fitter no longer stalls on coefficients far from unity**
+  The central-difference Jacobian used one absolute step for every coefficient, so a coefficient of large magnitude produced a step that vanished into its own floating-point ulp and a column of zeroes. The step now falls back to a relative one only where the absolute step genuinely underflows.
+
+- **C++ codegen sanitises comment text from formula library JSON**
+  `formula.description` and `formula.source` were spliced verbatim into `///` comments, so a library entry containing a newline or a comment terminator injected arbitrary C++ into the generated header. Uses the same sanitiser the GLSL backend already had.
+
+- **Scene transforms are resolved before the probe and radiosity bakes**
+  `scene->update(0.0f)` ran after the bakes, so both baked against un-propagated transforms — every child entity was lit at its parent-relative position.
+
+- **Anti-aliasing hotkey cycles all five modes**
+  The cycle was modulo 4 over a five-value enum, so one mode was unreachable from the keyboard.
+
+- **Audit tool config no longer corrupts its own defaults**
+  `_deep_merge` shallow-copied the base dict, so `_detect_tools` mutated the module-level DEFAULTS in place and every later call in the same process saw the previous project's tool set. This was also the suite's one failing test (`tools/audit`: 869 passed / 1 failed → 870 passed).
+
 ### 2026-08-31 Security — CI workflows hardened against template injection and over-broad tokens
 
 A whole-tree static-analysis sweep ran `zizmor` over the four workflows for

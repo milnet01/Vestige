@@ -416,6 +416,17 @@ void Framebuffer::cleanup()
         m_colorAttachment2 = 0;
     }
 
+    // m_colorAttachment3 was allocated by create() (fourthColorAttachment) and
+    // never released here, so every resize() — which is cleanup() + create() —
+    // orphaned a full-resolution RGBA16F texture (~16.6 MB at 1080p). The TAA
+    // scene FBO uses the fourth attachment and is resized on every window
+    // resize, so a drag-resize leaked it dozens of times.
+    if (m_colorAttachment3 != 0)
+    {
+        glDeleteTextures(1, &m_colorAttachment3);
+        m_colorAttachment3 = 0;
+    }
+
     if (m_depthAttachment != 0)
     {
         if (m_isDepthRenderbuffer)

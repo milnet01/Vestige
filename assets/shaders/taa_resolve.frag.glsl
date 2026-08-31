@@ -147,7 +147,13 @@ void main()
     vec3 nCur  = texture(u_currentNormal, v_texCoord).xyz;
     vec3 nPrev = texture(u_prevNormal,    historyUV).xyz;   // same reprojection as colour history
     float vMask = 0.0;
-    if (dot(nCur, nCur) > 0.01)
+    // BOTH normals must be guarded. nPrev carries the same cleared zero-length
+    // sentinel as nCur, and historyUV can also land off-screen -- normalize()
+    // of a zero vector is NaN, and that NaN reaches feedback and then the
+    // history texture, where the reprojection loop spreads it every frame. The
+    // max() clamp below does NOT rescue it: max(NaN, 0.0) is not specified to
+    // return 0.0 and does not on common drivers.
+    if (dot(nCur, nCur) > 0.01 && dot(nPrev, nPrev) > 0.01)
     {
         float ndot = clamp(dot(normalize(nCur), normalize(nPrev)), 0.0, 1.0);
         vMask = clamp(u_disocclusionAlpha * (1.0 - ndot), 0.0, 1.0);

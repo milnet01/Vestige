@@ -35,6 +35,14 @@ public:
 
     void execute() override
     {
+        // CommandHistory::execute() calls this unconditionally on the FIRST
+        // push, not only on redo -- so without this guard every tree placement
+        // was applied twice.
+        if (!m_applied)
+        {
+            m_applied = true;
+            return;
+        }
         for (const auto& ref : m_added)
         {
             int gx, gz;
@@ -74,6 +82,8 @@ private:
     FoliageManager& m_manager;
     std::vector<TreeInstanceRef> m_added;
     std::vector<TreeInstanceRef> m_removed;
+    /// See paint_foliage_command.h -- first execute() is the push, not a redo.
+    bool m_applied = false;
 };
 
 } // namespace Vestige

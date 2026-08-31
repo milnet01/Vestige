@@ -35,6 +35,14 @@ public:
 
     void execute() override
     {
+        // CommandHistory::execute() calls this unconditionally on the FIRST
+        // push, not only on redo -- so without this guard every scatter stroke
+        // was applied twice and the instance count silently doubled.
+        if (!m_applied)
+        {
+            m_applied = true;
+            return;
+        }
         // Redo: re-add added, re-remove removed
         for (const auto& ref : m_added)
         {
@@ -76,6 +84,8 @@ private:
     FoliageManager& m_manager;
     std::vector<ScatterInstanceRef> m_added;
     std::vector<ScatterInstanceRef> m_removed;
+    /// See paint_foliage_command.h -- first execute() is the push, not a redo.
+    bool m_applied = false;
 };
 
 } // namespace Vestige

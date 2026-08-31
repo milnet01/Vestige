@@ -58,6 +58,7 @@
 #include "editor/tools/brush_tool.h"
 #include "editor/scene_serializer.h"
 #include "profiler/cpu_profiler.h"
+#include "utils/cube_loader.h"
 
 #include <imgui.h>
 #include <GLFW/glfw3.h>
@@ -128,6 +129,39 @@ bool Engine::initialize(const EngineConfig& config)
 
     // Create resource manager
     m_resourceManager = std::make_unique<ResourceManager>();
+
+    // Install the path sandbox. Every validatePath() early-returns the raw path
+    // when the roots list is empty, so until this call the sandbox that
+    // docs/engine/resource/spec.md calls "the choke-point every public load runs
+    // through" was inert in production -- it had no caller outside the tests.
+    // A scene or model file is attacker-controllable in the threat model that
+    // matters for a downloadable engine, so this is what stops an asset
+    // reference escaping the asset root.
+    {
+        std::vector<std::filesystem::path> assetRoots;
+        std::error_code rootEc;
+        auto addRoot = [&assetRoots, &rootEc](const std::filesystem::path& p) {
+            if (p.empty()) return;
+            auto canon = std::filesystem::weakly_canonical(p, rootEc);
+            if (!rootEc && !canon.empty()) assetRoots.push_back(canon);
+            rootEc.clear();
+        };
+        addRoot(config.assetPath);
+        addRoot(std::filesystem::current_path(rootEc));
+        rootEc.clear();
+
+        if (assetRoots.empty())
+        {
+            Logger::warning("Path sandbox NOT installed — no resolvable asset root; "
+                            "asset loads will be unrestricted");
+        }
+        else
+        {
+            m_resourceManager->setSandboxRoots(assetRoots);
+            CubeLoader::setSandboxRoots(assetRoots);
+            m_sandboxRoots = assetRoots;  // AudioEngine is wired once AudioSystem exists
+        }
+    }
 
     // Create scene manager
     m_sceneManager = std::make_unique<SceneManager>();
@@ -231,6 +265,13 @@ bool Engine::initialize(const EngineConfig& config)
     // device itself comes up later in AudioSystem::initialize; the player
     // checks isAvailable() lazily). MusicSystem is registered here, before
     // initializeAll() runs the phase sort, so it ticks each frame.
+    // Second half of the path-sandbox install: AudioEngine is owned by
+    // AudioSystem, so it can only be wired once that system exists.
+    if (!m_sandboxRoots.empty())
+    {
+        audioSys->getAudioEngine().setSandboxRoots(m_sandboxRoots);
+    }
+
     m_musicPlayer = std::make_unique<AudioMusicPlayer>(audioSys->getAudioEngine());
     m_systemRegistry.registerSystem<MusicSystem>(*m_musicPlayer);
 
@@ -852,7 +893,12 @@ bool Engine::initialize(const EngineConfig& config)
             case GLFW_KEY_F7:
             {
                 int current = static_cast<int>(m_renderer->getAntiAliasMode());
-                int next = (current + 1) % 4;
+                // AntiAliasMode has FIVE values (None, MSAA_4X, TAA, SMAA,
+                // FXAA). % 4 made FXAA unreachable from this hotkey and, from
+                // FXAA, landed on MSAA_4X — the most expensive mode. FXAA is
+                // the Low/Medium quality-preset default, so this hit exactly
+                // the weak hardware it exists for.
+                int next = (current + 1) % 5;
                 m_renderer->setAntiAliasMode(static_cast<AntiAliasMode>(next));
                 break;
             }
@@ -4464,6 +4510,14 @@ void Engine::setupTabernacleScene()
 
         shGrid->initialize(gridConfig);
 
+        // World matrices MUST exist before any bake. Entity::m_worldMatrix is
+        // identity until Entity::update() runs, Scene::collectRenderData() is
+        // const and does not update it, and scene->update(0.0f) used to sit at
+        // the very END of this function — so the SH grid, the radiosity bounce
+        // and the cubemap probe were all baked against ~330 entities collapsed
+        // at the world origin. No tent, no walls, no courtyard.
+        scene->update(0.0f);
+
         // Capture from scene renders at each probe position (direct light pass).
         // 32×32 face size is sufficient for L2 SH (only 9 coefficients).
         auto renderData = scene->collectRenderData();
@@ -4502,7 +4556,8 @@ void Engine::setupTabernacleScene()
     m_camera->setYaw(-90.0f);
     m_camera->setPitch(-5.0f);
 
-    scene->update(0.0f);
+    // (scene->update(0.0f) now runs before the probe bakes above, where the
+    // world matrices are actually needed.)
 
     Logger::info("Tabernacle scene ready: courtyard (60 pillars, gate, altar, laver), "
                  "tent (4 roof layers, veil, entrance), Ark, Menorah, Table, Incense Altar, "

@@ -35,7 +35,15 @@ public:
 
     void execute() override
     {
-        // Already applied during painting — this is called for redo
+        // CommandHistory::execute() calls this unconditionally on the FIRST
+        // push, not only on redo -- so without this guard every paint stroke
+        // was applied twice and the instance count silently doubled.
+        // CreateEntityCommand uses the same first-execute guard.
+        if (!m_applied)
+        {
+            m_applied = true;
+            return;
+        }
         m_manager.restoreFoliage(m_added);
         m_manager.removeFoliage(m_removed);
     }
@@ -67,6 +75,10 @@ private:
     FoliageManager& m_manager;
     std::vector<FoliageInstanceRef> m_added;
     std::vector<FoliageInstanceRef> m_removed;
+    /// The stroke was already applied by the brush, so the first execute() --
+    /// which CommandHistory issues on push -- must be a no-op. Later ones are
+    /// redos and do re-apply.
+    bool m_applied = false;
 };
 
 } // namespace Vestige

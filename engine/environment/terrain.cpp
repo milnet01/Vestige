@@ -329,7 +329,18 @@ void Terrain::selectNode(int nodeIdx, const glm::vec3& cameraPos,
 
     // If this node has children and the camera is close enough to warrant finer detail
     bool hasChildren = (node.children[0] >= 0);
-    if (hasChildren && dist < lodRange)
+    // CDLOD: a node with children is drawn only when the camera is FARTHER
+    // than the range of the level below it, so its draw interval is
+    // [range[lod-1], range[lod]) — which is exactly the band the morph factor
+    // is computed over (see prevRange below, and terrain.vert.glsl:52).
+    // Testing against this node's OWN range put every subdivided node past the
+    // band's far edge, pinning morphFactor at 1.0: coarse nodes rendered at
+    // half their configured resolution and every LOD join had a T-junction.
+    // hasChildren implies lod > 0 (buildNode only subdivides when lodLevel > 0).
+    const float childRange = (lod > 0)
+        ? m_lodRanges[static_cast<size_t>(lod - 1)]
+        : 0.0f;
+    if (hasChildren && dist < childRange)
     {
         // Recurse into children for finer detail
         for (int i = 0; i < 4; ++i)

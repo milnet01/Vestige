@@ -33,8 +33,10 @@
 #include "ui/caption_map.h"
 #include "ui/subtitle.h"
 
+#include <filesystem>
 #include <memory>
 #include <string>
+#include <vector>
 
 namespace Vestige
 {
@@ -206,6 +208,11 @@ private:
     double m_profileElapsedSec = 0.0;    ///< Cumulative time_s passed to sample().
     PhysicsWorld m_physicsWorld;
     PhysicsDebugDraw m_physicsDebugDraw;
+
+    /// Canonicalised asset roots installed into every path sandbox
+    /// (ResourceManager, CubeLoader, AudioEngine). Empty means the sandbox
+    /// could not be resolved and loads are unrestricted -- initialize() warns.
+    std::vector<std::filesystem::path> m_sandboxRoots;
     VisualTestRunner m_visualTestRunner;
     bool m_visualTestMode = false;
     std::string m_assetPath;

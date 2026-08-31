@@ -9,7 +9,25 @@
 #include <iomanip>
 #include <sstream>
 #include <stdexcept>
+#include <string>
 #include <unordered_set>
+
+namespace
+{
+
+/// Strip CR/LF so free-text library fields cannot terminate a `///` comment.
+/// Local copy of CodegenGlsl's helper -- both generators emit comments from
+/// the same untrusted JSON, and only one of them was guarded.
+std::string sanitizeComment(const std::string& text)
+{
+    std::string out;
+    out.reserve(text.size());
+    for (char c : text)
+        out += (c == '\n' || c == '\r') ? ' ' : c;
+    return out;
+}
+
+}  // namespace
 
 namespace Vestige
 {
@@ -146,9 +164,14 @@ std::string CodegenCpp::generateFunction(const FormulaDefinition& formula,
     std::ostringstream out;
 
     // Comment with formula description
-    out << "/// @brief " << formula.description << "\n";
+    // Sanitised: library JSON is documented as untrusted input, and a raw CR/LF
+    // in `description` or `source` terminates the `///` comment so the rest of
+    // the field becomes emitted C++ in a header that is compiled into the
+    // engine. CodegenGlsl has had sanitizeComment() for exactly this; the C++
+    // generator did not.
+    out << "/// @brief " << sanitizeComment(formula.description) << "\n";
     if (!formula.source.empty())
-        out << "/// @note Source: " << formula.source << "\n";
+        out << "/// @note Source: " << sanitizeComment(formula.source) << "\n";
 
     // Function signature
     std::string funcName = toCppFunctionName(formula.name);

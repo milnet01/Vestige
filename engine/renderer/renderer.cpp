@@ -917,16 +917,6 @@ void Renderer::endFrame(float deltaTime)
         m_msaaFbo->resolve(*m_resolveFbo);
     }
 
-    // Invalidate the source FBO after resolve — tells the driver the multisampled
-    // data is no longer needed, avoiding unnecessary writeback to VRAM.
-    if (!usesNonMsaaFbo && m_msaaFbo && m_msaaFbo->isMultisampled())
-    {
-        glBindFramebuffer(GL_FRAMEBUFFER, m_msaaFbo->getId());
-        GLenum attachments[] = { GL_COLOR_ATTACHMENT0, GL_DEPTH_ATTACHMENT };
-        glInvalidateFramebuffer(GL_FRAMEBUFFER, 2, attachments);
-        glBindFramebuffer(GL_FRAMEBUFFER, 0);
-    }
-
     // 2. Resolve depth → sampleable depth texture for SSAO and TAA motion vectors
     GLuint depthSourceFbo = usesNonMsaaFbo ? m_taaSceneFbo->getId()
                                             : (m_msaaFbo ? m_msaaFbo->getId() : 0);
@@ -937,6 +927,21 @@ void Renderer::endFrame(float deltaTime)
         glBlitFramebuffer(0, 0, m_windowWidth, m_windowHeight,
                           0, 0, m_windowWidth, m_windowHeight,
                           GL_DEPTH_BUFFER_BIT, GL_NEAREST);
+        glBindFramebuffer(GL_FRAMEBUFFER, 0);
+    }
+
+    // Invalidate the source FBO after BOTH resolves — tells the driver the
+    // multisampled data is no longer needed, avoiding writeback to VRAM.
+    // This must follow the depth resolve above: glInvalidateFramebuffer makes
+    // the named attachment's contents undefined at that point in the command
+    // stream, so invalidating GL_DEPTH_ATTACHMENT before the depth blit fed
+    // undefined depth to SDSM, SSAO, god rays, contact shadows, the GI inject
+    // and the fog composite. It sat on the default MSAA path.
+    if (!usesNonMsaaFbo && m_msaaFbo && m_msaaFbo->isMultisampled())
+    {
+        glBindFramebuffer(GL_FRAMEBUFFER, m_msaaFbo->getId());
+        GLenum attachments[] = { GL_COLOR_ATTACHMENT0, GL_DEPTH_ATTACHMENT };
+        glInvalidateFramebuffer(GL_FRAMEBUFFER, 2, attachments);
         glBindFramebuffer(GL_FRAMEBUFFER, 0);
     }
 
@@ -1280,6 +1285,19 @@ void Renderer::endFrame(float deltaTime)
             if (data)
             {
                 float avgLuminance = 0.2126f * data[0] + 0.7152f * data[1] + 0.0722f * data[2];
+                // std::max returns its FIRST argument when the comparison is
+                // false, and every comparison against NaN is false -- so a NaN
+                // passes straight through, std::clamp below passes it too, and
+                // m_exposure is NaN for the rest of the process with no
+                // recovery path. One non-finite texel anywhere in the HDR scene
+                // reaches the 1x1 mip and ends the session's rendering.
+                if (!std::isfinite(avgLuminance))
+                {
+                    Logger::warning("Auto-exposure: non-finite scene luminance — "
+                                    "keeping previous exposure");
+                }
+                else
+                {
                 avgLuminance = std::max(avgLuminance, 0.001f);
 
                 m_targetExposure = m_autoExposureTarget / avgLuminance;
@@ -1287,6 +1305,7 @@ void Renderer::endFrame(float deltaTime)
 
                 float adaptSpeed = 1.0f - std::exp(-m_autoExposureSpeed * deltaTime);
                 m_exposure += (m_targetExposure - m_exposure) * adaptSpeed;
+                }
 
                 glUnmapNamedBuffer(m_luminancePbo[readIndex]);
             }
@@ -3894,6 +3913,14 @@ void Renderer::renderShadowPass(const std::vector<SceneRenderData::RenderItem>& 
             if (count >= MIN_INSTANCE_BATCH_SIZE && m_instanceBuffer)
             {
                 m_shadowDepthShader.setBool("u_useInstancing", true);
+                // Uniforms are program state and persist across use(), cascades
+                // and frames. shadow_depth.vert.glsl applies skinning (line 43)
+                // BEFORE the instancing branch (line 59), so without this reset
+                // an instanced static batch drawn after any skinned batch is
+                // deformed by the previous draw's bone palette. The scene path
+                // already does this (see u_hasBones=false on its instanced
+                // branch); the shadow path did not.
+                m_shadowDepthShader.setBool("u_hasBones", false);
                 m_instanceBuffer->upload(batch.modelMatrices);
                 batch.mesh->setupInstanceAttributes(m_instanceBuffer->getHandle());
 

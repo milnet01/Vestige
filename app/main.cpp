@@ -15,10 +15,33 @@
 #include "platform/folder_dialog.h"
 #include "utils/asset_locator.h"
 
+#include <exception>
 #include <filesystem>
 #include <string>
 
+// Engine::initialize constructs Window, whose constructor THROWS on the three
+// commonest startup failures (no GLFW, no window, no GL 4.5 via glad --
+// window.cpp:34/63/74). Without this catch those escape main: the process
+// aborts with SIGABRT instead of returning the exit code cli_args.h documents,
+// and because unwinding is not guaranteed for an exception leaving main,
+// ~Engine never runs -- so the log file opened during init is never flushed.
+static int runEngine(int argc, char* argv[]);
+
 int main(int argc, char* argv[])
+{
+    try
+    {
+        return runEngine(argc, argv);
+    }
+    catch (const std::exception& e)
+    {
+        Vestige::Logger::fatal(std::string("Engine initialization failed — ") + e.what());
+        Vestige::Logger::closeLogFile();
+        return 1;
+    }
+}
+
+static int runEngine(int argc, char* argv[])
 {
     Vestige::EngineConfig config;
     config.window.title = "Vestige Engine v0.5.0";

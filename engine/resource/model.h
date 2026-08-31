@@ -105,9 +105,15 @@ public:
     std::vector<std::shared_ptr<AnimationClip>> m_animationClips;
 
 private:
+    /// Maximum node-hierarchy depth honoured by instantiateNode. glTF 2.0
+    /// requires a strict tree, but a crafted file can contain a cycle; without
+    /// a bound that is unbounded recursion plus one Entity allocation per
+    /// level. Mirrors kMaxEntityRecursionDepth in entity_serializer.cpp.
+    static constexpr int MAX_NODE_DEPTH = 128;
+
     /// @brief Recursively instantiates a node and its children.
     Entity* instantiateNode(Scene& scene, Entity* parent,
-                            const ModelNode& node) const;
+                            const ModelNode& node, int depth = 0) const;
 };
 
 } // namespace Vestige

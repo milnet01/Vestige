@@ -69,8 +69,15 @@ Entity* Model::instantiate(Scene& scene, Entity* parent, const std::string& name
 }
 
 Entity* Model::instantiateNode(Scene& scene, Entity* parent,
-                                const ModelNode& node) const
+                                const ModelNode& node, int depth) const
 {
+    if (depth >= MAX_NODE_DEPTH)
+    {
+        Logger::warning("Model: node hierarchy exceeded MAX_NODE_DEPTH — "
+                        "refusing to recurse further (cyclic or malformed glTF?)");
+        return nullptr;
+    }
+
     // Create entity for this node
     std::string nodeName = node.name.empty() ? "Node" : node.name;
     auto entity = std::make_unique<Entity>(nodeName);
@@ -134,7 +141,7 @@ Entity* Model::instantiateNode(Scene& scene, Entity* parent,
         if (childIdx >= 0 && childIdx < static_cast<int>(m_nodes.size()))
         {
             instantiateNode(scene, entityPtr,
-                            m_nodes[static_cast<size_t>(childIdx)]);
+                            m_nodes[static_cast<size_t>(childIdx)], depth + 1);
         }
     }
 

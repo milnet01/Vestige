@@ -2744,6 +2744,115 @@ Every Phase 10.7 design-doc promise is verified by a test authored **from the de
   Kind: doc-fix.
   Source: cold-eyes-2026-06-01 (CE-bundle review loop 4).
 
+## Phase 10.10: Whole-Tree Review Remediation (2026-08-31)
+
+Deferred findings from a whole-tree check-code + review-code sweep on
+2026-08-31. 26 cold lanes over 147k LoC of engine, 92 GLSL shaders, the editor,
+the audit tool and the Formula Workbench. 19 verified CRITICAL/HIGH defects were
+fixed in the same pass (see CHANGELOG 2026-08-31); everything below was verified
+against source and deliberately NOT fixed then, either because it needs a design
+decision or because the fix is larger than a review pass should make unattended.
+
+The dominant theme, found independently by six lanes, is features recorded as
+shipped that have no invocation path at all.
+
+- 📋 [3D_E-0627] **Visual scripting cannot run: ScriptingSystem is never constructed outside tests.**
+  ROADMAP:519 records `- [x] ScriptComponent (entity attachment) + ScriptingSystem`. Verified: `ScriptingSystem` appears outside engine/scripting/ only in two comments, one of which says "runtime doesn't currently spin up a ScriptingSystem (scripts are exercised only via unit tests)" (editor.h:383). `ScriptComponent` and `addScript` have ZERO callers. `scripting_system.cpp:183` still reads "In the future, this will: 1. Find all entities with ScriptComponent".
+  Decide: wire onSceneLoad + register the system, or un-tick the roadmap bullet and mark docs/engine/scripting/spec.md Status: partial.
+  **Layman:** The whole node-based scripting feature is built and tested but never switched on, so no script can ever execute in the shipped engine.
+  Kind: fix.
+  Source: review-code 2026-08-31 lane scripting.
+
+- 📋 [3D_E-0628] **Key rebinding and mouse sensitivity are wired to nothing.**
+  Three separate defects in one surface. (a) Settings::controls.mouseSensitivity / invertY / gamepadDeadzoneLeft / gamepadDeadzoneRight are serialised, clamped and driven by live widgets, and have ZERO consumers; FirstPersonController reads ControllerConfig::mouseSensitivity, a different field. (b) InputManager::isActionDown / actionAxisValue have ZERO production callers while the FPC polls isKeyDown(GLFW_KEY_W) directly, so rebinding a movement key changes nothing and AZERTY/Dvorak layouts are wrong. (c) settings_editor_panel.cpp:837/909 writes the live map only and calls mutate([](Settings&){}), so isDirty() stays false, Apply is greyed out, and the next settings edit re-applies the old bindings over the new one.
+  docs/engine/input/spec.md:294 states the isActionDown rule as normative.
+  **Layman:** Changing mouse sensitivity, invert-Y or any key binding in Settings has no effect at all, and rebinds are lost on the next settings change.
+  Kind: fix.
+  Source: review-code 2026-08-31 lanes core-support, editor-panels.
+
+- 📋 [3D_E-0629] **GPU particle sort never runs, and its consumer is switched on regardless.**
+  GPUParticleSystem::sort() has zero callers -- GPUParticleEmitter::update calls beginFrame/emit/simulate/compact/updateIndirectCommand and never sort. particle_renderer.cpp:387-390 contains an empty block whose comment asserts the dispatch happened, then :418 sets u_useSortIndices = needsSorting(), so particle_gpu.vert.glsl:64 indexes the particle SSBO with uninitialised memory.
+  Compounding: the sort SSBO is sized maxParticles but the shader is dispatched over nextPowerOf2(maxParticles) with no sentinel for the tail, so FIXING the missing call without also fixing the sizing makes an out-of-bounds access live. Fix both together, or force u_useSortIndices false as an interim.
+  Also in this shader: u_sortStage is set by the CPU (gpu_particle_system.cpp:359) and never read, so the bitonic compare direction is derived from the step and the network does not sort.
+  **Layman:** Transparent GPU particles are drawn in an order read from memory that was never written.
+  Kind: fix.
+  Source: review-code 2026-08-31 lane renderer-effects-vegetation.
+
+- 📋 [3D_E-0630] **CPU and GPU cloth disagree on particle mass by up to 50x.**
+  CLAUDE.md rule 7 requires a dual CPU/GPU implementation to be pinned with a parity test; docs/engine/physics/spec.md 6 records that the harness does not exist, and the two have diverged.
+  cloth_simulator.cpp:83 derives invMass = 1.0f / config.particleMass. gpu_cloth_simulator.cpp m_invMassMirror is only ever 1.0f or 0.0f (lines 258, 894, 980) -- setParticleMass updates m_config and nothing else -- and cloth_constraints.comp.glsl:73 consumes .w as the XPBD weight. At the shipped linenCurtain mass of 0.02 kg that is w=50 on CPU and w=1 on GPU.
+  Same lane, same class: m_compliancesDirty is written by three setters and read nowhere (and its SSBO is immutable, so a naive fix still fails silently); GPU reset() clears pins where CPU reset() does not; the GPU backend skips the CPU's config validation entirely, so a large grid wraps uint32 into a multi-gigabyte out-of-bounds write.
+  Write the parity test FIRST -- it is the thing rule 7 actually asks for.
+  **Layman:** Cloth behaves differently depending on which solver the engine picks, and it picks automatically by size.
+  Kind: fix.
+  Source: review-code 2026-08-31 lane physics.
+
+- 📋 [3D_E-0631] **SMAA ships invented lookup tables, and one of them has no consumer.**
+  smaa.cpp:65-66/121/152 generate the area and search textures from placeholder formulas whose own comments say "simplified -- same data for now" and "For simplicity, we fill it with a uniform continue-searching pattern". smaa_blend.frag.glsl:100 addresses them with the genuine reference expression, so a correct consumer reads a table that does not encode the SMAA area function, and the diagonal half is a byte copy of the orthogonal half.
+  Separately Smaa::getSearchTexture() has zero callers: the 64x16 table is generated and uploaded every startup and consumed by nothing, while the shader hand-rolls its search as a linear scan.
+  smaa.h:20-23 and ARCHITECTURE.md:102 both advertise "SMAA 1x at HIGH quality preset". Fix: ship the reference AreaTex.h bytes (fixed constant, MIT with SMAA), or amend both documents.
+  **Layman:** Selecting SMAA anti-aliasing gives you something that is not SMAA, and nothing says so.
+  Kind: fix.
+  Source: review-code 2026-08-31 lane renderer-effects-vegetation.
+
+- 📋 [3D_E-0632] **Editor data loss: cutout tool has no undo, and the density map is never saved.**
+  cutout_tool.cpp:66 accepts a CommandHistory& and discards it; :162 mutates the wall mesh with no command pushed. Because FileMenu::isDirty() delegates entirely to CommandHistory (file_menu.cpp:330), the scene is never marked dirty -- so there is no unsaved-changes prompt either. Every sibling tool (wall/roof/stair/room) uses the history correctly.
+  Same shape: brush_tool.cpp:263 DENSITY-mode strokes push no command (endStroke has branches for ERASER/FOLIAGE/SCATTER/TREE and none for DENSITY); and DensityMap::serialize() (density_map.cpp:197) has zero callers although docs/engine/environment/spec.md:417 says scene save writes it, so a painted mask is discarded on every save.
+  Also: hierarchy_panel.cpp:561/569/580 bind drag-source, drop-target and the context menu to the LAST submitted item, which is the lock button, not the tree row -- so reparent-by-drag and the entity right-click menu are reachable only through a 16px square.
+  **Layman:** Cutting a door or window cannot be undone and does not mark the scene dirty, so quitting loses it with no prompt. Painted density masks vanish on save.
+  Kind: fix.
+  Source: review-code 2026-08-31 lanes editor-shell-tools, environment-terrain.
+
+- 📋 [3D_E-0633] **Two editor panels cannot be closed, and Environment/Performance disable themselves first.**
+  environment_panel.cpp:22 and performance_panel.cpp:25 both pass &m_open to ImGui::Begin (drawing an X that sets it false) but neither draw() starts with `if (!m_open) return;`, and neither call site guards. ImGui does not skip a window because *p_open is false -- the caller must. Four sibling panels do exactly that (terrain_panel.cpp:21, navigation_panel.cpp:18, audio_panel.cpp:157, validation_panel.cpp:21).
+  Performance is worse: profiler.setEnabled(m_open) at :23 runs first, so the un-closable window then shows frozen data.
+  One line per file.
+  **Layman:** Clicking the X on the Environment or Performance panel does nothing; Performance also freezes its own data.
+  Kind: fix.
+  Source: review-code 2026-08-31 lane editor-panels.
+
+- 📋 [3D_E-0634] **Skinned meshes snap to bind pose the moment a one-shot animation finishes.**
+  skeleton_animator.cpp:638 -- `return m_skeleton && !m_boneMatrices.empty() && m_playing;`. skeleton_animator.h:143 documents hasBones() as "whether this animator has valid bone data to render", and scene.cpp:374 gates item.boneMatrices on it. A non-looping clip sets m_playing = false on completion (:221), so the renderer stops receiving bone matrices and draws u_hasBones=false -- while the matrices are still perfectly valid.
+  Drop `&& m_playing`. One token, and it hits the engine's stated primary use case (the Tabernacle veil draw).
+  Same lane: sprite_animation.cpp:91-105 has an unbounded `while (true)` for a looping clip whose frames all have durationMs <= 0 -- a full engine hang from an asset-authoring slip. Clamp durationMs in addClip.
+  **Layman:** When a non-looping animation ends, the character visibly pops back to its default pose.
+  Kind: fix.
+  Source: review-code 2026-08-31 lane systems-anim-nav-ui.
+
+- 📋 [3D_E-0635] **Decide whether release workflows may restore a build cache at all.**
+  zizmor reports cache-poisoning (Low confidence) on actions/cache in release.yml (x2) and audit-full.yml. Not fixed, deliberately: release.yml's cache keys are already namespaced (`release-cmake-deps-*`) away from ci.yml's, and the workflow only runs on maintainer-gated tag pushes or workflow_call from the cadence -- so the poisoning vector needs the same write access as poisoning anything else.
+  The trade is real either way: dropping the cache makes release builds hermetic at the cost of several minutes per release. That is a maintainer decision, not a review-pass edit.
+  **Layman:** Release builds reuse a cached dependency folder; in principle that cache could be tampered with.
+  Kind: investigate.
+  Source: check-code 2026-08-31, zizmor cache-poisoning.
+
+- 📋 [3D_E-0636] **Bulk static-analysis noise needs a project audit-config, not per-run calibration.**
+  No audit-config.json exists at any of the three probed paths, so every run re-derives its calibration. Measured this run:
+  - typos: 8062 findings, of which 5747 (71%) are byte sequences inside .jpg/.png/.hdr/.glb/.ttf binaries and 1385 more are the domain term LOD. Real defects after both: approximately zero. Exclude binary asset extensions and add LOD to the dictionary.
+  - ruff: 1427 of 1880 are S101 (assert) in test files.
+  - cppcheck: 1012 of 1648 are unusedStructMember, an artefact of per-TU analysis on a header-heavy tree.
+  - gitleaks pointed at the working tree scans 27 GB of untracked build output; scoped to tracked files it is 21.6 MB.
+  Also author a .clang-tidy: without one the default check set is EMPTY, so clang-tidy exits having analysed nothing.
+  **Layman:** The linters produce thousands of false alarms that hide the real ones.
+  Kind: fix.
+  Source: check-code 2026-08-31.
+
+- 📋 [3D_E-0637] **clang-based analysis is blocked by a GCC precompiled header.**
+  CMake generates cmake_pch.hxx.gch with GCC. clang-tidy and clazy cannot read a GCC PCH, and for the vestige_engine target it is `-Werror,-Wignored-gch` -- so every file is abandoned and BOTH TOOLS REPORT ZERO FINDINGS WHILE EXITING 0. That is the exact shape check-code exists to prevent.
+  Workaround used this run: --extra-arg=-Wno-error=ignored-gch, after which clang-tidy found 179 unique project-owned findings.
+  Proper fix: disable the PCH for clang-based analysis targets, or generate a clang PCH alongside. Until then, any clean clang-tidy result on this tree is meaningless.
+  **Layman:** Two of the code-checking tools silently check nothing at all.
+  Kind: fix.
+  Source: check-code 2026-08-31.
+
+- 📋 [3D_E-0638] **GLSL has no static analysis at all: 92 shaders, zero tool coverage.**
+  No tool in check-code's set covers GLSL (its detection table has no GLSL row), and tools/shader_lint.py is a data-lint wired into ctest, not a semantic analyser -- it verifies `#version 450 core` and passes.
+  The cold read of those 92 files found 2 CRITICAL and 4 HIGH, including two shipped features that are arithmetically inert. Two were fixed this pass; still open from that lane: terrain.frag.glsl:530 diffuse missing the 1/PI and kD factors (terrain is ~PI x brighter than every other surface and not energy-conserving against its own specular); bloom_downsample.frag.glsl:41 extra Reinhard squash making every light above the threshold bloom identically; cloth_integrate.comp.glsl:39 writing prevPositions that no shader reads, so GPU cloth has no PBD velocity feedback; water.frag.glsl:180 perturbing world Z with the tangent-normal Z channel on the SIMPLE (weak-hardware) tier.
+  Evaluate glslangValidator or a spirv-based linter for the tool set.
+  **Layman:** Nothing automatically checks the shader code, and that is where several real bugs were found by hand.
+  Kind: fix.
+  Source: check-code + review-code 2026-08-31 lane shaders-glsl.
+
 ## Phase 11A: Gameplay Infrastructure
 **Goal:** The runtime subsystems every Phase 11B gameplay feature consumes — camera shake, screen flash, save-file compression, replay recording, behavior-tree runtime, and AI perception. Split out of the original single Phase 11 so the consumer-before-system dependencies surface at planning time rather than at implementation time.
 

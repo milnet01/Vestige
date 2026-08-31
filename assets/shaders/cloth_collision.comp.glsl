@@ -52,10 +52,12 @@ uniform uint u_particleCount;
 // normal. Modifies `v` in place.
 //
 // Invariant: called *after* the inward velocity component has been zeroed
-// out by the caller (the same pattern the CPU side uses), so `vNormal` here
-// is the residual normal velocity at contact (typically near zero on first
-// touch, non-zero on grazing contacts where some normal motion remains).
-void applyFriction(inout vec3 v, vec3 n)
+// out by the caller (the same pattern the CPU side uses). That is exactly why
+// `normalImpulse` is a PARAMETER: the residual dot(v, n) at that point is 0 by
+// construction, so deriving the normal speed from `v` here made the whole
+// function a no-op on every real contact. The caller passes the inward speed
+// it removed, which is the impulse Coulomb friction is proportional to.
+void applyFriction(inout vec3 v, vec3 n, float normalImpulse)
 {
     if (staticFriction <= 0.0 && kineticFriction <= 0.0) return;
 
@@ -65,7 +67,7 @@ void applyFriction(inout vec3 v, vec3 n)
     float vtLen    = length(vTangent);
     if (vtLen < 1e-7) return;
 
-    float normalSpeed = abs(vn);
+    float normalSpeed = normalImpulse;
     if (vtLen < staticFriction * normalSpeed)
     {
         v = vNormal;  // Static: stick.
@@ -93,8 +95,14 @@ void main()
     if (p.y < groundLimit)
     {
         p.y = groundLimit;
+        // Capture the inward normal speed BEFORE it is zeroed -- applyFriction
+        // needs the impulse that was just removed. Reading dot(v, n) after the
+        // zeroing gave normalSpeed == 0 exactly, which made the static test
+        // `vtLen < 0` never true and the kinetic reduction `k * 0 / vtLen` a
+        // no-op: friction was arithmetically inert on every contact.
+        float impulseY = max(0.0, -v.y);
         if (v.y < 0.0) v.y = 0.0;
-        applyFriction(v, vec3(0.0, 1.0, 0.0));
+        applyFriction(v, vec3(0.0, 1.0, 0.0), impulseY);
     }
 
     // Sphere colliders.
@@ -109,8 +117,9 @@ void main()
             vec3 n   = toP / dist;
             p        = c + n * r;
             float vn = dot(v, n);
+            float impulse = max(0.0, -vn);  // see the ground case above
             if (vn < 0.0) v -= n * vn;
-            applyFriction(v, n);
+            applyFriction(v, n, impulse);
         }
     }
 
@@ -131,8 +140,9 @@ void main()
         {
             p      -= n * signedDist;  // signedDist < 0, so subtract pushes outward.
             float vn = dot(v, n);
+            float impulse = max(0.0, -vn);  // see the ground case above
             if (vn < 0.0) v -= n * vn;
-            applyFriction(v, n);
+            applyFriction(v, n, impulse);
         }
     }
 

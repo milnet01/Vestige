@@ -13,7 +13,7 @@ import pytest
 @pytest.fixture
 def web_app():
     """Import the web app module; skip tests if Flask isn't installed."""
-    flask = pytest.importorskip("flask")
+    pytest.importorskip("flask")
     from web import app
     return app
 

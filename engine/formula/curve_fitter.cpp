@@ -45,6 +45,10 @@ void CurveFitter::computeJacobian(const ExprNode& expr,
     size_t N = coeffNames.size();
     jacobian.resize(M * N);
 
+    // The finite-difference step actually used for each coefficient (relative,
+    // see below), needed again when dividing the difference.
+    std::vector<float> perCoeffStep(N, step);
+
     ExpressionEvaluator eval;
 
     for (size_t j = 0; j < N; ++j)
@@ -56,8 +60,30 @@ void CurveFitter::computeJacobian(const ExprNode& expr,
             float val = coeffValues[k];
             if (k == j)
             {
-                mapPlus[coeffNames[k]] = val + step;
-                mapMinus[coeffNames[k]] = val - step;
+                // An absolute step is below the ULP of any float above ~330,
+                // so `val + step == val` exactly: both evaluations return the
+                // same number, the Jacobian column is all zeros, gradNorm is
+                // 0, the gradientThreshold test fires on iteration 0, and the
+                // fitter reports "Converged" after 0 iterations with the
+                // UNMODIFIED seed coefficients. The shipped
+                // aggregate_event_rate template (400 / 300 / 2200) underflowed
+                // on all three of its coefficients.
+                //
+                // Fall back to a relative step ONLY where the absolute one
+                // genuinely underflows. A blanket relative step also changes
+                // well-conditioned fits, which regressed
+                // CurveFitter.FitLinearTwoCoeffs and
+                // WeightedFitConvergesToWeightedOptimumOnSkewedData (both
+                // "lambda exceeded maximum") -- so this keeps the existing
+                // behaviour everywhere it already worked.
+                float h = step;
+                if (val + h == val || val - h == val)
+                {
+                    h = std::fmax(std::fabs(val) * step, step);
+                }
+                mapPlus[coeffNames[k]] = val + h;
+                mapMinus[coeffNames[k]] = val - h;
+                perCoeffStep[j] = h;
             }
             else
             {
@@ -70,7 +96,7 @@ void CurveFitter::computeJacobian(const ExprNode& expr,
         {
             float fPlus = eval.evaluate(expr, data[i].variables, mapPlus);
             float fMinus = eval.evaluate(expr, data[i].variables, mapMinus);
-            jacobian[i * N + j] = (fPlus - fMinus) / (2.0f * step);
+            jacobian[i * N + j] = (fPlus - fMinus) / (2.0f * perCoeffStep[j]);
         }
     }
 }

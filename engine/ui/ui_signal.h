@@ -36,7 +36,16 @@ public:
     /// @param args Arguments forwarded to each slot.
     void emit(Args... args) const
     {
-        for (const auto& slot : m_slots)
+        // Iterate a COPY. A slot may destroy the object that owns this signal:
+        // every main-menu button's onClick calls UISystem::applyIntent, which
+        // calls setRootScreen / pushModalScreen / popModalScreen, each of which
+        // clears the UICanvas and frees the UIElement holding this Signal. With
+        // a range-for over m_slots the loop then increments and compares
+        // iterators into freed heap, and the std::function was destroyed
+        // mid-call. Fires on the first button a player presses, and on the
+        // keyboard path too.
+        const std::vector<Slot> slots = m_slots;
+        for (const auto& slot : slots)
         {
             slot(args...);
         }

@@ -234,7 +234,12 @@ static void loadTextures(const tinygltf::Model& gltfModel,
                 continue;
             }
             const auto& buffer = gltfModel.buffers[static_cast<size_t>(bufferView.buffer)];
-            if (bufferView.byteOffset + bufferView.byteLength > buffer.data.size())
+            // Both operands are size_t straight from the file, so the sum can
+            // wrap: byteOffset = 2^64-8 with byteLength = 16 sums to 8 and
+            // passes, after which data() + byteOffset is a wild pointer.
+            // Compare without adding.
+            if (bufferView.byteOffset > buffer.data.size() ||
+                bufferView.byteLength > buffer.data.size() - bufferView.byteOffset)
             {
                 Logger::warning("glTF: buffer data out of range for embedded image: " + image.name);
                 outModel.m_textures.push_back(resourceManager.getDefaultTexture());
@@ -1191,6 +1196,14 @@ static void loadSkin(const tinygltf::Model& gltfModel, Model& outModel)
     for (int i = 0; i < jointCount; i++)
     {
         int gltfNodeIndex = skin.joints[static_cast<size_t>(i)];
+        // skin.joints holds unvalidated ints from the file; buildNodeHierarchy
+        // bounds-checks the same value, this path did not.
+        if (gltfNodeIndex < 0 ||
+            static_cast<size_t>(gltfNodeIndex) >= gltfModel.nodes.size())
+        {
+            Logger::warning("glTF: skin joint node index out of range — skipping joint");
+            continue;
+        }
         const auto& gltfNode = gltfModel.nodes[static_cast<size_t>(gltfNodeIndex)];
 
         Joint& joint = skeleton->m_joints[static_cast<size_t>(i)];
@@ -1379,6 +1392,15 @@ static void loadAnimations(const tinygltf::Model& gltfModel, Model& outModel)
                 // For morph targets, components = number of morph targets
                 // The accessor count = timestamps * morphTargetCount
                 // We read all floats and let the consumer interpret them
+                // sampler.output defaults to -1 in tinygltf; unchecked that is
+                // SIZE_MAX after the cast. channel.sampler is bounds-checked
+                // sixty lines above; this one was not.
+                if (sampler.output < 0 ||
+                    static_cast<size_t>(sampler.output) >= gltfModel.accessors.size())
+                {
+                    Logger::warning("glTF: animation sampler output index out of range");
+                    continue;
+                }
                 const auto& outAcc = gltfModel.accessors[static_cast<size_t>(sampler.output)];
                 if (!animChannel.timestamps.empty())
                 {

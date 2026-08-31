@@ -322,8 +322,21 @@ bool Texture::loadFromMemory(const unsigned char* rawData, int width, int height
     GLsizei mipLevels = computeMipLevels(m_width, m_height);
     glTextureStorage2D(m_textureId, mipLevels, internalFormat, m_width, m_height);
 
+    // Rows of a 3-component image at an odd width are not 4-byte aligned, and
+    // the default GL_UNPACK_ALIGNMENT of 4 then shears the upload into diagonal
+    // bands — the terrain "corduroy" artefact fixed in 82d0738. That fix reached
+    // three of this file's four upload paths; this one feeds
+    // generateNormalFromHeight, which is always 3-channel.
+    if (channels == 3)
+    {
+        glPixelStorei(GL_UNPACK_ALIGNMENT, 1);
+    }
     glTextureSubImage2D(m_textureId, 0, 0, 0, m_width, m_height,
                         dataFormat, GL_UNSIGNED_BYTE, flipped.data());
+    if (channels == 3)
+    {
+        glPixelStorei(GL_UNPACK_ALIGNMENT, 4);
+    }
     glGenerateTextureMipmap(m_textureId);
 
     Logger::debug("Texture loaded from raw data ("
