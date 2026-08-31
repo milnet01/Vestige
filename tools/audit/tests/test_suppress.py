@@ -7,7 +7,6 @@ from __future__ import annotations
 
 from pathlib import Path
 
-import pytest
 
 from lib.findings import Finding, Severity
 from lib.suppress import filter_suppressed, load_suppressions, save_suppression

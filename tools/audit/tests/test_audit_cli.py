@@ -16,7 +16,6 @@ import subprocess
 import sys
 from pathlib import Path
 
-import pytest
 
 # audit.py lives one level above tools/audit/tests/
 SCRIPT_DIR = Path(__file__).resolve().parent.parent

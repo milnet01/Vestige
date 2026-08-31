@@ -6,14 +6,13 @@
 from __future__ import annotations
 
 import html
-import json
 import logging
 from collections import defaultdict
 from datetime import datetime
 from typing import Any
 
 from .config import Config
-from .findings import Finding, Severity, deduplicate
+from .findings import Finding, deduplicate
 from .runner import AuditResults
 
 log = logging.getLogger("audit")

@@ -11,15 +11,12 @@ from pathlib import Path
 
 sys.path.insert(0, str(Path(__file__).resolve().parent.parent))
 
-import pytest
 
 from lib.findings import Finding, Severity
 from lib.sarif_output import (
     generate_sarif,
     write_sarif,
     _severity_to_level,
-    _build_rules,
-    _build_result,
     _pattern_to_rule_name,
 )
 

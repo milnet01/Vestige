@@ -37,8 +37,9 @@ on:
         options: [cadence, hotfix]
         default: cadence
 
-permissions:
-  contents: write
+# Default to nothing at the workflow level; each job requests exactly what it
+# needs. release-promote and release-rc already declare their own.
+permissions: {}
 
 concurrency:
   # Never let two cadence runs race on tag/branch creation.
@@ -50,6 +51,9 @@ jobs:
     name: Plan tags (promote / cut / hotfix)
     runs-on: ubuntu-24.04
     timeout-minutes: 10
+    permissions:
+      # This job creates and pushes the cadence tags and branches.
+      contents: write
     outputs:
       promote_tag: ${{ steps.plan.outputs.promote_tag }}
       rc_tag: ${{ steps.plan.outputs.rc_tag }}
@@ -58,6 +62,11 @@ jobs:
         uses: actions/checkout@9c091bb21b7c1c1d1991bb908d89e4e9dddfe3e0  # v6
         with:
           fetch-depth: 0  # need every tag + branch for the version math + merges
+          # persist-credentials stays ON here, deliberately: this job pushes
+          # tags and branches (see the promote/cut steps below) using the
+          # credentials checkout leaves in .git/config. Turning it off breaks
+          # the release automation. zizmor's `artipacked` finding on this step
+          # is therefore accepted rather than fixed.
 
       - name: Configure git identity
         run: |

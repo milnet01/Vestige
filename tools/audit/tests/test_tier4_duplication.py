@@ -10,7 +10,6 @@ from pathlib import Path
 
 sys.path.insert(0, str(Path(__file__).resolve().parent.parent))
 
-import pytest
 
 from lib.config import Config, DEFAULTS, _deep_merge
 from lib.tier4_duplication import (
@@ -19,7 +18,6 @@ from lib.tier4_duplication import (
     _rabin_karp_hashes,
     _strip_comments,
     _tokenize_file,
-    _find_clones,
     _merge_overlapping,
     ClonePair,
 )

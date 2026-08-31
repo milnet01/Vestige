@@ -22,6 +22,7 @@ import json
 import logging
 import os
 import sys
+from collections.abc import MutableMapping
 from pathlib import Path
 
 # Ensure the lib package is importable
@@ -46,7 +47,7 @@ def find_default_config() -> Path:
 
 def apply_no_color(
     explicit: bool,
-    env: dict[str, str] | None = None,
+    env: MutableMapping[str, str] | None = None,
     stdout_is_tty: bool | None = None,
 ) -> bool:
     """Apply the [NO_COLOR](https://no-color.org) convention for this process
@@ -70,7 +71,10 @@ def apply_no_color(
     tests; production callers should leave them at their defaults.
     """
     if env is None:
-        env = os.environ  # type: ignore[assignment]
+        # os.environ is an os._Environ, not a dict; MutableMapping is the
+        # type that actually covers both it and the dicts the tests pass, so
+        # the assignment no longer needs an ignore.
+        env = os.environ
     if stdout_is_tty is None:
         stdout_is_tty = sys.stdout.isatty()
 
@@ -527,7 +531,7 @@ def main() -> int:
         return get_exit_code(results.findings)
     else:
         # Build markdown report
-        report = runner.build_report(results, diff=diff)
+        runner.build_report(results, diff=diff)
         log.info("Done. Report: %s", config.report_path)
 
     # Generate HTML report if requested

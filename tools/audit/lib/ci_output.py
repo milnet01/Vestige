@@ -58,8 +58,8 @@ def format_step_summary(results_dict: dict[str, Any]) -> str:
     lines = [
         "## Audit Results",
         "",
-        f"| Metric | Value |",
-        f"|--------|-------|",
+        "| Metric | Value |",
+        "|--------|-------|",
         f"| Critical | {counts.get('critical', 0)} |",
         f"| High | {counts.get('high', 0)} |",
         f"| Medium | {counts.get('medium', 0)} |",

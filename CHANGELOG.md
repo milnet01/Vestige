@@ -23,6 +23,22 @@ may change any interface without notice.
 
 ## [Unreleased]
 
+### 2026-08-31 Security — CI workflows hardened against template injection and over-broad tokens
+
+A whole-tree static-analysis sweep ran `zizmor` over the four workflows for
+the first time — CI runs `actionlint`, which does not audit workflow
+security, so none of this had been looked at. It reported 27 findings; 23
+are now fixed and the remaining 4 are recorded with their reasons.
+
+- **Dispatch inputs no longer reach a shell as code (4 sites)**
+  `release.yml` interpolated `${{ inputs.tag }}` and `${{ inputs.version }}` directly into two `run:` blocks. A `${{ }}` expansion is substituted before the shell parses the script, so a crafted `workflow_dispatch` input executed as shell in the release job. Both blocks now receive the values through `env:` and read `$INPUT_TAG` / `$INPUT_VERSION`, which the shell treats as data.
+
+- **`contents: write` moved from workflow scope to the jobs that need it**
+  `release.yml` and `release-cadence.yml` both granted it at workflow level, so every job inherited it — including any added later. Each workflow now defaults to `permissions: {}` and each job requests its own. `ci.yml` and `audit-full.yml` gained an explicit `contents: read`, having previously run on the implicit default.
+
+- **Checkout credentials no longer persist in jobs that never push (9 of 10 steps)**
+  `actions/checkout` leaves the token in `.git/config` by default, where anything the job later runs or uploads can read it. Nine steps across `ci.yml`, `audit-full.yml` and `release.yml` now set `persist-credentials: false`. The tenth, in `release-cadence.yml`, deliberately keeps it: that job pushes the cadence tags and branches with exactly those credentials, and the reason is now recorded at the step.
+
 ### 2026-08-21 Changed — God rays get a derived Low/Medium budget and a preset-aware gate (3D_E-0624)
 
 The GPU benchmark for screen-space god rays previously asserted only on

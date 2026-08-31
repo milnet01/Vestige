@@ -8,11 +8,9 @@ from __future__ import annotations
 import json
 from pathlib import Path
 
-import pytest
 
 from lib.findings import Finding, Severity
 from lib.stats import (
-    DEFAULT_DEMOTION_POLICY,
     MAX_RUN_HISTORY,
     STATS_SCHEMA_VERSION,
     AuditStats,
@@ -242,8 +240,6 @@ class TestRenderTriage:
         stats = AuditStats()
         # 15 hits, 14 suppressed → 93% noise — should land in
         # recommended actions.
-        for i in range(15):
-            f = _mk_finding("noisy_rule", line=i)
         stats.rules["noisy_rule"] = RuleStat(
             rule_id="noisy_rule", hits=15, suppressed=14, verified=0,
         )

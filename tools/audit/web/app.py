@@ -223,18 +223,17 @@ def api_detect():
         detected = detect_project(root)
 
         # Also check what tools are available
+        import importlib.util
         import shutil
         tools = {
             "cppcheck": shutil.which("cppcheck") is not None,
             "clang_tidy": shutil.which("clang-tidy") is not None,
             "git": shutil.which("git") is not None,
             "cmake": shutil.which("cmake") is not None,
+            # lizard is a Python module rather than a binary, so it is probed
+            # by import spec instead of PATH -- same one-line shape as above.
+            "lizard": importlib.util.find_spec("lizard") is not None,
         }
-        try:
-            import lizard
-            tools["lizard"] = True
-        except ImportError:
-            tools["lizard"] = False
 
         detected["available_tools"] = tools
 

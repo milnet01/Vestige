@@ -16,7 +16,6 @@ from lib.tier4_per_frame_alloc import (
     analyze_per_frame_alloc,
     _find_function_bodies,
     _scan_body,
-    _scan_file,
     _function_name_matches,
     _DEFAULT_PER_FRAME_PATTERNS,
 )

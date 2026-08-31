@@ -38,7 +38,11 @@ class QueueLogHandler(logging.Handler):
                 "timestamp": time.time(),
             })
         except Exception:
-            pass
+            # A log handler must never raise into the code being logged, but
+            # swallowing silently loses the failure entirely. handleError is
+            # the stdlib route: it honours logging.raiseExceptions so the
+            # problem is visible in development and quiet in production.
+            self.handleError(record)
 
 
 class AuditSession:

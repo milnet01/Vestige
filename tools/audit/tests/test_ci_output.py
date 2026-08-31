@@ -60,7 +60,7 @@ class TestFormatGitHubAnnotations:
             for i in range(100)
         ]
         result = format_github_annotations(findings, max_annotations=5)
-        lines = [l for l in result.strip().split("\n") if l]
+        lines = [line for line in result.strip().split("\n") if line]
         assert len(lines) <= 5
 
     def test_error_limit_10(self):

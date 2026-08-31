@@ -5,6 +5,7 @@
 
 from __future__ import annotations
 
+import copy
 import logging
 import shutil
 from dataclasses import dataclass, field
@@ -17,8 +18,16 @@ log = logging.getLogger("audit")
 
 
 def _deep_merge(base: dict, overlay: dict) -> dict:
-    """Recursively merge overlay into base, returning a new dict."""
-    result = dict(base)
+    """Recursively merge overlay into base, returning a new dict.
+
+    ``base`` is deep-copied, not shallow-copied. ``dict(base)`` left every
+    nested dict shared with the caller's ``base``, so a key the overlay did
+    not mention still pointed at the original object -- and ``_detect_tools``
+    then mutated module-level ``DEFAULTS`` in place, permanently, for the
+    rest of the process. A second ``load_config()`` call started from those
+    corrupted defaults.
+    """
+    result = copy.deepcopy(base)
     for key, val in overlay.items():
         if key in result and isinstance(result[key], dict) and isinstance(val, dict):
             result[key] = _deep_merge(result[key], val)

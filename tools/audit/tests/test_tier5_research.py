@@ -10,7 +10,6 @@ from datetime import datetime, timedelta
 from pathlib import Path
 from unittest.mock import MagicMock, patch
 
-import pytest
 
 from lib.config import Config, DEFAULTS, _deep_merge
 from lib.tier5_research import _cache_key, _search_with_cache

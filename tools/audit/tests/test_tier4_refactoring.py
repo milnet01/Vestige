@@ -10,7 +10,6 @@ from pathlib import Path
 
 sys.path.insert(0, str(Path(__file__).resolve().parent.parent))
 
-import pytest
 
 from lib.config import Config, DEFAULTS, _deep_merge
 from lib.tier4_refactoring import (

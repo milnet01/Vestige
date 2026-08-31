@@ -15,7 +15,6 @@ from lib.tier4_dead_public_api import (
     DeadPublicApiResult,
     analyze_dead_public_api,
     _extract_symbols_from_header,
-    _NAME_BLOCKLIST,
 )
 
 

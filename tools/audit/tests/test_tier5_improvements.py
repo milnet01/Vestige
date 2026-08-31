@@ -6,15 +6,12 @@
 from __future__ import annotations
 
 from pathlib import Path
-from unittest.mock import patch
 
-import pytest
 
 from lib.config import Config, DEFAULTS, _deep_merge
 from lib.tier5_improvements import (
     LANGUAGE_IMPROVEMENT_QUERIES,
     TECHNOLOGY_SIGNATURES,
-    TechDetection,
     detect_technologies,
     get_improvement_queries,
 )

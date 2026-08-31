@@ -4,6 +4,60 @@ All notable changes to the Audit Tool are documented in this file.
 
 ## [Unreleased]
 
+### Fixed — `_deep_merge` corrupted module-level `DEFAULTS` for the process (2026-08-31)
+
+`_deep_merge(base, overlay)` did `result = dict(base)` — a **shallow** copy.
+Any key the overlay did not mention still pointed at `base`'s own nested
+dict, so `_detect_tools(raw)` mutated `lib.config.DEFAULTS` in place, and
+every later `load_config()` in the same process started from the corrupted
+defaults. `base` is now deep-copied.
+
+This was surfacing as an order-dependent test failure:
+`TestDetectTools::test_cppcheck_found` passed alone and failed inside
+`test_config.py`, because an earlier test's `_detect_tools` call had already
+flipped `DEFAULTS["static_analysis"]["cppcheck"]["enabled"]` to `False`. The
+suite goes 869 passed / 1 failed → **870 passed**.
+
+### Fixed — NVD key-validation leaked its HTTP response (2026-08-31)
+
+`validate_api_key` bound `urllib.request.urlopen(...)` to a name it never
+used and never closed, leaking the socket until GC. Now context-managed.
+
+### Fixed — a log handler swallowed every failure silently (2026-08-31)
+
+`QueueLogHandler.emit` ended in `except Exception: pass`, against the
+project's own no-`except: pass` rule. It now calls `self.handleError(record)`
+— the stdlib route, which honours `logging.raiseExceptions` so the failure is
+visible in development and quiet in production.
+
+### Removed — dead code found by `ruff` and `shellcheck` (2026-08-31)
+
+Nothing here changes behaviour; each item computed a value nothing read.
+
+- `tier4_cognitive.py` detected an `indent_unit` that no line in the file
+  ever consumed — eight lines of an abandoned approach, since the analyser
+  tracks nesting through `control_stack` instead. Its `next_name` /
+  `next_line` unpack was also discarding both names.
+- `tier4_deadcode.py` iterated `.items()` in three places using only the
+  value; now `.values()`.
+- `web/app.py` probed for `lizard` with a `try: import` whose result was
+  unused, while every neighbouring probe is a one-line
+  `shutil.which(...) is not None`. Now `importlib.util.find_spec`, matching
+  the surrounding shape.
+- 63 unused imports and empty f-strings across `lib/` and `tests/`.
+- `scripts/final_launch_sweep.sh` computed a `prior_snapshot` that nothing
+  read, inside a `for f in $(ls -1t ...)` loop; both the unused variable and
+  the fragile `ls` iteration went with it.
+
+### Fixed — `apply_no_color`'s `env` parameter was typed too narrowly (2026-08-31)
+
+It was annotated `dict[str, str] | None` and then assigned `os.environ`,
+which is an `os._Environ`, behind a `# type: ignore[assignment]`. `pyright`
+consequently could not narrow the parameter and reported two spurious
+`None`-access errors. Annotated `MutableMapping[str, str] | None`, which
+genuinely covers both `os.environ` and the dicts the tests pass; the ignore
+comment is gone.
+
 ### Fixed — Tier 1 CI gate false-positive on test build-guard `#error`s (2026-06-17)
 
 The push-triggered CI Tier 1 gate had been red since 2026-06-10: cppcheck

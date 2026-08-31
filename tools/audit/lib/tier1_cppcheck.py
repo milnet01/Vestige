@@ -7,11 +7,10 @@ from __future__ import annotations
 
 import logging
 import shlex
-from pathlib import Path
 
 from .config import Config
 from .findings import Finding, Severity
-from .utils import run_cmd, relative_path
+from .utils import run_cmd
 
 log = logging.getLogger("audit")
 

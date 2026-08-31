@@ -7,13 +7,11 @@ from __future__ import annotations
 
 import threading
 from pathlib import Path
-from typing import Any
-from unittest.mock import MagicMock, patch
+from unittest.mock import patch
 
-import pytest
 
 from lib.config import Config, DEFAULTS, _deep_merge
-from lib.findings import Finding, Severity, AuditData, ChangeSummary
+from lib.findings import Finding, Severity
 from lib.runner import AuditRunner
 
 

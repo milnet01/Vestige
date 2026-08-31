@@ -10,8 +10,6 @@ from pathlib import Path
 import pytest
 
 from lib.auto_config import (
-    BUILD_SYSTEMS,
-    LANGUAGE_SIGNATURES,
     _detect_build_system,
     _detect_cmake_deps,
     _detect_language,
@@ -171,7 +169,7 @@ class TestCppAudit202604019Rules:
 
     def _find_rule(self, name: str) -> dict:
         patterns = _get_language_defaults("cpp")["patterns"]
-        for category, rule_list in patterns.items():
+        for rule_list in patterns.values():
             for rule in rule_list:
                 if rule.get("name") == name:
                     return rule

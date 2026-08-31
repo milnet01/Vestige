@@ -7,10 +7,9 @@ from __future__ import annotations
 
 from pathlib import Path
 
-import pytest
 
 from lib.config import Config, DEFAULTS, _deep_merge
-from lib.findings import AuditData, ChangeSummary, Finding, Severity
+from lib.findings import Finding, Severity
 from lib.html_report import generate_html_report
 from lib.runner import AuditResults
 from lib.trends import TrendReport

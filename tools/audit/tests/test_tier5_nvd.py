@@ -14,13 +14,10 @@ from unittest.mock import MagicMock, patch
 
 import pytest
 
-from lib.findings import ResearchResult
 from lib.tier5_nvd import (
     CVEResult,
-    NVD_API_URL,
     _extract_cpe_version,
     _resolve_api_key,
-    _validate_api_key,
     cve_affects_version,
     parse_semver,
     query_nvd,
@@ -287,7 +284,7 @@ class TestRunNvdQueriesCacheHits:
              patch("lib.tier5_nvd.query_nvd", return_value=[]) as mock_query, \
              patch("lib.tier5_nvd.time.sleep"), \
              patch("lib.tier5_nvd._validate_api_key"):
-            results = run_nvd_queries(config, tmp_path, timedelta(days=7))
+            run_nvd_queries(config, tmp_path, timedelta(days=7))
 
         mock_query.assert_called_once()
 
@@ -699,7 +696,7 @@ class TestRunNvdQueriesDictForm:
              patch("lib.tier5_nvd.query_nvd", return_value=[]) as mock_query, \
              patch("lib.tier5_nvd.time.sleep"), \
              patch("lib.tier5_nvd._validate_api_key"):
-            results = run_nvd_queries(config, tmp_path, timedelta(days=7))
+            run_nvd_queries(config, tmp_path, timedelta(days=7))
 
         # Only the GLFW entry (dict with name, no version) is valid → one call.
         assert mock_query.call_count == 1

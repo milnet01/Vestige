@@ -32,6 +32,11 @@ env:
   # PCH compiles are only ccache-cacheable with these relaxations (see ci.yml).
   CCACHE_SLOPPINESS: pch_defines,time_macros
 
+# Least privilege: this workflow only reads the tree and uploads the audit
+# report as an artifact. Nothing writes to the repository.
+permissions:
+  contents: read
+
 jobs:
   full-audit:
     name: Full audit (all tiers incl. CVE)
@@ -40,6 +45,9 @@ jobs:
     steps:
       - name: Checkout
         uses: actions/checkout@9c091bb21b7c1c1d1991bb908d89e4e9dddfe3e0  # v6
+        with:
+          # This job only reads the tree; the token does not need to persist.
+          persist-credentials: false
 
       - name: Install audit tool dependencies
         # Same package set as ci.yml's audit job.

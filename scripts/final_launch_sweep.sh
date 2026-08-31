@@ -157,15 +157,6 @@ else
             fail "Expected a fresh trend_snapshot_*.json from this audit run, found none. Check whether audit.py actually completed."
         fi
 
-        # Find the most recent snapshot that existed BEFORE this run.
-        prior_snapshot=""
-        for f in $(ls -1t docs/trend_snapshot_*.json 2>/dev/null); do
-            if [[ -n "${prior_snapshots[$f]:-}" ]]; then
-                prior_snapshot="$f"
-                break
-            fi
-        done
-
         # Classify the run. Any genuine regression → abort. Otherwise →
         # print a summary and continue.
         #

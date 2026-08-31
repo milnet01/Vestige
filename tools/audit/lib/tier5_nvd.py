@@ -14,7 +14,7 @@ import time
 import urllib.error
 import urllib.parse
 import urllib.request
-from dataclasses import dataclass, field
+from dataclasses import dataclass
 from datetime import datetime, timedelta
 from pathlib import Path
 from typing import Any
@@ -381,8 +381,10 @@ def _validate_api_key(api_key: str) -> bool:
     req.add_header("User-Agent", "AuditTool/1.0")
     req.add_header("apiKey", api_key)
     try:
-        response = urllib.request.urlopen(req, timeout=15)
-        log.info("NVD API key validated — authenticated access confirmed")
+        # Context-managed: the response was previously bound and never closed,
+        # leaking the socket until GC.
+        with urllib.request.urlopen(req, timeout=15):
+            log.info("NVD API key validated — authenticated access confirmed")
         return True
     except urllib.error.HTTPError as e:
         log.warning("NVD API key validation failed (HTTP %d) — falling back to unauthenticated", e.code)

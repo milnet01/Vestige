@@ -10,12 +10,9 @@ from pathlib import Path
 
 sys.path.insert(0, str(Path(__file__).resolve().parent.parent))
 
-import pytest
 
 from lib.config import Config, DEFAULTS, _deep_merge
 from lib.tier4_includes import (
-    IncludeAnalysis,
-    analyze_includes,
     _classify_include,
     _check_include_order,
     _detect_circular,

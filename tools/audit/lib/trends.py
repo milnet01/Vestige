@@ -8,12 +8,12 @@ from __future__ import annotations
 import json
 import logging
 from collections import defaultdict
-from dataclasses import asdict, dataclass, field
+from dataclasses import dataclass, field
 from datetime import datetime
 from pathlib import Path
 from typing import Any
 
-from .findings import Finding, Severity
+from .findings import Finding
 
 log = logging.getLogger("audit")
 

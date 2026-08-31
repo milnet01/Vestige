@@ -16,7 +16,6 @@ from lib.tier4_token_shingle import (
     analyze_token_shingle,
     _tokenize,
     _shingle_hashes,
-    _strip_for_lang,
 )
 
 
@@ -101,7 +100,7 @@ class TestAnalyzeTokenShingle:
     def test_flags_near_duplicate_files(self, tmp_path: Path):
         # Two files with the same token sequence (only formatting differs).
         body = "\n".join([
-            f"int compute_{{}}(int a, int b, int c) {{",
+            "int compute_{}(int a, int b, int c) {",
             "    int x = a + b;",
             "    int y = b + c;",
             "    int z = a * b * c;",

@@ -9,7 +9,6 @@ import json
 from datetime import datetime
 from pathlib import Path
 
-import pytest
 
 from lib.findings import AuditData, Finding, Severity
 from lib.trends import (

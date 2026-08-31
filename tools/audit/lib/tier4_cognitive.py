@@ -378,18 +378,9 @@ def _analyze_python(content: str, rel_path: str) -> list[dict[str, Any]]:
         body_end = len(lines)
         if fi + 1 < len(func_locs):
             # Next function at same or lesser indent ends this one
-            next_name, next_line, next_idx, next_indent = func_locs[fi + 1]
+            next_idx, next_indent = func_locs[fi + 1][2:]
             if next_indent <= func_indent:
                 body_end = next_idx
-
-        # Detect indent unit from first indented body line
-        indent_unit = 4  # default
-        for k in range(body_start, min(body_end, len(lines))):
-            if lines[k].strip():
-                body_indent = len(lines[k]) - len(lines[k].lstrip())
-                if body_indent > func_indent:
-                    indent_unit = body_indent - func_indent
-                    break
 
         # Process body lines
         # Track nesting of control structures via indentation

@@ -71,7 +71,7 @@ def parse_csv(path: Path) -> tuple[dict[str, list[float]], list[float]]:
     fps_series: list[float] = []
     with path.open(encoding="utf-8", newline="") as fh:
         reader = csv.reader(fh)
-        header = next(reader, None)  # discard "time_s,category,name,depth,ms,fps"
+        next(reader, None)  # discard "time_s,category,name,depth,ms,fps"
         for row in reader:
             if len(row) < 5:
                 continue  # too few columns — skip (INV-9)

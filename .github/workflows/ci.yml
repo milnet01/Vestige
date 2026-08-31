@@ -29,6 +29,13 @@ concurrency:
 env:
   CCACHE_SLOPPINESS: pch_defines,time_macros
 
+# Least privilege: every job here only reads the tree and uploads artifacts
+# (upload-artifact uses the Actions API, not the contents scope). Nothing
+# writes to the repository, and the actionlint job deliberately does not use
+# `security-events` — see the note on the SARIF step.
+permissions:
+  contents: read
+
 jobs:
   linux-build-test:
     name: Linux ${{ matrix.config }}
@@ -44,6 +51,11 @@ jobs:
         # No submodules in this repo (verified 2026-05-18); `submodules: recursive`
         # was wasted IO — left off intentionally.
         uses: actions/checkout@9c091bb21b7c1c1d1991bb908d89e4e9dddfe3e0  # v6
+        with:
+          # No job here pushes, so the token does not need to outlive the
+          # checkout. Leaving it in .git/config exposes it to anything the
+          # job later runs or uploads.
+          persist-credentials: false
 
       - name: Install build dependencies
         # Retrying, timeout-bounded apt install — see
@@ -134,6 +146,11 @@ jobs:
     steps:
       - name: Checkout
         uses: actions/checkout@9c091bb21b7c1c1d1991bb908d89e4e9dddfe3e0  # v6
+        with:
+          # No job here pushes, so the token does not need to outlive the
+          # checkout. Leaving it in .git/config exposes it to anything the
+          # job later runs or uploads.
+          persist-credentials: false
 
       - name: Cache CMake FetchContent deps
         uses: actions/cache@55cc8345863c7cc4c66a329aec7e433d2d1c52a9  # v5
@@ -182,6 +199,11 @@ jobs:
     steps:
       - name: Checkout
         uses: actions/checkout@9c091bb21b7c1c1d1991bb908d89e4e9dddfe3e0  # v6
+        with:
+          # No job here pushes, so the token does not need to outlive the
+          # checkout. Leaving it in .git/config exposes it to anything the
+          # job later runs or uploads.
+          persist-credentials: false
 
       - name: Install audit tool dependencies
         # Retrying, timeout-bounded apt install — see
@@ -300,6 +322,11 @@ jobs:
     steps:
       - name: Checkout
         uses: actions/checkout@9c091bb21b7c1c1d1991bb908d89e4e9dddfe3e0  # v6
+        with:
+          # No job here pushes, so the token does not need to outlive the
+          # checkout. Leaving it in .git/config exposes it to anything the
+          # job later runs or uploads.
+          persist-credentials: false
 
       - name: Install build dependencies
         # Retrying, timeout-bounded apt install — see
@@ -391,6 +418,7 @@ jobs:
           # gitleaks detect walks the full git history; shallow clone
           # would miss older commits that could contain leaked secrets.
           fetch-depth: 0
+          persist-credentials: false
 
       - name: Install gitleaks CLI
         run: |
@@ -440,6 +468,11 @@ jobs:
     steps:
       - name: Checkout
         uses: actions/checkout@9c091bb21b7c1c1d1991bb908d89e4e9dddfe3e0  # v6
+        with:
+          # No job here pushes, so the token does not need to outlive the
+          # checkout. Leaving it in .git/config exposes it to anything the
+          # job later runs or uploads.
+          persist-credentials: false
 
       - name: Verify shellcheck is present
         # actionlint shells every `run:` block out to shellcheck. Without it

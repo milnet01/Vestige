@@ -440,7 +440,7 @@ def _analyze_python(config: Config) -> tuple[DeadCodeAnalysis, list[Finding]]:
 
     # Find all references
     all_references: set[str] = set()
-    for f, content in all_content.items():
+    for content in all_content.values():
         for word in re.findall(r"\b(\w+)\s*\(", content):
             all_references.add(word)
         for word in re.findall(r"\b(\w+)\b", content):
@@ -455,7 +455,7 @@ def _analyze_python(config: Config) -> tuple[DeadCodeAnalysis, list[Finding]]:
 
         # Count references (excluding the def line itself)
         ref_count = 0
-        for f, content in all_content.items():
+        for content in all_content.values():
             ref_count += len(re.findall(rf"\b{re.escape(func_name)}\b", content))
 
         # Subtract definition lines
@@ -592,7 +592,7 @@ def _analyze_rust(config: Config) -> tuple[DeadCodeAnalysis, list[Finding]]:
     # Count references
     for func_name, def_list in definitions.items():
         ref_count = 0
-        for f, content in all_content.items():
+        for content in all_content.values():
             ref_count += len(re.findall(rf"\b{re.escape(func_name)}\b", content))
         ref_count -= len(def_list)
 

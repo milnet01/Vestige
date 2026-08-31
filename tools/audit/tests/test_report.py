@@ -8,14 +8,12 @@ from __future__ import annotations
 import json
 from pathlib import Path
 
-import pytest
 
 from lib.config import Config, DEFAULTS, _deep_merge
 from lib.findings import (
     AuditData,
     ChangeSummary,
     Finding,
-    ResearchResult,
     Severity,
 )
 from lib.report import ReportBuilder

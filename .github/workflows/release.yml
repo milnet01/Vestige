@@ -67,10 +67,11 @@ concurrency:
   group: release-${{ inputs.tag || inputs.version || github.ref }}
   cancel-in-progress: true
 
-permissions:
-  # Needed for softprops/action-gh-release to create / update releases.
-  # Nothing else. No `security-events`, no `id-token`.
-  contents: write
+# Default to nothing at the workflow level; each job requests exactly what it
+# needs. A workflow-level grant is inherited by every job, including any added
+# later, which is what makes the broad form a standing risk rather than a
+# one-off one.
+permissions: {}
 
 jobs:
   # ─────────────────────────────────────────────────────────────────────
@@ -80,6 +81,10 @@ jobs:
     name: Linux x86_64 tarball
     runs-on: ubuntu-24.04
     timeout-minutes: 60
+    permissions:
+      # Needed for softprops/action-gh-release to create / update releases.
+      # Nothing else. No `security-events`, no `id-token`.
+      contents: write
     steps:
       - name: Checkout
         # No submodules in this repo (verified 2026-05-18); `submodules: recursive`
@@ -90,6 +95,9 @@ jobs:
           # branch default (usually main); pin to the requested tag so
           # the built binary actually carries the tagged source.
           ref: ${{ inputs.tag || inputs.version || github.ref }}
+          # The release upload uses GITHUB_TOKEN via the release action's own
+          # env, not the checkout credentials, so these need not persist.
+          persist-credentials: false
 
       - name: Install build dependencies
         # Plain apt-get, NOT awalsh128/cache-apt-pkgs-action: that action is
@@ -128,14 +136,20 @@ jobs:
 
       - name: Resolve version string
         id: version
+        env:
+          # Passed through the environment, never interpolated into the script
+          # body: a ${{ }} expansion inside `run:` is substituted before the
+          # shell sees it, so a crafted dispatch input would execute here.
+          INPUT_TAG: ${{ inputs.tag }}
+          INPUT_VERSION: ${{ inputs.version }}
         run: |
           # Strip refs/tags/ prefix; fall back to VERSION file for
           # manual dispatch that forgot the input.
           # Resolve the tag from whichever trigger fired: workflow_call (cadence)
           # → inputs.tag; workflow_dispatch → inputs.version; tag push → the ref.
           # VERSION file is the last-resort fallback.
-          TAG="${{ inputs.tag }}"
-          [ -z "$TAG" ] && TAG="${{ inputs.version }}"
+          TAG="$INPUT_TAG"
+          [ -z "$TAG" ] && TAG="$INPUT_VERSION"
           if [ -z "$TAG" ]; then
             T="${GITHUB_REF#refs/tags/}"
             [ "$T" != "$GITHUB_REF" ] && TAG="$T"
@@ -268,12 +282,16 @@ jobs:
     name: Windows x86_64 zip
     runs-on: windows-2022
     timeout-minutes: 90
+    permissions:
+      # Needed for softprops/action-gh-release to create / update releases.
+      contents: write
     steps:
       - name: Checkout
         # No submodules in this repo; same drop applied in c768aff.
         uses: actions/checkout@9c091bb21b7c1c1d1991bb908d89e4e9dddfe3e0  # v6
         with:
           ref: ${{ inputs.tag || inputs.version || github.ref }}
+          persist-credentials: false
 
       - name: Cache CMake FetchContent deps
         uses: actions/cache@55cc8345863c7cc4c66a329aec7e433d2d1c52a9  # v5
@@ -299,12 +317,18 @@ jobs:
       - name: Resolve version string
         id: version
         shell: bash
+        env:
+          # Passed through the environment, never interpolated into the script
+          # body: a ${{ }} expansion inside `run:` is substituted before the
+          # shell sees it, so a crafted dispatch input would execute here.
+          INPUT_TAG: ${{ inputs.tag }}
+          INPUT_VERSION: ${{ inputs.version }}
         run: |
           # Resolve the tag from whichever trigger fired: workflow_call (cadence)
           # → inputs.tag; workflow_dispatch → inputs.version; tag push → the ref.
           # VERSION file is the last-resort fallback.
-          TAG="${{ inputs.tag }}"
-          [ -z "$TAG" ] && TAG="${{ inputs.version }}"
+          TAG="$INPUT_TAG"
+          [ -z "$TAG" ] && TAG="$INPUT_VERSION"
           if [ -z "$TAG" ]; then
             T="${GITHUB_REF#refs/tags/}"
             [ "$T" != "$GITHUB_REF" ] && TAG="$T"

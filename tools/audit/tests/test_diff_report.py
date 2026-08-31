@@ -8,7 +8,6 @@ from __future__ import annotations
 import json
 from pathlib import Path
 
-import pytest
 
 from lib.diff_report import ReportDiff, compute_diff, load_previous_results
 from lib.findings import Finding, Severity
