@@ -2995,6 +2995,28 @@ shipped that have no invocation path at all.
   Kind: chore.
   Source: check-code 2026-08-31.
 
+- 🚧 [3D_E-0655] **verify-delivery coverage record — what the 2026-09-01 run executed, and the ~800 promises it never reached.**
+  IN PROGRESS deliberately: the run was partial by design and this bullet is where the remainder lives. Without it a later session cannot tell a covered promise from an unexamined one, and would either re-run what is done or guess.
+
+  SCOPE RESOLVED. `--since v0.1.70` resolves to CHANGELOG section `[0.1.70]` -- 418 bullets across ~60 dated subsections, 2026-05-02 to 2026-08-19 -- plus 408 `- [x]` ROADMAP bullets. The run did NOT enumerate and filter all ~826. It took the render path whole plus the promises the review-code sweep had concrete reason to doubt. That is a narrower step 1 than the skill specifies.
+
+  COVERED, by EXECUTION (rung 2). Drove `./build/bin/vestige --visual-test` under Xvfb + llvmpipe: 27 captures across 6 viewpoints, each with a frame report, in `Testing/visual_tests/run_20260901_000203/`. No black frames, no zero-draw frames; brightness 0.366-0.697, draw calls 36-102, 1,043,082 grass blades with LOD culling 3-96/256 chunks, water frustum-skipping correctly, TAA + bloom + SSAO + POM + ACES all reported active. Verdict `delivered` for the core render path, and it also proves the auto-exposure NaN latch (3D_E-0646) is not occurring.
+  RECIPE, since it is not obvious: `Xvfb :77 -screen 0 1280x720x24` then `DISPLAY=:77 LIBGL_ALWAYS_SOFTWARE=1 ./build/bin/vestige --visual-test`. On the Debug/ASan build it exits 1 on a 240-byte leak in `<unknown module>` inside the Mesa driver -- that is not project code and not a delivery failure.
+
+  COVERED, by call-site enumeration. The nine not-delivered / unreachable promises now filed as 3D_E-0627, 0628, 0629, 0631, 0632, 0639, 0640, 0641 and the SMAA half of 0631. Enumeration is conclusive rather than inferential here: a call site is present in the tree or it is not.
+
+  NOT COVERED -- the remainder, and the reason it is a decision rather than an oversight. These bundles were never enumerated, filtered or run:
+    - Audio: AX1 occlusion, AX2 convolution reverb, AX3 acoustic pre-bake, AX4 procedural/material audio, AX5 LOD ladder, AX6 air absorption, AX8 surround, AX9 loudness, AX11, AX12 spectrum viewer, AX13 ducking
+    - Localization L1-L6 (UTF-8, font stack, RTL Hebrew, string table, settings picker, coverage lint)
+    - Fog / volumetric slices 11.5-11.11, and the Phase 10 Rendering R1-R4 set
+    - Formula pipeline path-tracer coverage (3D_E-0006..0012)
+  A scoped run per bundle is cheaper than another whole-tree pass, and the audio bundle is the strongest candidate: it is the largest, the most recently shipped, and the least reachable from a visual-test harness -- so it is the one where a green unit test proves least.
+
+  DO NOT re-run the covered half to confirm it. The render-path verdict rests on artefacts still on disk at the path above.
+  **Layman:** A record of which shipped features were actually run and checked, and which large groups were never looked at.
+  Kind: investigate.
+  Source: verify-delivery 2026-09-01.
+
 ## Phase 11A: Gameplay Infrastructure
 **Goal:** The runtime subsystems every Phase 11B gameplay feature consumes — camera shake, screen flash, save-file compression, replay recording, behavior-tree runtime, and AI perception. Split out of the original single Phase 11 so the consumer-before-system dependencies surface at planning time rather than at implementation time.
 
