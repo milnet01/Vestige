@@ -2853,6 +2853,99 @@ shipped that have no invocation path at all.
   Kind: fix.
   Source: check-code + review-code 2026-08-31 lane shaders-glsl.
 
+- 📋 [3D_E-0639] **The Ruler / Measure tool is on the menu and its clicks reach nothing.**
+  Verified by call-site enumeration, not inferred. `editor.cpp:609` ships an `ImGui::MenuItem("Ruler / Measure", nullptr, m_rulerTool.isActive())` that toggles the tool active and cancels it -- so a user can reach it and it reports its own state. `engine/core/engine.cpp` contains ZERO references to `rulerTool` (grep -c = 0), and its click handler dispatches wallTool (:1432), roomTool (:1442), roofTool (:1465), stairTool (:1474) and pathTool (:1488). `RulerTool::processClick` (ruler_tool.cpp:25), `startMeasurement`, `cancel` and `queueDebugDraw` are never called from the runtime.
+  This is the textbook wired-but-dead shape: both halves review clean in a per-subsystem sweep because neither is wrong on its own -- only the missing edge between them is.
+  **Layman:** You can switch on the Ruler tool from the editor menu, click in the scene, and nothing is ever measured.
+  Kind: fix.
+  Source: verify-delivery 2026-09-01.
+
+- 📋 [3D_E-0640] **PhysicsDebugDraw is compiled and never invoked.**
+  `PhysicsDebugDraw::draw` (physics_debug.cpp:46) and `drawConstraints` (:97) are the ONLY .cpp occurrences of the type in the tree -- i.e. its own two definitions and no invocation. There is no menu item, no hotkey and no settings flag reaching it, so unlike the ruler tool this one is not even nominally reachable.
+  Decide between wiring it to the editor's debug-draw surface (where DebugDraw already has a live consumer) and deleting it. Either is fine; leaving a debug facility that cannot be switched on is what is not.
+  **Layman:** The physics debug overlay cannot be turned on from anywhere.
+  Kind: fix.
+  Source: verify-delivery 2026-09-01.
+
+- 📋 [3D_E-0641] **Every Renderer carries a 2 MB frame arena that nothing allocates from.**
+  `renderer.h:945-948` declares `static constexpr size_t FRAME_ARENA_SIZE = 2 * 1024 * 1024;`, `alignas(64) char m_frameArena[FRAME_ARENA_SIZE]{}` and a `std::pmr::monotonic_buffer_resource m_frameResource` over it with `null_memory_resource()` as upstream.
+  Outside those declarations `m_frameResource` appears exactly twice in the whole tree: a comment at renderer.cpp:145 and `m_frameResource.release()` at :228. Nothing ever allocates from it, so the release is a no-op on an empty arena and the 2 MB is resident for the life of the object. The `{}` zero-initialiser also costs a 2 MB memset per Renderer construction.
+  Either route a real per-frame allocation through it (the transient vectors in the culling and draw-list paths are the obvious candidates) or delete all four lines. Do not keep it as a placeholder -- it reads as an optimisation that is in force.
+  **Layman:** Two megabytes of memory are reserved per renderer and never used.
+  Kind: fix.
+  Source: verify-delivery 2026-09-01.
+
+- 📋 [3D_E-0642] **The input spec's own regression check cannot detect the regression it describes.**
+  `docs/engine/input/spec.md` states normatively: "Every game verb consumed via `InputManager::isActionDown` must be registered on `InputActionMap` -- no `glfwGetKey(...)` short-cuts... Reviewers should grep for `glfwGetKey` outside `engine/core/input_manager.cpp` and treat hits as regressions."
+  I ran that grep. It PASSES -- and that is the defect. The tree holds exactly one bare `glfwGetKey(` call, at `input_manager.cpp:43` inside `isKeyDown`, which is the one file the check exempts. `isKeyDown` then has 14 call sites, ALL in `first_person_controller.cpp` (W/A/S/D, Space, Shift, Ctrl), while `isActionDown` has zero production call sites. So 100% of movement verbs bypass the binding system through a wrapper living inside the exemption.
+  The fix is to the CHECK as well as to the code (3D_E-0628 owns the code half): a test that a file-scoped exemption defeats is worse than no test, because it returns green and is cited as evidence. Re-state it as "no bare glfwGetKey call may be reachable from gameplay code", or gate it on isKeyDown having no callers outside input_manager.cpp.
+  **Layman:** The input design document tells reviewers how to check for a specific mistake, and that check cannot find the mistake, which is present.
+  Kind: doc-fix.
+  Source: verify-delivery 2026-09-01.
+
+- ✅ [3D_E-0643] **CI workflows hardened: template injection, over-broad tokens, credential persistence.**
+  Shipped 2026-08-31 in 9cd4935. Four template-injection sites in `.github/workflows/release.yml` interpolated `${{ inputs.tag }}` / `${{ inputs.version }}` straight into `run:` blocks; all four now pass the value through the `env:` block and read it as a shell variable. Workflow-level `permissions: {}` added with `contents: write` pushed down to the jobs that need it. `persist-credentials: false` on 9 of 10 checkout steps -- the tenth, in `release-cadence.yml`, keeps them deliberately because it pushes tags, and that is documented at the step.
+  zizmor findings 27 -> 4; the 4 that remain are the cache-poisoning advisories tracked as 3D_E-0635. actionlint exit 0.
+  **Layman:** The automated release process could be tricked into running attacker-supplied commands; it no longer can.
+  Kind: security.
+  Source: check-code 2026-08-31, commit 9cd4935.
+
+- ✅ [3D_E-0644] **Audit tool no longer corrupts its own defaults across a process.**
+  Shipped 2026-08-31 in 9cd4935. `tools/audit/lib/config.py::_deep_merge` built its result with `dict(base)` -- a SHALLOW copy -- so `_detect_tools` mutated the module-level `DEFAULTS` in place and every later call in the same process inherited the previous project's tool set. Changed to `copy.deepcopy(base)`.
+  This was the suite's one failing test: `tools/audit` went 869 passed / 1 failed -> 870 passed / 0 failed. It is the highest-value single fix of the check-code half, and it was a genuine production bug rather than a lint finding.
+  Same commit also cleared the ruff signal rules across the audit test suite and `tools/perf_gate.py`.
+  **Layman:** The code-checking tool silently reused one project's settings for the next.
+  Kind: fix.
+  Source: check-code 2026-08-31, commit 9cd4935.
+
+- ✅ [3D_E-0645] **Crash and memory-safety fixes: start-up abort, glTF bounds, node recursion, use-after-free, FBO leak.**
+  Shipped 2026-08-31 in 68a0eb8. All five verified against source before fixing.
+  - `app/main.cpp`: `Window`'s constructor throws on GLFW init / monitor query / context creation failure and nothing in `app/` caught it, so a missing display terminated via `std::terminate` with no log line. `main()` now wraps the run, logs a fatal and flushes the log.
+  - `gltf_loader.cpp`: the `byteOffset + byteLength` bounds test could overflow; `skin.joints[i]` and `sampler.output` were dereferenced with no index check. A truncated or crafted `.gltf` read past its buffer.
+  - `model.cpp/.h`: a glTF node cycle drove `instantiateNode` into unbounded recursion. Capped at `MAX_NODE_DEPTH = 128`.
+  - `ui_signal.h`: a slot destroying the UIElement that owns the signal left `emit()` iterating a freed vector. Slot list is copied before dispatch.
+  - `framebuffer.cpp`: `cleanup()` never deleted `m_colorAttachment3` -- about 16.6 MB leaked per resize at 1080p.
+  **Layman:** Five ways the engine could crash or corrupt memory, including on a malicious model file.
+  Kind: security.
+  Source: review-code 2026-08-31, commit 68a0eb8.
+
+- ✅ [3D_E-0646] **Renderer correctness: depth invalidation, shadow bone state, NaN exposure latch, upload alignment, CDLOD selection.**
+  Shipped 2026-08-31 in 68a0eb8.
+  - `renderer.cpp`: `glInvalidateFramebuffer(GL_DEPTH_ATTACHMENT)` ran eleven lines AHEAD of the depth resolve that reads it -- the driver was told to discard a buffer still needed. Moved after the blit.
+  - `renderer.cpp`: `u_hasBones` was set only on the non-instanced shadow branch, so an instanced draw inherited the previous draw's value.
+  - `renderer.cpp`: `std::max` returns its FIRST argument when the comparison is false, so a NaN average luminance passed straight through and latched `m_exposure` permanently -- black screen until restart. Now guarded with `std::isfinite` plus a warning.
+  - `texture.cpp`: the fourth of four upload paths lacked the `GL_UNPACK_ALIGNMENT` bracket, and `generateNormalFromHeight` feeds it 3-channel data -- the same diagonal-banding shape already on record for the terrain normal map.
+  - `terrain.cpp`: CDLOD selection compared camera distance against the node's OWN lod range rather than its children's, subdividing one level late across the tree.
+  **Layman:** Five rendering bugs, one of which could leave the screen permanently black.
+  Kind: fix.
+  Source: review-code 2026-08-31, commit 68a0eb8.
+
+- ✅ [3D_E-0647] **Shader fixes: cloth friction was inert, TAA history could be poisoned by NaN.**
+  Shipped 2026-08-31 in 68a0eb8. Both found by the cold read of the 92 GLSL files -- the surface with no static-analysis coverage at all (3D_E-0638).
+  - `cloth_collision.comp.glsl`: `applyFriction` derived its normal impulse from the velocity ALONG the normal, and all three call sites zero that component before calling it, so `normalSpeed` was always 0 and friction was arithmetically inert. Signature changed to take the impulse explicitly; all three call sites now capture `max(0.0, -vn)` before zeroing.
+  - `taa_resolve.frag.glsl`: `normalize(nPrev)` on a zero previous-frame normal yields NaN, which the history buffer then carries forever. Both normals are now length-checked before the comparison.
+  **Layman:** Cloth friction did nothing at all, and the anti-aliasing history could be permanently corrupted.
+  Kind: fix.
+  Source: review-code 2026-08-31, commit 68a0eb8.
+
+- ✅ [3D_E-0648] **Editor and engine: sandbox installed, bakes ordered, paint strokes no longer doubled, AA cycle complete.**
+  Shipped 2026-08-31 in 68a0eb8 (+ the help-text follow-up in 3e58350).
+  - `engine.cpp`: `setSandboxRoots` on `ResourceManager`, `CubeLoader` and `AudioEngine` had ZERO callers, so every path check they gate was inert. `Engine::initialize` now canonicalises the asset roots and installs them on all three, warning if the set comes out empty.
+  - `engine.cpp`: `scene->update(0.0f)` ran AFTER the probe and radiosity bakes, so both baked against un-propagated transforms -- every child entity was lit at its parent-relative position. Moved before the bakes.
+  - `engine.cpp`: the AA hotkey cycled `% 4` over a five-value enum, so one mode was unreachable from the keyboard. Now `% 5`; the F7 help row was corrected to match in 3e58350 (collateral caught by the close-findings sweep).
+  - `paint_foliage_command.h`, `paint_scatter_command.h`, `place_tree_command.h`: `CommandHistory::execute()` calls `execute()` on push and all three had ALREADY applied their instances in the constructor, so every first paint stroke landed twice. All three now guard with an `m_applied` flag.
+  **Layman:** The path-security check was switched on, lighting bakes were reordered, and painting no longer places everything twice.
+  Kind: fix.
+  Source: review-code 2026-08-31, commits 68a0eb8 and 3e58350.
+
+- ✅ [3D_E-0649] **Formula workbench: Jacobian step underflow fixed, and codegen no longer splices untrusted text into C++.**
+  Shipped 2026-08-31 in 68a0eb8.
+  - `curve_fitter.cpp`: the central-difference Jacobian used ONE absolute step for every coefficient, so a coefficient of large magnitude produced a step that vanished into its own floating-point ulp and yielded a column of zeroes. The step now falls back to a relative one ONLY where the absolute step genuinely underflows -- the narrow form matters: a blanket relative step broke `CurveFitter.FitLinearTwoCoeffs` and `WeightedFitConvergesToWeightedOptimumOnSkewedData`, which is how the over-broad first attempt was caught. All 17 CurveFitter tests pass.
+  - `codegen_cpp.cpp`: `formula.description` and `formula.source` were spliced VERBATIM into `///` comments, so a library entry containing a comment terminator injected arbitrary C++ into the generated header. Now uses `sanitizeComment()`, matching the sanitiser the GLSL backend already had.
+  **Layman:** Curve fitting could stall on some inputs, and a formula library file could inject arbitrary code into generated headers.
+  Kind: security.
+  Source: review-code 2026-08-31, commit 68a0eb8.
+
 ## Phase 11A: Gameplay Infrastructure
 **Goal:** The runtime subsystems every Phase 11B gameplay feature consumes — camera shake, screen flash, save-file compression, replay recording, behavior-tree runtime, and AI perception. Split out of the original single Phase 11 so the consumer-before-system dependencies surface at planning time rather than at implementation time.
 
