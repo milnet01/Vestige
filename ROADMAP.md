@@ -2946,6 +2946,55 @@ shipped that have no invocation path at all.
   Kind: security.
   Source: review-code 2026-08-31, commit 68a0eb8.
 
+- 📋 [3D_E-0650] **Five documents state as fact features that this audit proved absent.**
+  Each was VERIFIED false against source during the sweep, and each is currently recorded only as a sub-clause of the code bullet that found it. They are collected here so the DOCUMENT half has an owner of its own -- fixing the code and leaving the claim, or fixing the claim and leaving the code, both leave the project inconsistent.
+  - `ROADMAP.md:519` -- `- [x] ScriptComponent (entity attachment) + ScriptingSystem (ISystem with update loop, latent tick, event bridge)`. `ScriptingSystem` is never constructed at runtime; `ScriptComponent` has zero references anywhere including tests. See 3D_E-0627.
+  - `ARCHITECTURE.md:102` and `engine/renderer/smaa.h:20-23` -- both advertise "SMAA 1x at HIGH quality preset" with "Area texture lookup for accurate blend weights". The area table's diagonal half is a byte copy of the orthogonal half and the search table is a uniform placeholder, by the code's own comments. See 3D_E-0631.
+  - `docs/engine/environment/spec.md:417` -- "Save: ... density-map / spline arrays serialised". `DensityMap::serialize()` has zero production callers. See 3D_E-0632.
+  - `docs/engine/physics/spec.md` section 6 -- records that the CPU/GPU cloth parity harness does not exist, while CLAUDE.md rule 7 REQUIRES a parity test for a dual implementation. The document is honest and the project is in breach of its own rule. See 3D_E-0630.
+  - `engine/editor/editor.h:383` and `engine/scripting/scripting_system.cpp:183` -- comments describing the runtime in the future tense ("In the future, this will: 1. Find all entities with ScriptComponent") for code that shipped.
+  Do NOT batch-fix by deleting the claims. Each needs the same decision 3D_E-0627 states: deliver the feature, or withdraw the claim and say so.
+  **Layman:** Five places in the documentation describe features that do not work, so anyone reading them is misled.
+  Kind: doc-fix.
+  Source: review-code + verify-delivery 2026-08-31/09-01.
+
+- 📋 [3D_E-0651] **The project has no design document of record (docs/design.md).**
+  VERIFIED ABSENT: `docs/design.md` does not exist. `~/.claude/CLAUDE.md` 14a makes it the project's design document of record, authored directly and gated with `review-contract docs/design.md --genre adr` -- note the genre name does not match the document's, which is deliberate and settled in that rule.
+  `ARCHITECTURE.md` exists and is NOT a substitute: it is a subsystem inventory ("Shadow pass -- directional CSM (4 cascades)") rather than a statement of what the engine is for, what it refuses to do, and why the big choices were made. This audit felt the absence directly -- several review lanes had no document to check a subsystem's intent against and fell back to the code's own apparent intent, which is circular.
+  Skeleton at `~/.claude/skeleton/files/docs/design.md`. Investigate scope first: a 147k-LoC engine's design doc is a real piece of work, and writing a thin one is worse than none.
+  **Layman:** There is no single document explaining what the engine is for and how its parts fit together.
+  Kind: doc.
+  Source: documentation survey 2026-09-01.
+
+- 📋 [3D_E-0652] **Seven engine subsystems have no spec — investigate which actually need one.**
+  Measured 2026-09-01 by comparing `engine/*/` against `docs/engine/*/spec.md`. Fifteen subsystems have a spec; these seven do not:
+    utils (16 cpp) - experimental (22 cpp) - profiler (5 cpp) -
+    accessibility (2 cpp) - localization (2 cpp) - platform (1 cpp) - testing (1 cpp)
+  INVESTIGATE rather than write seven specs. `spec-format.md` section 1 says most work needs no spec and is the only place that decides; a spec written to fill a table is a document nobody reads and everybody has to keep true.
+  Two are worth deciding first, and for opposite reasons. **utils** holds `gltf_loader.cpp` -- an UNTRUSTED-INPUT parser, where this audit fixed three memory-safety defects (3D_E-0645), and a parser handling hostile input is the strongest case in the tree for a written contract. **experimental** is 22 cpp files with no contract at all; the question there is whether it is a staging area that should never have one, or a subsystem that quietly became load-bearing.
+  The other five are small and may legitimately need nothing. Record the decision either way -- a subsystem deliberately left unspecced and one nobody has considered look identical from outside.
+  **Layman:** Seven parts of the engine have no written contract; some of them probably should.
+  Kind: doc.
+  Source: documentation survey 2026-09-01.
+
+- 📋 [3D_E-0653] **There are no per-feature test contracts (tests/features/ does not exist).**
+  VERIFIED ABSENT: `tests/features/` does not exist; `tests/` is a flat directory of ~200 `test_*.cpp` files.
+  This is why verify-delivery had so little to work with. A `tests/features/<name>/spec.md` is a tiny contract -- not a design document -- and `~/.claude/CLAUDE.md` rule 14 explicitly exempts it from the cold-review gate for that reason. Without one, a test is written by the same author from the same reading of the feature as the code, so a green test proves the code does what its author MEANT rather than what the record PROMISED.
+  This audit found the sharpest possible example: `DensityMapTest.SerializeDeserialize` passes and asserts round-trip fidelity, while nothing calls `DensityMap::serialize()` from the scene-save path -- the unit is green and the promise is broken (3D_E-0632).
+  Do not backfill 200 of them. Start with the features this audit proved undelivered, where the contract would have caught it.
+  **Layman:** No feature has a small written contract saying what it must do, so tests check the code rather than the promise.
+  Kind: test.
+  Source: documentation survey 2026-09-01.
+
+- 📋 [3D_E-0654] **Three analysis config files are absent, and one of them makes clang-tidy analyse nothing.**
+  VERIFIED ABSENT, all three probed paths empty: `docs/private/audit/audit-config.json`, `.claude/audit/audit-config.json`, `tools/audit/audit-config.json`. Also absent: `.clang-tidy`.
+  The `.clang-tidy` absence is the severe one and is NOT merely noise-related: with no config, clang-tidy's default check set is EMPTY, so it runs to completion and exits 0 having analysed nothing. Combined with 3D_E-0637 (the GCC PCH blocking it entirely), any clean clang-tidy result on this tree today is meaningless twice over.
+  The `audit-config.json` absence means every check-code run re-derives its calibration from scratch. Measured this run: typos 8062 findings of which 5747 (71%) are byte sequences inside binary assets and 1385 more are the domain term LOD; ruff 1427 of 1880 are S101 in test files; cppcheck 1012 of 1648 are unusedStructMember.
+  Overlaps 3D_E-0636, which names the same two files from the noise angle. Close them together; this bullet exists so the ABSENCE is findable as a missing document rather than only as a symptom.
+  **Layman:** Missing settings files mean one code-checking tool checks nothing and the others produce thousands of false alarms.
+  Kind: chore.
+  Source: check-code 2026-08-31.
+
 ## Phase 11A: Gameplay Infrastructure
 **Goal:** The runtime subsystems every Phase 11B gameplay feature consumes — camera shake, screen flash, save-file compression, replay recording, behavior-tree runtime, and AI perception. Split out of the original single Phase 11 so the consumer-before-system dependencies surface at planning time rather than at implementation time.
 
