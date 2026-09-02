@@ -70,11 +70,16 @@ HOST="${VESTIGE_WINTEST_HOST:-wintest}"
 DRIVE="${VESTIGE_WINTEST_DRIVE:-C:}"
 TASK_NAME='VestigeTests'
 # Quality tier this box is entitled to. The GPU perf gates in
-# tests/test_fog_benchmark.cpp are design § 8's HIGH-preset figures, measured on
-# the RX 6600 dev rig; the GTX 1050 in this box misses the volumetric one by 8%
-# (3D_E-0615) and no volumetric budget is published below High, so it is gated
-# as medium and the benchmarks report rather than assert. Override to high to
-# hold this box to the dev-rig numbers anyway.
+# tests/test_fog_benchmark.cpp are mostly design § 8's HIGH-preset figures,
+# measured on the RX 6600 dev rig; the GTX 1050 in this box misses the
+# volumetric one by 8% (3D_E-0615) and no volumetric budget is published below
+# High, so it is gated as medium and the volumetric and GI-inject gates report
+# rather than assert.
+#
+# The god-ray gate is the exception and DOES assert here (3D_E-0624): it carries
+# a Low/Med tier budget derived from a 60 FPS frame rather than from the RX
+# 6600, so medium is exactly the declaration that arms it. Override to high to
+# hold this box to the dev-rig numbers instead.
 QUALITY_PRESET="${VESTIGE_WINTEST_QUALITY_PRESET:-medium}"
 BIN_DIR="$REPO_ROOT/build-msvc/bin"
 

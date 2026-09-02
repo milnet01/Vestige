@@ -71,12 +71,14 @@ using namespace Vestige;
 
 namespace
 {
-// design § 7: the full fog stack must stay inside 2.0 ms / frame at 1080p on
+// fog design § 1 (and research § 7): the full fog stack must stay inside 2.0
+// ms / frame at 1080p on
 // the RX 6600 dev rig (hard 60 FPS floor). The froxel dispatch is the bulk of
 // that stack.
 constexpr double kVolumetricBudgetMicros = 2000.0;
 
-// design § 11.2: the dynamic-GI inject is one extra RGBA16F 160×90×64 image
+// phase_10_rendering_design.md § 11.2 -- NOT the fog design doc, whose § 11.2
+// is the noise basis: the dynamic-GI inject is one extra RGBA16F 160×90×64 image
 // write (~one fog pass). The primary gate R4 controls is the inject dispatch
 // timed in isolation staying ≤ 0.4 ms on the RX 6600 at 1080p (est. ~0.3 ms).
 constexpr double kGiInjectBudgetMicros = 400.0;
@@ -93,9 +95,14 @@ constexpr double kGiInjectBudgetMicros = 400.0;
 // shipped shader is at the band's low tap count (64) but its high per-tap
 // content cost (2 samples), and § 8 records why the 64-tap end alone is too
 // tight: research § 7's extrapolation is itself optimistic by ~1.7x on this
-// texture-bandwidth-bound pass. 1.2 ms is still not slack -- mutating the
-// shader's NUM_SAMPLES to its 128-tap ceiling measures 1.21 ms here and goes
-// red, against 0.69 ms for the shipped 64-tap worst case.
+// texture-bandwidth-bound pass.
+//
+// Whether 1.2 ms is still tight enough to catch a doubled tap count is
+// UNVERIFIED (3D_E-0657). The 1.21 ms 128-tap red that established it was a
+// median under the pre-3D_E-0626 harness; the same all-sky pass now reads
+// ~0.52 ms as an uncontended minimum where it read 0.69 ms as a median, which
+// maps the 128-tap case to ~0.9 ms and under this budget. Do not rely on this
+// row to catch a tap-count regression until the mutation is re-run.
 constexpr double kGodRayBudgetMicros = 1200.0;
 
 // design § 8 row "God rays, screen-space -- Low/Med tier budget | 1.75 ms"
@@ -145,9 +152,10 @@ bool isSoftwareRenderer()
 // pass cost. Across those same five runs the spread is 1.9% on the minimum,
 // 4.7% on a median and 67.7% on a p90 -- so a high percentile, which is what
 // 3D_E-0626 first guessed at, would gate on the interference rather than on the
-// pass. Design § 8's rows are a per-pass cost model, so the uncontended cost is
-// the figure they mean, and every other row in that table was measured the same
-// isolated way.
+// pass. Design § 8's rows are uncontended per-pass cost, so that is the figure
+// they mean. The tier row is the exception: it is derived from a frame share
+// rather than measured, and § 8 owns why a ceiling of that kind is policed by
+// a minimum.
 //
 // Each gate reports min, median and max, so the spread is visible in the log
 // rather than inferred from one number.
@@ -254,7 +262,7 @@ QualityPreset gatedPreset()
 // design § 8 / § 11.2, which cite research § 7, whose table is headed
 // "Performance Targets (RDNA2 / RX 6600)". VESTIGE_QUALITY_PRESET is how a box
 // declares it is NOT that class: a machine the preset system would not run at
-// High (see scripts/wintest.sh) reports its median instead of asserting it.
+// High (see scripts/wintest.sh) reports its cost instead of asserting it.
 // Ultra is High's grid or larger on the same class of GPU, so it qualifies.
 //
 // Read it as a hardware-class check, NOT as "does this preset run this pass"
@@ -713,7 +721,8 @@ TEST_F(FogBenchmarkTest, GodRayPassUnderBudget)
     {
         GTEST_SKIP() << "quality preset " << qualityPresetLabel(gatedPreset())
                      << " — " << kGodRayBudgetMicros
-                     << " µs is research § 7's RX 6600 figure and this box is"
+                     << " µs is design § 8's own doubled RX 6600 figure and"
+                        " this box is"
                         " not that class, and the preset is not one that runs"
                         " god rays either, so neither budget applies. God-ray"
                         " pass cost " << gatedMicros << " µs recorded at"

@@ -23,6 +23,26 @@ may change any interface without notice.
 
 ## [Unreleased]
 
+### 2026-09-02 Fixed — The fog GPU benchmark can reproduce its own verdict (3D_E-0626)
+
+The three fog performance gates ran three warm-up frames and asserted the
+median of eight, which sampled inside the GPU's start-up transient. The
+same binary on the same box returned 549.8 to 1199.9 us for the god-ray
+pass across five runs -- a 76% spread, against budgets policed to a few
+per cent.
+
+- **Warm-up is now bounded by time, not by frames** (3D_E-0626)
+  Measured over 600-frame series: the RX 6600 settles about fifteen frames in, while the GTX 1050 ramps its clocks under sustained load for roughly half a second. A frame count that reaches steady clocks on one is wasteful on the other.
+
+- **The gated statistic is the uncontended cost, not a median or a high percentile** (3D_E-0626)
+  Even in steady state a fraction of frames run several times the median because the compositor preempts the GPU. Across five runs the spread is 1.9% on the minimum, 4.7% on a median and 67.7% on a p90, so a high percentile would gate on the interference rather than on the pass. Every gate now logs min, median and max.
+
+- **One timing helper replaces three copies of the loop** (3D_E-0626)
+  Under llvmpipe or in Debug, where every gate skips its assertion anyway, it keeps the short sample -- so CI time is unchanged. Measured spread after the change, six runs each: god rays 3.9% on the GTX 1050 and 2.3% on the RX 6600, volumetric 1.0% and 4.0%.
+
+- **The god-ray pass does have headroom at Low and Medium after all** (3D_E-0625)
+  Re-measured on the GTX 1050 at Medium: 1391.7 to 1447.0 us against the 1750 us budget, red on none and about 20% inside the ceiling, where the old harness read a 2% margin and went red on 2 runs of 6. The budget is unchanged and is still not to be raised.
+
 ### 2026-08-31 Fixed — Whole-tree code review remediation — 19 verified defects across renderer, physics, editor, loaders and shaders
 
 A `review-code` sweep over the whole tree (18 subsystem lanes) verified 19
