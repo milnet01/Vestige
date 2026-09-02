@@ -2770,6 +2770,41 @@ record, and a real clearance before commercial release needs counsel.
   Lanes: legal, docs.
   Source: tech-survey-2026-09-02.
 
+- 📋 [3D_E-0681] **What the 2026-09-02 survey did not examine at all.**
+  Filed because this section otherwise reads as complete coverage of its own
+  question, and it is not. Every item below was in scope and was never
+  reached -- each research lane exhausted its search budget before getting
+  there.
+
+  NOT EXAMINED, technology side:
+
+  - CLOTH SIMULATION advances since 2024 -- XPBD variants, GPU solvers,
+    collision handling. Vestige has CPU and GPU cloth with a parity test
+    (Cl9/Cl10, 3D_E-0009), so this was a real question with a real subject
+    and it has no answer here.
+  - A direct sweep of the SIGGRAPH 2024, 2025 and 2026 technical-papers
+    listings. The rendering and physics findings rest on repository
+    artefacts, licence files and specific papers found by search, not on a
+    systematic proceedings pass.
+
+  NOT EXAMINED, IP side (3D_E-0679 holds the detail):
+
+  - ASTC, PVRTC and ETC texture-compression encumbrances.
+  - Ray-tracing patents, which matter to the planned RT work.
+  - Vulkan and mesh-shader patents, which matter to Phase 14's runtime.
+  - The entire audio side.
+
+  Separately, and more serious than an omission: 3D_E-0679 records that
+  SSAO, temporal anti-aliasing and cascaded shadow maps could not be
+  CLEARED, and all three already ship.
+
+  The cheapest of these to close is the cloth question, which needs one
+  research session with search budget and no patent work in it.
+  **Layman:** A list of things we meant to look into and ran out of time for, so nobody assumes they were checked.
+  Kind: research.
+  Lanes: research.
+  Source: tech-survey-2026-09-02.
+
 ## Phase 10.5: Editor Usability Pass
 **Goal:** Make the editor genuinely usable for people who have never opened it — both solo creators working without AI help and AI-assisted users who need the editor to meet them halfway.
 
