@@ -1849,7 +1849,7 @@ Full spatial audio pipeline with dynamic mixing, occlusion, and adaptive music. 
   harness's noise. The proof here is the derivation and the selection
   contract, not a demonstrated catch.
 
-- 📋 [3D_E-0625] **The god-ray pass has no headroom on the tier it exists for.**
+- 💭 [3D_E-0625] **The god-ray pass has no headroom on the tier it exists for.**
   Measured 2026-08-21 by 3D_E-0624 step (c)'s new tier gate. Six runs on
   the GTX 1050 at the Medium preset (renderScale 0.75, 720x405 gather +
   1440x810 combine), via scripts/wintest.sh:
@@ -1897,8 +1897,29 @@ Full spatial audio pipeline with dynamic mixing, occlusion, and adaptive music. 
 
   So the order is: fix 3D_E-0626, re-measure to get a trustworthy baseline,
   then choose a cheaper config against both the number AND the image.
+  Withdrawn (2026-09-02) by 3D_E-0626. The premise was an artifact of the
+  harness, not a property of the pass.
 
-- 📋 [3D_E-0626] **The fog GPU benchmark cannot reproduce its own verdict.**
+  Re-measured on the same box, same preset and same binary once the gate
+  warmed past the GPU's clock ramp and asserted the uncontended cost:
+  1391.7, 1394.9, 1402.2, 1412.0, 1415.6 and 1447.0 us against the 1750 us
+  budget. A 3.9% spread, red on none, and about 20% inside the ceiling --
+  where the 2026-08-21 figures read a 2% margin and went red on 2 runs of
+  6.
+
+  So the god-ray pass DOES have headroom on the tier it exists for, and
+  there is nothing here to fix. Kept as considered rather than closed
+  because the remedy it names -- a cheaper god-ray configuration at Low and
+  Medium, fewer taps or a quarter-res gather -- stays the correct response
+  if that budget ever tightens or a weaker box enters the estate. Its
+  conditions are unchanged: the 1750 us budget is derived rather than
+  measured and is not to be raised, and a resolution change must move the
+  design section 8 row with it.
+
+  The blocking relationship is discharged: 3D_E-0626 shipped, and what it
+  showed is that the work this bullet describes was never indicated.
+
+- ✅ [3D_E-0626] **The fog GPU benchmark cannot reproduce its own verdict.**
   Found 2026-08-21 while measuring 3D_E-0624 step (c). Same binary, same
   box, same configuration, same preset -- the median moves far more than the
   thing being gated.
@@ -1933,6 +1954,90 @@ Full spatial audio pipeline with dynamic mixing, occlusion, and adaptive music. 
   Kind: fix.
   Lanes: tests, perf.
   Source: in-session-2026-08-21 (3D_E-0624 step (c) measurement).
+  Resolved (2026-09-02). Two causes, and the bullet's own guess named
+  neither correctly.
+
+  The dominant one is the start-up transient. Measured over 600-frame
+  series: the RX 6600 runs 4749, 1426, 1241 ... before settling near 554 us
+  by about frame fifteen, while the GTX 1050 ramps its clocks under
+  sustained load for roughly half a second (1684 us in the first 100 ms,
+  1481 us at 400-500 ms, flat at ~1460 us after). Three warm-up frames left
+  all eight timed frames inside that transient on both machines. The
+  warm-up is therefore bounded by TIME, not frames -- a frame count that
+  reaches steady clocks on the 1050 is wasteful on the RX 6600, and one
+  that suits the RX 6600 does not reach them on the 1050.
+
+  The second is interference, and it is why the bullet's "assert a high
+  percentile" direction was NOT taken. Even in steady state a fraction of
+  frames run several times the median because the compositor preempts the
+  GPU. Across five RX 6600 runs the god-ray spread is 1.9% on the minimum,
+  4.7% on a median and 67.7% on a p90 -- a high percentile gates on the
+  interference rather than on the pass. The gate now asserts the
+  uncontended cost: the minimum of a long timed run. Design section 8's
+  rows are a per-pass cost model, and every other row in that table was
+  measured the same isolated way.
+
+  Shipped: one `runGpuBench` helper replacing three copies of the old loop,
+  warming until the clocks settle and reporting min, median and max so the
+  spread is visible in the log rather than inferred. Under llvmpipe or in
+  Debug -- where every gate SKIPs anyway -- it keeps the short sample, so CI
+  time is unchanged.
+
+  Measured run-to-run spread, six runs each, same binary and box:
+  god rays 3.9% on the GTX 1050 at Medium and 2.3% on the RX 6600;
+  volumetric 1.0% and 4.0%. Against 76% for the scheme it replaces.
+
+  Residual, recorded rather than fixed: GI inject on the RX 6600 still
+  spans 39%. At roughly a tenth of a millisecond, drained every frame, that
+  pass never holds boost clocks and its whole distribution shifts between
+  runs -- min tracks median, so it is power state and not outliers. Its ~3x
+  headroom means the gate still adjudicates. The same gate on the GTX 1050
+  spans 10%.
+
+  Follow-ups filed rather than absorbed: 3D_E-0656 (two other perf gates
+  still use the old scheme) and 3D_E-0657 (the section 8 figures this run
+  did not re-take).
+
+- 📋 [3D_E-0656] **Two more perf gates still time the way 3D_E-0626 proved unreliable.**
+  `tests/test_text_renderer_perf.cpp` (HUD pass, GPU) and
+  `tests/test_reverb_zone_select.cpp` (zone selection, CPU) both still run
+  three warm-up iterations and assert the median of eight -- the scheme
+  3D_E-0626 measured at a 76% run-to-run spread on the fog gates and
+  replaced there.
+
+  The fix is to reuse the timing helper 3D_E-0626 added to
+  `tests/test_fog_benchmark.cpp` rather than to re-derive one. That means
+  lifting it out of that file into a shared test header first, which is why
+  this was not folded into 3D_E-0626: moving it is a change to a file the
+  bullet's subject does not name.
+
+  The reverb gate is CPU-side, so the GPU clock ramp does not apply to it;
+  what does apply is the sample count, and whether a minimum is the right
+  statistic there has not been measured.
+  **Layman:** Two other speed checks use the old, untrustworthy stopwatch.
+  Kind: fix.
+  Lanes: tests, perf.
+  Source: in-session-2026-09-02 (3D_E-0626).
+
+- 📋 [3D_E-0657] **Fog design section 8 and section 11.2 still quote single-sample per-pass figures.**
+  3D_E-0626 re-took the three figures its own gates assert, and recorded
+  them in design section 8. The rest of that section's per-pass numbers were
+  not re-taken and each remains a single sample from the pre-0626 harness:
+  the 0.69 ms all-sky and 0.48-0.55 ms no-sky god-ray figures, the 1.21 ms
+  128-tap mutation result, the 10.6 us harness sync overhead, and the
+  figures in section 11.2.
+
+  Re-taking them is not just a re-run: the god-ray pair needs the all-sky
+  and no-sky scenes reconstructed, and the 128-tap result needs the shader
+  mutated again. Until then, read those figures as indicative.
+
+  Nothing is gated on them, which is why this is an investigate rather than
+  a fix -- the budgets they informed are already published and are not to be
+  re-fitted to a new measurement.
+  **Layman:** Some published speed numbers in the design doc were each measured once, before the stopwatch was fixed.
+  Kind: investigate.
+  Lanes: docs, perf.
+  Source: in-session-2026-09-02 (3D_E-0626).
 
 ### Fog, Mist, and Volumetric Lighting
 - [x] Distance fog (linear, exponential, exponential-squared) — pure-function primitives shipped in `engine/renderer/fog.{h,cpp}`. `FogMode` enum (`None` / `Linear` / `Exponential` / `ExponentialSquared`) + `FogParams` (linear-RGB colour, start, end, density). `computeFogFactor(mode, params, distance)` implements the three canonical forms: Linear `(end-d)/(end-start)`, GL_EXP `exp(-density·d)`, GL_EXP2 `exp(-(density·d)²)` — returns *surface visibility* in [0,1], matches OpenGL Red Book §9 / D3D9 fog-formulas. Guards every degenerate param (zero span, negative density, sub-camera distance) with pass-through behaviour. 15 unit tests cover knees, monotonicity, and edge cases.

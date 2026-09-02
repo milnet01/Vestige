@@ -17,7 +17,7 @@
 /// CI runs under llvmpipe, where the compute passes rasterise on the CPU and
 /// the wall-clock is meaningless against a GPU budget. So the path always runs
 /// (proving it does not crash), but the assertion only fires on hardware; under
-/// a software renderer the test SKIPs after logging the measured median. This
+/// a software renderer the test SKIPs after logging the measured cost. This
 /// is an environment guard, not a workaround — the gate is real wherever a real
 /// GPU exists.
 ///
@@ -28,7 +28,7 @@
 /// there is no number to hold a lower-tier machine to. The preset being gated
 /// for is read from `VESTIGE_QUALITY_PRESET` and defaults to High, so the dev
 /// rig and CI are unchanged; a machine the preset system would not run at High
-/// declares itself (see `scripts/wintest.sh`) and gets the median reported
+/// declares itself (see `scripts/wintest.sh`) and gets the cost reported
 /// rather than asserted. Same shape as the software-renderer guard above: an
 /// environment guard, not a workaround.
 ///
@@ -37,7 +37,7 @@
 /// High/Ultra. A Low/Medium declaration therefore ASSERTS -- against a tier
 /// budget derived from a 60 FPS frame rather than from the RX 6600 -- and the
 /// pass is timed at that tier's own `renderScale`. Only `Custom`, and a box that
-/// is neither the reference class nor a god-ray tier, still reports a median.
+/// is neither the reference class nor a god-ray tier, still reports a cost.
 /// See design § 8, "How the two budgets are selected".
 #include <gtest/gtest.h>
 
@@ -63,6 +63,7 @@
 #include <chrono>
 #include <cstdlib>
 #include <iostream>
+#include <sstream>
 #include <string>
 #include <vector>
 
@@ -121,6 +122,110 @@ bool isSoftwareRenderer()
         || s.find("softpipe") != std::string::npos
         || s.find("swrast")   != std::string::npos
         || s.find("software") != std::string::npos;
+}
+
+// One timing scheme for every GPU gate in this file (3D_E-0626).
+//
+// What it replaces: three warm-up frames, then the median of eight. That
+// sampled inside the start-up transient. Five runs of the god-ray pass on the
+// RX 6600, same binary and same preset, returned 549.8 to 1199.9 µs -- a 76%
+// spread, against budgets policed to a few per cent.
+//
+// The transient has a different shape on each machine in the estate, so the
+// warm-up is bounded by TIME rather than by frames. The RX 6600 settles within
+// about fifteen frames; the GTX 1050 ramps its clocks for roughly half a second
+// (measured 2026-09-02: uncontended cost 1684 µs in the first 100 ms, 1481 µs at
+// 400-500 ms, flat at ~1460 µs thereafter). A frame count that covers the
+// second is wasteful on the first, and one that suits the first does not reach
+// steady clocks on the second.
+//
+// The gated statistic is the MINIMUM, not a median and not a high percentile.
+// Even in steady state a fraction of frames on a desktop run several times the
+// median because the compositor preempts the GPU; that is interference, not
+// pass cost. Across those same five runs the spread is 1.9% on the minimum,
+// 4.7% on a median and 67.7% on a p90 -- so a high percentile, which is what
+// 3D_E-0626 first guessed at, would gate on the interference rather than on the
+// pass. Design § 8's rows are a per-pass cost model, so the uncontended cost is
+// the figure they mean, and every other row in that table was measured the same
+// isolated way.
+//
+// Each gate reports min, median and max, so the spread is visible in the log
+// rather than inferred from one number.
+struct GpuBenchResult
+{
+    double gated  = 0.0;  // the minimum — what the budgets are asserted against
+    double median = 0.0;
+    double max    = 0.0;
+    int    frames = 0;
+};
+
+// Sustained load before the first timed frame. Covers the slowest clock ramp in
+// the estate (the GTX 1050's, above) with margin.
+constexpr double kBenchWarmupMillis = 600.0;
+// Floor for a pass slow enough that the millisecond budget buys too few frames.
+constexpr int kBenchWarmupFramesMin = 16;
+// Timed frames. Fewer than this widens the run-to-run spread on the minimum;
+// more does not narrow it.
+constexpr int kBenchTimedFrames = 128;
+
+// True when a budget can be asserted at all: an optimised build on real
+// hardware. Under llvmpipe or in Debug every gate below SKIPs after recording
+// its figure, so the long warm-up would buy nothing but CI time — those runs
+// exist to prove the path does not crash, and take a short sample.
+bool benchIsGating()
+{
+#if !defined(NDEBUG)
+    return false;
+#else
+    return !isSoftwareRenderer();
+#endif
+}
+
+/// Warm the pipeline past its clock ramp, then time `timeOnce` repeatedly.
+/// `timeOnce` must return the wall-clock microseconds of one glFinish-bracketed
+/// dispatch.
+template <typename TimeOnce>
+GpuBenchResult runGpuBench(TimeOnce timeOnce)
+{
+    const bool gating = benchIsGating();
+
+    if (!gating)
+    {
+        for (int i = 0; i < 3; ++i) timeOnce();
+    }
+    else
+    {
+        const auto warmStart = std::chrono::steady_clock::now();
+        for (int i = 0;; ++i)
+        {
+            timeOnce();
+            const double elapsed = std::chrono::duration<double, std::milli>(
+                                       std::chrono::steady_clock::now() - warmStart).count();
+            if (i + 1 >= kBenchWarmupFramesMin && elapsed >= kBenchWarmupMillis) break;
+        }
+    }
+
+    const int frames = gating ? kBenchTimedFrames : 8;
+    std::vector<double> micros;
+    micros.reserve(static_cast<std::size_t>(frames));
+    for (int f = 0; f < frames; ++f) micros.push_back(timeOnce());
+    std::sort(micros.begin(), micros.end());
+
+    GpuBenchResult r;
+    r.gated  = micros.front();
+    r.median = micros[micros.size() / 2];
+    r.max    = micros.back();
+    r.frames = frames;
+    return r;
+}
+
+// "1454.0 µs (min of 128 timed frames; median 1535.2, max 5470.8)"
+std::string benchSummary(const GpuBenchResult& r)
+{
+    std::ostringstream os;
+    os << r.gated << " µs (min of " << r.frames << " timed frames; median "
+       << r.median << ", max " << r.max << ")";
+    return os.str();
 }
 
 // The quality preset these budgets are being gated for. Defaults to High, the
@@ -316,20 +421,17 @@ TEST_F(FogBenchmarkTest, VolumetricDispatchUnderBudget)
         return std::chrono::duration<double, std::micro>(t1 - t0).count();
     };
 
-    for (int i = 0; i < 3; ++i) timeDispatch();  // warm the pipeline
-
-    constexpr int kFrames = 8;
-    std::vector<double> micros;
-    micros.reserve(kFrames);
-    for (int f = 0; f < kFrames; ++f) micros.push_back(timeDispatch());
-    std::sort(micros.begin(), micros.end());
-    const double medianMicros = micros[micros.size() / 2];
+    const GpuBenchResult bench = runGpuBench(timeDispatch);
+    const double gatedMicros = bench.gated;
 
     glDeleteTextures(1, &litMap);
 
+    std::cout << "[   PERF   ] volumetric froxel dispatch (160×90×64) "
+              << benchSummary(bench) << "\n";
+
 #if !defined(NDEBUG)
-    GTEST_SKIP() << "non-optimised (Debug) build — volumetric dispatch median "
-                 << medianMicros << " µs not gated against the "
+    GTEST_SKIP() << "non-optimised (Debug) build — volumetric dispatch cost "
+                 << gatedMicros << " µs not gated against the "
                  << kVolumetricBudgetMicros
                  << " µs budget (enforced in optimised builds).";
 #endif
@@ -338,7 +440,7 @@ TEST_F(FogBenchmarkTest, VolumetricDispatchUnderBudget)
     {
         GTEST_SKIP() << "software renderer ("
                      << reinterpret_cast<const char*>(glGetString(GL_RENDERER))
-                     << ") — volumetric dispatch median " << medianMicros
+                     << ") — volumetric dispatch cost " << gatedMicros
                      << " µs not gated against the " << kVolumetricBudgetMicros
                      << " µs GPU budget.";
     }
@@ -351,12 +453,12 @@ TEST_F(FogBenchmarkTest, VolumetricDispatchUnderBudget)
                         " is not that class. (No volumetric figure is published"
                         " below High either: Tier-1 design § 4.1 drops the pass"
                         " at Low and Medium, so those tiers dispatch no froxel"
-                        " grid at all.) Volumetric dispatch median "
-                     << medianMicros << " µs recorded, not gated.";
+                        " grid at all.) Volumetric dispatch cost "
+                     << gatedMicros << " µs recorded, not gated.";
     }
 
-    EXPECT_LE(medianMicros, kVolumetricBudgetMicros)
-        << "volumetric froxel dispatch (160×90×64) median " << medianMicros
+    EXPECT_LE(gatedMicros, kVolumetricBudgetMicros)
+        << "volumetric froxel dispatch (160×90×64) cost " << gatedMicros
         << " µs exceeds the " << kVolumetricBudgetMicros << " µs fog-stack budget";
 }
 
@@ -394,21 +496,18 @@ TEST_F(FogBenchmarkTest, GiInjectDispatchUnderBudget)
         return std::chrono::duration<double, std::micro>(t1 - t0).count();
     };
 
-    for (int i = 0; i < 3; ++i) timeGi();  // warm
-
-    constexpr int kFrames = 8;
-    std::vector<double> micros;
-    micros.reserve(kFrames);
-    for (int f = 0; f < kFrames; ++f) micros.push_back(timeGi());
-    std::sort(micros.begin(), micros.end());
-    const double medianMicros = micros[micros.size() / 2];
+    const GpuBenchResult bench = runGpuBench(timeGi);
+    const double gatedMicros = bench.gated;
 
     glDeleteTextures(1, &att3);
     glDeleteTextures(1, &depth);
 
+    std::cout << "[   PERF   ] GI inject dispatch (160×90×64) "
+              << benchSummary(bench) << "\n";
+
 #if !defined(NDEBUG)
-    GTEST_SKIP() << "non-optimised (Debug) build — GI inject dispatch median "
-                 << medianMicros << " µs not gated against the "
+    GTEST_SKIP() << "non-optimised (Debug) build — GI inject dispatch cost "
+                 << gatedMicros << " µs not gated against the "
                  << kGiInjectBudgetMicros << " µs budget.";
 #endif
 
@@ -416,7 +515,7 @@ TEST_F(FogBenchmarkTest, GiInjectDispatchUnderBudget)
     {
         GTEST_SKIP() << "software renderer ("
                      << reinterpret_cast<const char*>(glGetString(GL_RENDERER))
-                     << ") — GI inject dispatch median " << medianMicros
+                     << ") — GI inject dispatch cost " << gatedMicros
                      << " µs not gated against the " << kGiInjectBudgetMicros
                      << " µs GPU budget.";
     }
@@ -426,11 +525,11 @@ TEST_F(FogBenchmarkTest, GiInjectDispatchUnderBudget)
         GTEST_SKIP() << "quality preset " << qualityPresetLabel(gatedPreset())
                      << " — " << kGiInjectBudgetMicros
                      << " µs is design § 11.2's High-preset gate; GI inject"
-                        " median " << medianMicros << " µs recorded, not gated.";
+                        " cost " << gatedMicros << " µs recorded, not gated.";
     }
 
-    EXPECT_LE(medianMicros, kGiInjectBudgetMicros)
-        << "GI inject dispatch (160×90×64) median " << medianMicros
+    EXPECT_LE(gatedMicros, kGiInjectBudgetMicros)
+        << "GI inject dispatch (160×90×64) cost " << gatedMicros
         << " µs exceeds the " << kGiInjectBudgetMicros << " µs budget (design § 11.2)";
 }
 
@@ -554,22 +653,16 @@ TEST_F(FogBenchmarkTest, GodRayPassUnderBudget)
         return std::chrono::duration<double, std::micro>(t1 - t0).count();
     };
 
-    for (int i = 0; i < 3; ++i) timeGodRays();  // warm the pipeline
-
-    constexpr int kFrames = 8;
-    std::vector<double> micros;
-    micros.reserve(kFrames);
-    for (int f = 0; f < kFrames; ++f) micros.push_back(timeGodRays());
-    std::sort(micros.begin(), micros.end());
-    const double medianMicros = micros[micros.size() / 2];
+    const GpuBenchResult bench = runGpuBench(timeGodRays);
+    const double gatedMicros = bench.gated;
 
     Framebuffer::unbind();
     glDeleteTextures(1, &sceneTex);
     glDeleteTextures(1, &depthTex);
 
 #if !defined(NDEBUG)
-    GTEST_SKIP() << "non-optimised (Debug) build — god-ray pass median "
-                 << medianMicros
+    GTEST_SKIP() << "non-optimised (Debug) build — god-ray pass cost "
+                 << gatedMicros
                  << " µs not gated against either budget (enforced in optimised"
                     " builds).";
 #endif
@@ -578,7 +671,7 @@ TEST_F(FogBenchmarkTest, GodRayPassUnderBudget)
     {
         GTEST_SKIP() << "software renderer ("
                      << reinterpret_cast<const char*>(glGetString(GL_RENDERER))
-                     << ") — god-ray pass median " << medianMicros
+                     << ") — god-ray pass cost " << gatedMicros
                      << " µs not gated against either GPU budget. This guard"
                         " applies to the tier budget too: that figure is derived"
                         " from a frame rather than from a GPU, but the thing"
@@ -589,8 +682,8 @@ TEST_F(FogBenchmarkTest, GodRayPassUnderBudget)
     // silent, so without this a green run says nothing about how close it came --
     // and this gate's margin is narrow enough that the distance matters as much
     // as the verdict (3D_E-0624).
-    std::cout << "[   PERF   ] god-ray pass median " << medianMicros
-              << " µs at renderScale " << renderScale << " (" << (internalW / 2) << "×"
+    std::cout << "[   PERF   ] god-ray pass " << benchSummary(bench)
+              << " at renderScale " << renderScale << " (" << (internalW / 2) << "×"
               << (internalH / 2) << " gather + " << internalW << "×" << internalH
               << " combine), preset " << qualityPresetLabel(gatedPreset()) << "\n";
 
@@ -602,11 +695,11 @@ TEST_F(FogBenchmarkTest, GodRayPassUnderBudget)
     // (3D_E-0624, design § 8).
     if (usesTierGodRayBudget(gatedPreset()))
     {
-        EXPECT_LE(medianMicros, kGodRayTierBudgetMicros)
+        EXPECT_LE(gatedMicros, kGodRayTierBudgetMicros)
             << "screen-space god-ray pass at the " << qualityPresetLabel(gatedPreset())
             << " preset (renderScale " << renderScale << " → " << (internalW / 2) << "×"
             << (internalH / 2) << " gather + " << internalW << "×" << internalH
-            << " combine) median " << medianMicros << " µs exceeds design § 8's "
+            << " combine) cost " << gatedMicros << " µs exceeds design § 8's "
             << kGodRayTierBudgetMicros
             << " µs Low/Med tier budget. That budget is derived from a 60 FPS"
                " frame and is NOT to be raised to fit this measurement -- the"
@@ -623,13 +716,13 @@ TEST_F(FogBenchmarkTest, GodRayPassUnderBudget)
                      << " µs is research § 7's RX 6600 figure and this box is"
                         " not that class, and the preset is not one that runs"
                         " god rays either, so neither budget applies. God-ray"
-                        " pass median " << medianMicros << " µs recorded at"
+                        " pass cost " << gatedMicros << " µs recorded at"
                         " renderScale " << renderScale << ".";
     }
 
-    EXPECT_LE(medianMicros, kGodRayBudgetMicros)
+    EXPECT_LE(gatedMicros, kGodRayBudgetMicros)
         << "screen-space god-ray pass (64-tap gather at " << (internalW / 2) << "×"
-        << (internalH / 2) << " + full-res combine) median " << medianMicros
+        << (internalH / 2) << " + full-res combine) cost " << gatedMicros
         << " µs exceeds design § 8's " << kGodRayBudgetMicros
         << " µs RX 6600 reference budget";
 }

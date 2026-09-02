@@ -299,15 +299,33 @@ Both sit inside the corrected band, but note the all-sky figure is ~15% above th
 
 Three things this settles, and one it does not. **The scaling model was sound**: 1716.5 µs measured against ~1740 µs predicted is within 2%, even though the prediction scaled a figure taken with *unscaled* source textures. **The budget is doing its job**: it was written and published before this measurement, so it was capable of failing, and it very nearly does. **And the pass has no headroom on the tier it exists for** — 2% under a ceiling that is itself 12% of the frame, on the hardware least able to give any of it back. What it does NOT settle is a verdict, because **the gate exceeds its budget on 2 runs of 6**. A gate that red-flags a third of its runs cannot adjudicate a 2% margin, and that is a defect in the measurement rather than in the budget. Same instrument on the RX 6600 spans 526–1097 µs at `renderScale` 1.0 depending only on how warm the GPU is. Both consequences are filed rather than absorbed here: a cheaper Low/Med god-ray configuration, and the harness's reproducibility. **Do not respond to the flap by raising the budget** — the budget is the one part of this that is derived rather than measured.
 
+**RE-MEASURED (2026-09-02, 3D_E-0626) — the flap was the harness, and Medium has headroom.** The block above was taken with a timing scheme that sampled inside the GPU's start-up transient: three warm-up frames, then the median of eight. The GTX 1050 ramps its clocks under sustained load for roughly half a second, so every timed frame landed in the ramp. The gate now warms until the clocks settle and asserts the *uncontended* cost — the minimum of a long timed run — with the reasoning recorded beside the helper in `tests/test_fog_benchmark.cpp`.
+
+Six runs of the shipped tier gate on the GTX 1050 at Medium, same box and same binary, via `scripts/wintest.sh`:
+
+`1391.7 · 1394.9 · 1402.2 · 1412.0 · 1415.6 · 1447.0 µs` — a 3.9% spread, against the 1750 µs budget, **red on none**.
+
+**This withdraws the "no headroom" verdict, and nothing else.** Medium sits about 20% inside its ceiling. The block above stays as the record of what that run found, and two of its statements still hold: the budget was published before any weak-GPU measurement so it remains capable of failing, and it is still not to be raised. What does not hold is the scaling prediction's apparent accuracy — ~1.74 ms predicted against ~1.40 ms measured is pessimistic by about a quarter, for the reason that paragraph already gives, that it scaled a figure taken with *unscaled* source textures.
+
+**The three gate figures, re-taken on the RX 6600 under the same harness (2026-09-02, six runs each).** These are uncontended cost, not the medians the older figures in this section quote:
+
+| Gate | Measured | Budget | Run-to-run spread |
+|---|---|---|---|
+| God rays, `renderScale` 1.0 | ~0.52 ms | 1.2 ms | 2.3% |
+| Volumetric froxel dispatch | ~0.40 ms | 2.0 ms | 4.0% |
+| GI inject dispatch | ~0.10–0.19 ms | 0.4 ms | 39% |
+
+The GI inject spread is a residual recorded rather than fixed. At roughly a tenth of a millisecond, drained every frame, that pass never holds boost clocks and its whole distribution shifts between runs — its minimum tracks its median, so this is power state and not outliers. Its headroom against the 0.4 ms budget is wide enough that the gate still adjudicates, and a tighter figure would need a different measurement shape. **Every other per-pass figure in this section and in § 11.2 predates this harness and is a single sample; re-taking them is 3D_E-0657.**
+
 **How the two budgets are selected, and what must NOT change.** `budgetsApplyToThisMachine` asks whether the box is the hardware class every figure in the benchmark was measured on. **It stays exactly as it is and keeps its meaning**, and the volumetric and GI gates keep using it unchanged — inverting it or redefining it would silently move those two. The god-ray gate gains a tier branch *ahead* of it rather than replacing it, so the reference row is still protected by the hardware-class question it was measured under:
 
 | Declared preset | Timed at | Asserts |
 |---|---|---|
 | Low, Medium | that preset's `renderScale`, read back from the shipped `applyQualityPreset` | the 1.75 ms tier row |
 | High, Ultra — **and an unset or unrecognised value, which resolve to High** | `renderScale` 1.0 | the 1.2 ms reference row |
-| Custom | `renderScale` 1.0 — the reference resolution | *(nothing — reports its median)* |
+| Custom | `renderScale` 1.0 — the reference resolution | *(nothing — reports its cost)* |
 
-`Custom` times at 1.0 rather than skipping before the draws, for two reasons: the file's existing contract is that the path always runs so a crash is still caught, and a median reported at an unstated resolution could not be compared with the 0.69 ms and 3.1 ms figures this project set its budgets from. Unset resolving to High is deliberate: `applyQualityPreset` writes no `renderScale` for `Custom`, so 1.0 is the only defined choice, and an undeclared box is not claiming to be a weak tier.
+`Custom` times at 1.0 rather than skipping before the draws, for two reasons: the file's existing contract is that the path always runs so a crash is still caught, and a cost reported at an unstated resolution could not be compared with the 0.69 ms and 3.1 ms figures this project set its budgets from. Unset resolving to High is deliberate: `applyQualityPreset` writes no `renderScale` for `Custom`, so 1.0 is the only defined choice, and an undeclared box is not claiming to be a weak tier.
 
 **The selection splits across the timed region, and this is the one ordering that works.** The resolution half must be resolved **above** the draws — the framebuffer and source-texture sizes are chosen before the timing lambda, so the tier's `renderScale` has to be in hand there. The budget-and-assert half sits **below** the existing Debug and software-renderer guards, whose order is unchanged. Putting the whole tier branch below the guards would time the pass at `renderScale` 1.0 and then judge it against the tier row — 3.1 ms against 1.75 ms on the GTX 1050, permanently red on the one box the tier branch exists for. Hoisting the guards above the timing instead would lose the property the benchmark's header promises, that the path always runs and so still proves it does not crash.
 
