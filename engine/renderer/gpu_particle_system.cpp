@@ -186,10 +186,15 @@ void GPUParticleSystem::createBuffers(uint32_t maxParticles)
                          nullptr,
                          GL_DYNAMIC_STORAGE_BIT);
 
-    // Sort key SSBO (binding 5) — pairs of (depth, index)
+    // Sort key SSBO (binding 5) — pairs of (depth, index).
+    // Sized to the bitonic network's power-of-two width, NOT to maxParticles:
+    // sort() dispatches over nextPowerOf2(maxParticles) and the merge passes
+    // address the whole width, so a buffer sized to maxParticles is written
+    // out of bounds by the padding lanes (3D_E-0629). Pass 0 fills the tail
+    // with the sentinel key so it sorts past every live particle.
     glCreateBuffers(1, &m_sortKeySSBO);
     glNamedBufferStorage(m_sortKeySSBO,
-                         maxParticles * 2 * sizeof(uint32_t),
+                         nextPowerOf2(maxParticles) * 2 * sizeof(uint32_t),
                          nullptr,
                          GL_DYNAMIC_STORAGE_BIT);
 }
@@ -324,7 +329,7 @@ void GPUParticleSystem::compact()
     glMemoryBarrier(GL_SHADER_STORAGE_BARRIER_BIT);
 }
 
-void GPUParticleSystem::sort(const glm::mat4& viewMatrix)
+void GPUParticleSystem::sort(const glm::mat4& viewMatrix) const
 {
     if (!m_initialized)
         return;

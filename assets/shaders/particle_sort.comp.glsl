@@ -60,6 +60,10 @@ uniform int u_sortStage;       // Bitonic stage parameter
 uniform int u_sortStep;        // Bitonic step parameter
 uniform int u_sortCount;       // Number of elements to sort (rounded to power of 2)
 
+// Key reserved for dead particles and for the padding lanes between
+// maxParticles and u_sortCount. Maximum value == sorts last.
+const uint SENTINEL_KEY = 0xFFFFFFFFu;
+
 void main()
 {
     uint idx = gl_GlobalInvocationID.x;
@@ -67,14 +71,26 @@ void main()
     if (u_sortPass == 0)
     {
         // Pass 0: Generate sort keys from alive particles
-        if (idx >= maxParticles)
+        if (idx >= uint(u_sortCount))
             return;
+
+        // The network is a power of two wide, so the lanes past the particle
+        // array are padding. They must still be seeded, or the merge passes
+        // shuffle uninitialised keys into the live range (3D_E-0629).
+        if (idx >= maxParticles)
+        {
+            sortKeys[idx].depth = SENTINEL_KEY;
+            sortKeys[idx].index = idx;
+            return;
+        }
 
         GPUParticle p = particles[idx];
         if ((p.flags & 1u) == 0u)
         {
-            // Dead particles get maximum depth value (sorted to end)
-            sortKeys[idx].depth = 0xFFFFFFFFu;
+            // Dead particles get the maximum key, so they sort past every
+            // live particle and never land inside the indirect draw's
+            // aliveCount instances.
+            sortKeys[idx].depth = SENTINEL_KEY;
             sortKeys[idx].index = idx;
             return;
         }
@@ -92,7 +108,12 @@ void main()
         else
             depthBits |= 0x80000000u; // Positive: flip sign bit only
 
-        sortKeys[idx].depth = depthBits;
+        // The network sorts ASCENDING. Back-to-front means farthest first,
+        // so the key is the complement of the depth ordering: the largest
+        // depth becomes the smallest key. This also keeps SENTINEL_KEY (the
+        // maximum) as "sorts last", which is what the dead/padding lanes
+        // above rely on.
+        sortKeys[idx].depth = ~depthBits;
         sortKeys[idx].index = idx;
     }
     else
@@ -107,7 +128,12 @@ void main()
         // Determine partner index
         uint groupIdx = idx / block;
         uint localIdx = idx % block;
-        bool ascending = (groupIdx % 2u) == 0u;
+
+        // Direction comes from the STAGE, not the step. Deriving it from the
+        // step (which halves on every inner pass) flips the compare direction
+        // at the wrong granularity, and the network does not sort
+        // (3D_E-0629). This is the classic `(i & k) == 0` test, k = 1 << stage.
+        bool ascending = (idx & (1u << uint(u_sortStage))) == 0u;
 
         uint partnerOffset;
         if (localIdx < halfBlock)
@@ -128,8 +154,10 @@ void main()
         SortKey b = sortKeys[partnerIdx];
 
         bool shouldSwap;
+        // Keys ascend; the key itself is the complement of depth, so an
+        // ascending sort here is a back-to-front draw order.
         if (ascending)
-            shouldSwap = a.depth > b.depth; // Back-to-front: descending depth
+            shouldSwap = a.depth > b.depth;
         else
             shouldSwap = a.depth < b.depth;
 

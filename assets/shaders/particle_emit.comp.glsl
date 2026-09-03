@@ -57,9 +57,12 @@ uniform vec4 u_startColor;
 uniform int u_randomSeed;
 
 // --- PCG random number generator (public domain, O'Neill 2014) ---
-uint pcgHash(uint input)
+// `input` is a RESERVED WORD in GLSL 4.5 and the parameter used to be named
+// that, so this shader never compiled and GPUParticleSystem::init() failed at
+// its first shader load -- the whole GPU particle path was dead (3D_E-0629).
+uint pcgHash(uint value)
 {
-    uint state = input * 747796405u + 2891336453u;
+    uint state = value * 747796405u + 2891336453u;
     uint word = ((state >> ((state >> 28u) + 4u)) ^ state) * 277803737u;
     return (word >> 22u) ^ word;
 }

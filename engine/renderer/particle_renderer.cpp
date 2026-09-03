@@ -383,11 +383,13 @@ void ParticleRenderer::renderGPU(
         if (!gpuSys || !gpuSys->isInitialized())
             continue;
 
-        // Sort alpha-blend particles
+        // Sort alpha-blend particles back-to-front. GPUParticleEmitter::update
+        // cannot do this — it has no camera — so the dispatch belongs here, the
+        // only site holding the view matrix. It must run before this iteration
+        // binds its textures and program below, because a compute dispatch
+        // clobbers the units a draw has already set up (3D_E-0629).
         if (emitter->needsSorting())
-        {
-            // Sort pass was already dispatched during update — use sorted indices
-        }
+            gpuSys->sort(view);
 
         const ParticleEmitterConfig& config = emitter->getConfig();
 

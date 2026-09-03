@@ -137,7 +137,7 @@ public:
 
     /// @brief Dispatches bitonic sort for back-to-front transparency.
     /// @param viewMatrix Camera view matrix (for depth calculation).
-    void sort(const glm::mat4& viewMatrix);
+    void sort(const glm::mat4& viewMatrix) const;
 
     /// @brief Dispatches indirect draw command update (alive count → instance count).
     void updateIndirectCommand();

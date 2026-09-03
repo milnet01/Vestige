@@ -3611,13 +3611,36 @@ shipped that have no invocation path at all.
   Kind: fix.
   Source: review-code 2026-08-31 lanes core-support, editor-panels.
 
-- 📋 [3D_E-0629] **GPU particle sort never runs, and its consumer is switched on regardless.**
+- ✅ [3D_E-0629] **GPU particle sort never runs, and its consumer is switched on regardless.**
   GPUParticleSystem::sort() has zero callers -- GPUParticleEmitter::update calls beginFrame/emit/simulate/compact/updateIndirectCommand and never sort. particle_renderer.cpp:387-390 contains an empty block whose comment asserts the dispatch happened, then :418 sets u_useSortIndices = needsSorting(), so particle_gpu.vert.glsl:64 indexes the particle SSBO with uninitialised memory.
   Compounding: the sort SSBO is sized maxParticles but the shader is dispatched over nextPowerOf2(maxParticles) with no sentinel for the tail, so FIXING the missing call without also fixing the sizing makes an out-of-bounds access live. Fix both together, or force u_useSortIndices false as an interim.
   Also in this shader: u_sortStage is set by the CPU (gpu_particle_system.cpp:359) and never read, so the bitonic compare direction is derived from the step and the network does not sort.
   **Layman:** Transparent GPU particles are drawn in an order read from memory that was never written.
   Kind: fix.
   Source: review-code 2026-08-31 lane renderer-effects-vegetation.
+  Resolved (2026-09-03): all three defects fixed together, as the bullet
+  required. (a) The dispatch is now issued from ParticleRenderer::renderGPU,
+  the only site holding a view matrix -- GPUParticleEmitter::update takes
+  only a delta time, so it never could have done it; `sort()` became const,
+  matching bindForRendering, so the const emitter list can reach it. (b) The
+  key SSBO is sized to the network width rather than to maxParticles, and
+  pass 0 seeds the padding lanes with the sentinel. (c) The compare
+  direction now reads u_sortStage instead of deriving itself from the step.
+
+  The sentinel is the maximum key and the network sorts ascending, so the
+  live key became the complement of the depth ordering: farthest first, dead
+  and padding parked past every live particle, which is what the indirect
+  draw's aliveCount indexing requires.
+
+  Locked by tests/test_gpu_particle_sort.cpp, which runs the real shader on
+  a GL context and asserts the output order, the tail, the buffer width and
+  that the result is a permutation. Proven red first: pre-fix the key read
+  errors out on the undersized buffer, and with only the direction defect
+  restored six of eight slots hold the wrong particle while the permutation
+  check still passes -- which is why the broken network was never noticed.
+
+  Verified on Mesa 26.2.1 / RX 6600. See 3D_E-0682 for the reserved-word
+  defect that had kept this whole subsystem from initialising.
 
 - 📋 [3D_E-0630] **CPU and GPU cloth disagree on particle mass by up to 50x.**
   CLAUDE.md rule 7 requires a dual CPU/GPU implementation to be pinned with a parity test; docs/engine/physics/spec.md 6 records that the harness does not exist, and the two have diverged.
@@ -3864,6 +3887,27 @@ shipped that have no invocation path at all.
   **Layman:** A record of which shipped features were actually run and checked, and which large groups were never looked at.
   Kind: investigate.
   Source: verify-delivery 2026-09-01.
+
+- ✅ [3D_E-0682] **The GPU particle emit shader used a GLSL reserved word, so the whole path failed to initialise.**
+  `particle_emit.comp.glsl` named a function parameter `input`, which is
+  reserved in GLSL 4.5. The shader therefore never compiled, and it is the
+  FIRST one `GPUParticleSystem::init` loads -- so init returned false and no
+  GPU emitter ever ran. Found on Mesa on an RX 6600 when a new test called
+  init for the first time from a GL context; no existing test reached that
+  path, and the failure surfaces as a log line rather than a crash.
+
+  This is why 3D_E-0629's missing sort dispatch was never observed in
+  practice: the subsystem it belonged to had not initialised since the
+  shader was written. Renaming the parameter is the whole fix.
+
+  Resolved (2026-09-03): parameter renamed to `value`; init now succeeds and
+  all five particle compute shaders load. Locked by the 3D_E-0629 GL tests,
+  which assert init succeeds before they assert anything else. 3D_E-0638
+  already records that no tool statically analyses GLSL -- this is exactly
+  the class of defect such a tool would have caught at build time.
+  **Layman:** GPU particles never started up at all, because one shader would not compile.
+  Kind: fix.
+  Source: in-session-2026-09-03, found while verifying 3D_E-0629.
 
 ## Phase 11A: Gameplay Infrastructure
 **Goal:** The runtime subsystems every Phase 11B gameplay feature consumes — camera shake, screen flash, save-file compression, replay recording, behavior-tree runtime, and AI perception. Split out of the original single Phase 11 so the consumer-before-system dependencies surface at planning time rather than at implementation time.

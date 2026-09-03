@@ -23,6 +23,28 @@ may change any interface without notice.
 
 ## [Unreleased]
 
+### 2026-09-03 Fixed — GPU particles now initialise, and their transparency sort actually runs (3D_E-0629, 3D_E-0682)
+
+The GPU particle path had not started up since its emit shader was written, which is why the three defects underneath it went unseen.
+
+- **A GLSL reserved word stopped the whole subsystem initialising** (3D_E-0682)
+  particle_emit.comp.glsl named a parameter `input`, reserved in GLSL 4.5. It is the first shader the system loads, so init returned false and no GPU emitter ever ran. The failure was a log line, not a crash, and no test reached the path.
+
+- **The transparency sort was never dispatched** (3D_E-0629)
+  The renderer held an empty block whose comment asserted the sort had already happened during update -- which it could not have, since the emitter update takes only a delta time and the sort needs a view matrix. The dispatch now runs in the renderer, before the draw reads the key buffer and before the iteration binds its textures.
+
+- **The key buffer was narrower than the network it feeds** (3D_E-0629)
+  The bitonic network dispatches over the next power of two, while the buffer was sized to the particle count, so the padding lanes read and wrote past the end. The buffer now spans the network width and the padding is seeded with the sentinel key.
+
+- **The bitonic compare direction is taken from the stage, not the step** (3D_E-0629)
+  The stage uniform was set by the CPU and never read; the direction was derived from the step instead, which flips it at the wrong granularity, so the network did not sort. With that defect restored in isolation, six of eight slots hold the wrong particle while the output is still a valid permutation -- which is why it survived review.
+
+- **Sort keys are ordered so the sentinel means "draw last"** (3D_E-0629)
+  The network sorts ascending and the dead/padding sentinel is the maximum key, so the live key is now the complement of the depth ordering. Live particles come out farthest-first and dead ones park behind them, which is what the indirect draw's aliveCount indexing requires.
+
+- **The sort is covered by a GL test that runs the real shader** (3D_E-0629)
+  tests/test_gpu_particle_sort.cpp dispatches the compute shader on a GL context and reads the keys back, asserting the draw order, the parked tail, the buffer width and that the result is a permutation. Verified on Mesa 26.2.1 / RX 6600.
+
 ### 2026-09-03 Fixed — Skinned meshes no longer snap to bind pose when a one-shot clip ends (3D_E-0634)
 
 Two animation defects from the whole-tree review, both in the same lane.
