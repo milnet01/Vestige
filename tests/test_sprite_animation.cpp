@@ -174,3 +174,38 @@ TEST(SpriteAnimation, AddClipReplacesExisting)
     anim.play("idle");
     EXPECT_EQ(anim.currentFrameName(), "only");
 }
+
+// 3D_E-0634: a looping clip whose frames all have durationMs <= 0 spun
+// tick() forever — every frame took the degenerate-frame branch, which
+// advances and continues without consuming elapsed time. addClip clamps
+// the duration at ingest so the invariant holds for every consumer.
+TEST(SpriteAnimation, AddClipClampsNonPositiveFrameDuration)
+{
+    SpriteAnimation anim;
+    SpriteAnimationClip clip;
+    clip.name = "degenerate";
+    clip.frames = {{"d0", 0.0f}, {"d1", -25.0f}};
+    anim.addClip(clip);
+
+    const auto* stored = anim.findClip("degenerate");
+    ASSERT_NE(stored, nullptr);
+    for (const auto& frame : stored->frames)
+    {
+        EXPECT_GT(frame.durationMs, 0.0f) << "frame " << frame.name;
+    }
+}
+
+TEST(SpriteAnimation, LoopingClipWithZeroDurationsDoesNotHang)
+{
+    SpriteAnimation anim;
+    SpriteAnimationClip clip;
+    clip.name = "degenerate";
+    clip.frames = {{"d0", 0.0f}, {"d1", 0.0f}};
+    clip.loop = true;
+    anim.addClip(clip);
+
+    anim.play("degenerate");
+    anim.tick(0.1f);  // hangs unless the clamp gives each frame real time
+
+    EXPECT_TRUE(anim.isPlaying());
+}

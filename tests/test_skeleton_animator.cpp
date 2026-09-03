@@ -462,3 +462,32 @@ TEST(SkeletonAnimatorTest, FirstFramePrevPoseEqualsCurrent_R2)
     }
     EXPECT_TRUE(animator.getPrevMorphWeights() == animator.getMorphWeights());
 }
+
+// 3D_E-0634: a finished non-looping clip must keep reporting bone data.
+// `hasBones()` gates `RenderItem::boneMatrices` (scene.cpp), so returning
+// false on completion makes the renderer draw u_hasBones=false — the mesh
+// snaps back to bind pose — while the matrices are still valid.
+TEST(SkeletonAnimatorTest, NonLoopingClipKeepsBonesAfterCompletion)
+{
+    SkeletonAnimator animator;
+    animator.setSkeleton(makeSimpleSkeleton());
+    animator.addClip(makeSimpleClip());
+    animator.setLooping(false);
+    animator.play("Walk");
+
+    animator.update(0.5f);
+    ASSERT_TRUE(animator.isPlaying());
+    ASSERT_TRUE(animator.hasBones());
+    const auto poseMidClip = animator.getBoneMatrices();
+
+    // Advance past the 1-second clip duration so playback completes.
+    animator.update(1.0f);
+    ASSERT_FALSE(animator.isPlaying()) << "clip should have finished";
+
+    EXPECT_TRUE(animator.hasBones())
+        << "bone data is still valid after a one-shot clip ends";
+    EXPECT_EQ(animator.getBoneMatrices().size(), poseMidClip.size());
+
+    // The held pose is the clip's last frame, not the bind pose.
+    EXPECT_NEAR(animator.getBoneMatrices()[0][3][0], 5.0f, 0.1f);
+}

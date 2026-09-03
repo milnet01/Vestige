@@ -23,6 +23,16 @@ may change any interface without notice.
 
 ## [Unreleased]
 
+### 2026-09-03 Fixed — Skinned meshes no longer snap to bind pose when a one-shot clip ends (3D_E-0634)
+
+Two animation defects from the whole-tree review, both in the same lane.
+
+- **hasBones() is no longer gated on playback** (3D_E-0634)
+  A non-looping clip stops playing the moment it completes, but the bone matrices it left behind are still valid. Because the scene gates RenderItem::boneMatrices on hasBones(), the renderer stopped receiving them and drew the mesh at bind pose -- a visible pop at the end of every one-shot animation, including the Tabernacle veil draw. The held pose is now the clip's last frame.
+
+- **A sprite frame duration is clamped at ingest** (3D_E-0634)
+  A looping clip whose frames all carried a non-positive duration made tick() loop forever: every frame took the degenerate-frame branch, which advances without consuming elapsed time. addClip now clamps each frame to Aseprite's own one-millisecond minimum, so an asset-authoring slip can no longer hang the engine. The clamp is written to catch NaN as well as zero and negatives.
+
 ### 2026-09-02 Fixed — The fog GPU benchmark can reproduce its own verdict (3D_E-0626)
 
 The three fog performance gates ran three warm-up frames and asserted the

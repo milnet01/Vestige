@@ -635,7 +635,11 @@ const std::vector<glm::mat4>& SkeletonAnimator::getPrevBoneMatrices() const
 
 bool SkeletonAnimator::hasBones() const
 {
-    return m_skeleton && !m_boneMatrices.empty() && m_playing;
+    // Deliberately NOT gated on m_playing: a finished one-shot clip holds a
+    // valid final pose, and scene.cpp gates RenderItem::boneMatrices on this,
+    // so gating on playback snapped skinned meshes back to bind pose the
+    // moment a non-looping clip ended (3D_E-0634).
+    return m_skeleton && !m_boneMatrices.empty();
 }
 
 // ---------------------------------------------------------------------------

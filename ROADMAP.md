@@ -3652,13 +3652,20 @@ shipped that have no invocation path at all.
   Kind: fix.
   Source: review-code 2026-08-31 lane editor-panels.
 
-- 📋 [3D_E-0634] **Skinned meshes snap to bind pose the moment a one-shot animation finishes.**
+- ✅ [3D_E-0634] **Skinned meshes snap to bind pose the moment a one-shot animation finishes.**
   skeleton_animator.cpp:638 -- `return m_skeleton && !m_boneMatrices.empty() && m_playing;`. skeleton_animator.h:143 documents hasBones() as "whether this animator has valid bone data to render", and scene.cpp:374 gates item.boneMatrices on it. A non-looping clip sets m_playing = false on completion (:221), so the renderer stops receiving bone matrices and draws u_hasBones=false -- while the matrices are still perfectly valid.
   Drop `&& m_playing`. One token, and it hits the engine's stated primary use case (the Tabernacle veil draw).
   Same lane: sprite_animation.cpp:91-105 has an unbounded `while (true)` for a looping clip whose frames all have durationMs <= 0 -- a full engine hang from an asset-authoring slip. Clamp durationMs in addClip.
   **Layman:** When a non-looping animation ends, the character visibly pops back to its default pose.
   Kind: fix.
   Source: review-code 2026-08-31 lane systems-anim-nav-ui.
+  Resolved (2026-09-03): both halves fixed and locked by regression
+  tests written red first. hasBones() dropped its `&& m_playing` clause --
+  the doc comment already described the pose-validity contract it now
+  keeps. addClip clamps each frame to a one-millisecond floor, catching
+  NaN as well as zero and negatives; the hang was reproduced under a
+  timeout before the fix and the same test returns immediately after.
+  Full suite green, no other consumer of hasBones() regressed.
 
 - 📋 [3D_E-0635] **Decide whether release workflows may restore a build cache at all.**
   zizmor reports cache-poisoning (Low confidence) on actions/cache in release.yml (x2) and audit-full.yml. Not fixed, deliberately: release.yml's cache keys are already namespaced (`release-cmake-deps-*`) away from ci.yml's, and the workflow only runs on maintainer-gated tag pushes or workflow_call from the cadence -- so the poisoning vector needs the same write access as poisoning anything else.

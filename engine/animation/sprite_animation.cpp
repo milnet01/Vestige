@@ -10,6 +10,21 @@ namespace Vestige
 
 void SpriteAnimation::addClip(SpriteAnimationClip clip)
 {
+    // A frame with a non-positive duration takes tick()'s degenerate-frame
+    // branch, which advances without consuming elapsed time — so a looping
+    // clip whose frames are all degenerate loops forever. Clamp at the ingest
+    // boundary so the invariant holds for every consumer of `frames`.
+    // 1 ms matches Aseprite's own minimum frame duration. The negated form
+    // also catches NaN, which `durationMs < MIN` would let through.
+    constexpr float MIN_FRAME_DURATION_MS = 1.0f;
+    for (auto& frame : clip.frames)
+    {
+        if (!(frame.durationMs >= MIN_FRAME_DURATION_MS))
+        {
+            frame.durationMs = MIN_FRAME_DURATION_MS;
+        }
+    }
+
     // Cache the key up-front — the subsequent `std::move(clip)` leaves
     // `clip.name` in a moved-from state, so using it after the move is
     // undefined (and on libstdc++ lands in an empty string).
