@@ -5,9 +5,11 @@
 
 from __future__ import annotations
 
+import json
 import logging
 import os
 import re
+import shlex
 from concurrent.futures import ThreadPoolExecutor
 from pathlib import Path
 
@@ -16,6 +18,111 @@ from .findings import Finding, Severity
 from .utils import run_cmd, enumerate_files, relative_path
 
 log = logging.getLogger("audit")
+
+
+# CMake emits these two flags for a precompiled header. They are a build-speed
+# artefact with no bearing on what the code means, and clang cannot read the
+# GCC .gch the build produced -- under the project's -Werror that abandons the
+# whole translation unit (3D_E-0637). Strip them before analysing.
+_PCH_HEADER_SUFFIX = "cmake_pch.hxx"
+_PCH_FLAGS = frozenset({"-Winvalid-pch", "-fpch-preprocess"})
+
+
+def _strip_pch_tokens(tokens: list[str]) -> list[str]:
+    """Drop the PCH flags from one compile command's argument list.
+
+    Only a ``-include`` naming a CMake PCH header is removed; a forced include
+    of a real project header is a semantic flag and is kept.
+    """
+    out: list[str] = []
+    skip_next = False
+    for i, tok in enumerate(tokens):
+        if skip_next:
+            skip_next = False
+            continue
+        if tok in _PCH_FLAGS:
+            continue
+        if tok == "-include" and i + 1 < len(tokens) \
+                and tokens[i + 1].endswith(_PCH_HEADER_SUFFIX):
+            skip_next = True
+            continue
+        if tok.startswith("-include") and tok.endswith(_PCH_HEADER_SUFFIX):
+            continue
+        out.append(tok)
+    return out
+
+
+def _write_pch_free_compile_db(cc_dir: Path, out_dir: Path) -> Path | None:
+    """Copy ``cc_dir``'s compile database to ``out_dir`` without PCH flags.
+
+    Returns the directory holding the rewritten database, or None when the
+    source database is missing or unreadable -- the caller then falls back to
+    the original directory rather than analysing nothing.
+    """
+    src = Path(cc_dir) / "compile_commands.json"
+    try:
+        entries = json.loads(src.read_text())
+    except (OSError, ValueError) as exc:
+        log.warning("clang-tidy: cannot read %s (%s) — analysing against the "
+                    "build's own database, which may carry a GCC PCH", src, exc)
+        return None
+
+    for entry in entries:
+        if "arguments" in entry:
+            entry["arguments"] = _strip_pch_tokens(list(entry["arguments"]))
+        elif "command" in entry:
+            stripped = _strip_pch_tokens(shlex.split(entry["command"]))
+            entry["command"] = " ".join(shlex.quote(t) for t in stripped)
+
+    out_dir = Path(out_dir)
+    out_dir.mkdir(parents=True, exist_ok=True)
+    (out_dir / "compile_commands.json").write_text(json.dumps(entries))
+    return out_dir
+
+
+# clang-tidy reports an abandoned translation unit with lines that carry no
+# ``file:line:col:`` prefix, so the diagnostic parser below never matches them.
+# That is what let a run analyse nothing, report zero findings and exit clean.
+_ABANDONED_FILE_RE = re.compile(r"^Error while processing (.+?)\.?$", re.MULTILINE)
+_BARE_ERROR_RE = re.compile(r"^error: (.+)$", re.MULTILINE)
+
+
+def _detect_analysis_failures(output: str) -> list[Finding]:
+    """Turn "the analyser gave up" into a finding.
+
+    A tool that analysed nothing must not be indistinguishable from a tool
+    that found nothing. Two shapes, measured on this tree:
+
+    * clang-tidy prints ``Error while processing <file>.`` and exits 1.
+    * clazy prints the bare ``error:`` alone and exits 0, with no other
+      output at all -- the silent zero this exists to catch.
+
+    A bare ``error:`` carries no ``file:line:col:`` prefix, so it is a
+    driver- or configuration-level failure rather than a code diagnostic,
+    and the diagnostic parser below never matches it.
+    """
+    reasons = sorted(set(_BARE_ERROR_RE.findall(output)))
+    files = sorted(set(_ABANDONED_FILE_RE.findall(output)))
+    if not reasons and not files:
+        return []
+
+    detail = reasons[0] if reasons else "no diagnostic text"
+    if files:
+        shown = ", ".join(files[:3]) + (" ..." if len(files) > 3 else "")
+        where = f"{len(files)} file(s): {shown}"
+    else:
+        where = "an unnamed file (the tool reported no location)"
+
+    return [Finding(
+        file=files[0] if files else "<compile database>",
+        line=None,
+        severity=Severity.HIGH,
+        category="clang_tidy",
+        source_tier=1,
+        title=(f"clang-based analysis failed on {where} — the run analysed "
+               f"less than it appears to have. First cause: {detail}"),
+        pattern_name="clangtidy_analysis_failed",
+    )]
 
 
 def _clangtidy_workers(ct_config: dict) -> int:
@@ -122,7 +229,13 @@ def run(config: Config) -> list[Finding]:
             # Auto-generated — lives in the build directory
             build_dir = config.get("build", "build_dir", default="build")
             cc_dir = config.root / build_dir
-        base_cmd: list[str] = [binary, "-p", str(cc_dir), f"--checks={checks}"]
+        # Analyse against a PCH-free copy of the database. The build's own
+        # database names a GCC precompiled header that clang cannot read, and
+        # -Werror turns that into an abandoned translation unit (3D_E-0637).
+        analysis_dir = _write_pch_free_compile_db(
+            cc_dir, cc_dir / "audit-clang-tidy")
+        base_cmd: list[str] = [binary, "-p", str(analysis_dir or cc_dir),
+                               f"--checks={checks}"]
         cmd_suffix: list[str] = []
     else:
         # Trailing `--` separates clang-tidy options from compiler flags.
@@ -165,8 +278,15 @@ def run(config: Config) -> list[Finding]:
             pattern_name="clangtidy_timeout",
         ))
 
+    merged = "\n".join(outputs)
+
+    # Before the diagnostics: did clang-tidy actually analyse anything? An
+    # abandoned file produces no parseable diagnostic, so without this a run
+    # that analysed nothing reports zero findings and exits clean.
+    findings.extend(_detect_analysis_failures(merged))
+
     # Parse merged output — clang-tidy writes diagnostics to stdout
-    findings.extend(_parse_output("\n".join(outputs), config))
+    findings.extend(_parse_output(merged, config))
 
     log.info("clang-tidy: %d findings", len(findings))
     return findings

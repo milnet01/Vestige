@@ -23,6 +23,19 @@ may change any interface without notice.
 
 ## [Unreleased]
 
+### 2026-09-03 Fixed — Clang-based analysis no longer trips over the GCC precompiled header (3D_E-0637)
+
+The build precompiles its headers with GCC. Clang cannot read a GCC PCH, and the resulting diagnostic carries no source location, so nothing downstream could see it.
+
+- **The audit analyses against a PCH-free copy of the compile database** (3D_E-0637)
+  The two flags CMake emits for a precompiled header are dropped into a derived database under the build directory; a forced include of a real header is kept. This is the root-cause fix rather than suppressing the warning, and it helps any clang-based tool pointed at that directory.
+
+- **An analyser that gave up now reports a finding instead of nothing** (3D_E-0637)
+  The diagnostic has no file:line:col: prefix, so the parser never matched it and a run that analysed nothing looked exactly like a clean one. Both failure shapes are now detected and raised.
+
+- **Correction to what the original report claimed** (3D_E-0637)
+  Measured on LLVM 22.1.8, clang-tidy was not in fact reporting zero: it analysed normally and exited non-zero. It is clazy that emitted only the error and still exited clean. The defect was real; the tool it was attributed to was not.
+
 ### 2026-09-03 Fixed — GPU particles now initialise, and their transparency sort actually runs (3D_E-0629, 3D_E-0682)
 
 The GPU particle path had not started up since its emit shader was written, which is why the three defects underneath it went unseen.

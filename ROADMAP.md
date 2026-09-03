@@ -3708,13 +3708,53 @@ shipped that have no invocation path at all.
   Kind: fix.
   Source: check-code 2026-08-31.
 
-- 📋 [3D_E-0637] **clang-based analysis is blocked by a GCC precompiled header.**
+- ✅ [3D_E-0637] **clang-based analysis is blocked by a GCC precompiled header.**
   CMake generates cmake_pch.hxx.gch with GCC. clang-tidy and clazy cannot read a GCC PCH, and for the vestige_engine target it is `-Werror,-Wignored-gch` -- so every file is abandoned and BOTH TOOLS REPORT ZERO FINDINGS WHILE EXITING 0. That is the exact shape check-code exists to prevent.
   Workaround used this run: --extra-arg=-Wno-error=ignored-gch, after which clang-tidy found 179 unique project-owned findings.
   Proper fix: disable the PCH for clang-based analysis targets, or generate a clang PCH alongside. Until then, any clean clang-tidy result on this tree is meaningless.
   **Layman:** Two of the code-checking tools silently check nothing at all.
   Kind: fix.
   Source: check-code 2026-08-31.
+  Resolved (2026-09-03), with a CORRECTION to what this bullet claimed.
+
+  Measured on LLVM 22.1.8 against this tree, the two tools do NOT behave
+  alike, and only one of them shows the silent zero:
+
+    - clang-tidy still analyses the translation unit. The ignored GCC PCH is
+      reported, -Werror makes it fatal to the exit code, and the run exits 1
+      -- but the findings are all there (97 on skeleton_animator.cpp, 8017 on
+      particle_renderer.cpp with the configured check set). It does not report
+      zero, and it does not exit 0.
+    - clazy DOES match the description exactly: the PCH error is its entire
+      output and it exits 0. Nothing downstream can tell that from a clean run.
+
+  So the shape the bullet names is real, but it belongs to clazy. The earlier
+  "clang-tidy found 179 findings only after --extra-arg" reading is most
+  likely a check-set artefact -- with no .clang-tidy present the default check
+  set is empty, which 3D_E-0636 already records separately.
+
+  The fix is the root-cause one this bullet asked for rather than the
+  --extra-arg workaround: the audit now analyses against a PCH-free COPY of
+  the compile database (`_write_pch_free_compile_db`, written to
+  <build>/audit-clang-tidy/). The two PCH flags CMake emits, -Winvalid-pch
+  and the -include of cmake_pch.hxx, are dropped; a forced include of a real
+  header is kept. Verified: same 97 findings, exit 1 becomes exit 0, and the
+  abandoned-file marker disappears. clazy against the same directory no
+  longer emits the error.
+
+  Second half, and the more important one: an analyser that gave up now
+  produces a HIGH finding. The PCH diagnostic carries no file:line:col:
+  prefix, so the diagnostic parser could never match it -- that is what made
+  a run that analysed nothing look identical to a clean one. Both shapes are
+  covered, clang-tidy's "Error while processing" and clazy's bare error line.
+
+  Locked by tools/audit/tests/test_tier1_clangtidy.py, written red first.
+  Audit suite 877 passed.
+
+  Residual, not fixed here: check-code invokes clazy pointed at the build
+  directory itself, so it still reads the PCH-carrying database. Point it at
+  <build>/audit-clang-tidy/, or configure with
+  -DCMAKE_DISABLE_PRECOMPILE_HEADERS=ON.
 
 - 📋 [3D_E-0638] **GLSL has no static analysis at all: 92 shaders, zero tool coverage.**
   No tool in check-code's set covers GLSL (its detection table has no GLSL row), and tools/shader_lint.py is a data-lint wired into ctest, not a semantic analyser -- it verifies `#version 450 core` and passes.
