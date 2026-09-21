@@ -562,7 +562,7 @@ Shipped via commit `6a40da4`. Three asset-viewer panels in `engine/editor/panels
 - [x] Node type registry (NodeTypeDescriptor with execute functions, categorized palette lookup)
 - [x] Graph interpreter (ScriptContext: impulse-driven execution, lazy data pull, call depth + node count safety limits)
 - [x] Runtime instances (ScriptInstance with per-graph blackboard, latent action queue, event subscriptions)
-- [x] ScriptComponent (entity attachment) + ScriptingSystem (ISystem with update loop, latent tick, event bridge)
+- [ ] ScriptComponent (entity attachment) + ScriptingSystem (ISystem with update loop, latent tick, event bridge) — **un-ticked 2026-09-21 (3D_E-0627).** The classes exist and are unit-tested, but nothing constructs a `ScriptingSystem` at runtime, `ScriptComponent` has zero callers, and `ScriptingSystem::onSceneLoad` is a stub whose own comment lists the four steps nobody wrote. No script can execute in the shipped engine. Switching it on is tracked as its own item.
 - [x] 10 core node types (OnStart, OnUpdate, OnDestroy, Branch, Sequence, Delay, SetVariable, GetVariable, PrintToScreen, LogMessage)
 - [x] Six-scope variable model (Flow / Graph / Entity / Scene / Application / Saved) via Blackboard
 - [x] 43 unit tests for scripting infrastructure
@@ -2971,6 +2971,29 @@ shipped that have no invocation path at all.
   **Layman:** A record of which shipped features were actually run and checked, and which large groups were never looked at.
   Kind: investigate.
   Source: verify-delivery 2026-09-01.
+  STALE BASELINE, found 2026-09-21. The "DO NOT re-run the covered
+  half" instruction above is no longer safe to follow, and the artefacts it
+  points at are no longer a valid before-capture.
+
+  Three code commits landed after the 2026-09-01 run: 5b55f36 (GPU particle
+  sort — this one renders), 9faa653 (bone data / sprite frame duration) and
+  fc040e6 (PCH-free compile database). The render-path `delivered` verdict
+  therefore describes a tree that is three commits old, and a pixel delta
+  measured against run_20260901_000203/ would attribute the particle-sort
+  change to whatever was being tested.
+
+  The files are all still on disk, which is what makes the original wording
+  convincing: "rests on artefacts still on disk" reads as durable and is not.
+  A record pinning a verdict to an artefact has to pin the COMMIT the
+  artefact came from, or it decays into a false claim the first time
+  anything lands.
+
+  What this does NOT do is falsify the verdict — the render path may well
+  still be fine. It means the evidence no longer covers the current tree,
+  so the next run must re-capture rather than cite.
+
+  Found by the claude-3d session while declining a delegation of 3D_E-0638;
+  flagged against that item's request for a before/after pixel delta.
 
 - ✅ [3D_E-0682] **The GPU particle emit shader used a GLSL reserved word, so the whole path failed to initialise.**
   `particle_emit.comp.glsl` named a function parameter `input`, which is
