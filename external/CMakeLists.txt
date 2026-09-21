@@ -118,7 +118,7 @@ _vestige_restore_dep_warnings()
 FetchContent_Declare(
     tinyexr
     GIT_REPOSITORY https://github.com/syoyo/tinyexr.git
-    GIT_TAG        v1.0.9
+    GIT_TAG        v1.0.13
     GIT_SHALLOW    TRUE
 )
 _vestige_silence_upstream_dep_warnings()

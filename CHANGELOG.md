@@ -23,6 +23,17 @@ may change any interface without notice.
 
 ## [Unreleased]
 
+### 2026-09-21 Security — tinyexr raised to v1.0.13, taking two upstream memory-safety fixes (3D_E-0669)
+
+EXR loading was pinned below two fixes upstream had already published: a double-free in `FreeEXRImage` when chunk decoding fails, and a heap-buffer-overflow in B44/B44A pixel decoding with mixed channel types. EXR parsing is reachable whenever an asset comes from outside the repository, so this was a real exposure rather than hygiene.
+
+v1.0.13 is the top of the 1.x line and a patch-level move within the same API. v3.x was deliberately not taken: it restructures the API and must not ride along with a security patch (3D_E-0670 owns that migration).
+
+A cold review located copies of both versions and diffed them rather than inferring: `LoadEXR`, `TINYEXR_SUCCESS` and `FreeEXRErrorMessage` are byte-identical, and the malloc/free ownership contract is unchanged, so the caller's `free()` stays correct. The new spectral-EXR and compiler-FP16 surface is inert here because nothing defines a `TINYEXR_*` macro. Full local CI green across all seven jobs.
+
+The review left the decode internals unaudited and found that no test loads an EXR at all — filed as 3D_E-0686.
+<fields>["ok", "category", "line"]
+
 ### 2026-09-21 Fixed — Bloom stopped responding to brightness (3D_E-0638)
 
 The third of the four shader defects from the GLSL cold read, and the one

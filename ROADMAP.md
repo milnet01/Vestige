@@ -3371,6 +3371,18 @@ shipped that have no invocation path at all.
   Source: tech-survey-2026-09-02.
 
 
+- 📋 [3D_E-0685] **The tree dither copy has no parity test, and CLAUDE.md cites it as the example of one.**
+  `tree_mesh.frag.glsl` and `tree_shadow.frag.glsl` both define `interleavedGradientNoise`, and the shadow copy's comment says it matches. Nothing pins them: no file under `tests/` mentions either shader or `dither`, and the nine text-parity tests cover IBL, bloom, colour grading, subsurface, terrain GGX, audio curves, cloth and grass shadow only. CLAUDE.md's shader rule cites this exact pair as its worked example of copy-and-pin, so its own precedent sits in the state the same sentence forbids. A drift would fail the way that rule describes: a warning at load time, trees silently stop casting shadows. Two cold lanes found this independently. The fix is the test, not the sentence: pin the pair the way `test_grass_shadow_parity.cpp` does.
+  **Layman:** Two tree shaders share a copied function with nothing checking they stay identical, and the rules file points at that pair as its example of doing it properly.
+  Kind: test.
+  Source: rule-14 gate on CLAUDE.md, 2026-09-21.
+
+- 📋 [3D_E-0686] **No test loads an EXR, so the HDRI decode path has no coverage at all.**
+  Found by the cold review of the tinyexr v1.0.13 bump (3D_E-0669). `Texture::loadFromExr` is the only consumer of tinyexr and nothing exercises it: searching for `.exr` or `loadFromExr` outside the docs finds only `texture.cpp`, `texture.h`, three editor files that extension-match for UI purposes, and two tool configs that exclude `*.exr` from text scans. So a decode difference surfaces as a visually wrong HDRI at runtime and nothing fails. That is the same shape as 3D_E-0685: a real behaviour with no test over it. The review also left tinyexr's `DecodePixelData` internals undetermined — the function grew substantially between v1.0.9 and v1.0.13 and gained two more half-to-float call sites, and the review verified the public contract rather than that region. A load-and-compare test over a small committed EXR would close both: it pins our decode path and it would catch an upstream decode change on the next bump. Secondary, pre-authored and unrelated to the bump: `docs/engine/renderer/spec.md` calls tinyexr vendored at `external/`, which is false — it is fetched and consumed from the build tree.
+  **Layman:** Nothing in the test suite ever opens an HDR image file, so if the library that reads them started decoding differently, no test would notice.
+  Kind: test.
+  Source: cold review of 3D_E-0669, 2026-09-21.
+
 ## 0.3.0 — An editor a builder can use
 
 Breaks: the scene format. Editor work changes what a scene stores.
@@ -5654,8 +5666,8 @@ record, and a real clearance before commercial release needs counsel.
   Lanes: renderer, terrain.
   Source: tech-survey-2026-09-02.
 
-- 📋 [3D_E-0669] **tinyexr is pinned below two published memory-safety fixes.**
-  external/CMakeLists.txt pins tinyexr at v1.0.9. Upstream v1.0.13
+- ✅ [3D_E-0669] **tinyexr is pinned below two published memory-safety fixes.**
+  external/CMakeLists.txt pinned tinyexr at v1.0.9. Upstream v1.0.13
   (2026-03-31) fixed, in its own release notes: "Fix double-free in
   FreeEXRImage when DecodeChunk fails" and "Fix heap-buffer-overflow in
   B44/B44A DecodePixelData with mixed channel types". Verified directly on
@@ -5675,6 +5687,18 @@ record, and a real clearance before commercial release needs counsel.
   Kind: security.
   Lanes: deps, security.
   Source: tech-survey-2026-09-02.
+  Resolved (2026-09-21): pin moved to v1.0.13, the top of the 1.x line;
+  THIRD_PARTY_NOTICES.md updated. Full local CI green on all seven jobs
+  including Windows/MSVC and the CMake 3.21.0 floor. Cold review located
+  genuine copies of both versions and diffed them: LoadEXR,
+  TINYEXR_SUCCESS and FreeEXRErrorMessage are byte-identical, the
+  malloc/free ownership contract is unchanged so the caller's free()
+  stays correct, and v1.0.13's additions (spectral EXR, compiler-FP16)
+  are inert because nothing here defines a TINYEXR_ macro. v3.x
+  deliberately not taken — that is 3D_E-0670. The review left two items
+  undetermined and they are filed as 3D_E-0686: DecodePixelData's
+  internals changed materially and were not audited, and no test loads
+  an .exr at all, so a decode difference has no coverage.
 
 - 💭 [3D_E-0675] **Correct the record on why Steam Audio was rejected — licensing was not a valid reason.**
   The 2026-07 AX2/AX3 decision is recorded as rejecting Steam Audio on

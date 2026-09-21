@@ -29,7 +29,7 @@ publishes no suitable release tag — see "Branch-commit pins" below.
 | imgui-node-editor| v0.9.3                                          | MIT                                               | <https://github.com/thedmd/imgui-node-editor> |
 | ImPlot           | commit `1351ab2c` (master branch, see below)    | MIT                                               | <https://github.com/epezent/implot> |
 | FreeType         | VER-2-14-3                                      | FreeType Project License (BSD-style) — chosen over GPLv2 | <https://github.com/freetype/freetype> (official mirror; build fetches this) |
-| tinyexr          | v1.0.9                                          | BSD 3-Clause                                      | <https://github.com/syoyo/tinyexr> |
+| tinyexr          | v1.0.13                                         | BSD 3-Clause                                      | <https://github.com/syoyo/tinyexr> |
 | tinygltf         | v2.9.4                                          | MIT                                               | <https://github.com/syoyo/tinygltf> |
 | nlohmann/json    | v3.12.0 (URL tarball; see `external/CMakeLists.txt`)     | MIT                                      | <https://github.com/nlohmann/json> |
 | Jolt Physics     | v5.3.0                                          | MIT                                               | <https://github.com/jrouwe/JoltPhysics> |
