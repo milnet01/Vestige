@@ -10,6 +10,8 @@
 #include <GLFW/glfw3.h>
 
 #include <algorithm>
+#include <cmath>
+#include <cstdint>
 
 namespace Vestige
 {
@@ -374,11 +376,66 @@ void GpuClothSimulator::uploadPinsIfDirty()
 void GpuClothSimulator::initialize(const ClothConfig& config, uint32_t seed)
 {
     if (m_initialized) destroyBuffers();
+    // Every reject below returns early, so clear this FIRST. Otherwise a
+    // failed re-initialise leaves the previous run's `true` in place and the
+    // caller is told a cloth exists that does not (3D_E-0630).
+    m_initialized = false;
+
+    // ---- Config validation, matching `ClothSimulator::initialize` ---------
+    //
+    // The GPU backend checked only for a zero particle count, so a config the
+    // CPU refuses produced an uninitialised CPU cloth and a LIVE GPU one --
+    // and the engine chooses the backend by cloth size, so which you got
+    // depended on the grid rather than on the config.
+
+    // A cloth needs at least one quad in each direction; the constraint and
+    // dihedral builders assume it.
+    if (config.width < 2 || config.height < 2)
+    {
+        Logger::warning("[GpuClothSimulator] Refusing a grid smaller than 2x2");
+        return;
+    }
+
+    // OVERFLOW, and this is the memory-safety half. `width * height` in
+    // uint32 wraps for a large grid -- 65536 x 65537 wraps to 65536 -- so the
+    // buffers would be sized for the wrapped count while `buildInitialGrid`
+    // indexes `z * W + x` across the REAL extents, writing far past the end.
+    // Computed in 64 bits and rejected before anything is allocated.
+    const uint64_t requested =
+        static_cast<uint64_t>(config.width) * static_cast<uint64_t>(config.height);
+    if (requested > static_cast<uint64_t>(UINT32_MAX))
+    {
+        Logger::warning("[GpuClothSimulator] Refusing a grid whose particle "
+                        "count overflows 32 bits");
+        return;
+    }
+
+    // Non-positive mass would invert gravity; NaN passes every `<=` test
+    // (a comparison with NaN is false) and would poison each particle's
+    // inverse mass, then its velocity, position and the mesh upload.
+    if (!(config.particleMass > 0.0f) || !std::isfinite(config.particleMass))
+    {
+        Logger::warning("[GpuClothSimulator] Refusing a non-positive or "
+                        "non-finite particleMass");
+        return;
+    }
+
+    if (!(config.spacing > 0.0f) || !std::isfinite(config.spacing) ||
+        !std::isfinite(config.damping)  ||
+        !std::isfinite(config.gravity.x) ||
+        !std::isfinite(config.gravity.y) ||
+        !std::isfinite(config.gravity.z))
+    {
+        Logger::warning("[GpuClothSimulator] Refusing a non-finite spacing, "
+                        "damping or gravity");
+        return;
+    }
+    // ---- end validation --------------------------------------------------
 
     m_config        = config;  // Cached for live-tuning mutators + getConfig().
     m_gridW = config.width;
     m_gridH = config.height;
-    m_particleCount = m_gridW * m_gridH;
+    m_particleCount = static_cast<uint32_t>(requested);
     m_gravity       = config.gravity;
     m_damping       = config.damping;
     m_substeps      = (config.substeps < 1) ? 1 : config.substeps;

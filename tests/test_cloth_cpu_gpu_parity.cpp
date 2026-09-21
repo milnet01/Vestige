@@ -339,3 +339,79 @@ TEST_F(ClothCpuGpuParityTest, Cl1_GpuSolverRespondsToParticleMass)
            "weighted w=1 while the CPU uses w=1/mass (50 at linenCurtain's "
            "0.02 kg). 3D_E-0630.";
 }
+
+// =============================================================================
+// Cl8 — the GPU must refuse the configs the CPU refuses (3D_E-0630)
+// =============================================================================
+// `ClothSimulator::initialize` rejects a sub-2×2 grid, a non-positive or
+// non-finite particleMass, non-positive/non-finite spacing, and non-finite
+// damping or gravity. `GpuClothSimulator::initialize` checked only for a zero
+// particle count, so the same ClothConfig produced an uninitialised CPU cloth
+// and a live GPU one — and the engine picks the backend by size, so which you
+// got depended on the grid.
+TEST_F(ClothCpuGpuParityTest, Cl8_GpuRejectsTheConfigsTheCpuRejects)
+{
+    const float qNaN = std::numeric_limits<float>::quiet_NaN();
+    const float inf  = std::numeric_limits<float>::infinity();
+
+    struct Case { const char* what; ClothConfig cfg; };
+    std::vector<Case> cases;
+    auto add = [&](const char* what, auto mutate)
+    {
+        ClothConfig c = parityConfig();
+        mutate(c);
+        cases.push_back({what, c});
+    };
+
+    add("1x1 grid",            [](ClothConfig& c){ c.width = 1; c.height = 1; });
+    add("2x1 grid",            [](ClothConfig& c){ c.height = 1; });
+    add("zero mass",           [](ClothConfig& c){ c.particleMass = 0.0f; });
+    add("negative mass",       [](ClothConfig& c){ c.particleMass = -1.0f; });
+    add("NaN mass",            [&](ClothConfig& c){ c.particleMass = qNaN; });
+    add("zero spacing",        [](ClothConfig& c){ c.spacing = 0.0f; });
+    add("inf spacing",         [&](ClothConfig& c){ c.spacing = inf; });
+    add("NaN damping",         [&](ClothConfig& c){ c.damping = qNaN; });
+    add("inf gravity",         [&](ClothConfig& c){ c.gravity.y = -inf; });
+
+    for (const Case& k : cases)
+    {
+        ClothSimulator cpu;
+        cpu.initialize(k.cfg, /*seed=*/0);
+        ASSERT_FALSE(cpu.isInitialized())
+            << "fixture wrong: CPU accepted " << k.what;
+
+        GpuClothSimulator gpu;
+        gpu.setShaderPath(VESTIGE_SHADER_DIR);
+        gpu.initialize(k.cfg, /*seed=*/0);
+        EXPECT_FALSE(gpu.isInitialized())
+            << "GPU accepted " << k.what << " where the CPU refused it. The two "
+               "backends disagree about what a valid ClothConfig is, and the "
+               "engine selects between them by cloth size. 3D_E-0630.";
+    }
+}
+
+// A grid whose particle count overflows uint32 wraps to a small number, so the
+// buffers are sized for the wrapped count while `buildInitialGrid` indexes
+// `z * W + x` over the real extents — a very large out-of-bounds write.
+//
+// DELIBERATELY NOT PROVEN RED, and this is the one place in this change where
+// the red run was skipped on purpose: proving it red means EXECUTING that
+// out-of-bounds write. `testing.md` asks for a failing run first; here the
+// failing run is the defect going off inside the test process, which is not a
+// thing to do to find out what we already know from reading the arithmetic.
+// The safe half above was proven red normally.
+TEST_F(ClothCpuGpuParityTest, Cl8_GpuRejectsAGridWhoseParticleCountOverflows)
+{
+    ClothConfig cfg = parityConfig();
+    cfg.width  = 65536;
+    cfg.height = 65537;  // 65536 * 65537 wraps to 65536 in uint32.
+
+    GpuClothSimulator gpu;
+    gpu.setShaderPath(VESTIGE_SHADER_DIR);
+    gpu.initialize(cfg, /*seed=*/0);
+
+    EXPECT_FALSE(gpu.isInitialized())
+        << "GPU accepted a grid whose particle count overflows uint32: "
+           "width * height wrapped, so the buffers are sized for the wrapped "
+           "count while the grid build indexes the real extents. 3D_E-0630.";
+}
