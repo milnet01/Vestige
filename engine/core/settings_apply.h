@@ -51,7 +51,9 @@ struct AudioSettings;            // core/settings.h
 struct AccessibilitySettings;    // core/settings.h
 struct LocalizationSettings;     // core/settings.h
 struct ActionBindingWire;        // core/settings.h
+struct ControlsSettings;         // core/settings.h
 class InputActionMap;            // input/input_bindings.h
+class FirstPersonController;     // core/first_person_controller.h
 class LocalizationService;       // localization/localization_service.h
 class Window;                    // core/window.h
 class UISystem;                  // systems/ui_system.h
@@ -722,6 +724,51 @@ std::vector<ActionBindingWire> extractInputBindings(
 /// strings both map to `InputDevice::None`.
 void applyInputBindings(const std::vector<ActionBindingWire>& wires,
                          InputActionMap& map);
+
+// ================================================================
+// 3D_E-0628a — Controls apply path
+// ================================================================
+
+/// @brief Sink for the non-binding half of `ControlsSettings` — look
+///        sensitivity, invert-Y and the two gamepad deadzones.
+///
+/// `applyInputBindings` above covers the *bindings* half. These four
+/// fields are the rest of the Controls tab, and until 3D_E-0628a they
+/// were serialised, clamped and driven by live widgets while reaching
+/// nothing: the controller read `ControllerConfig::mouseSensitivity`,
+/// a different field, and no code path connected the two.
+class ControlsApplySink
+{
+public:
+    virtual ~ControlsApplySink() = default;
+
+    /// @brief Look sensitivity multiplier. `Settings::validate` clamps
+    ///        it to [0.1, 10.0] before it reaches here.
+    virtual void setMouseSensitivity(float sensitivity) = 0;
+
+    /// @brief Inverts the vertical look axis (mouse and right stick).
+    virtual void setInvertY(bool invert) = 0;
+
+    /// @brief Per-stick deadzones, each clamped to [0.0, 0.9].
+    virtual void setGamepadDeadzones(float left, float right) = 0;
+};
+
+/// @brief Pushes the four control values onto a sink.
+void applyControls(const ControlsSettings& controls, ControlsApplySink& sink);
+
+/// @brief Production sink wrapping a live `FirstPersonController`.
+class ControllerControlsApplySink final : public ControlsApplySink
+{
+public:
+    explicit ControllerControlsApplySink(FirstPersonController& controller);
+
+    void setMouseSensitivity(float sensitivity) override;
+    void setInvertY(bool invert) override;
+    void setGamepadDeadzones(float left, float right) override;
+
+private:
+    FirstPersonController& m_controller;
+};
 
 // ================================================================
 // Slice L5 — Localization apply path

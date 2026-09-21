@@ -6,6 +6,7 @@
 #include "core/settings_apply.h"
 
 #include "audio/audio_engine.h"
+#include "core/first_person_controller.h"
 #include "core/logger.h"
 #include "core/settings.h"
 #include "core/window.h"
@@ -689,6 +690,39 @@ void applyInputBindings(const std::vector<ActionBindingWire>& wires,
         action->secondary = bindingFromWire(w.secondary);
         action->gamepad   = bindingFromWire(w.gamepad);
     }
+}
+
+// ================================================================
+// 3D_E-0628a — Controls apply
+// ================================================================
+
+void applyControls(const ControlsSettings& controls, ControlsApplySink& sink)
+{
+    sink.setMouseSensitivity(controls.mouseSensitivity);
+    sink.setInvertY(controls.invertY);
+    sink.setGamepadDeadzones(controls.gamepadDeadzoneLeft,
+                             controls.gamepadDeadzoneRight);
+}
+
+ControllerControlsApplySink::ControllerControlsApplySink(
+    FirstPersonController& controller)
+    : m_controller(controller)
+{
+}
+
+void ControllerControlsApplySink::setMouseSensitivity(float sensitivity)
+{
+    m_controller.setMouseSensitivity(sensitivity);
+}
+
+void ControllerControlsApplySink::setInvertY(bool invert)
+{
+    m_controller.setInvertY(invert);
+}
+
+void ControllerControlsApplySink::setGamepadDeadzones(float left, float right)
+{
+    m_controller.setGamepadDeadzones(left, right);
 }
 
 // ================================================================

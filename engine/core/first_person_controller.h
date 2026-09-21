@@ -18,14 +18,38 @@ namespace Vestige
 
 class Terrain;
 
+/// @brief The action ids `FirstPersonController` polls for movement.
+///
+/// `Engine::initialize` registers exactly these on the `InputActionMap`
+/// (3D_E-0628b). Both sides name the same constants deliberately: a
+/// controller polling an id nobody registered gets a permanent `false`,
+/// so the key simply stops working with no error anywhere. Sharing the
+/// spelling makes that drift impossible instead of merely tested-for.
+namespace MovementActions
+{
+inline constexpr const char* Forward  = "MoveForward";
+inline constexpr const char* Backward = "MoveBackward";
+inline constexpr const char* Left     = "MoveLeft";
+inline constexpr const char* Right    = "MoveRight";
+inline constexpr const char* Up       = "MoveUp";
+inline constexpr const char* Down     = "MoveDown";
+inline constexpr const char* Sprint   = "Sprint";
+} // namespace MovementActions
+
 /// @brief Configuration for the first-person controller.
 struct ControllerConfig
 {
     float moveSpeed = 3.0f;
     float sprintMultiplier = 2.0f;
     float mouseSensitivity = 0.1f;
+    bool  invertY = false;                  // Invert vertical look (mouse + right stick)
     float gamepadLookSensitivity = 350.0f;  // Degrees per second
-    float gamepadDeadzone = 0.15f;
+    // Per-stick deadzones. Separate because the sticks do different jobs:
+    // the left one walks you into a wall, the right one swings the camera,
+    // so the tolerable amount of drift differs. Defaults match
+    // `ControlsSettings` (3D_E-0628a), which is what feeds them at runtime.
+    float gamepadDeadzoneLeft = 0.15f;
+    float gamepadDeadzoneRight = 0.10f;
     float playerHeight = 1.7f;     // Eye height above ground
     float playerRadius = 0.3f;     // Collision radius
     float maxSlopeAngle = 50.0f;   // Maximum walkable slope in degrees
@@ -58,6 +82,38 @@ public:
     /// @brief Gets the controller configuration (for runtime adjustment).
     ControllerConfig& getConfig();
 
+    /// @brief Sets look sensitivity, forwarding to the camera (3D_E-0628a).
+    ///
+    /// The camera holds its own copy, set once at construction. Writing
+    /// `getConfig().mouseSensitivity` alone therefore changed nothing —
+    /// which is what left the Settings slider inert. Use this instead.
+    void setMouseSensitivity(float sensitivity);
+
+    /// @brief Inverts vertical look for mouse and gamepad right stick.
+    void setInvertY(bool invert);
+
+    /// @brief Sets the per-stick deadzones (left = move, right = look).
+    void setGamepadDeadzones(float left, float right);
+
+    /// @brief Points the controller at the action map that names its
+    ///        movement verbs (3D_E-0628b).
+    ///
+    /// Movement is always read through `MovementActions::*` — never by
+    /// polling a raw key. `engine/input`'s spec § 12 forbids a raw poll
+    /// reachable from gameplay code, and a fallback that polled keys
+    /// when no map was set would reintroduce exactly that, one call
+    /// site instead of fourteen.
+    ///
+    /// So the controller builds its own map of the default bindings at
+    /// construction and uses that until this is called. An embedder
+    /// with no `Engine` therefore still gets working WASD, through the
+    /// binding layer rather than around it. Passing `nullptr` restores
+    /// the built-in map.
+    ///
+    /// Does not take ownership. A supplied map must outlive the
+    /// controller.
+    void setActionMap(const InputActionMap* map);
+
     /// @brief Gets the player's collision AABB in world space.
     AABB getPlayerBounds() const;
 
@@ -84,11 +140,21 @@ private:
     void processGamepad(float deltaTime, glm::vec3& moveDir);
     void applyCollision(glm::vec3& newPosition, const std::vector<AABB>& colliders);
     void applyTerrainCollision(glm::vec3& newPosition, float deltaTime);
-    float applyDeadzone(float value) const;
+    float applyDeadzone(float value, float deadzone) const;
+
+    /// @brief True if a movement verb is currently active.
+    bool movementActionDown(const char* actionId) const;
+
+    /// @brief Registers the default movement bindings on the built-in map.
+    void buildDefaultActionMap();
 
     Camera& m_camera;
     InputManager& m_inputManager;
     ControllerConfig m_config;
+    /// Default bindings, used until `setActionMap` supplies the engine's.
+    InputActionMap m_defaultActionMap;
+    /// Never null — points at `m_defaultActionMap` or a supplied map.
+    const InputActionMap* m_actionMap = nullptr;
     const Terrain* m_terrain = nullptr;
     bool m_isEnabled;
     bool m_walkMode = false;

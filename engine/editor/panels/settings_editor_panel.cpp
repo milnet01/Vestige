@@ -6,20 +6,24 @@
 #include "editor/panels/settings_editor_panel.h"
 
 #include "core/logger.h"
+#include "core/settings_apply.h"   // extractInputBindings
 #include "core/settings_editor.h"
 #include "input/input_bindings.h"
+#include "input/input_bindings_wire.h"  // ActionBindingWire (complete type)
 
 #include <imgui.h>
 
 // GLFW key codes — matching the wire format used in
-// `InputBinding::code`. We include the GLFW header only for the
-// constant values; we do not call any GLFW functions from this
-// file (capture uses ImGui's backend-agnostic key state).
+// `InputBinding::code`. Capture itself uses ImGui's backend-agnostic
+// key state; the one GLFW call is `glfwGetKeyScancode` in the capture
+// path, which converts the captured keycode to a layout-independent
+// scancode (I1).
 #include <GLFW/glfw3.h>
 
 #include <cstddef>
 #include <string>
 #include <utility>
+#include <vector>
 
 namespace Vestige
 {
@@ -800,6 +804,16 @@ void SettingsEditorPanel::drawLocalizationTab()
     }
 }
 
+void SettingsEditorPanel::persistBindings()
+{
+    // 3D_E-0628(c). Extract the whole map rather than patching the one
+    // changed action: the wire list is the persisted projection of the
+    // map, and rebuilding it wholesale keeps the two from drifting if a
+    // future path mutates the map by some other route.
+    std::vector<ActionBindingWire> wires = extractInputBindings(*m_inputMap);
+    m_editor->mutate([&wires](Settings& s) { s.controls.bindings = wires; });
+}
+
 void SettingsEditorPanel::drawRebindModal()
 {
     if (!ImGui::BeginPopupModal("##rebind_modal", nullptr,
@@ -834,7 +848,6 @@ void SettingsEditorPanel::drawRebindModal()
         {
             const std::string id   = m_captureActionId;
             const SlotIndex   slot = m_captureSlot;
-            m_editor->mutate([](Settings&) { /* no Settings field flip — live action map */ });
             switch (slot)
             {
                 case SlotIndex::Primary:
@@ -844,6 +857,10 @@ void SettingsEditorPanel::drawRebindModal()
                 case SlotIndex::Gamepad:
                     m_inputMap->setGamepad(id, InputBinding::none());   break;
             }
+            // 3D_E-0628(c): persist AFTER the map edit, never before —
+            // the wire list is extracted from the map, so extracting
+            // first would capture the pre-unbind state.
+            persistBindings();
         }
         finished = true;
     }
@@ -900,14 +917,7 @@ void SettingsEditorPanel::drawRebindModal()
                 case SlotIndex::Gamepad:
                     m_inputMap->setGamepad(id, captured);   break;
             }
-            // Trigger a mutate so live-apply fires (the editor doesn't
-            // need to know a binding changed, but it will re-apply the
-            // (unchanged) Settings struct and the input map change is
-            // already reflected in the map itself).
-            if (m_editor)
-            {
-                m_editor->mutate([](Settings&) {});
-            }
+            persistBindings();
             finished = true;
         }
     }

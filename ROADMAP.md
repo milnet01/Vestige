@@ -1376,6 +1376,43 @@ Full spatial audio pipeline with dynamic mixing, occlusion, and adaptive music. 
   Filed upstream as its own finding with the repro; expected behaviour is
   advance to max(existing, counter) + 1, plus a pre-return assert that the
   issued id is absent from the store.
+  Progress (2026-09-21): STILL BLOCKED, and the blocker is now diagnosed
+  rather than suspected. ANTS-4491 (the github-task-list -> ants-v1
+  convert path) has SHIPPED, so the previously-recorded blocker is gone,
+  but `roadmap_log op:"convert" dry_run:true` on this file is unsafe for
+  two independent reasons. Measured on HEAD f7a2472, clean tree,
+  immediately after a clean roadmap_migrate from the same commit. (1)
+  TEXT LOSS: would_discard_external_edits true, would_discard_reason
+  "text_lost", would_discard_text_lines 890 (truncated). Because the
+  store was migrated from this exact file moments before, the file
+  cannot be behind the store, so these are a parse->render round-trip
+  loss, not a stale publication. The sampled lost set is not confined to
+  id-less bullets: it includes the complete 3D_E-0006..3D_E-0012
+  bullets, the FW W5 (cont.) / Audit X1 / Audit/FW X2 / FW W9 write-ups,
+  and every bold `<name> System` bullet. (2) ITEM RESURRECTION:
+  items_rendered 1661 against ids.bullets_total 1096, a difference of
+  exactly items_orphaned 565. The Ants MCP maintainer session confirmed
+  from src/roadmapmigrateload.h and roadmapstore.cpp that orphaned is a
+  migration-time observation and is NOT persisted, and that no orphan
+  filter exists in the render path -- so the publish would re-add 565
+  items previously deleted from this roadmap. The ANTS-4141
+  render_would_drop guard does not catch either case: it refuses only on
+  a bullet the store never imported, and after a migrate every bullet is
+  known, so it checks identity rather than content. Verified NOT a
+  problem: convert renumbers nothing -- across every planned row where
+  the file already carries an id, the id survives byte-identical, and
+  ids.allocated is 0. Also resolved: ids.ambiguous_rematch 11 (seven
+  bullets sharing the headline "Phase 9E-2:") is NOT a silent
+  mis-binding; src/roadmapmigrateload.cpp pairs an ambiguous group by
+  order deliberately and reproducibly. DECISION: Vestige stays on
+  markdown. Do not run op:"convert" until the maintainer says the verb
+  is fixed; the next move is theirs, not ours. Four findings filed in
+  Ants_MCP_Feedback_Files/Vestige_Ants_MCP_Feedback.md. One correction
+  to the record: the previously-held acceptance test "8 bold
+  pseudo-headings survive in place" was wrong and is withdrawn -- they
+  are promoted to items whose id is the caption text, with the
+  id/headline split running through the middle of the bold caption,
+  which is a defect and not a pass.
 
 - ✅ [3D_E-0613] **Move 3D_E-0042's CHANGELOG entry out of the legacy flat region into a dated topic.**
   CHANGELOG.md's `## [Unreleased]` spans lines 23-10970 and has TWO layouts:
@@ -2653,12 +2690,55 @@ shipped that have no invocation path at all.
 
   docs/engine/scripting/spec.md Status is now `partial` with the three verified facts recorded. Its rule-14 gate is still owed.
 
-- 📋 [3D_E-0628] **Key rebinding and mouse sensitivity are wired to nothing.**
+- ✅ [3D_E-0628] **Key rebinding and mouse sensitivity are wired to nothing.**
   Three separate defects in one surface. (a) Settings::controls.mouseSensitivity / invertY / gamepadDeadzoneLeft / gamepadDeadzoneRight are serialised, clamped and driven by live widgets, and have ZERO consumers; FirstPersonController reads ControllerConfig::mouseSensitivity, a different field. (b) InputManager::isActionDown / actionAxisValue have ZERO production callers while the FPC polls isKeyDown(GLFW_KEY_W) directly, so rebinding a movement key changes nothing and AZERTY/Dvorak layouts are wrong. (c) settings_editor_panel.cpp:837/909 writes the live map only and calls mutate([](Settings&){}), so isDirty() stays false, Apply is greyed out, and the next settings edit re-applies the old bindings over the new one.
   docs/engine/input/spec.md:294 states the isActionDown rule as normative.
   **Layman:** Changing mouse sensitivity, invert-Y or any key binding in Settings has no effect at all, and rebinds are lost on the next settings change.
   Kind: fix.
   Source: review-code 2026-08-31 lanes core-support, editor-panels.
+  Resolved (2026-09-21). All three sub-defects fixed; build green, ctest
+  7/7. (a) New `ControlsApplySink` / `applyControls` /
+  `ControllerControlsApplySink` in core/settings_apply, wired into
+  SettingsEditor::ApplyTargets, so sensitivity, invert-Y and both
+  deadzones reach FirstPersonController -- and reach it at boot too, via
+  the existing forceLiveApply. invertY is new to ControllerConfig and
+  covers mouse and right stick; the single gamepadDeadzone splits into
+  left/right to match the two values Settings already persisted;
+  applyDeadzone self-clamps so a 1.0 deadzone cannot divide by zero off
+  the Settings::validate path. (b) The action map held only four F-key
+  demo actions, so the rewire needed BOTH halves: Engine::initialize now
+  registers seven Movement actions as scancodes, and the controller
+  reads every movement verb plus Sprint through isActionDown. Action ids
+  are shared `MovementActions::*` constants named by the controller and
+  by Engine, so a rename cannot leave the controller polling an id
+  nobody registered -- that failure is a permanently-false action, i.e.
+  a key that silently stops working. No raw-key fallback: the controller
+  builds its own default InputActionMap at construction, so an embedder
+  without an Engine still walks, through the binding layer rather than
+  around it. (c) The rebind modal called mutate with an empty mutator,
+  so isDirty() stayed false AND the stale wire list overwrote the new
+  binding. CORRECTION TO THIS ITEM AS FILED: that overwrite happens on
+  the SAME mutate call, not "the next settings edit" -- the editor
+  pushes applyInputBindings through its sinks on every mutation.
+  Verified by reverting the fix in-place and watching all three
+  assertions fail. Now persists the extracted map; the unbind path also
+  had an ordering error (mutated before editing the map) and now
+  persists after. Tests: four new gtests in test_settings.cpp, one of
+  which is a genuine regression test proved red against the old code.
+  Gate: docs/engine/input/spec.md 12 instructed that its two bypass
+  greps be automated "as part of 3D_E-0628, not before, in the same
+  change that makes it pass" -- done, as tools/input_poll_audit.py +
+  ctest InputPollAudit, with four fixtures pinning that it fails on a
+  violation and passes on the one exempt module. Grep 2 went 14 hits ->
+  0. Docs: input spec 1.2 -> 1.3 and core spec amended (sink count seven
+  -> eight; the claim that FPC's knobs were "all rebindable via
+  Settings::controls" was false and is now stated precisely --
+  gamepadLookSensitivity and sprintMultiplier still have no Settings
+  field). Both are code-conformance amendments under rule 14 and
+  re-armed no gate. Deferred, deliberately: gamepadLookSensitivity and
+  sprintMultiplier are still code-only; the input spec's per-frame
+  budget is arithmetic from its own per-call figure, not a profile, and
+  is flagged unmeasured pending the Phase 11 audit.
 
 - ✅ [3D_E-0629] **GPU particle sort never runs, and its consumer is switched on regardless.**
   GPUParticleSystem::sort() has zero callers -- GPUParticleEmitter::update calls beginFrame/emit/simulate/compact/updateIndirectCommand and never sort. particle_renderer.cpp:387-390 contains an empty block whose comment asserts the dispatch happened, then :418 sets u_useSortIndices = needsSorting(), so particle_gpu.vert.glsl:64 indexes the particle SSBO with uninitialised memory.

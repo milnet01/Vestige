@@ -448,16 +448,23 @@ bool Engine::initialize(const EngineConfig& config)
         // can add, override, or clear these before their first
         // Settings apply.
         {
-            auto addAction = [this](const std::string& id,
-                                     const std::string& label,
-                                     InputBinding primary)
+            auto addActionIn = [this](const std::string& category,
+                                      const std::string& id,
+                                      const std::string& label,
+                                      InputBinding primary)
             {
                 InputAction a;
                 a.id       = id;
                 a.label    = label;
-                a.category = "Demo";
+                a.category = category;
                 a.primary  = primary;
                 m_inputActionMap.addAction(a);
+            };
+            auto addAction = [&addActionIn](const std::string& id,
+                                            const std::string& label,
+                                            InputBinding primary)
+            {
+                addActionIn("Demo", id, label, primary);
             };
             // I1 — default bindings stored as scancodes so they survive
             // a layout switch (QWERTY → AZERTY etc.). glfwGetKeyScancode
@@ -466,6 +473,21 @@ bool Engine::initialize(const EngineConfig& config)
             auto kbScan = [](int glfwKey) {
                 return InputBinding::scancode(glfwGetKeyScancode(glfwKey));
             };
+            // 3D_E-0628b — the movement verbs FirstPersonController reads.
+            // These must exist for a rebind to mean anything: before this,
+            // the map held only the four F-key demo actions, so the
+            // controller had nothing to poll through and fell back to
+            // hardcoded WASD. Registered first so they head the Controls
+            // tab, which lists actions in insertion order.
+            addActionIn("Movement", MovementActions::Forward,  "Move forward",  kbScan(GLFW_KEY_W));
+            addActionIn("Movement", MovementActions::Backward, "Move backward", kbScan(GLFW_KEY_S));
+            addActionIn("Movement", MovementActions::Left,     "Move left",     kbScan(GLFW_KEY_A));
+            addActionIn("Movement", MovementActions::Right,    "Move right",    kbScan(GLFW_KEY_D));
+            addActionIn("Movement", MovementActions::Up,       "Move up / jump", kbScan(GLFW_KEY_SPACE));
+            addActionIn("Movement", MovementActions::Down,     "Move down / crouch",
+                        kbScan(GLFW_KEY_LEFT_SHIFT));
+            addActionIn("Movement", MovementActions::Sprint,   "Sprint",        kbScan(GLFW_KEY_LEFT_CONTROL));
+
             addAction("ToggleWireframe", "Toggle wireframe",  kbScan(GLFW_KEY_F1));
             addAction("CycleTonemap",    "Cycle tonemapper", kbScan(GLFW_KEY_F2));
             addAction("Screenshot",      "Screenshot + diagnostics", kbScan(GLFW_KEY_F11));
@@ -586,6 +608,18 @@ bool Engine::initialize(const EngineConfig& config)
         }
 
         targets.inputMap = &m_inputActionMap;
+
+        // 3D_E-0628 — point the controller at the action map so movement
+        // is rebindable, and give the Controls tab's sensitivity /
+        // invert-Y / deadzone widgets somewhere to land. forceLiveApply()
+        // below pushes the persisted values in at boot.
+        if (m_controller)
+        {
+            m_controller->setActionMap(&m_inputActionMap);
+            m_controlsSink =
+                std::make_unique<ControllerControlsApplySink>(*m_controller);
+            targets.controls = m_controlsSink.get();
+        }
 
         // Slice L5: language picker routes through the registered
         // LocalizationService. forceLiveApply() below then hot-applies

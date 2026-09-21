@@ -80,7 +80,7 @@ Key abstractions:
 | `Settings` | struct | Persisted user settings root (display / audio / controls / gameplay / accessibility / onboarding). `engine/core/settings.h:300` |
 | `validate(Settings&)` | free function | Clamp every field to its declared range; called by `fromJson`. `engine/core/settings.h:350` |
 | `migrate()` | free function | Walks the v1→v2→… migration chain on a json tree. `engine/core/settings_migration.h:46` |
-| `DisplayApplySink` etc. | abstract bases | **Seven** sink interfaces (display / audio / HRTF / UI a11y / renderer a11y / subtitle / photosensitive) — abstract-base declarations at `engine/core/settings_apply.h:51, 97, 134, 179, 225, 270, 302`. Input bindings use a different shape (`extractInputBindings` / `applyInputBindings` free functions, no sink) at `engine/core/settings_apply.h:357, 373`. |
+| `DisplayApplySink` etc. | abstract bases | **Eight** sink interfaces (display / audio / HRTF / UI a11y / renderer a11y / subtitle / photosensitive / controls) — abstract-base declarations in `engine/core/settings_apply.h`, `ControlsApplySink` added by 3D_E-0628a. Input *bindings* use a different shape (`extractInputBindings` / `applyInputBindings` free functions, no sink) in the same header. |
 | `SettingsEditor` | class | Two-copy (`m_applied` / `m_pending`) dirty-tracker with live-apply and per-category restore. `engine/core/settings_editor.h:44` |
 | `captionMapPath()` | free function | Compose `<assetPath>/captions.json`. `engine/core/engine_paths.h:29` |
 
@@ -172,6 +172,7 @@ void          applySubtitleSettings(const AccessibilitySettings&, SubtitleApplyS
 void          applyPhotosensitiveSafety(const AccessibilitySettings&, PhotosensitiveApplySink&);
 void          applyInputBindings(const std::vector<ActionBindingWire>&, InputActionMap&);
 std::vector<ActionBindingWire> extractInputBindings(const InputActionMap&);
+void          applyControls(const ControlsSettings&, ControlsApplySink&);
 SaveStatus    SettingsEditor::apply(const std::filesystem::path&);
 void          SettingsEditor::mutate(const std::function<void(Settings&)>&);
 void          SettingsEditor::revert();
@@ -325,9 +326,9 @@ Per CODING_STANDARDS §11 — no exceptions in steady-state hot paths.
 `engine/core` itself produces no user-facing pixels or sound. **However**, it is the *route* every accessibility surface flows through:
 
 - `Settings::accessibility` carries the persisted state (UI scale, high contrast, reduced motion, subtitles, color-vision filter, post-process toggles, photosensitive caps).
-- The seven apply-sinks in `settings_apply.h` (display / audio / HRTF / UI a11y / renderer a11y / subtitle / photosensitive — same count as §3) are the sole writeable path from "user toggled a checkbox" to "subsystem behaves differently" — UI scale → `UIAccessibilityApplySink`, color-vision filter + DoF/motion-blur/fog → `RendererAccessibilityApplySink`, captions → `SubtitleQueueApplySink`, photosensitive caps → `PhotosensitiveStoreApplySink`. Input bindings are routed through `applyInputBindings` (free function, not a sink).
+- The eight apply-sinks in `settings_apply.h` (display / audio / HRTF / UI a11y / renderer a11y / subtitle / photosensitive / controls — same count as §3) are the sole writeable path from "user toggled a checkbox" to "subsystem behaves differently" — UI scale → `UIAccessibilityApplySink`, color-vision filter + DoF/motion-blur/fog → `RendererAccessibilityApplySink`, captions → `SubtitleQueueApplySink`, photosensitive caps → `PhotosensitiveStoreApplySink`, look sensitivity / invert-Y / gamepad deadzones → `ControlsApplySink` (3D_E-0628a). Input bindings are routed through `applyInputBindings` (free function, not a sink).
 - `EventBus` carries `KeyPressedEvent::mods` (added Phase 10.9 Slice 3) so keyboard-focus handlers can distinguish `Tab` from `Shift+Tab` without re-querying GLFW (`engine/core/event.h:39`).
-- `FirstPersonController` exposes `mouseSensitivity`, `gamepadDeadzone`, `gamepadLookSensitivity`, sprint-multiplier — all rebindable via `Settings::controls`. No motion-blur or screen-shake originates here; `reducedMotion` flows through the renderer / camera-shake consumers via the photosensitive sinks.
+- `FirstPersonController` exposes `mouseSensitivity`, `invertY`, `gamepadDeadzoneLeft` / `gamepadDeadzoneRight`, `gamepadLookSensitivity` and sprint-multiplier. **The first four are driven by `Settings::controls`, through `ControlsApplySink`; the last two are not** — they have no `ControlsSettings` field and are adjustable only in code via `getConfig()`. Before 3D_E-0628a none of them was reachable from Settings at all: the controller read `ControllerConfig::mouseSensitivity` while the Settings field of the same name had no consumer. Movement *bindings* are separate again — they go through `InputActionMap` (see `engine/input`'s spec § 12), not through this sink. No motion-blur or screen-shake originates here; `reducedMotion` flows through the renderer / camera-shake consumers via the photosensitive sinks.
 - `Logger` ring buffer feeds the editor's console panel — the `LogLevel` enum is the only colour-conveyed signal, and the panel must back colour with text labels (`TRACE` / `INFO` / `WARN` / …) per the partially-sighted-user constraint (project memory).
 
 Constraint summary for downstream UIs that consume `engine/core`:

@@ -23,6 +23,25 @@ may change any interface without notice.
 
 ## [Unreleased]
 
+### 2026-09-21 Fixed — Controls settings and key rebinding now reach the game (3D_E-0628)
+
+Three defects in one surface, all of which made the Controls tab a set of
+widgets that changed nothing. Two halves were missing rather than one: the
+settings had no consumer, and the action map the rebind system writes into
+held no movement verbs for anything to read.
+
+- **Mouse sensitivity, invert-Y and gamepad deadzones now actually do something** (3D_E-0628)
+  The sliders were serialised, clamped and driven by live widgets while reaching no code: the controller read `ControllerConfig::mouseSensitivity` and Settings wrote `ControlsSettings::mouseSensitivity`, two different fields nothing connected. New `ControlsApplySink` + `applyControls` in `core/settings_apply.h`, with `ControllerControlsApplySink` wrapping the live `FirstPersonController`, following the same shape as the seven existing apply-sinks. `Engine` wires it into `SettingsEditor::ApplyTargets`, so `forceLiveApply()` also pushes persisted values in at boot rather than only on an edit. Invert-Y is new to `ControllerConfig` and applies to mouse look and the gamepad right stick alike. The single `gamepadDeadzone` splits into left and right to match the two values Settings already persisted, and `applyDeadzone` now clamps its own deadzone so a value of 1.0 cannot divide by zero on the path that does not go through `Settings::validate`.
+
+- **Rebinding a movement key now changes how the game moves** (3D_E-0628)
+  `InputManager::isActionDown` had no production callers at all, and the controller polled `isKeyDown(GLFW_KEY_W)` and friends at 14 sites, so every rebind was inert and non-QWERTY layouts got the wrong physical keys. The engine's `InputActionMap` also held only four F-key demo actions, so there was nothing to poll through even in principle. `Engine::initialize` now registers seven Movement actions as scancodes, so the physical keys survive a layout switch, and the controller reads all of them through `isActionDown`. The ids are shared constants named by both sides, because a controller polling an id nobody registered gets a permanent false and the key just stops working with nothing logged. There is deliberately no raw-key fallback: the controller builds its own default map at construction, so an embedder without an `Engine` still gets working WASD through the binding layer rather than around it.
+
+- **A rebind is no longer discarded the moment it is made** (3D_E-0628)
+  The rebind modal wrote the binding into the live map and then called `SettingsEditor::mutate` with an empty mutator. That left `m_pending == m_applied`, so Apply stayed greyed out -- and because the editor pushes `applyInputBindings` on every mutation, the stale wire list overwrote the new binding on that very call, not merely on the next settings edit as previously recorded. The panel now extracts the whole map into the pending Settings, which makes the editor dirty and the push idempotent. The unbind path had the same bug plus an ordering error, mutating before editing the map, and now persists after.
+
+- **Added: an input-poll audit gate, so this cannot regress quietly** (3D_E-0628)
+  `tools/input_poll_audit.py`, wired into ctest as `InputPollAudit`. It automates the two greps the input spec's accessibility section specifies, which that section deliberately left unwired because one of them failed by design until this item landed. That grep went from 14 hits to 0. Four fixtures pin that the audit can bite: two violations it must catch, one near-miss filename proving the exemption prefix is exact rather than swallowing any similarly-named file, and one genuinely exempt module it must pass -- a check that flagged everything would look identical to a correct one from the green side.
+
 ### 2026-09-21 Fixed — Editor work that was silently lost, a tool that measured nothing, and GPU cloth that ignored mass (3D_E-0630, 3D_E-0632, 3D_E-0639)
 
 Five fixes from a review backlog, four of them things that failed quietly —

@@ -6,8 +6,8 @@
 |-------|-------|
 | Subsystem | `engine/input` |
 | Status | `shipped` |
-| Spec version | `1.2` |
-| Last reviewed | `2026-09-21` (review-contract, 2 loops × 3 cold lanes, reached the cap; 17 findings fixed — see §16) |
+| Spec version | `1.3` |
+| Last reviewed | `2026-09-21` (review-contract, 2 loops × 3 cold lanes, reached the cap; 17 findings fixed — see §16. Amended same day for 3D_E-0628, which re-armed no gate: code-conformance only) |
 | Owners | `milnet01` |
 | Engine version range | `v0.1.0+` (action-map data model since Phase 10 accessibility; wire helpers relocated here Phase 10.9 Slice 9 I2) |
 
@@ -178,10 +178,18 @@ code and corrupt every persisted keyboard binding.
 
 This subsystem has no per-frame state — flow is "data shapes plus the routes through them."
 
-**Game-code query path — the INTENDED flow, not the current one.** No
-production code walks it today: `isActionDown` has no callers outside the tests
-(see §12). The first-person controller polls `isKeyDown` instead, which is
-3D_E-0628. Read the steps below as what the rewire must produce.
+**Game-code query path — live since 3D_E-0628 (2026-09-21).** The first-person
+controller walks it for every movement verb: `MoveForward`, `MoveBackward`,
+`MoveLeft`, `MoveRight`, `MoveUp`, `MoveDown` and `Sprint`, whose ids are the
+`MovementActions` constants in `engine/core/first_person_controller.h` and are
+registered by `Engine::initialize`. It previously polled `isKeyDown` at 14
+sites and `isActionDown` had no production callers at all.
+
+The controller holds a built-in `InputActionMap` carrying the default
+bindings and uses it until `setActionMap` supplies the engine's. There is
+deliberately **no raw-key fallback**: a fallback for the no-map case would
+reintroduce exactly the bypass §12 forbids, at one call site instead of
+fourteen. `m_actionMap` is therefore never null.
 
 1. Caller → `InputManager::isActionDown(map, "Jump")` (lives in `engine/core`).
 2. `InputManager` → `isActionDown(map, "Jump", [this](const InputBinding& b){ return isBindingDown(b); })` — pure free function in `engine/input`.
@@ -244,14 +252,26 @@ No locks held; no shared state across threads.
 | `extractInputBindings` (whole-map serialisation) | < 0.5 ms | TBD — measure by Phase 11 audit (only runs on settings save) |
 | `applyInputBindings` (whole-map deserialisation) | < 1 ms | TBD — measure by Phase 11 audit (only runs on settings load) |
 
-Per-frame cost **once 3D_E-0628 lands**: dominated by `isActionDown`, which the
-FPC and a handful of gameplay verbs would call ≤ ~10× per frame. At the table's
-own `< 0.005 ms` budget for `isActionDown`, ten calls come to **0.05 ms — which
-is a ceiling reached, not headroom.** (The 0.05 ms figure above belongs to
-`findConflicts`, which runs in the rebind UI and not per-frame; this subsystem
-has no per-frame aggregate row of its own, and should gain one before the
-rewire adds call sites.) **Today that cost is zero, because nothing calls it**
-(§12).
+Per-frame cost **since 3D_E-0628 landed (2026-09-21)**: dominated by
+`isActionDown`, at **7 calls per frame** — six movement verbs plus `Sprint`.
+
+That is 7 and not 14 although the controller has two input paths, because
+`Engine::run` selects exactly one per frame: `computeDesiredVelocity` runs
+only when the Jolt character controller is active, `update` only when it is
+not, both gated on the same `m_usePhysicsController && isInitialized()`
+condition. Each path makes the same 7 calls.
+
+At the table's own `< 0.005 ms` budget for `isActionDown`, 7 calls come to
+**0.035 ms**, against a 16.67 ms frame at the project's 60 FPS floor. (The
+0.05 ms figure above belongs to `findConflicts`, which runs in the rebind UI
+and not per-frame; this subsystem still has no per-frame aggregate row of its
+own and should gain one.)
+
+**Unmeasured.** The budget is the table's stated per-call figure multiplied by
+a counted number of call sites, not a profile. `isActionDown` is a scan over
+three slots with an injected predicate, so the true cost is likely well under
+the budget — but "likely" is what the Phase 11 audit is for, and until then
+this row is arithmetic rather than evidence.
 This row is a budget for the rewired state, not a measurement of the current
 one. JSON paths run only at load / save, not per-frame.
 
@@ -266,7 +286,13 @@ Profiler markers / capture points: none — `engine/input` is below the threshol
 | Ownership | `InputActionMap` owns its `m_actions` and `m_defaults` vectors. `Engine` owns the canonical `m_inputActionMap` (`engine/core/engine.h:221`). |
 | Lifetimes | Engine-lifetime — registration happens in `Engine::initialize`, the map persists until `Engine::shutdown`. JSON wire structs are transient (built on save / discarded after load). |
 
-No `new`/`delete` (CODING_STANDARDS §12). No arena, no per-frame transient allocator needed — `isActionDown` does no allocation, so even at the post-3D_E-0628 rate of 60 FPS × 10 calls/frame = 600 calls/s the heap stays cold.
+No `new`/`delete` (CODING_STANDARDS §12). No arena, no per-frame transient allocator needed — `isActionDown` does no allocation, so even at the post-3D_E-0628 rate of 60 FPS × 7 calls/frame = 420 calls/s the heap stays cold.
+
+One addition from 3D_E-0628: `FirstPersonController` owns a second
+`InputActionMap` holding its default bindings, used until `setActionMap`
+supplies the engine's. Same ~6 KB shape as the table above, one per
+controller, allocated once at construction — there is exactly one controller
+in the engine.
 
 ## 10. Error handling
 
@@ -302,14 +328,18 @@ Per CODING_STANDARDS §11 — no exceptions in steady-state hot paths. `engine/i
 | `bindingToJson` / `bindingFromJson` round-trip + "none" scancode collapse | `tests/test_input_bindings.cpp` | Audit I2 wire round-trip in new home |
 | `actionBindingToJson` / `actionBindingFromJson` round-trip + missing-slot defaults | `tests/test_input_bindings.cpp` | Audit I2 forward-compat |
 | Editor → InputManager → EventBus integration | `tests/test_ui_system_input.cpp` | Smoke (covers the consumer side, not this subsystem directly) |
+| No raw key poll reachable from gameplay code (§12's two greps) | `tools/input_poll_audit.py` via ctest `InputPollAudit` | 3D_E-0628 — source-tree gate, not a unit test |
+| That audit fails on a violation and passes on the exempt module | `tests/fixtures/input_poll_audit/{raw_wrapper,bare_glfw,near_miss,exempt}` | 3D_E-0628 — pins the gate can bite; three are `WILL_FAIL` |
 
 **Adding a test for `engine/input`:** drop a new case into `tests/test_input_bindings.cpp` next to its peers (the file is the canonical home; CMake (Cross-Platform Make) auto-discovers via `gtest_discover_tests`). Use `InputActionMap` directly without an `Engine` instance — every primitive in this subsystem is unit-testable headlessly because there is no GLFW context required. Inject a lambda into `isActionDown` to simulate "key X is currently down" without polling. The wire helpers similarly need only an `nlohmann::json` value, not a `Settings` instance.
 
 **Coverage gap: one.** `InputDevice::GamepadAxis` wire round-tripping has no
 row above and should gain one — the `"gamepadaxis"` token is what §15 Q2 makes
-load-bearing for saved files, and nothing here exercises it. Separately, §12's
-binding-bypass greps are a manual review step, not a test: they are expected to
-fail until 3D_E-0628 and are deliberately not wired into a gate (§12 says why).
+load-bearing for saved files, and nothing here exercises it. §12's
+binding-bypass greps are no longer a gap: 3D_E-0628 wired them in as the
+`InputPollAudit` ctest entries (`tools/input_poll_audit.py`), with four
+fixtures pinning that the audit fails on a violation and passes on the one
+exempt module.
  Visual confirmation (the rebind dialog visibly reflects a change) is deferred to the manual Phase 10.9 visual-test pass — it exercises the consumer (the Settings panel) rather than this subsystem.
 
 ## 12. Accessibility
@@ -320,14 +350,16 @@ Routing surfaces:
 
 - `InputAction` carries the persisted user-facing binding state (primary, secondary, gamepad). Every game verb registered on the action map is rebindable by construction.
 
-  **Known false as stated, since before 2026-09-21 (3D_E-0628).** This bullet
-  used to end "there is no 'hardcoded' path for a `glfwGetKey` check elsewhere
-  in the engine that would bypass this layer (any such path would be a
-  regression)." There is one, and it is the movement path: the first-person
-  controller polls `InputManager::isKeyDown` directly at 14 sites, which wraps
-  `glfwGetKey` and never consults `InputActionMap`. The guarantee holds for
-  verbs that go through `isActionDown` and does not hold for the engine as a
-  whole. §12's check is what detects it; 3D_E-0628 is the fix.
+  **Was known false from before 2026-09-21 until 3D_E-0628 closed it that
+  day.** This bullet used to end "there is no 'hardcoded' path for a
+  `glfwGetKey` check elsewhere in the engine that would bypass this layer (any
+  such path would be a regression)." There was one, and it was the movement
+  path: the first-person controller polled `InputManager::isKeyDown` directly
+  at 14 sites, which wraps `glfwGetKey` and never consults `InputActionMap`.
+  3D_E-0628 rewired all 14 onto `isActionDown` and left no fallback, so the
+  guarantee now holds for the engine as a whole rather than only for verbs
+  that already went through `isActionDown`. §12's check is what detected it
+  and is now the automated gate that keeps it true.
 - `Settings::controls.bindings` (a `std::vector<ActionBindingWire>` defined in `engine/core/settings.h:145`) is the persisted projection of `InputActionMap`. The sole writeable path from "user rebound a key in the Settings panel" to "subsystem behaves differently" is `applyInputBindings` (free function — `engine/core/settings_apply.cpp:335`). Note this is a *free function*, not an apply-sink — it differs in shape from the seven sinks in `settings_apply.h` because the data lives inside the `InputActionMap` object the engine owns, not behind an abstract interface.
 - `InputActionMap::resetToDefaults` and `resetActionToDefaults` provide the per-row reset and per-tab reset the rebind UI surfaces. The defaults must remain accessible-friendly (e.g. no two-handed shortcut for a one-handed user — Phase 11 will introduce a one-handed preset).
 - `bindingDisplayLabel` is the **sole** source for human-readable binding strings shown in the rebind UI; the editor panel never reads `glfwGetKeyName` directly. Localisation (Phase 10 Localization) wraps the returned token rather than overriding the table.
@@ -373,27 +405,29 @@ Constraint summary for downstream UI (User Interface) consumers:
   exemption defeats is worse than no test, because it returns green and is then
   cited as evidence.**
 
-  **Where this check lives: nowhere automated, on purpose.** It is a manual
-  review step, run by hand or by a reviewer reading this section. It is
-  deliberately NOT wired into `tests/` or `scripts/local-ci.sh`, because grep 2
-  fails today and a gate that fails by design would block every push until
-  3D_E-0628 lands. §11's test table therefore has no row for it, and §11's
-  "Coverage gap: none in the headless surface" is about this subsystem's own
-  units — it is not a claim that this check is automated.
+  **Where this check lives: `tools/input_poll_audit.py`, wired into ctest as
+  `InputPollAudit`.** It automates both greps. It was deliberately unwired
+  until 3D_E-0628 — grep 2 failed by design, and a gate that fails by design
+  blocks every push — and was wired in by that same change, which is what this
+  section previously instructed.
 
-  **Wire it into the suite as part of 3D_E-0628, not before**, in the same
-  change that makes it pass. Until then, do not add it to a gate.
+  Four fixture tests under `tests/fixtures/input_poll_audit/` pin that the
+  audit actually bites, because a check that cannot fail is worse than none:
+  `raw_wrapper` and `bare_glfw` must be caught (one per grep), `near_miss`
+  must be caught to prove the exemption prefix `engine/core/input_manager.`
+  is EXACT rather than swallowing any `input_manager*`-named file, and
+  `exempt` must come back clean so a check that flagged everything could not
+  masquerade as a correct one. The three catching fixtures are `WILL_FAIL`.
 
-  **Grep 2 FAILS today, and that is correct.** It reports 14 hits, all in
-  `engine/core/first_person_controller.cpp` (W/A/S/D, Space, Shift, Ctrl), while
-  `isActionDown` has **no production callers at all** — the only mentions in
-  `engine/` are its two declarations, the free function's definition at
-  `input_bindings.cpp:493`, and `input_manager.cpp:162` where the method
-  delegates to it. Every genuine call site is in
-  `tests/test_input_bindings.cpp`. So rebinding a movement key changes nothing
-  and AZERTY/Dvorak layouts are wrong. The code half is **3D_E-0628**; this
-  section owns only the check that finds it. Do not silence grep 2 to make the
-  suite green — its failing is the defect being visible for the first time.
+  **Grep 2 PASSES since 3D_E-0628 (2026-09-21); it reported 14 hits before.**
+  All 14 were in `engine/core/first_person_controller.cpp` (W/A/S/D, Space,
+  Shift, Ctrl), while `isActionDown` had **no production callers at all** — so
+  rebinding a movement key changed nothing and AZERTY/Dvorak layouts were
+  wrong. 3D_E-0628 moved every one onto the binding layer and added no
+  fallback, taking the count to 0.
+
+  Do not silence grep 2 if it ever fails again, and do not widen the
+  exemption: a hit means a verb has gone back to bypassing the bindings.
 - **Gamepad + keyboard parity, non-negotiable.** Every action with a keyboard default must also ship with a gamepad default; Settings panel should surface both columns. Audit I4 (same-device conflicts only) is what makes "bind C to gamepad and keyboard independently" usable.
 - **No time-pressure puzzles.** This subsystem has no time-pressure semantics (no "double-tap within 200 ms"), and the engine's gameplay layer is forbidden from baking one in via `isActionDown` polling alone. Phase 11 hold-action / chord support, when it lands, must surface a configurable timing setting.
 - **Defaults must remain accessible-friendly.** Engine-shipped defaults (`addAction(...)` calls at engine startup) are the floor; reset-to-defaults must never produce an inaccessible binding (e.g. requiring two simultaneous modifier keys with no single-key alternative).
@@ -447,3 +481,4 @@ Internal cross-references:
 | 2026-04-28 | 1.0 | milnet01 | Initial spec — `engine/input` action-map data model + JSON wire format; relocated wire helpers since Phase 10.9 Slice 9 I2; formalised post-Phase 10.9 audit. |
 | 2026-09-21 | 1.1 | milnet01 | **review-contract loop 1** — 3 cold lanes, 6 verified findings, all fixed; 1 dismissed as immaterial (a stale `settings.h` line citation). Q1 ×4, Q2 ×1, Q3 ×1. **Q1:** §3/§4 named a retired `InputBinding::key(int)` factory (it is `scancode(int)`, Slice 9 I1) and omitted `gamepadAxis`; `InputDevice` was listed with 4 members against 5 in code (`GamepadAxis`); Open Q1 asserted the wire field holds key codes when the scancode migration shipped 2026-05-02 — acting on it would double-convert and corrupt every saved binding; Open Q2 said axis bindings do not exist when Slice 9 I3 shipped them, inviting a duplicate parallel representation. **Q2:** §5 and §8 described `isActionDown` as the live per-frame path while §12 states it has no production callers. **Q3:** §12's new bypass check named no home; now stated as a manual step, deliberately unwired until 3D_E-0628. Spec version 1.0 → 1.1. |
 | 2026-09-21 | 1.2 | milnet01 | **review-contract loop 2 — CAP (a spec caps at 2).** 3 cold lanes, 11 verified findings, all fixed. Q1 ×3, Q2 ×7, Q3 ×1. **Four landed on text loop 1 itself wrote:** §11's "coverage gap: none" contradicted its own next sentence; §12's grep 2 was `--include=*.cpp` only, so it could not see a poll from a header, and omitted `isMouseButtonDown`, a raw-poll wrapper of identical shape over a bindable device — the same file-scoped-exemption failure the section itself warns about, one level up; and §8 borrowed `findConflicts`' rebind-UI budget, where ten calls at the table's own `< 0.005 ms` come to 0.05 ms exactly, a ceiling reached rather than headroom. **Four were pre-existing text that loop 1's own fix falsified** and that loop 1 failed to sweep for: §13's `InputBinding::code` value space, §14's "pattern this subsystem still owes", §14's "scancode-pending item", and §15 Q4's trigger gated on the now-closed Q1. **Three were genuinely pre-existing:** §15 Q4 claimed `bindingDisplayLabel` does NOT call `glfwGetKeyName` and always renders US-QWERTY — false in both halves, and acting on it would have "fixed" a working layout-aware path; §4 declared only the non-const `findAction` on a surface it calls semver-frozen, while `isActionDown` takes a const map; §12 claimed full-word labels against the shipped "LB"/"RB"/em-dash. Cap sweep yielded 2 more: a residual §14 reference, and the identical stale scancode claim in `docs/engine/core/spec.md` Open Q3, corrected there. Spec version 1.1 → 1.2. |
+| 2026-09-21 | 1.3 | milnet01 | **3D_E-0628 amendment — not a review loop.** Brings the document in line with code that now exists and is verified, so per CLAUDE.md rule 14 it does not re-arm the gate. The first-person controller was rewired off raw key polling onto `isActionDown`: 14 `isKeyDown` call sites gone, movement verbs now the `MovementActions` constants shared by the controller and `Engine::initialize` so an id cannot drift. **Deliberately no raw-key fallback** — a fallback for the no-map case would reintroduce §12's bypass at one site instead of fourteen — so the controller carries its own default `InputActionMap` and `m_actionMap` is never null. Sections corrected: §5's query path (was "the INTENDED flow, not the current one"), §8's per-frame budget (was conditional on this item landing; also corrected 10 calls → 7, and 14 → 7 because `Engine::run` selects `update` or `computeDesiredVelocity` per frame, never both), §9's allocation rate plus the controller's second map, §11's coverage gap and two new table rows, §12's "known false as stated" bullet and its grep-2-fails-today paragraph. §12's check is now **automated** as `tools/input_poll_audit.py` / ctest `InputPollAudit`, which is what that section instructed be done in this same change; four fixtures pin that it bites, including one proving the exemption prefix is exact. Grep 2: 14 hits → 0. Spec version 1.2 → 1.3. |

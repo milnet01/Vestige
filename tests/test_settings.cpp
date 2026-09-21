@@ -1259,6 +1259,27 @@ public:
     void setLodEnabled(bool e) override { enabled = e; ++calls; }
 };
 
+// 3D_E-0628a — records the controls pushes (sensitivity / invert-Y /
+// per-stick deadzones).
+class RecordingControlsSink final : public ControlsApplySink
+{
+public:
+    float sensitivity  = -1.0f;
+    bool  invertY      = false;
+    float deadzoneLeft  = -1.0f;
+    float deadzoneRight = -1.0f;
+    int   calls        = 0;
+
+    void setMouseSensitivity(float s) override { sensitivity = s; ++calls; }
+    void setInvertY(bool i) override { invertY = i; ++calls; }
+    void setGamepadDeadzones(float l, float r) override
+    {
+        deadzoneLeft  = l;
+        deadzoneRight = r;
+        ++calls;
+    }
+};
+
 // AX4 S9 — records the procedural-audio toggle pushes.
 class RecordingProceduralAudioSink final : public ProceduralAudioApplySink
 {
@@ -1998,6 +2019,98 @@ TEST(SettingsApplyInputBindings, ApplyFromSettingsControlsBlockIntegration)
     ASSERT_NE(p, nullptr);
     EXPECT_EQ(p->primary.device, InputDevice::Keyboard);
     EXPECT_EQ(p->primary.code,   256);
+}
+
+// ===== 3D_E-0628 — controls apply path =====================================
+
+TEST(SettingsApplyControls, PushesAllFourValuesOntoTheSink)
+{
+    ControlsSettings c;
+    c.mouseSensitivity     = 3.5f;
+    c.invertY              = true;
+    c.gamepadDeadzoneLeft  = 0.25f;
+    c.gamepadDeadzoneRight = 0.05f;
+
+    RecordingControlsSink sink;
+    applyControls(c, sink);
+
+    EXPECT_FLOAT_EQ(sink.sensitivity,   3.5f);
+    EXPECT_TRUE(sink.invertY);
+    EXPECT_FLOAT_EQ(sink.deadzoneLeft,  0.25f);
+    EXPECT_FLOAT_EQ(sink.deadzoneRight, 0.05f);
+    EXPECT_EQ(sink.calls, 3);
+}
+
+TEST(SettingsApplyControls, LeftAndRightDeadzonesAreNotInterchanged)
+{
+    // The two defaults differ (0.15 / 0.10), so a transposed pair is
+    // silent unless the test uses values that cannot be confused.
+    ControlsSettings c;
+    c.gamepadDeadzoneLeft  = 0.80f;
+    c.gamepadDeadzoneRight = 0.10f;
+
+    RecordingControlsSink sink;
+    applyControls(c, sink);
+
+    EXPECT_FLOAT_EQ(sink.deadzoneLeft,  0.80f);
+    EXPECT_FLOAT_EQ(sink.deadzoneRight, 0.10f);
+}
+
+TEST(SettingsEditorControls, MutatedControlsReachTheSink)
+{
+    // The whole point of 3D_E-0628a: a Controls-tab edit must arrive at
+    // a subsystem. Before the fix these four fields had no sink at all.
+    RecordingControlsSink sink;
+    SettingsEditor::ApplyTargets targets{};
+    targets.controls = &sink;
+
+    SettingsEditor editor(Settings{}, targets);
+    editor.mutate([](Settings& s) { s.controls.mouseSensitivity = 7.25f; });
+
+    EXPECT_FLOAT_EQ(sink.sensitivity, 7.25f);
+}
+
+TEST(SettingsEditorControls, RebindPersistedIntoPendingSurvivesTheSameApply)
+{
+    // 3D_E-0628c. The editor pushes applyInputBindings on every mutation,
+    // so a rebind written only into the live map was overwritten by the
+    // stale wire list on that very call. Reproduce the panel's sequence:
+    // seed a stale binding, rebind the map, then persist the EXTRACTED
+    // map the way persistBindings() does.
+    InputActionMap map;
+    map.addAction(makeAction("Jump", InputBinding::scancode(100)));
+
+    Settings initial;
+    ActionBindingWire stale;
+    stale.id = "Jump";
+    stale.primary.device   = "keyboard";
+    stale.primary.scancode = 100;
+    initial.controls.bindings.push_back(stale);
+
+    SettingsEditor::ApplyTargets targets{};
+    targets.inputMap = &map;
+    SettingsEditor editor(initial, targets);
+    ASSERT_FALSE(editor.isDirty());
+
+    // User rebinds Jump onto a different key in the live map.
+    map.setPrimary("Jump", InputBinding::scancode(200));
+
+    // What the panel now does.
+    std::vector<ActionBindingWire> wires = extractInputBindings(map);
+    editor.mutate([&wires](Settings& s) { s.controls.bindings = wires; });
+
+    // The push-through must NOT have reverted the rebind.
+    const InputAction* jump = map.findAction("Jump");
+    ASSERT_NE(jump, nullptr);
+    EXPECT_EQ(jump->primary.code, 200)
+        << "the stale wire list overwrote the new binding";
+
+    // And Apply must be reachable.
+    EXPECT_TRUE(editor.isDirty())
+        << "isDirty() false leaves Apply greyed out, so the rebind "
+           "is never written to disk";
+    ASSERT_EQ(editor.pending().controls.bindings.size(), 1u);
+    EXPECT_EQ(editor.pending().controls.bindings[0].primary.scancode, 200);
 }
 
 // ===== Slice 13.5 — SettingsEditor orchestrator =============================

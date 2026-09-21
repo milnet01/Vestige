@@ -197,6 +197,10 @@ void SettingsEditor::pushPendingToSinks()
         applyInputBindings(m_pending.controls.bindings,
                            *m_targets.inputMap);
     }
+    if (m_targets.controls)
+    {
+        applyControls(m_pending.controls, *m_targets.controls);
+    }
     if (m_targets.localization)
     {
         applyLocalization(m_pending.localization, *m_targets.localization);

@@ -72,6 +72,7 @@ public:
         SubtitleApplySink*              subtitle        = nullptr;
         PhotosensitiveApplySink*        photosensitive  = nullptr;
         InputActionMap*                 inputMap        = nullptr;
+        ControlsApplySink*              controls        = nullptr;     // 3D_E-0628a
         LocalizationApplySink*          localization    = nullptr;
     };
 

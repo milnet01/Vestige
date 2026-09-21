@@ -379,6 +379,43 @@ if(Python3_FOUND)
     set_tests_properties(LocalizationAuditCatchesHardcoded
                          PROPERTIES WILL_FAIL TRUE)
 
+    # --- 3D_E-0628 — input-poll audit (input spec § 12) ------------------------
+    # "No raw key poll is reachable from gameplay code." The spec defines the
+    # rule as two greps and says to wire them into the suite as part of
+    # 3D_E-0628, in the same change that makes them pass — deliberately NOT
+    # before, because grep 2 failed by design until the controller was rewired
+    # and a gate that fails by design blocks every push.
+    add_test(
+        NAME InputPollAudit
+        COMMAND Python3::Interpreter
+                ${CMAKE_SOURCE_DIR}/tools/input_poll_audit.py
+    )
+
+    # The audit is only worth having if it fails on a violation. Four fixtures,
+    # three that must be caught and one that must not — a check that flagged
+    # everything would look identical to a correct one from the green side.
+    foreach(_poll_fixture raw_wrapper bare_glfw near_miss)
+        add_test(
+            NAME InputPollAuditCatches_${_poll_fixture}
+            COMMAND Python3::Interpreter
+                    ${CMAKE_SOURCE_DIR}/tools/input_poll_audit.py
+                    --root ${CMAKE_CURRENT_SOURCE_DIR}/fixtures/input_poll_audit/${_poll_fixture}
+        )
+        set_tests_properties(InputPollAuditCatches_${_poll_fixture}
+                             PROPERTIES WILL_FAIL TRUE)
+    endforeach()
+
+    # near_miss above is the important one: it pins that the exemption prefix
+    # `engine/core/input_manager.` is EXACT. A loose prefix would let any
+    # input_manager*-named file hide a raw poll, which is the file-scoped
+    # exemption trap the spec section documents.
+    add_test(
+        NAME InputPollAuditHonoursExemption
+        COMMAND Python3::Interpreter
+                ${CMAKE_SOURCE_DIR}/tools/input_poll_audit.py
+                --root ${CMAKE_CURRENT_SOURCE_DIR}/fixtures/input_poll_audit/exempt
+    )
+
     # --- Shader standards lint -------------------------------------------------
     # Static line-scan keeping every GLSL shader on the engine's GL 4.5 target
     # (#version 450 core, ARB-suffixed draw-parameter built-ins). Catches the

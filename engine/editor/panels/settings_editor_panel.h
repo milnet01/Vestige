@@ -86,6 +86,23 @@ private:
     /// GLFW code, and writes the new binding via the editor.
     void drawRebindModal();
 
+    /// @brief Writes the live `InputActionMap` back into the pending
+    ///        `Settings::controls.bindings` (3D_E-0628c).
+    ///
+    /// A rebind lands in the live map, but the map is not what
+    /// survives a restart — `Settings::controls.bindings` is, and
+    /// `Engine::initialize` replays it over the map at every boot.
+    /// The old code called `mutate` with an empty mutator, which
+    /// left `m_pending == m_applied`: `isDirty()` stayed false so
+    /// Apply was greyed out, and the stale wire list then overwrote
+    /// the new binding on the next settings change. Extracting the
+    /// whole map fixes both — the pending Settings differ, and what
+    /// they carry is current.
+    ///
+    /// Call AFTER mutating the map; the wire list is read from it.
+    /// Requires `m_editor` and `m_inputMap` to be non-null.
+    void persistBindings();
+
     enum class SlotIndex : int
     {
         Primary   = 0,

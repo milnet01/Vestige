@@ -27,6 +27,12 @@ FirstPersonController::FirstPersonController(Camera& camera, InputManager& input
     m_camera.setSensitivity(config.mouseSensitivity);
     m_cosMaxSlope = std::cos(glm::radians(m_config.maxSlopeAngle));
 
+    // 3D_E-0628b — movement reads the binding layer, never a raw key, so
+    // there must always be a map. Engine replaces this with the shared
+    // one via setActionMap; an embedder without an Engine keeps it.
+    buildDefaultActionMap();
+    m_actionMap = &m_defaultActionMap;
+
     // Check for connected gamepads
     for (int i = GLFW_JOYSTICK_1; i <= GLFW_JOYSTICK_LAST; i++)
     {
@@ -82,7 +88,7 @@ void FirstPersonController::update(float deltaTime, const std::vector<AABB>& col
     {
         // Sprint check
         float speed = m_config.moveSpeed;
-        if (m_inputManager.isKeyDown(GLFW_KEY_LEFT_CONTROL) || m_isGamepadSprinting)
+        if (movementActionDown(MovementActions::Sprint) || m_isGamepadSprinting)
         {
             speed *= m_config.sprintMultiplier;
         }
@@ -132,29 +138,61 @@ void FirstPersonController::update(float deltaTime, const std::vector<AABB>& col
     }
 }
 
+void FirstPersonController::buildDefaultActionMap()
+{
+    // 3D_E-0628b. Bindings are stored as SCANCODES, matching what Engine
+    // registers: a scancode names the physical key, so WASD stays under
+    // the same fingers on AZERTY and Dvorak.
+    auto add = [this](const char* id, const char* label, int glfwKey)
+    {
+        InputAction a;
+        a.id       = id;
+        a.label    = label;
+        a.category = "Movement";
+        a.primary  = InputBinding::scancode(glfwGetKeyScancode(glfwKey));
+        m_defaultActionMap.addAction(a);
+    };
+    add(MovementActions::Forward,  "Move forward",       GLFW_KEY_W);
+    add(MovementActions::Backward, "Move backward",      GLFW_KEY_S);
+    add(MovementActions::Left,     "Move left",          GLFW_KEY_A);
+    add(MovementActions::Right,    "Move right",         GLFW_KEY_D);
+    add(MovementActions::Up,       "Move up / jump",     GLFW_KEY_SPACE);
+    add(MovementActions::Down,     "Move down / crouch", GLFW_KEY_LEFT_SHIFT);
+    add(MovementActions::Sprint,   "Sprint",             GLFW_KEY_LEFT_CONTROL);
+}
+
+bool FirstPersonController::movementActionDown(const char* actionId) const
+{
+    // 3D_E-0628b. Always through the binding layer — never a raw key
+    // poll. `engine/input`'s spec 12 forbids a raw poll reachable from
+    // gameplay code, and m_actionMap is never null, so there is no
+    // branch here that could reintroduce one.
+    return m_inputManager.isActionDown(*m_actionMap, actionId);
+}
+
 void FirstPersonController::processKeyboardMovement(float /*deltaTime*/, glm::vec3& moveDir)
 {
-    if (m_inputManager.isKeyDown(GLFW_KEY_W))
+    if (movementActionDown(MovementActions::Forward))
     {
         moveDir.z += 1.0f;
     }
-    if (m_inputManager.isKeyDown(GLFW_KEY_S))
+    if (movementActionDown(MovementActions::Backward))
     {
         moveDir.z -= 1.0f;
     }
-    if (m_inputManager.isKeyDown(GLFW_KEY_D))
+    if (movementActionDown(MovementActions::Right))
     {
         moveDir.x += 1.0f;
     }
-    if (m_inputManager.isKeyDown(GLFW_KEY_A))
+    if (movementActionDown(MovementActions::Left))
     {
         moveDir.x -= 1.0f;
     }
-    if (m_inputManager.isKeyDown(GLFW_KEY_SPACE))
+    if (movementActionDown(MovementActions::Up))
     {
         moveDir.y += 1.0f;
     }
-    if (m_inputManager.isKeyDown(GLFW_KEY_LEFT_SHIFT))
+    if (movementActionDown(MovementActions::Down))
     {
         moveDir.y -= 1.0f;
     }
@@ -165,7 +203,10 @@ void FirstPersonController::processMouseLook()
     glm::vec2 mouseDelta = m_inputManager.getMouseDelta();
     if (mouseDelta.x != 0.0f || mouseDelta.y != 0.0f)
     {
-        m_camera.rotate(mouseDelta.x, -mouseDelta.y);
+        // Screen Y grows downward, so the pitch term is negated to make
+        // "push the mouse forward" look up. invertY cancels that negation.
+        const float pitch = m_config.invertY ? mouseDelta.y : -mouseDelta.y;
+        m_camera.rotate(mouseDelta.x, pitch);
     }
 }
 
@@ -183,8 +224,8 @@ void FirstPersonController::processGamepad(float deltaTime, glm::vec3& moveDir)
     }
 
     // Left stick — movement
-    float leftX = applyDeadzone(state.axes[GLFW_GAMEPAD_AXIS_LEFT_X]);
-    float leftY = applyDeadzone(state.axes[GLFW_GAMEPAD_AXIS_LEFT_Y]);
+    float leftX = applyDeadzone(state.axes[GLFW_GAMEPAD_AXIS_LEFT_X], m_config.gamepadDeadzoneLeft);
+    float leftY = applyDeadzone(state.axes[GLFW_GAMEPAD_AXIS_LEFT_Y], m_config.gamepadDeadzoneLeft);
 
     if (leftX != 0.0f || leftY != 0.0f)
     {
@@ -193,13 +234,14 @@ void FirstPersonController::processGamepad(float deltaTime, glm::vec3& moveDir)
     }
 
     // Right stick — camera look
-    float rightX = applyDeadzone(state.axes[GLFW_GAMEPAD_AXIS_RIGHT_X]);
-    float rightY = applyDeadzone(state.axes[GLFW_GAMEPAD_AXIS_RIGHT_Y]);
+    float rightX = applyDeadzone(state.axes[GLFW_GAMEPAD_AXIS_RIGHT_X], m_config.gamepadDeadzoneRight);
+    float rightY = applyDeadzone(state.axes[GLFW_GAMEPAD_AXIS_RIGHT_Y], m_config.gamepadDeadzoneRight);
 
     if (rightX != 0.0f || rightY != 0.0f)
     {
         float lookSpeed = m_config.gamepadLookSensitivity * deltaTime;
-        m_camera.rotate(rightX * lookSpeed, -rightY * lookSpeed);
+        const float pitch = m_config.invertY ? rightY : -rightY;
+        m_camera.rotate(rightX * lookSpeed, pitch * lookSpeed);
     }
 
     // Triggers — up/down
@@ -276,7 +318,7 @@ void FirstPersonController::applyCollision(glm::vec3& newPosition, const std::ve
     }
 }
 
-float FirstPersonController::applyDeadzone(float value) const
+float FirstPersonController::applyDeadzone(float value, float deadzone) const
 {
     // AUDIT M28: sanitize at the input boundary — a faulty HID report or
     // driver bug can produce NaN or out-of-range axis values that would
@@ -289,13 +331,18 @@ float FirstPersonController::applyDeadzone(float value) const
     }
     value = std::clamp(value, -1.0f, 1.0f);
 
-    if (std::abs(value) < m_config.gamepadDeadzone)
+    // A deadzone of 1.0 would divide by zero below. Settings::validate
+    // clamps to 0.9, but this class is constructible without Settings,
+    // so guard here too rather than trusting a caller we do not own.
+    deadzone = std::clamp(deadzone, 0.0f, 0.9f);
+
+    if (std::abs(value) < deadzone)
     {
         return 0.0f;
     }
     // Remap remaining range to 0-1
     float sign = (value > 0.0f) ? 1.0f : -1.0f;
-    return sign * (std::abs(value) - m_config.gamepadDeadzone) / (1.0f - m_config.gamepadDeadzone);
+    return sign * (std::abs(value) - deadzone) / (1.0f - deadzone);
 }
 
 void FirstPersonController::setEnabled(bool isEnabled)
@@ -306,6 +353,33 @@ void FirstPersonController::setEnabled(bool isEnabled)
 bool FirstPersonController::isEnabled() const
 {
     return m_isEnabled;
+}
+
+void FirstPersonController::setMouseSensitivity(float sensitivity)
+{
+    m_config.mouseSensitivity = sensitivity;
+    // The camera keeps its own copy — the constructor pushes it once, and
+    // before 3D_E-0628a nothing pushed it again. Forward every change.
+    m_camera.setSensitivity(sensitivity);
+}
+
+void FirstPersonController::setInvertY(bool invert)
+{
+    m_config.invertY = invert;
+}
+
+void FirstPersonController::setGamepadDeadzones(float left, float right)
+{
+    m_config.gamepadDeadzoneLeft = left;
+    m_config.gamepadDeadzoneRight = right;
+}
+
+void FirstPersonController::setActionMap(const InputActionMap* map)
+{
+    // Never leave it null — movementActionDown dereferences it, and the
+    // whole point of 3D_E-0628b is that there is no raw-key path to fall
+    // back to. A null argument means "go back to the built-in map".
+    m_actionMap = (map != nullptr) ? map : &m_defaultActionMap;
 }
 
 ControllerConfig& FirstPersonController::getConfig()
@@ -383,12 +457,15 @@ void FirstPersonController::processLookOnly(float deltaTime)
         GLFWgamepadstate state;
         if (glfwGetGamepadState(m_gamepadId, &state))
         {
-            float rightX = applyDeadzone(state.axes[GLFW_GAMEPAD_AXIS_RIGHT_X]);
-            float rightY = applyDeadzone(state.axes[GLFW_GAMEPAD_AXIS_RIGHT_Y]);
+            float rightX = applyDeadzone(state.axes[GLFW_GAMEPAD_AXIS_RIGHT_X],
+                                         m_config.gamepadDeadzoneRight);
+            float rightY = applyDeadzone(state.axes[GLFW_GAMEPAD_AXIS_RIGHT_Y],
+                                         m_config.gamepadDeadzoneRight);
             if (rightX != 0.0f || rightY != 0.0f)
             {
                 float lookSpeed = m_config.gamepadLookSensitivity * deltaTime;
-                m_camera.rotate(rightX * lookSpeed, -rightY * lookSpeed);
+                const float pitch = m_config.invertY ? rightY : -rightY;
+                m_camera.rotate(rightX * lookSpeed, pitch * lookSpeed);
             }
         }
     }
@@ -403,13 +480,14 @@ glm::vec3 FirstPersonController::computeDesiredVelocity(float /*deltaTime*/)
 
     glm::vec3 moveDir(0.0f);
 
-    // Keyboard movement
-    if (m_inputManager.isKeyDown(GLFW_KEY_W))    moveDir.z += 1.0f;
-    if (m_inputManager.isKeyDown(GLFW_KEY_S))    moveDir.z -= 1.0f;
-    if (m_inputManager.isKeyDown(GLFW_KEY_D))    moveDir.x += 1.0f;
-    if (m_inputManager.isKeyDown(GLFW_KEY_A))    moveDir.x -= 1.0f;
-    if (m_inputManager.isKeyDown(GLFW_KEY_SPACE))       moveDir.y += 1.0f;
-    if (m_inputManager.isKeyDown(GLFW_KEY_LEFT_SHIFT))  moveDir.y -= 1.0f;
+    // Keyboard movement — same action routing as processKeyboardMovement
+    // (3D_E-0628b); this path serves the physics character controller.
+    if (movementActionDown(MovementActions::Forward))  moveDir.z += 1.0f;
+    if (movementActionDown(MovementActions::Backward)) moveDir.z -= 1.0f;
+    if (movementActionDown(MovementActions::Right))    moveDir.x += 1.0f;
+    if (movementActionDown(MovementActions::Left))     moveDir.x -= 1.0f;
+    if (movementActionDown(MovementActions::Up))       moveDir.y += 1.0f;
+    if (movementActionDown(MovementActions::Down))     moveDir.y -= 1.0f;
 
     // Gamepad left-stick movement + triggers
     if (m_gamepadId >= 0)
@@ -417,8 +495,10 @@ glm::vec3 FirstPersonController::computeDesiredVelocity(float /*deltaTime*/)
         GLFWgamepadstate state;
         if (glfwGetGamepadState(m_gamepadId, &state))
         {
-            float leftX = applyDeadzone(state.axes[GLFW_GAMEPAD_AXIS_LEFT_X]);
-            float leftY = applyDeadzone(state.axes[GLFW_GAMEPAD_AXIS_LEFT_Y]);
+            float leftX = applyDeadzone(state.axes[GLFW_GAMEPAD_AXIS_LEFT_X],
+                                        m_config.gamepadDeadzoneLeft);
+            float leftY = applyDeadzone(state.axes[GLFW_GAMEPAD_AXIS_LEFT_Y],
+                                        m_config.gamepadDeadzoneLeft);
             if (leftX != 0.0f || leftY != 0.0f)
             {
                 moveDir.x += leftX;
@@ -442,7 +522,7 @@ glm::vec3 FirstPersonController::computeDesiredVelocity(float /*deltaTime*/)
 
     // Sprint speed
     float speed = m_config.moveSpeed;
-    if (m_inputManager.isKeyDown(GLFW_KEY_LEFT_CONTROL) || m_isGamepadSprinting)
+    if (movementActionDown(MovementActions::Sprint) || m_isGamepadSprinting)
     {
         speed *= m_config.sprintMultiplier;
     }

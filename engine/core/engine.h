@@ -291,6 +291,7 @@ private:
     std::unique_ptr<AudioEngineReverbApplySink>          m_reverbSink;          // AX2 R4
     std::unique_ptr<PhotosensitiveStoreApplySink>        m_photosensitiveSink;
     std::unique_ptr<LocalizationServiceApplySink>        m_localizationSink;
+    std::unique_ptr<ControllerControlsApplySink>         m_controlsSink;        // 3D_E-0628a
 
     /// @brief Engine-owned input action map. Game code pushes its
     ///        action definitions here before `initialize()` returns
