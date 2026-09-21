@@ -142,8 +142,6 @@ Renderer::Renderer(EventBus& eventBus)
             onWindowResize(event.width, event.height);
         });
 
-    // PMR arena initialized in-class (m_frameResource)
-
     // Dummy SSBO for model matrices (binding point 0) — Mesa requires all declared
     // SSBOs to have valid buffers bound, even when the MDI code path is not taken.
     glCreateBuffers(1, &m_dummyModelSSBO);
@@ -221,11 +219,6 @@ Renderer::Renderer(EventBus& eventBus)
         nullptr, 0);
 
     Logger::info("Renderer initialized (OpenGL 4.5, reverse-Z)");
-}
-
-void Renderer::resetFrameAllocator()
-{
-    m_frameResource.release();
 }
 
 Renderer::~Renderer()
@@ -3157,9 +3150,6 @@ void Renderer::renderScene(const SceneRenderData& renderData, const Camera& came
 
     if (!geometryOnly)
     {
-        // Reset per-frame scratch allocator (all pmr::vectors from last frame are now invalid)
-        resetFrameAllocator();
-
         // Reset per-frame stats
         m_cullingStats.drawCalls = 0;
         m_cullingStats.instanceBatches = 0;

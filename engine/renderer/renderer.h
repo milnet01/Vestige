@@ -37,7 +37,6 @@
 #include <glm/glm.hpp>
 
 #include <memory>
-#include <memory_resource>
 #include <unordered_map>
 #include <vector>
 
@@ -938,15 +937,22 @@ private:
     // Frustum culling statistics (updated each frame in renderScene)
     CullingStats m_cullingStats;
 
-
-    // Per-frame PMR arena for scratch allocations (reset each frame).
-    // Value-initialized so cppcheck's uninitMemberVar rule stops firing;
-    // the pmr arena overwrites this storage on first allocation anyway.
-    static constexpr size_t FRAME_ARENA_SIZE = 2 * 1024 * 1024;  // 2 MB
-    alignas(64) char m_frameArena[FRAME_ARENA_SIZE]{};
-    std::pmr::monotonic_buffer_resource m_frameResource{
-        m_frameArena, FRAME_ARENA_SIZE, std::pmr::null_memory_resource()};
-    void resetFrameAllocator();
+    // A 2 MB per-frame PMR arena used to live here (FRAME_ARENA_SIZE,
+    // m_frameArena, m_frameResource, resetFrameAllocator). Removed 2026-09-21,
+    // 3D_E-0641: nothing ever allocated from it. The only references outside
+    // its own declarations were a comment and a release() call, so the reset
+    // was a no-op on an empty arena while the 2 MB stayed resident for the
+    // life of every Renderer and its {} zero-initialiser cost a 2 MB memset
+    // per construction.
+    //
+    // Per-frame scratch is handled by the reusable vectors above
+    // (m_culledItems, m_sortedTransparentItems, m_shadowCasterItems,
+    // m_cascadeCulledCasters), which keep their capacity across frames. That
+    // is what the renderer actually does and what the spec now describes.
+    //
+    // If a real bump allocator is ever wanted, profile first and reintroduce
+    // it with a call site in the same change — a placeholder arena reads as an
+    // optimisation that is in force.
 };
 
 } // namespace Vestige
