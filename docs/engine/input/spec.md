@@ -282,7 +282,16 @@ Per CODING_STANDARDS §11 — no exceptions in steady-state hot paths. `engine/i
 
 Routing surfaces:
 
-- `InputAction` carries the persisted user-facing binding state (primary, secondary, gamepad). Every game verb registered on the action map is rebindable by construction — there is no "hardcoded" path for a `glfwGetKey` check elsewhere in the engine that would bypass this layer (any such path would be a regression).
+- `InputAction` carries the persisted user-facing binding state (primary, secondary, gamepad). Every game verb registered on the action map is rebindable by construction.
+
+  **Known false as stated, since before 2026-09-21 (3D_E-0628).** This bullet
+  used to end "there is no 'hardcoded' path for a `glfwGetKey` check elsewhere
+  in the engine that would bypass this layer (any such path would be a
+  regression)." There is one, and it is the movement path: the first-person
+  controller polls `InputManager::isKeyDown` directly at 14 sites, which wraps
+  `glfwGetKey` and never consults `InputActionMap`. The guarantee holds for
+  verbs that go through `isActionDown` and does not hold for the engine as a
+  whole. §12's check is what detects it; 3D_E-0628 is the fix.
 - `Settings::controls.bindings` (a `std::vector<ActionBindingWire>` defined in `engine/core/settings.h:145`) is the persisted projection of `InputActionMap`. The sole writeable path from "user rebound a key in the Settings panel" to "subsystem behaves differently" is `applyInputBindings` (free function — `engine/core/settings_apply.cpp:335`). Note this is a *free function*, not an apply-sink — it differs in shape from the seven sinks in `settings_apply.h` because the data lives inside the `InputActionMap` object the engine owns, not behind an abstract interface.
 - `InputActionMap::resetToDefaults` and `resetActionToDefaults` provide the per-row reset and per-tab reset the rebind UI surfaces. The defaults must remain accessible-friendly (e.g. no two-handed shortcut for a one-handed user — Phase 11 will introduce a one-handed preset).
 - `bindingDisplayLabel` is the **sole** source for human-readable binding strings shown in the rebind UI; the editor panel never reads `glfwGetKeyName` directly. Localisation (Phase 10 Localization) wraps the returned token rather than overriding the table.
@@ -291,7 +300,35 @@ Routing surfaces:
 
 Constraint summary for downstream UI (User Interface) consumers:
 
-- **Every binding rebindable.** Every game verb consumed via `InputManager::isActionDown` must be registered on `InputActionMap` — no `glfwGetKey(...)` short-cuts for "this one shortcut is special." Reviewers should grep for `glfwGetKey` outside `engine/core/input_manager.cpp` and treat hits as regressions.
+- **Every binding rebindable.** Every game verb consumed via `InputManager::isActionDown` must be registered on `InputActionMap` — no raw key polling for "this one shortcut is special."
+
+  **The check (3D_E-0642).** The rule is *no raw key poll is reachable from
+  gameplay code*, and it takes two greps, not one:
+
+  ```
+  # 1. No bare GLFW call outside the one file allowed to make it.
+  grep -rn 'glfwGetKey(' engine/ app/ --include=*.cpp | grep -v '^engine/core/input_manager.cpp'
+
+  # 2. No caller of the wrapper that bypasses the binding layer.
+  grep -rn 'isKeyDown(' engine/ app/ --include=*.cpp | grep -v '^engine/core/input_manager.cpp'
+  ```
+
+  Grep 2 is the one that matters, and the spec carried only grep 1 until
+  2026-09-21. Grep 1 passes today and has always passed: the tree holds exactly
+  one bare `glfwGetKey(` call, at `input_manager.cpp:43`, inside `isKeyDown` —
+  which is the one file grep 1 exempts. A file-scoped exemption cannot see a
+  wrapper living inside it, so the check returned green while 100% of movement
+  verbs bypassed the binding system through that wrapper. **A test a file-scoped
+  exemption defeats is worse than no test, because it returns green and is then
+  cited as evidence.**
+
+  **Grep 2 FAILS today, and that is correct.** It reports 14 hits, all in
+  `engine/core/first_person_controller.cpp` (W/A/S/D, Space, Shift, Ctrl), while
+  `isActionDown` has one production caller in `engine/input/input_bindings.cpp`
+  and none in the gameplay layer. So rebinding a movement key changes nothing
+  and AZERTY/Dvorak layouts are wrong. The code half is **3D_E-0628**; this
+  section owns only the check that finds it. Do not silence grep 2 to make the
+  suite green — its failing is the defect being visible for the first time.
 - **Gamepad + keyboard parity, non-negotiable.** Every action with a keyboard default must also ship with a gamepad default; Settings panel should surface both columns. Audit I4 (same-device conflicts only) is what makes "bind C to gamepad and keyboard independently" usable.
 - **No time-pressure puzzles.** This subsystem has no time-pressure semantics (no "double-tap within 200 ms"), and the engine's gameplay layer is forbidden from baking one in via `isActionDown` polling alone. Phase 11 hold-action / chord support, when it lands, must surface a configurable timing setting.
 - **Defaults must remain accessible-friendly.** Engine-shipped defaults (`addAction(...)` calls at engine startup) are the floor; reset-to-defaults must never produce an inaccessible binding (e.g. requiring two simultaneous modifier keys with no single-key alternative).

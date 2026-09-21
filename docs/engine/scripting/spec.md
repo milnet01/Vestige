@@ -5,11 +5,37 @@
 | Field | Value |
 |-------|-------|
 | Subsystem | `engine/scripting` |
-| Status | `shipped` |
+| Status | `partial` — see the note directly below |
 | Spec version | `1.0` |
 | Last reviewed | `2026-04-28` (initial draft — pending cold-eyes review) |
 | Owners | `milnet01` |
 | Engine version range | `v0.9.0+` (foundation since Phase 9E-1, 2026-04) |
+
+> **Status is `partial`, not `shipped` — downgraded 2026-09-21 (3D_E-0627).**
+>
+> Everything this spec describes is built and unit-tested, and none of it runs
+> in the shipped engine. No script can execute today.
+>
+> Three facts, each verified against source:
+>
+> - Nothing constructs a `ScriptingSystem` outside the tests. It is never
+>   registered with the engine, so `update()` — and with it `tickUpdateNodes`
+>   and `tickLatentActions` — is never called at runtime.
+> - `ScriptComponent` has zero callers. `addScript` is never invoked, and the
+>   component has no entry in the entity serializer, so it cannot be attached
+>   to an entity that survives a scene save.
+> - `ScriptingSystem::onSceneLoad` is a stub. Its own comment lists the four
+>   steps nobody wrote: find the entities with a `ScriptComponent`, load their
+>   graph assets, create the `ScriptInstance`s, fire `OnStart`.
+>
+> So read this document as a specification of machinery that exists and is
+> not wired up, rather than of behaviour you can observe. The interpreter,
+> the instance model, the node types and the blackboard are real and
+> correct as described; the path from a saved scene to a running graph is
+> the part that does not exist.
+>
+> Switching it on is tracked as its own roadmap item. Until that lands, do
+> not cite this spec as evidence that scripting works.
 
 ---
 
