@@ -2641,12 +2641,17 @@ decision or because the fix is larger than a review pass should make unattended.
 The dominant theme, found independently by six lanes, is features recorded as
 shipped that have no invocation path at all.
 
-- 📋 [3D_E-0627] **Visual scripting cannot run: ScriptingSystem is never constructed outside tests.**
+- ✅ [3D_E-0627] **Visual scripting cannot run: ScriptingSystem is never constructed outside tests.**
   ROADMAP:519 records `- [x] ScriptComponent (entity attachment) + ScriptingSystem`. Verified: `ScriptingSystem` appears outside engine/scripting/ only in two comments, one of which says "runtime doesn't currently spin up a ScriptingSystem (scripts are exercised only via unit tests)" (editor.h:383). `ScriptComponent` and `addScript` have ZERO callers. `scripting_system.cpp:183` still reads "In the future, this will: 1. Find all entities with ScriptComponent".
   Decide: wire onSceneLoad + register the system, or un-tick the roadmap bullet and mark docs/engine/scripting/spec.md Status: partial.
   **Layman:** The whole node-based scripting feature is built and tested but never switched on, so no script can ever execute in the shipped engine.
   Kind: fix.
   Source: review-code 2026-08-31 lane scripting.
+  Resolved 2026-09-21 (commit 2eee753) by taking the SECOND branch this bullet offered: un-tick the roadmap bullet and mark the spec partial. Not by wiring it on.
+
+  Why that branch: switching scripting on is not the missing registration call the bullet implies. ScriptingSystem::onSceneLoad is a stub whose own comment lists four unwritten steps (find the entities, load their graph assets, construct the instances, fire OnStart), and ScriptComponent has no entity-serializer entry, so nothing survives a scene save. That is a feature slice, and scheduling it honestly beats leaving a tick that says it is done. User chose this branch explicitly.
+
+  docs/engine/scripting/spec.md Status is now `partial` with the three verified facts recorded. Its rule-14 gate is still owed.
 
 - 📋 [3D_E-0628] **Key rebinding and mouse sensitivity are wired to nothing.**
   Three separate defects in one surface. (a) Settings::controls.mouseSensitivity / invertY / gamepadDeadzoneLeft / gamepadDeadzoneRight are serialised, clamped and driven by live widgets, and have ZERO consumers; FirstPersonController reads ControllerConfig::mouseSensitivity, a different field. (b) InputManager::isActionDown / actionAxisValue have ZERO production callers while the FPC polls isKeyDown(GLFW_KEY_W) directly, so rebinding a movement key changes nothing and AZERTY/Dvorak layouts are wrong. (c) settings_editor_panel.cpp:837/909 writes the live map only and calls mutate([](Settings&){}), so isDirty() stays false, Apply is greyed out, and the next settings edit re-applies the old bindings over the new one.
@@ -2711,13 +2716,20 @@ shipped that have no invocation path at all.
   Kind: fix.
   Source: review-code 2026-08-31 lanes editor-shell-tools, environment-terrain.
 
-- 📋 [3D_E-0633] **Two editor panels cannot be closed, and Environment/Performance disable themselves first.**
+- ✅ [3D_E-0633] **Two editor panels cannot be closed, and Environment/Performance disable themselves first.**
   environment_panel.cpp:22 and performance_panel.cpp:25 both pass &m_open to ImGui::Begin (drawing an X that sets it false) but neither draw() starts with `if (!m_open) return;`, and neither call site guards. ImGui does not skip a window because *p_open is false -- the caller must. Four sibling panels do exactly that (terrain_panel.cpp:21, navigation_panel.cpp:18, audio_panel.cpp:157, validation_panel.cpp:21).
   Performance is worse: profiler.setEnabled(m_open) at :23 runs first, so the un-closable window then shows frozen data.
   One line per file.
   **Layman:** Clicking the X on the Environment or Performance panel does nothing; Performance also freezes its own data.
   Kind: fix.
   Source: review-code 2026-08-31 lane editor-panels.
+  Resolved 2026-09-21 (commit 0de4d01). Added the missing `if (!m_open)
+  return;` to both panels. The guard goes AFTER
+  `profiler.setEnabled(m_open)` in performance_panel, not at the top:
+  that ordering is what fixes both halves at once — the close still
+  disables the profiler, and the window then stops drawing. A
+  top-of-function guard would have left the profiler enabled for the
+  rest of the session. Build clean, 3916/3921 pass.
 
 - ✅ [3D_E-0634] **Skinned meshes snap to bind pose the moment a one-shot animation finishes.**
   skeleton_animator.cpp:638 -- `return m_skeleton && !m_boneMatrices.empty() && m_playing;`. skeleton_animator.h:143 documents hasBones() as "whether this animator has valid bone data to render", and scene.cpp:374 gates item.boneMatrices on it. A non-looping clip sets m_playing = false on completion (:221), so the renderer stops receiving bone matrices and draws u_hasBones=false -- while the matrices are still perfectly valid.
@@ -2734,14 +2746,17 @@ shipped that have no invocation path at all.
   timeout before the fix and the same test returns immediately after.
   Full suite green, no other consumer of hasBones() regressed.
 
-- 📋 [3D_E-0635] **Decide whether release workflows may restore a build cache at all.**
+- ✅ [3D_E-0635] **Decide whether release workflows may restore a build cache at all.**
   zizmor reports cache-poisoning (Low confidence) on actions/cache in release.yml (x2) and audit-full.yml. Not fixed, deliberately: release.yml's cache keys are already namespaced (`release-cmake-deps-*`) away from ci.yml's, and the workflow only runs on maintainer-gated tag pushes or workflow_call from the cadence -- so the poisoning vector needs the same write access as poisoning anything else.
   The trade is real either way: dropping the cache makes release builds hermetic at the cost of several minutes per release. That is a maintainer decision, not a review-pass edit.
   **Layman:** Release builds reuse a cached dependency folder; in principle that cache could be tampered with.
   Kind: investigate.
   Source: check-code 2026-08-31, zizmor cache-poisoning.
+  Decided 2026-09-21 (commit 9f0ce63): KEEP the cache. Recorded at each of the three actions/cache sites rather than only here, because the next person meets this as a scanner finding in a workflow file.
 
-- 📋 [3D_E-0636] **Bulk static-analysis noise needs a project audit-config, not per-run calibration.**
+  Grounds: keys are namespaced away from ci.yml's, and these workflows run only on maintainer-gated tag pushes, workflow_call, or manual dispatch — so poisoning needs the same write access as poisoning anything else in the repo. Each comment names the two premises it rests on and says to re-open if either stops holding, because a kept finding with no recorded expiry becomes a permanent silent exception.
+
+- ✅ [3D_E-0636] **Bulk static-analysis noise needs a project audit-config, not per-run calibration.**
   No audit-config.json exists at any of the three probed paths, so every run re-derives its calibration. Measured this run:
   - typos: 8062 findings, of which 5747 (71%) are byte sequences inside .jpg/.png/.hdr/.glb/.ttf binaries and 1385 more are the domain term LOD. Real defects after both: approximately zero. Exclude binary asset extensions and add LOD to the dictionary.
   - ruff: 1427 of 1880 are S101 (assert) in test files.
@@ -2751,6 +2766,11 @@ shipped that have no invocation path at all.
   **Layman:** The linters produce thousands of false alarms that hide the real ones.
   Kind: fix.
   Source: check-code 2026-08-31.
+  Resolved 2026-09-21 (commit e2eab1b). tools/audit/{audit-config.json,scope.txt,suppressions.md} plus _typos.toml at the repo root.
+
+  MEASURED: typos over the repo went 2104 findings -> 419, an 80% reduction. Verified that LOD/LODs/froxel stop flagging only for files INSIDE the repo — typos resolves its config relative to the file being checked, so a probe outside the tree still flags them and is not evidence the config works.
+
+  NOT at probe path 1. The skill probes docs/private/audit/ first and calls it "tracked by convention", but .gitignore:192 ignores docs/private/ in this repo — a calibration written there is invisible to anyone who clones. Used probe path 3 (tools/audit/), which is tracked.
 
 - ✅ [3D_E-0637] **clang-based analysis is blocked by a GCC precompiled header.**
   CMake generates cmake_pch.hxx.gch with GCC. clang-tidy and clazy cannot read a GCC PCH, and for the vestige_engine target it is `-Werror,-Wignored-gch` -- so every file is abandoned and BOTH TOOLS REPORT ZERO FINDINGS WHILE EXITING 0. That is the exact shape check-code exists to prevent.
@@ -2822,13 +2842,18 @@ shipped that have no invocation path at all.
   Kind: fix.
   Source: verify-delivery 2026-09-01.
 
-- 📋 [3D_E-0641] **Every Renderer carries a 2 MB frame arena that nothing allocates from.**
+- ✅ [3D_E-0641] **Every Renderer carries a 2 MB frame arena that nothing allocates from.**
   `renderer.h:945-948` declares `static constexpr size_t FRAME_ARENA_SIZE = 2 * 1024 * 1024;`, `alignas(64) char m_frameArena[FRAME_ARENA_SIZE]{}` and a `std::pmr::monotonic_buffer_resource m_frameResource` over it with `null_memory_resource()` as upstream.
   Outside those declarations `m_frameResource` appears exactly twice in the whole tree: a comment at renderer.cpp:145 and `m_frameResource.release()` at :228. Nothing ever allocates from it, so the release is a no-op on an empty arena and the 2 MB is resident for the life of the object. The `{}` zero-initialiser also costs a 2 MB memset per Renderer construction.
   Either route a real per-frame allocation through it (the transient vectors in the culling and draw-list paths are the obvious candidates) or delete all four lines. Do not keep it as a placeholder -- it reads as an optimisation that is in force.
   **Layman:** Two megabytes of memory are reserved per renderer and never used.
   Kind: fix.
   Source: verify-delivery 2026-09-01.
+  Resolved 2026-09-21 (commit b49be27). Deleted, not wired up — wiring the cull vectors through it is a hot-path change with no measured problem behind it, and CLAUDE.md says profile before optimizing.
+
+  This bullet named four spec locations; the subject sweep found FIVE. The fifth was the out-of-GPU-memory row, whose "steady-state allocation is bounded (per-frame arena resets)" rested on the same premise and shares no searchable token with the others. One of the five was prescriptive — the failure-modes table told an implementer to "grow the arena if real data demands it" — which is why this needed a spec change and not just a deletion.
+
+  A tombstone comment stays where the declarations were, per this bullet's own instruction not to leave a placeholder. Build clean, 3916/3921 pass.
 
 - 📋 [3D_E-0642] **The input spec's own regression check cannot detect the regression it describes.**
   `docs/engine/input/spec.md` states normatively: "Every game verb consumed via `InputManager::isActionDown` must be registered on `InputActionMap` -- no `glfwGetKey(...)` short-cuts... Reviewers should grep for `glfwGetKey` outside `engine/core/input_manager.cpp` and treat hits as regressions."
@@ -2941,7 +2966,7 @@ shipped that have no invocation path at all.
   Kind: test.
   Source: documentation survey 2026-09-01.
 
-- 📋 [3D_E-0654] **Three analysis config files are absent, and one of them makes clang-tidy analyse nothing.**
+- ✅ [3D_E-0654] **Three analysis config files are absent, and one of them makes clang-tidy analyse nothing.**
   VERIFIED ABSENT, all three probed paths empty: `docs/private/audit/audit-config.json`, `.claude/audit/audit-config.json`, `tools/audit/audit-config.json`. Also absent: `.clang-tidy`.
   The `.clang-tidy` absence is the severe one and is NOT merely noise-related: with no config, clang-tidy's default check set is EMPTY, so it runs to completion and exits 0 having analysed nothing. Combined with 3D_E-0637 (the GCC PCH blocking it entirely), any clean clang-tidy result on this tree today is meaningless twice over.
   The `audit-config.json` absence means every check-code run re-derives its calibration from scratch. Measured this run: typos 8062 findings of which 5747 (71%) are byte sequences inside binary assets and 1385 more are the domain term LOD; ruff 1427 of 1880 are S101 in test files; cppcheck 1012 of 1648 are unusedStructMember.
@@ -2949,6 +2974,11 @@ shipped that have no invocation path at all.
   **Layman:** Missing settings files mean one code-checking tool checks nothing and the others produce thousands of false alarms.
   Kind: chore.
   Source: check-code 2026-08-31.
+  Resolved 2026-09-21 (commit 5d23ed4). Authored .clang-tidy at the repo root. Verified before/after on this box: `clang-tidy --list-checks` reported "No checks enabled" and now reports 277, with all 8 project exclusions intact.
+
+  One correction to this bullet: "any clean clang-tidy result on this tree today is meaningless twice over" overstates it for the path that gates CI. tools/audit/lib/tier1_clangtidy.py builds --checks= from audit_config.yaml and passes it explicitly, so the tier-1 audit was never blind. The blindness was real for every other caller — editors, ad-hoc runs, and check-code's default invocation.
+
+  The check set now has ONE home. audit_config.yaml's checks key is empty and the audit omits the flag, because a command-line --checks overrides .clang-tidy wholesale — a copied list would have silently won and the new file would have been decorative. 4 new tests pin which source wins; each half of the fix was mutated separately and reddened its own test.
 
 - 🚧 [3D_E-0655] **verify-delivery coverage record — what the 2026-09-01 run executed, and the ~800 promises it never reached.**
   IN PROGRESS deliberately: the run was partial by design and this bullet is where the remainder lives. Without it a later session cannot tell a covered promise from an unexamined one, and would either re-run what is done or guess.
