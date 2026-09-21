@@ -57,7 +57,7 @@
 | `NodeTypeRegistry` + `NodeTypeDescriptor` — node-type catalogue with execute lambdas, pin definitions, category, memoisation flag. | Node definitions in user / mod packages — registry is engine-only at v0.9.x. |
 | `PinId` intern table — process-local string → `uint32_t` for hot-path pin lookup. | Stable cross-process pin identifiers — on-disk schema keeps strings on purpose (see `pin_id.h` head comment). |
 | Built-in node packs: `core_nodes` (10 lifecycle / flow / debug), `event_nodes` (input / scene / weather / custom), `flow_nodes` (Switch, ForLoop, WhileLoop, Gate, DoOnce, FlipFlop), `action_nodes` (impure side-effect nodes), `latent_nodes` (Wait, Timeline, MoveTo), `pure_nodes` (math / vector / boolean / queries). | Domain-specific nodes that ship with future packs (e.g. weather scripting pack, terrain authoring pack). |
-| `ScriptComponent` — entity component holding `(graphAssetPath, ScriptInstance, entityBlackboard)` triples. | The `Entity` / component framework itself — `engine/scene/`. |
+| `ScriptComponent` — entity component holding `(graphAssetPath, ScriptInstance)` pairs **plus ONE entity-scope blackboard shared by every script on that entity** (§9 Ownership is canonical). | The `Entity` / component framework itself — `engine/scene/`. |
 | `script_templates` — five pre-built gameplay graphs (DoorOpens, Collectible, DamageZone, Checkpoint, DialogueTrigger). | The trigger / collision events those templates consume (engine-side stubs at v0.9.x, full wiring tracked in Open Q3). |
 | `ScriptCustomEvent` — user-defined event struct routed through the engine `EventBus`. | The `EventBus` itself — `engine/core/event_bus.h`. |
 
@@ -138,7 +138,8 @@ The subsystem exposes a deliberately small facade. Per CODING_STANDARDS §18 dow
 **Header inventory:** `engine/scripting/` has 19 headers. The 9 grouped below are **public**: `scripting_system`, `script_graph`, `script_compiler`, `script_instance`, `script_context`, `script_value`, `blackboard`, `node_type_registry`, `script_templates`. The other 10 (`script_events`, `script_component`, `pin_id`, `script_common`, plus the six node-pack registration headers `core_nodes` / `event_nodes` / `flow_nodes` / `action_nodes` / `latent_nodes` / `pure_nodes`) are **support / internal**: they are referenced by §3 abstractions but are either consumed only by `ScriptingSystem` itself (the node packs) or are small leaf types (`pin_id`, `script_common`) that don't need their own §4 entry. There is no `engine/scripting/internal/` subdirectory yet — this is the convention adopted in §18 spirit; a future cleanup pass may move the support headers there.
 
 ```cpp
-/// scripting_system.h — system owner, registered with SystemRegistry.
+/// scripting_system.h — system owner. INTENDED to be registered with
+/// SystemRegistry; NOT registered today — see the Status note at the top.
 class ScriptingSystem : public ISystem
 {
     bool initialize(Engine&) override;       // NOT idempotent — pair every init with shutdown (audit L1)
@@ -264,8 +265,8 @@ const char* gameplayTemplateDisplayName(GameplayTemplate);
 
 **Steady-state per-frame (`ScriptingSystem::update` — `engine/scripting/scripting_system.cpp`):**
 
-1. `tickLatentActions(dt)` — walks `m_activeInstances`, decrements `PendingLatentAction::remainingTime` / evaluates `condition`, fires `outputPin` on completion via a fresh `ScriptContext`.
-2. `tickUpdateNodes(dt)` — per active instance, walks the cached `updateNodes()` list (audit M9) and calls each node's execute via a fresh `ScriptContext`. The cache is rebuilt only inside `ScriptInstance::initialize`; per-frame cost is O(active instances × OnUpdate nodes), no string scan.
+1. `tickUpdateNodes(dt)` — walks `m_activeInstances`, decrements `PendingLatentAction::remainingTime` / evaluates `condition`, fires `outputPin` on completion via a fresh `ScriptContext`.
+2. `tickLatentActions(dt)` — per active instance, walks the cached `updateNodes()` list (audit M9) and calls each node's execute via a fresh `ScriptContext`. The cache is rebuilt only inside `ScriptInstance::initialize`; per-frame cost is O(active instances × OnUpdate nodes), no string scan.
 
 **Event dispatch (asynchronous, EventBus-driven):**
 
@@ -290,7 +291,7 @@ const char* gameplayTemplateDisplayName(GameplayTemplate);
 
 1. `ScriptingSystem::shutdown` calls `unregisterInstance` for all remaining instances, clears `m_activeInstances`, clears the registry, resets blackboards. Engine pointer nulled. Safe to `initialize()` again.
 
-**Exception path:** none; the compiler returns a `CompilationResult` with diagnostics rather than throwing, the runtime guards every cap with a `Logger::warning` + early return, and EventBus subscribers must not throw (per `engine/core` policy — propagates to publisher otherwise).
+**Exception path:** none; the compiler returns a `CompilationResult` with diagnostics rather than throwing, the runtime guards the EXECUTION caps (`MAX_CALL_DEPTH`, `MAX_NODES_PER_CHAIN`, `MAX_EVENT_REENTRY_DEPTH`) with a `Logger::warning` + early return — **but not the blackboard `MAX_KEYS` cap, whose insertion is rejected SILENTLY (§10)**, which is why §10's designer recourse has no log line to start from, and EventBus subscribers must not throw (per `engine/core` policy — propagates to publisher otherwise).
 
 ## 6. CPU / GPU placement
 
@@ -311,7 +312,7 @@ The `pin_id.h` head comment makes the contract explicit: the intern table is sin
 
 ## 8. Performance budget
 
-60 frames-per-second hard requirement (CLAUDE.md) → 16.6 millisecond (ms) per-frame budget. Phase 9E §1 set the design target at **< 0.5 ms per frame for 50 active scripts**. **The Budget column states the engineering targets** (validated qualitatively by the test harness running ~50-instance synthetic scenes); the Measured column is uniformly TBD pending the Phase 11 audit (Open Q5) — no fabricated numbers, no capture run yet.
+60 frames-per-second hard requirement (CLAUDE.md) → 16.6 millisecond (ms) per-frame budget. Phase 9E §1 set the design target at **< 0.5 ms per frame for 50 active scripts**. **The Budget column is DESIGN INTENT, not measurement — see Open Q5, which calls these placeholders. Nothing has been profiled; do not wire them into a perf gate as thresholds.** The Budget column states the engineering targets** (validated qualitatively by the test harness running ~50-instance synthetic scenes); the Measured column is uniformly TBD pending the Phase 11 audit (Open Q5) — no fabricated numbers, no capture run yet.
 
 | Path | Budget | Measured (RX 6600, 1080p) |
 |------|--------|----------------------------|
