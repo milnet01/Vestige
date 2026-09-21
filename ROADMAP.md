@@ -1,9 +1,51 @@
 # Vestige Engine Roadmap
 
-This document outlines the phased development plan for the Vestige 3D Engine.
+This document outlines the development plan for the Vestige 3D Engine.
+
+## How this file is organised
+
+**Open work is grouped by the release that closes it**, under headings of the
+form `## <MAJOR>.<MINOR>.0 — <theme>`. Each names the surface it breaks;
+`docs/standards/versioning-overrides.md` § 3 owns that rule and § 1 owns the
+surfaces. Completed work keeps its original `## Phase N` headings, because that
+is how it shipped.
+
+**Phases still exist** — they are headings inside a release block rather than
+sections of their own. That is deliberate: the roadmap viewer groups by
+section, so this is what makes its Next tab read as a release plan instead of a
+phase list.
+
+**Filing an item: use the RELEASE slug, not a phase slug.** A phase is no
+longer an addressable section, so `roadmap_log op:"append"` refuses
+`phase-10-10-...` and its kin. The targetable slugs are
+`0-2-0-finish-what-s-started`, `0-3-0-an-editor-a-builder-can-use`,
+`0-4-0-rendering-and-geometry-at-scale`, `0-5-0-interactivity`,
+`0-6-0-shipping-a-walkthrough`, `1-0-0-tabernacle-walkthrough-ships` and
+`after-1-0-0`, plus the completed-phase sections. `roadmap_query
+mode:"sections"` lists them; a wrong slug refuses `bad_section` and hands back
+candidates.
+
+**The cost of that, so nobody rediscovers it:** an appended item lands at the
+END of the release block, not under the phase it belongs to. Move it by hand if
+placement matters. This was accepted in exchange for the grouping above.
+
+**Headings here are at markdown's floor.** The innermost are `h6`, so a further
+grouping level cannot be made by demoting — something would have to flatten.
 
 <details>
-<summary><strong>Table of Contents</strong> (phases)</summary>
+<summary><strong>Table of Contents</strong> — releases, then completed phases</summary>
+
+**Open work, by release**
+
+- [0.2.0 — Finish what's started](#020--finish-whats-started)
+- [0.3.0 — An editor a builder can use](#030--an-editor-a-builder-can-use)
+- [0.4.0 — Rendering and geometry at scale](#040--rendering-and-geometry-at-scale)
+- [0.5.0 — Interactivity](#050--interactivity)
+- [0.6.0 — Shipping a walkthrough](#060--shipping-a-walkthrough)
+- [1.0.0 — Tabernacle walkthrough ships](#100--tabernacle-walkthrough-ships)
+- [After 1.0.0](#after-100)
+
+**Completed phases, and the phases inside each release**
 
 - [Phase 1: Foundation (COMPLETE)](#phase-1-foundation-complete)
 - [Phase 2: 3D World (COMPLETE)](#phase-2-3d-world-complete)
