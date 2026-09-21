@@ -181,10 +181,16 @@ void main()
         // SIMPLE: use precomputed normal map texture (no procedural noise)
         vec2 scrollUV = v_texCoord + flow * vec2(0.1, 0.05);
         vec3 texNormal = texture(u_normalMap, scrollUV).rgb * 2.0 - 1.0;
+        // World X and Z take the tangent-space X and Y — the two channels that
+        // actually encode slope. This read `texNormal.z` until 3D_E-0638: that
+        // is the blue channel, which is ~1.0 for a flat normal, so it applied a
+        // near-constant tilt to the whole surface and discarded green entirely.
+        // The FULL branch above is the same shape, perturbing X and Z with two
+        // DIFFERENT components of its distortion vector.
         normal = normalize(vec3(
             normal.x + texNormal.x * u_normalStrength * 0.3,
             normal.y,
-            normal.z + texNormal.z * u_normalStrength * 0.3
+            normal.z + texNormal.y * u_normalStrength * 0.3
         ));
 
         if (u_hasDudvMap)

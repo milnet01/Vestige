@@ -502,6 +502,11 @@ void main()
     // dielectric F0=0.04 — so it matches every other surface exactly. The
     // flat-colour fallback keeps its fixed Blinn-Phong term byte-identical.
     vec3 spec;
+    // Diffuse energy factor. 1.0 keeps the flat-colour fallback's legacy
+    // Blinn-Phong response byte-identical; the textured path overwrites it
+    // with the canonical kD so diffuse and specular share one energy budget
+    // (3D_E-0638).
+    vec3 kD = vec3(1.0);
     if (u_useGroundTextures)
     {
         float NdotV = max(dot(N, viewDir), 0.0);
@@ -512,6 +517,9 @@ void main()
         vec3  F  = fresnelSchlick(HdotV, F0);
         vec3 specTerm = (D * G * F) / (4.0 * NdotV * NdotL + 0.0001);
         spec = u_lightColor * specTerm * NdotL;
+        // Ground is dielectric, so metallic = 0 and kD = 1 - F. Same form as
+        // scene.frag.glsl's `kD = (1 - F) * (1 - metallic)`.
+        kD = vec3(1.0) - F;
     }
     else
     {
@@ -527,7 +535,13 @@ void main()
     }
 
     vec3 ambient = albedo * u_ambientColor * groundAO;
-    vec3 diffuse = albedo * NdotL * u_lightColor;
+    // Lambert. The 1/PI normalisation and the kD split are what make this
+    // share an energy budget with the Cook-Torrance specular above, and what
+    // put terrain on the same scale as every other surface — without them the
+    // ground was ~PI x brighter than scene.frag.glsl's, which applies both
+    // (3D_E-0638). On the flat-colour fallback kD is 1 and the division is the
+    // whole change, which is correct: that path was equally over-bright.
+    vec3 diffuse = (kD * albedo / PI) * NdotL * u_lightColor;
 
     vec3 color = ambient + (diffuse + spec) * (1.0 - shadow);
 

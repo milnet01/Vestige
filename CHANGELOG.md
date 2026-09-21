@@ -23,6 +23,18 @@ may change any interface without notice.
 
 ## [Unreleased]
 
+### 2026-09-21 Fixed — Two shader defects from the GLSL cold read (3D_E-0638)
+
+Two of the four defects the shaders-glsl review lane left open. Both were
+found by hand because nothing statically analyses GLSL; that gap is the
+rest of the item and is still open.
+
+- **Terrain was about PI times brighter than every other surface** (3D_E-0638)
+  `terrain.frag.glsl` shaded diffuse as `albedo * NdotL * lightColor` -- no `1/PI` normalisation and no `kD` split -- while shading specular with full Cook-Torrance GGX. So the two halves did not share an energy budget, and the ground sat on a different scale from every surface lit by `scene.frag.glsl`, which applies both. A comment directly above claimed the textured path "matches every other surface exactly"; that was true of the specular and false of the diffuse. Now `(kD * albedo / PI) * NdotL * lightColor`, with `kD = 1 - F` since ground is dielectric -- the same form `scene.frag.glsl` and `material_preview.frag.glsl` already use. The flat-colour fallback keeps its legacy Blinn-Phong specular untouched and takes the `1/PI` with `kD` at 1, because that path was equally over-bright. Expect terrain to render noticeably darker; the old brightness was the defect, but a scene tuned around it may want its light intensity revisited.
+
+- **Water on the weak-hardware tier tilted instead of rippling** (3D_E-0638)
+  The SIMPLE tier perturbed the world Z normal with `texNormal.z` -- the blue channel of a tangent-space normal map, which is ~1.0 for a flat normal. So it added a near-constant tilt across the whole surface and discarded the green channel, which is the one that actually encodes slope in that direction. Now uses `texNormal.y`, matching the FULL branch directly above, which perturbs X and Z with two different components of its distortion vector. Only the SIMPLE tier was affected, so this was invisible on hardware that selects FULL.
+
 ### 2026-09-21 Fixed — Controls settings and key rebinding now reach the game (3D_E-0628)
 
 Three defects in one surface, all of which made the Controls tab a set of
