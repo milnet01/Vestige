@@ -73,6 +73,16 @@ jobs:
           key: audit-full-Debug
           max-size: 500M
 
+      # zizmor: cache-poisoning (low confidence) — REVIEWED AND KEPT, 3D_E-0635.
+      # Decision 2026-09-21. The trade is real: dropping the cache makes these
+      # builds hermetic and costs several minutes per audit run. Kept because
+      # the key is namespaced away from ci.yml's
+      # (cmake-deps-Debug-*) and this workflow only runs on
+      # a schedule or a manual dispatch,
+      # so poisoning the entry needs the same write access as
+      # poisoning anything else in the repo.
+      # Re-open this if either premise stops holding: a shared key prefix, or a
+      # trigger reachable without maintainer access.
       - name: Cache CMake FetchContent deps
         uses: actions/cache@55cc8345863c7cc4c66a329aec7e433d2d1c52a9  # v5
         with:

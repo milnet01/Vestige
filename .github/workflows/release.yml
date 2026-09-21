@@ -116,6 +116,16 @@ jobs:
             libwayland-dev libxkbcommon-dev libasound2-dev \
             patchelf desktop-file-utils
 
+      # zizmor: cache-poisoning (low confidence) — REVIEWED AND KEPT, 3D_E-0635.
+      # Decision 2026-09-21. The trade is real: dropping the cache makes these
+      # builds hermetic and costs several minutes on every release. Kept because
+      # the key is namespaced away from ci.yml's
+      # (release-cmake-deps-linux-*) and this workflow only runs on
+      # maintainer-gated tag pushes or workflow_call,
+      # so poisoning the entry needs the same write access as
+      # poisoning anything else in the repo.
+      # Re-open this if either premise stops holding: a shared key prefix, or a
+      # trigger reachable without maintainer access.
       - name: Cache CMake FetchContent deps
         uses: actions/cache@55cc8345863c7cc4c66a329aec7e433d2d1c52a9  # v5
         with:
@@ -293,6 +303,16 @@ jobs:
           ref: ${{ inputs.tag || inputs.version || github.ref }}
           persist-credentials: false
 
+      # zizmor: cache-poisoning (low confidence) — REVIEWED AND KEPT, 3D_E-0635.
+      # Decision 2026-09-21. The trade is real: dropping the cache makes these
+      # builds hermetic and costs several minutes on every release. Kept because
+      # the key is namespaced away from ci.yml's
+      # (release-cmake-deps-windows-*) and this workflow only runs on
+      # maintainer-gated tag pushes or workflow_call,
+      # so poisoning the entry needs the same write access as
+      # poisoning anything else in the repo.
+      # Re-open this if either premise stops holding: a shared key prefix, or a
+      # trigger reachable without maintainer access.
       - name: Cache CMake FetchContent deps
         uses: actions/cache@55cc8345863c7cc4c66a329aec7e433d2d1c52a9  # v5
         with:
