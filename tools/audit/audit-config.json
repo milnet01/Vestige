@@ -1,0 +1,53 @@
+{
+  "_comment": [
+    "Project-side calibration for the check-code skill (3D_E-0636, 3D_E-0654).",
+    "Authored 2026-09-21. Before this file existed every run re-derived its",
+    "calibration from scratch, and the measured noise buried the real findings:",
+    "typos 8062 findings of which 5747 (71%) were byte sequences inside binary",
+    "assets and 1385 more were the domain term LOD; ruff 1427 of 1880 were S101",
+    "in test files; cppcheck 1012 of 1648 were unusedStructMember, an artefact",
+    "of per-TU analysis on a header-heavy tree; and gitleaks pointed at the",
+    "working tree scanned 27 GB of untracked build output against 21.6 MB of",
+    "tracked files.",
+    "",
+    "Every exclusion below removes a class that was measured, not a class that",
+    "looked noisy. The clang-tidy check set is deliberately NOT here: it lives",
+    "in the repo-root .clang-tidy so one list governs every caller."
+  ],
+
+  "scope_file": "tools/audit/scope.txt",
+
+  "tools": {
+    "typos": {
+      "flags": [
+        "--exclude", "*.jpg", "--exclude", "*.png", "--exclude", "*.hdr",
+        "--exclude", "*.exr", "--exclude", "*.glb", "--exclude", "*.ttf",
+        "--exclude", "*.zip", "--exclude", "*.blend",
+        "--exclude", "build/", "--exclude", "build-*/"
+      ],
+      "_note": "LOD, froxel, ambisonics and the other domain terms live in the [default.extend-words] table of _typos.toml at the repo root, which typos reads on its own."
+    },
+
+    "ruff": {
+      "flags": ["--extend-exclude", "tests/"],
+      "_note": "S101 (assert) is the point of a test file; 1427 of 1880 findings were that rule in that directory. Excluding the directory rather than the rule keeps the rule live everywhere it means something."
+    },
+
+    "cppcheck": {
+      "checks": ["warning", "style", "performance", "portability"],
+      "flags": ["--suppress=unusedStructMember", "--suppress=missingIncludeSystem"],
+      "_note": "unusedStructMember is an artefact of per-translation-unit analysis on a header-heavy tree: a struct field used only in another TU reads as unused. 1012 of 1648 findings. It cannot be made accurate without whole-program analysis, so it is suppressed rather than triaged every run."
+    },
+
+    "clang-tidy": {
+      "requires": ["build/compile_commands.json"],
+      "_note": "No checks key on purpose. A command-line --checks overrides the repo-root .clang-tidy wholesale, which is how two lists drift apart (3D_E-0654)."
+    },
+
+    "gitleaks": {
+      "_note": "Scope this to tracked files. Pointed at the working tree it scans build output: 27 GB against 21.6 MB tracked. gitleaks ignores directory-root exclusions silently, so the scope_file prefixes must be applied by materialising the file list, not passed as flags."
+    }
+  },
+
+  "suppressions_doc": "tools/audit/suppressions.md"
+}

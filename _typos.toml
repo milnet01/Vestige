@@ -1,0 +1,34 @@
+# typos configuration for Vestige (3D_E-0636).
+#
+# Measured 2026-08-31: a check-code run produced 8062 typos findings, of which
+# 5747 (71%) were byte sequences inside binary assets and 1385 more were the
+# domain term LOD. Real defects after both: approximately zero. The binary
+# half is excluded in docs/private/audit/audit-config.json; this file is the
+# vocabulary half.
+#
+# Add a word here only when it is a real term of art in this codebase. A word
+# added to silence one finding is how a spellcheck stops finding anything.
+
+[files]
+extend-exclude = [
+    "build/",
+    "build-*/",
+    "external/",
+    "assets/**/*.jpg",
+    "assets/**/*.png",
+    "assets/**/*.hdr",
+    "assets/**/*.exr",
+    "assets/**/*.glb",
+    "assets/**/*.ttf",
+    "assets/**/*.zip",
+    "assets/**/*.blend",
+]
+
+[default.extend-words]
+# Graphics and engine terms typos reads as misspellings.
+LOD = "LOD"          # level of detail — 1385 findings on its own
+lod = "lod"
+LODs = "LODs"
+froxel = "froxel"    # frustum-voxel, the volumetric fog unit
+Froxel = "Froxel"
+froxels = "froxels"

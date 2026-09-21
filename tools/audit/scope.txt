@@ -1,0 +1,19 @@
+# check-code scope exclusions for Vestige (3D_E-0636).
+#
+# One path prefix per line. Each is passed to every tool's own exclusion
+# mechanism; for a tool with no exclusion flag (gitleaks is the live case)
+# the prefixes are applied by materialising the file list instead, because
+# gitleaks handed a directory root ignores them silently.
+#
+# Measured 2026-08-31: gitleaks pointed at the working tree scanned 27 GB of
+# untracked build output. Scoped to tracked files it is 21.6 MB.
+
+build/
+build-release/
+build-msvc/
+build-tsan/
+build-cmake-compat/
+external/
+logs/
+Testing/
+docs/archive/
