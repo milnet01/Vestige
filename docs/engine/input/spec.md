@@ -6,8 +6,8 @@
 |-------|-------|
 | Subsystem | `engine/input` |
 | Status | `shipped` |
-| Spec version | `1.0` |
-| Last reviewed | `2026-04-28` (initial draft — pending cold-eyes review) |
+| Spec version | `1.1` |
+| Last reviewed | `2026-09-21` (review-contract, 1 loop, 3 cold lanes — converged; see §16) |
 | Owners | `milnet01` |
 | Engine version range | `v0.1.0+` (action-map data model since Phase 10 accessibility; wire helpers relocated here Phase 10.9 Slice 9 I2) |
 
@@ -71,8 +71,8 @@ Key abstractions:
 
 | Abstraction | Type | Purpose |
 |-------------|------|---------|
-| `InputDevice` | enum class | `None` / `Keyboard` / `Mouse` / `Gamepad`. `engine/input/input_bindings.h:38` |
-| `InputBinding` | struct | `(device, code)` pair + `isBound` + factory helpers (`key`, `mouse`, `gamepad`, `none`). `engine/input/input_bindings.h:79` |
+| `InputDevice` | enum class | `None` / `Keyboard` / `Mouse` / `Gamepad` / `GamepadAxis`. `engine/input/input_bindings.h:38` |
+| `InputBinding` | struct | `(device, code)` pair + `isBound` + factory helpers (`scancode`, `mouse`, `gamepad`, `gamepadAxis`, `none`). `engine/input/input_bindings.h:79` |
 | `InputAction` | struct | id + label + category + three binding slots + `matches(binding)`. `engine/input/input_bindings.h:117` |
 | `InputActionMap` | class | Live + defaults registry; rebind, reverse lookup, conflict detection, reset. `engine/input/input_bindings.h:136` |
 | `bindingDisplayLabel()` | free function | GLFW code → "W" / "Space" / "Left Mouse" / "LB" / "—". `engine/input/input_bindings.h:203` |
@@ -88,18 +88,28 @@ Small surface — two public headers, both legitimately included by downstream c
 
 ```cpp
 // engine/input/input_bindings.h — runtime data model
-enum class InputDevice { None, Keyboard, Mouse, Gamepad };
+enum class InputDevice { None, Keyboard, Mouse, Gamepad, GamepadAxis };
 
 struct InputBinding {
     InputDevice device;
     int         code;
     bool isBound() const;
     bool operator==(const InputBinding&) const;
-    static InputBinding key(int glfwKey);
+    static InputBinding scancode(int glfwScancode);
     static InputBinding mouse(int glfwButton);
     static InputBinding gamepad(int glfwButton);
+    static InputBinding gamepadAxis(int glfwAxis, int sign = +1);
     static InputBinding none();
 };
+
+// Keyboard `code` is a GLFW SCANCODE (physical key position), not a key code.
+// Slice 9 I1 made that change so a settings.json authored on QWERTY keeps the
+// correct physical keys on AZERTY / Dvorak. Capture with
+// glfwGetKeyScancode(key). There is no `key(int)` factory -- it was retired in
+// the same slice, and passing a key code to scancode() binds the wrong key.
+//
+// GamepadAxis packs (axis index, sign) into `code` via packGamepadAxis();
+// AXIS_DIGITAL_THRESHOLD (0.5) is where a deflection reads as "pressed".
 
 struct InputAction {
     std::string id, label, category;
@@ -153,13 +163,24 @@ ActionBindingWire actionBindingFromJson(const nlohmann::json&);
 - `actionBindingFromJson` tolerates missing slot fields — older `settings.json` files lacking `secondary` / `gamepad` round-trip cleanly with default-constructed `InputBindingWire{}`.
 - `findActionBoundTo` is a forward linear scan and returns the **first** match; with three slots × ≤ 64 actions the cost is negligible. Conflict detection via `findConflicts` walks the same vector and is also O(actions).
 
-**Stability:** the surface above is semver-frozen for `v0.x`. One known evolution point is flagged in §15: the wire `scancode` field currently stores GLFW *key codes*, not true scancodes — layout-preserving WASD-on-AZERTY (Azerty French layout) rebind requires `glfwGetKeyScancode` + a reverse lookup and is the same Open Question as `engine/core` Open Q3. The wire shape itself does **not** need to change for that fix.
+**Stability:** the surface above is semver-frozen for `v0.x`.
+
+**The `scancode` field holds a real scancode, and has since Slice 9 I1
+(2026-05-02).** This paragraph used to say it "currently stores GLFW *key
+codes*, not true scancodes" and pointed at `glfwGetKeyScancode` as the fix.
+That is false and acting on it is destructive: the capture path already runs
+`glfwGetKeyScancode` (`engine/editor/panels/settings_editor_panel.cpp`), so a
+second conversion at the wire boundary would re-encode an already-physical
+code and corrupt every persisted keyboard binding.
 
 ## 5. Data Flow
 
 This subsystem has no per-frame state — flow is "data shapes plus the routes through them."
 
-**Game-code query path (per-frame, called by FPC and gameplay systems):**
+**Game-code query path — the INTENDED flow, not the current one.** No
+production code walks it today: `isActionDown` has no callers outside the tests
+(see §12). The first-person controller polls `isKeyDown` instead, which is
+3D_E-0628. Read the steps below as what the rewire must produce.
 
 1. Caller → `InputManager::isActionDown(map, "Jump")` (lives in `engine/core`).
 2. `InputManager` → `isActionDown(map, "Jump", [this](const InputBinding& b){ return isBindingDown(b); })` — pure free function in `engine/input`.
@@ -181,7 +202,7 @@ This subsystem has no per-frame state — flow is "data shapes plus the routes t
 **Rebind UI path (interactive, while the editor's Settings panel is open):**
 
 1. User clicks the "[bound to]" cell — panel reads `bindingDisplayLabel(action.primary)` etc. for display.
-2. User presses a key — panel constructs `InputBinding::key(glfwCode)` (or `mouse` / `gamepad`).
+2. User presses a key — panel runs `glfwGetKeyScancode(glfwCode)` and constructs `InputBinding::scancode(sc)`, dropping the binding if the lookup returns `-1` (or `mouse` / `gamepad` / `gamepadAxis` for the other devices).
 3. Panel calls `map.findConflicts(captured, currentActionId)` — surfaces colliding action ids in the warning pill (same-device only).
 4. Panel calls `map.setPrimary(id, captured)` (or `setSecondary` / `setGamepad`).
 5. `SettingsEditor` schedules an apply pass; on commit, `extractInputBindings` runs and the pending state is persisted.
@@ -222,7 +243,11 @@ No locks held; no shared state across threads.
 | `extractInputBindings` (whole-map serialisation) | < 0.5 ms | TBD — measure by Phase 11 audit (only runs on settings save) |
 | `applyInputBindings` (whole-map deserialisation) | < 1 ms | TBD — measure by Phase 11 audit (only runs on settings load) |
 
-Per-frame cost dominated by `isActionDown`, which the FPC and a handful of gameplay verbs call ≤ ~10× per frame — well inside the 0.05 ms slice. JSON paths run only at load / save, not per-frame.
+Per-frame cost **once 3D_E-0628 lands**: dominated by `isActionDown`, which the
+FPC and a handful of gameplay verbs would call ≤ ~10× per frame — well inside
+the 0.05 ms slice. **Today that cost is zero, because nothing calls it** (§12).
+This row is a budget for the rewired state, not a measurement of the current
+one. JSON paths run only at load / save, not per-frame.
 
 Profiler markers / capture points: none — `engine/input` is below the threshold that warrants `glPushDebugGroup` markers, and the polling that surrounds it is timed under the `InputManager::update` slice in `engine/core`.
 
@@ -235,7 +260,7 @@ Profiler markers / capture points: none — `engine/input` is below the threshol
 | Ownership | `InputActionMap` owns its `m_actions` and `m_defaults` vectors. `Engine` owns the canonical `m_inputActionMap` (`engine/core/engine.h:221`). |
 | Lifetimes | Engine-lifetime — registration happens in `Engine::initialize`, the map persists until `Engine::shutdown`. JSON wire structs are transient (built on save / discarded after load). |
 
-No `new`/`delete` (CODING_STANDARDS §12). No arena, no per-frame transient allocator needed — `isActionDown` does no allocation, so even at 60 FPS × 10 calls/frame = 600 calls/s the heap stays cold.
+No `new`/`delete` (CODING_STANDARDS §12). No arena, no per-frame transient allocator needed — `isActionDown` does no allocation, so even at the post-3D_E-0628 rate of 60 FPS × 10 calls/frame = 600 calls/s the heap stays cold.
 
 ## 10. Error handling
 
@@ -274,7 +299,12 @@ Per CODING_STANDARDS §11 — no exceptions in steady-state hot paths. `engine/i
 
 **Adding a test for `engine/input`:** drop a new case into `tests/test_input_bindings.cpp` next to its peers (the file is the canonical home; CMake (Cross-Platform Make) auto-discovers via `gtest_discover_tests`). Use `InputActionMap` directly without an `Engine` instance — every primitive in this subsystem is unit-testable headlessly because there is no GLFW context required. Inject a lambda into `isActionDown` to simulate "key X is currently down" without polling. The wire helpers similarly need only an `nlohmann::json` value, not a `Settings` instance.
 
-**Coverage gap:** none in the headless surface. Visual confirmation (the rebind dialog visibly reflects a change) is deferred to the manual Phase 10.9 visual-test pass — it exercises the consumer (the Settings panel) rather than this subsystem.
+**Coverage gap:** none in the headless surface — for this subsystem's own
+units. Two things this table deliberately does not cover: §12's
+binding-bypass greps, which are a manual review step and are expected to fail
+until 3D_E-0628 (see §12 for why they are not wired into a gate), and
+`InputDevice::GamepadAxis` round-tripping, which has no row here and should
+gain one. Visual confirmation (the rebind dialog visibly reflects a change) is deferred to the manual Phase 10.9 visual-test pass — it exercises the consumer (the Settings panel) rather than this subsystem.
 
 ## 12. Accessibility
 
@@ -322,10 +352,24 @@ Constraint summary for downstream UI (User Interface) consumers:
   exemption defeats is worse than no test, because it returns green and is then
   cited as evidence.**
 
+  **Where this check lives: nowhere automated, on purpose.** It is a manual
+  review step, run by hand or by a reviewer reading this section. It is
+  deliberately NOT wired into `tests/` or `scripts/local-ci.sh`, because grep 2
+  fails today and a gate that fails by design would block every push until
+  3D_E-0628 lands. §11's test table therefore has no row for it, and §11's
+  "Coverage gap: none in the headless surface" is about this subsystem's own
+  units — it is not a claim that this check is automated.
+
+  **Wire it into the suite as part of 3D_E-0628, not before**, in the same
+  change that makes it pass. Until then, do not add it to a gate.
+
   **Grep 2 FAILS today, and that is correct.** It reports 14 hits, all in
   `engine/core/first_person_controller.cpp` (W/A/S/D, Space, Shift, Ctrl), while
-  `isActionDown` has one production caller in `engine/input/input_bindings.cpp`
-  and none in the gameplay layer. So rebinding a movement key changes nothing
+  `isActionDown` has **no production callers at all** — the only mentions in
+  `engine/` are its two declarations, the free function's definition at
+  `input_bindings.cpp:493`, and `input_manager.cpp:162` where the method
+  delegates to it. Every genuine call site is in
+  `tests/test_input_bindings.cpp`. So rebinding a movement key changes nothing
   and AZERTY/Dvorak layouts are wrong. The code half is **3D_E-0628**; this
   section owns only the check that finds it. Do not silence grep 2 to make the
   suite green — its failing is the defect being visible for the first time.
@@ -369,8 +413,8 @@ Internal cross-references:
 
 | # | Question | Owner | Target |
 |---|----------|-------|--------|
-| 1 | Wire-format `scancode` field stores GLFW *key codes* (not true scancodes); layout-preserving rebind (WASD on AZERTY / Dvorak) requires `glfwGetKeyScancode` + reverse lookup at the wire ↔ runtime boundary. Same Open Question as `engine/core` Open Q3 — fix lives in `settings_apply.cpp`'s `bindingToWire` / `bindingFromWire`, not in this subsystem's wire shape. | milnet01 | Phase 11 entry |
-| 2 | No notion of *axis* bindings (analog stick deflection, trigger pressure, mouse wheel delta) — only digital "is this binding down?" Phase 11 hold-action / chord / axis support will require either extending `InputBinding` with a value type field or adding a parallel `InputAxisBinding` shape. Spec'd separately when scoped. | milnet01 | Phase 11 entry |
+| 1 | ~~Wire-format `scancode` field stores GLFW key codes~~ — **CLOSED, shipped in Phase 10.9 Slice 9 I1 (2026-05-02).** `InputBinding::code` is a scancode for `Keyboard`, `InputBinding::key(int)` was retired in favour of `scancode(int)`, and the rebind panel captures via `glfwGetKeyScancode`. Left in the table rather than deleted because the claim was quoted in §4 and acting on it now would double-convert and corrupt saved bindings. | milnet01 | closed 2026-09-21 |
+| 2 | **Narrowed 2026-09-21.** Gamepad axis bindings SHIPPED in Slice 9 I3: `InputDevice::GamepadAxis`, `InputBinding::gamepadAxis(axis, sign)`, `packGamepadAxis`, `AXIS_DIGITAL_THRESHOLD`, `bindingAxisValue` / `actionAxisValue`, and the wire token `"gamepadaxis"`. **Do not add a parallel `InputAxisBinding` shape** — that would be a second axis representation and a second wire encoding, orphaning saved `"gamepadaxis"` entries. What remains open is narrower: mouse-wheel delta as a bindable axis, and hold-action / chord timing. | milnet01 | Phase 11 entry |
 | 3 | `findActionBoundTo` returns the **first** match in registration order; if two actions share a slot (legitimate use case: same key bound to two contextual verbs in different gameplay modes) the second is invisible to reverse lookup. Currently fine because the engine has no mode contexts. Re-evaluate when Phase 11 introduces context switching. | milnet01 | Phase 11 entry |
 | 4 | `bindingDisplayLabel` for keyboard codes uses a hand-curated switch (not `glfwGetKeyName`), so non-Latin layouts on Linux/X11 always render the US-QWERTY label. Acceptable today (layout-preserving rebind is Open Q1's prerequisite); revisit alongside that fix. | milnet01 | Phase 11 entry |
 | 5 | Gamepad mappings ship via GLFW's embedded `SDL_GameControllerDB` snapshot; no runtime refresh path is wired up yet. `glfwUpdateGamepadMappings` could be called from `Engine::initialize` against a bundled `gamecontrollerdb.txt` to pick up new controllers without an engine rebuild. | milnet01 | triage |
@@ -380,3 +424,4 @@ Internal cross-references:
 | Date | Spec version | Author | Change |
 |------|--------------|--------|--------|
 | 2026-04-28 | 1.0 | milnet01 | Initial spec — `engine/input` action-map data model + JSON wire format; relocated wire helpers since Phase 10.9 Slice 9 I2; formalised post-Phase 10.9 audit. |
+| 2026-09-21 | 1.1 | milnet01 | **review-contract loop 1** — 3 cold lanes, 6 verified findings, all fixed; 1 dismissed as immaterial (a stale `settings.h` line citation). Q1 ×4, Q2 ×1, Q3 ×1. **Q1:** §3/§4 named a retired `InputBinding::key(int)` factory (it is `scancode(int)`, Slice 9 I1) and omitted `gamepadAxis`; `InputDevice` was listed with 4 members against 5 in code (`GamepadAxis`); Open Q1 asserted the wire field holds key codes when the scancode migration shipped 2026-05-02 — acting on it would double-convert and corrupt every saved binding; Open Q2 said axis bindings do not exist when Slice 9 I3 shipped them, inviting a duplicate parallel representation. **Q2:** §5 and §8 described `isActionDown` as the live per-frame path while §12 states it has no production callers. **Q3:** §12's new bypass check named no home; now stated as a manual step, deliberately unwired until 3D_E-0628. Spec version 1.0 → 1.1. |
