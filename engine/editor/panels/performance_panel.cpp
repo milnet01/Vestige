@@ -19,8 +19,12 @@ namespace Vestige
 void PerformancePanel::draw(PerformanceProfiler& profiler, const Renderer* renderer,
                             Timer* timer, Window* window)
 {
-    // Auto-enable profiling when panel is open
+    // Auto-enable profiling when panel is open. This must run BEFORE the
+    // m_open guard below, or closing the panel would leave the profiler
+    // enabled for the rest of the session.
     profiler.setEnabled(m_open);
+
+    if (!m_open) return;
 
     if (!ImGui::Begin("Performance", &m_open))
     {

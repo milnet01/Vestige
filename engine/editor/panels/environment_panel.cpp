@@ -19,6 +19,8 @@ void EnvironmentPanel::draw(BrushTool& brushTool, FoliageManager& manager,
 {
     (void)history;
 
+    if (!m_open) return;
+
     if (!ImGui::Begin("Environment", &m_open))
     {
         ImGui::End();
