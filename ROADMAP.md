@@ -121,11 +121,11 @@ PBR-style FabricMaterial (areal density GSM, tensile / shear / bending stiffness
 
 Breaks: the settings schema. Closing the audit items lands settings fields.
 
-### Formula Pipeline (Cross-Cutting Infrastructure) — COMPLETE
+#### Formula Pipeline (Cross-Cutting Infrastructure) — COMPLETE
 
 Unified physics/lighting formula storage, evaluation, and code generation shared across cloth / water / foliage / particles / lighting. Shipped: EnvironmentForces query API (wind / weather / buoyancy / temp / humidity / wetness); expression-tree AST (5 node types, JSON round-trip); FormulaLibrary (named registry, categories, coefficients, quality tiers); tree-walking evaluator; FormulaCompiler (C++ + GLSL codegen); LUT generator + loader (VLUT format with 1D/2D/3D interpolation, FNV-1a axis hashing); CurveFitter (Levenberg-Marquardt with R²/RMSE); FormulaWorkbench (standalone ImGui/ImPlot tool: template browser, CSV import, LM fitter, residual plots, train/test split, JSON export); FormulaPreset system (9 built-in styles: Realistic Desert, Tropical Forest, Arctic Tundra, Underwater, Anime/Cel-Shaded, Painterly, Stormy Weather, Calm Interior, Biblical Tabernacle); 15 physics templates (aerodynamic drag, Stokes drag, Fresnel-Schlick, Beer-Lambert, Gerstner wave, buoyancy, caustic depth fade, water absorption, inverse-square falloff, exponential fog, Hooke spring, Coulomb friction, terminal velocity, wet darkening, wind deformation); water-formula quality tiers (caustics 6/2/1 reads, FBM 3/2/0 octaves) wired through FormulaQualityManager (global + per-category JSON persistence, per-water-surface inspector dropdown).
 
-#### Outstanding tool-loop follow-ups (low priority, tracked here for visibility)
+##### Outstanding tool-loop follow-ups (low priority, tracked here for visibility)
 Source of truth: [`docs/research/self_learning_roadmap.md`](docs/research/self_learning_roadmap.md). Surfaced in the main roadmap so these don't stay invisible; the design/test context lives in the sibling doc.
 
 - [x] **FW W5 (cont.)** — add a reference-regression spec per library formula for broader regression coverage as the formula library grows. **Shipped 2026-06-01:** added the 12 remaining *coefficient-bearing* formulas (`gerstner_wave`, `coulomb_friction`, `terminal_velocity`, `ggx_distribution`, `schlick_geometry`, `aces_tonemap`, `spot_cone_falloff`, `bloom_threshold`, `exposure_ev`, `dof_coc`, `height_blend`, `thermal_erosion`) → 22/22 fittable formulas now covered; `test_reference_harness` green. The original "~17" estimate (27 builtins − 10) over-counted: the harness *fits coefficients*, and 5 builtins have **zero coefficients** (`wind_deformation`, `caustic_depth_fade`, `water_absorption`, `ease_in_sine`, `fast_neg_exp`) — `CurveFitter::fit` early-returns "No coefficients to fit" for them, so they can't carry a reference-regression spec under the current harness. Each spec is auto-discovered (directory glob); degenerate fits (g/Cd ratio, ACES scale-degeneracy, thin-lens alias) assert fit quality only, and nonlinear-rational fits (GGX, Schlick) follow the `aerodynamic_drag` start-on-answer convention. **Follow-up shipped 2026-06-02 (v1.18.0):** the "0-coefficient evaluation-regression" harness mode now covers the 5 input-only formulas (`wind_deformation`, `caustic_depth_fade`, `water_absorption`, `ease_in_sine`, `fast_neg_exp`) — when a `reference_cases/*.json` carries an `evaluation_points` array the harness evaluates the FULL-tier expression at committed `inputs → expected_output` golden points (derived from each formula's math, default abs tolerance 1e-4) instead of fitting. Harness coverage now **27/27** builtins; `test_reference_harness` green (44 tests).
@@ -346,7 +346,7 @@ Source of truth: [`docs/research/self_learning_roadmap.md`](docs/research/self_l
   Lanes: ci.
   Source: user-request-2026-08-21 (CI status check).
 
-#### Path-tracer formula coverage (DOOM_Ants Workbench requests, 2026-06-16)
+##### Path-tracer formula coverage (DOOM_Ants Workbench requests, 2026-06-16)
 
 Library-coverage and integration-path requests raised by the DOOM_Ants project
 (a GPL-v2 DOOM fork building a Vulkan path tracer) while scoping the Formula
@@ -391,7 +391,7 @@ once the path tracer's first curves are fitted in anger.
   Kind: enhancement.
   Source: DOOM_Ants_Feedback.md #B (2026-06-16).
 
-#### Audio-DSP formula coverage (Vestige audio bundle, 2026-06-29)
+##### Audio-DSP formula coverage (Vestige audio bundle, 2026-06-29)
 
 Coverage gap surfaced while shipping the Phase 10 audio quick-wins bundle
 (AX5/6/8/9/11/13). Project Rule 6 designates the Formula Workbench as the home
@@ -415,7 +415,7 @@ than fitted/exported through the Workbench. These concern the Workbench /
   tracking bullet for the deferred K-weighting biquad + air-absorption fitted
   polynomial follow-ups named above.
 
-### Phase 9: Domain-Driven System Architecture
+#### Phase 9: Domain-Driven System Architecture
 **Goal:** Evolve the engine toward a domain-driven system model where each natural domain (vegetation, water, cloth, terrain, etc.) is owned by a dedicated system that encapsulates ALL behavior for that domain — rendering, physics, animation, audio, defaults, and editor integration. Scenes compose by pulling in only the systems they need.
 
 This is NOT a rewrite — it's a refactor and extension of what already exists. Vestige already partially follows this pattern (terrain system, foliage manager, water renderer, cloth simulator exist as separate subsystems). This phase formalizes the pattern.
@@ -424,15 +424,15 @@ Reference: see `ARCHITECTURE.md` §§10–19 and the phase-09 design docs in `do
 
 ---
 
-#### Phase 9A: System Infrastructure (COMPLETE)
+##### Phase 9A: System Infrastructure (COMPLETE)
 Shipped via commit `dfbb96b`. `ISystem` base class (`engine/core/i_system.h`) — 4 pure virtuals (`getSystemName`, `initialize`, `shutdown`, `update`) + opt-in `fixedUpdate` / `submitRenderData` / `onSceneLoad` / `onSceneUnload` / `drawDebug` / `reportMetrics` no-ops + per-system frame-budget API + `getOwnedComponentTypes()`. `SystemRegistry` (`system_registry.{h,cpp}`) auto-activates systems whose owned component types appear in the scene; `isForceActive()` for always-on (Atmosphere, Lighting); integrated into `Engine::run` (`updateAll` / `fixedUpdateAll` / `submitRenderDataAll`). Cross-system interaction: typed event structs (`engine/core/system_events.h` — SceneLoaded / SceneUnloaded / WeatherChanged / EntityDestroyed / TerrainModified / AudioPlay / NavMeshBaked); query model for continuous data via shared infrastructure (`EnvironmentForces`, `Terrain`); rule — events for discrete occurrences, queries for continuous data, systems never `#include` each other.
 
 ---
 
-#### Phase 9B: Wrap Existing Code into Domain Systems
+##### Phase 9B: Wrap Existing Code into Domain Systems
 **Goal:** Wrap each existing subsystem into a formal domain system class. Each step: create the system class, have it own the existing subsystem instances, register with shared infrastructure. Tests must pass after each step.
 
-##### Domain Systems to Wrap
+###### Domain Systems to Wrap
 
 > **T0 audit 2026-04-24 (Phase 10.9 Slice 0):** Two entries below claim ownership of subsystems that include Phase-7/Phase-8 zombies — the wrapping ISystem was registered but the wrapped primitives (MotionMatcher, LipSyncPlayer, FacialAnimator, EyeController, Ragdoll, Fracture, GrabSystem, Dismemberment) have no production caller. The wrap itself is live (the system pumps its `update`), but the advertised behaviour is reduced by the zombies it claims to own. Specifically:
 > - `Destruction & Physics System` wrap ← W13 affects (Fracture, Ragdoll, GrabSystem, Dismemberment zombies — rigid bodies / joints are live).
@@ -449,7 +449,7 @@ Shipped via commit `dfbb96b`. `ISystem` base class (`engine/core/i_system.h`) �
 - [x] **Lighting System** — wrap all light/shadow/probe/IBL/radiosity code. Owns: all light types, shadow mapping, IBL, light probes, radiosity baking, volumetric light shafts
 - [x] **Atmosphere & Weather System** — wrap `environment/environment_forces` (already implemented), `renderer/skybox`, `renderer/environment_map`. Extends EnvironmentForces with sky rendering, clouds, time-of-day, fog, weather transitions, lightning
 
-##### Consistency Guarantees
+###### Consistency Guarantees
 Each system provides sensible defaults for its domain. Objects behave correctly the moment they're created:
 - Vegetation automatically responds to wind, has LOD, casts shadows, sways naturally
 - Every water body has correct reflections, refractions, caustics, and depth coloring
@@ -459,12 +459,12 @@ Each system provides sensible defaults for its domain. Objects behave correctly 
 
 ---
 
-#### Phase 9C: New Domain Systems (FOUNDATIONS SHIPPED)
+##### Phase 9C: New Domain Systems (FOUNDATIONS SHIPPED)
 **Goal:** Build domain systems for capabilities that don't yet exist in the engine.
 
 Foundations shipped via commit `fa0b100` — "Phase 9C: New domain systems — Audio (OpenAL Soft), UI/HUD, Navigation (Recast/Detour)". Each sub-system landed with an `ISystem` wrapper and the minimum viable feature set; richer capabilities are queued for later phases as noted per sub-system.
 
-##### Audio System
+###### Audio System
 *Scope: multi-month initiative requiring library selection and dedicated design document.*
 - [x] Audio library integration — OpenAL Soft selected; `engine/audio/audio_engine.{h,cpp}` + `engine/systems/audio_system.{h,cpp}`; dr_libs/stb_vorbis decoders.
 - [x] Spatial audio — 3D positioned sound sources with distance attenuation (`AudioSourceComponent::spatial`, `AudioEngine` listener pose).
@@ -481,7 +481,7 @@ Foundations shipped via commit `fa0b100` — "Phase 9C: New domain systems — A
 
 **Note:** Detailed audio specs are in Phase 10 (Polish and Features). Phase 9C implemented the Audio domain-system wrapper + OpenAL integration + spatial audio; Phase 10 will deliver the full feature set.
 
-##### UI & HUD System
+###### UI & HUD System
 - [x] In-game UI rendering — `engine/ui/sprite_batch_renderer.{h,cpp}` + `UIElement` hierarchy (`UICanvas`, `UIImage`, `UILabel`, `UIPanel`) + `engine/systems/ui_system.{h,cpp}`; sprite shaders `assets/shaders/ui_sprite.{vert,frag}.glsl`. Separate from the ImGui editor overlay.
 - [x] In-world UI — `engine/ui/ui_world_label.{h,cpp}` (3D-anchored floating text with frustum-culled world-to-screen projection via the pure-CPU `ui_world_projection.{h,cpp}` helper) + `ui_interaction_prompt.{h,cpp}` (`UIWorldLabel` subclass with "Press [KEY] to action" formatting + linear distance-based alpha fade between `fadeNear` and `fadeFar`). Nameplates use `UIWorldLabel` directly with a per-frame `worldPosition` setter from game code that follows the entity. 11 unit tests in `tests/test_ui_world_projection.cpp`.
 - [x] Screen-space UI (HUD, minimap, crosshair) — `engine/ui/ui_crosshair.{h,cpp}` (centred plus with configurable arms / gap), `ui_progress_bar.{h,cpp}` (ratio-based fill, clamped), `ui_fps_counter.{h,cpp}` (smoothed EMA + TextRenderer drawing). Minimap deferred (needs render-target + camera-frustum overlay).
@@ -490,7 +490,7 @@ Foundations shipped via commit `fa0b100` — "Phase 9C: New domain systems — A
 - [x] Input routing — `UISystem::setModalCapture(bool)` for sticky modal capture (pause menu, dialog) + `updateMouseHit()` for cursor-over-interactive-element capture. `wantsCaptureInput()` is the union; game input handlers consult it each frame.
 - [x] Editor: visual UI layout editor, theme editor — `engine/editor/panels/ui_layout_panel.{h,cpp}` shipped as a `Window → UI Layout` ImGui panel. Inspects the element tree of any `UICanvas` passed in (per-element position / size / anchor / visibility / interactivity live-editable) + full color-picker surface over `UITheme` (backgrounds / strokes / text / accent / HUD / sizes). Vellum and Plumbline reset buttons for quick-switch between registers. **Follow-up enhancements:** drag-place widget palette (needs viewport mouse capture + drag math) and JSON canvas serialisation (needs per-element-type reflection). Both gated on factoring the editor's ImGui viewport out of `editor.cpp`.
 
-##### AI & Navigation System (Basics)
+###### AI & Navigation System (Basics)
 *Scope: requires Recast/Detour library integration and dedicated design document.*
 - [x] Navmesh generation from terrain and static geometry — Recast via `engine/navigation/nav_mesh_builder.{h,cpp}` + `engine/systems/navigation_system.{h,cpp}`.
 - [x] Pathfinding (A* on navmesh) — Detour via `engine/navigation/nav_mesh_query.{h,cpp}`; `NavAgentComponent` for per-entity agents.
@@ -500,12 +500,12 @@ Foundations shipped via commit `fa0b100` — "Phase 9C: New domain systems — A
 
 ---
 
-#### Phase 9D: Editor Enhancements (COMPLETE)
+##### Phase 9D: Editor Enhancements (COMPLETE)
 Shipped via commit `6a40da4`. Three asset-viewer panels in `engine/editor/panels/`: ModelViewer (orbit camera, material display, animation playback, skeleton viz, bounding box + vertex/tri count, drag-to-place into viewport); TextureViewer (full-res zoom/pan, channel isolation, mipmap levels, tiling preview, metadata, PBR-set grouping); HDRIViewer (spherical preview, exposure, mini-viewport skybox, irradiance + prefilter previews, one-click as scene env map). Game-type templates via `template_dialog.{h,cpp}` — `GameTemplateType` enum: FIRST_PERSON_3D, THIRD_PERSON_3D, TWO_POINT_FIVE_D, ISOMETRIC, TOP_DOWN, POINT_AND_CLICK; each configures camera + physics dimensionality + default input + required systems + starter scene. 2D templates (Side-Scroller, Shmup) require Phase 9F.
 
 ---
 
-#### Phase 9E: Visual Scripting
+##### Phase 9E: Visual Scripting
 **Goal:** No-code gameplay logic via a node-based graph editor.
 
 *Scope: major initiative — essentially building a programming language with an IDE. Requires dedicated design document and evaluation of existing node graph libraries (imnodes, imgui-node-editor).*
@@ -558,7 +558,7 @@ Prioritize basic event-to-action chains first. The formula node editor builds on
 
 ---
 
-#### Phase 9F: 2D Game Support
+##### Phase 9F: 2D Game Support
 **Goal:** Enable 2D games alongside existing 3D capabilities.
 
 *Requires renderer additions (sprite batch, 2D physics integration) before 2D game templates become viable.*
@@ -578,7 +578,7 @@ Prioritize basic event-to-action chains first. The formula node editor builds on
 
 ---
 
-#### Phase 9 Key Principles
+##### Phase 9 Key Principles
 
 1. **Don't break what works.** Every refactoring step leaves the engine functional. Wrap existing code; don't delete and rewrite it.
 2. **Consistency through defaults.** Each system provides sensible defaults. Objects behave correctly the moment they're created. Defaults applied in component constructors and `onSceneLoad`.
@@ -588,17 +588,17 @@ Prioritize basic event-to-action chains first. The formula node editor builds on
 6. **Performance budgets are mandatory.** Every simulation system (cloth, particles, physics, AI) respects a per-frame time budget and automatically reduces quality to maintain 60 FPS.
 7. **Auto-activation over manual configuration.** The registry discovers required systems from scene component types. No manual system lists.
 
-#### Milestone
+##### Milestone
 All existing subsystems wrapped in formal domain system classes. Audio, UI, and AI basics operational. Model/Texture/HDRI viewer panels in the editor. Game type templates for 3D styles. Visual scripting with basic event-to-action chains. 2D sprite rendering and tilemap support. Designers can build complete games in the editor without writing C++.
 
 ---
 
-### Phase 10: Polish and Features
+#### Phase 10: Polish and Features
 **Goal:** Complete the experience — rendering enhancements, localization, accessibility, and cinematic effects.
 
 **Note:** Audio System and UI System are now implemented as domain systems in Phase 9C. Camera modes are partially covered by Phase 9D's game type templates. This phase focuses on rendering enhancements, cinematic effects, localization, and accessibility that are system-agnostic.
 
-#### Features
+##### Features
 - [x] In-game UI system (menus, HUD, information panels/plaques). `engine/ui/game_screen.{h,cpp}` — pure-function `GameScreen` state machine (MainMenu / Loading / Playing / Paused / Settings / Exiting) with total transition table and `isWorldSimulationSuspended` / `suppressesWorldInput` predicates (slice 12.1). `UISystem::setRootScreen` / `pushModalScreen` / `popModalScreen` / `applyIntent` + per-screen `ScreenBuilder` hook (`setScreenBuilder`) so game projects can override MainMenu / Pause / Settings with studio-branded prefabs without touching engine code; Engine wiring routes ESC through `applyIntent(Pause/Resume/CloseSettings)` (slice 12.2). `engine/ui/ui_notification_toast.{h,cpp}` — headless `NotificationQueue` (FIFO, default cap 3, push-newest/drop-oldest) with `NotificationSeverity::{Info, Success, Warning, Error}` and a pure `notificationAlphaAt(elapsed, duration, fade)` envelope (fade-in / plateau / fade-out, collapses to rectangle under reduced-motion). `UISystem::update` advances the queue against `UITheme::transitionDuration`; `UINotificationToast` renders a severity-accented panel + title + body with full accessibility metadata (slice 12.3). `buildDefaultHud(canvas, theme, textRenderer, uiSystem)` populates the `Playing` canvas with crosshair (CENTER) + FPS counter (TOP_LEFT, hidden by default) + interaction-prompt anchor (BOTTOM_CENTER) + top-right notification stack (three pre-created toast slots); `Playing` now has a built-in default `ScreenBuilder` (slice 12.4). `engine/editor/panels/ui_runtime_panel.{h,cpp}` — four-tab editor surface (State / Menus / HUD / Accessibility): current-screen readout + manual intent firing + scrollback of the last 20 screen transitions; MainMenu / Pause / Settings prefab preview with rebuild button; per-HUD-element visibility toggles that write through to the live `UISystem` canvas; live compose of scale preset + high-contrast + reduced-motion (slice 12.5). ~60 new unit tests across `test_game_screen.cpp`, `test_ui_system_screen_stack.cpp`, `test_notification_queue.cpp`, `test_default_hud.cpp`, `test_ui_runtime_panel.cpp`. See `docs/phases/phase_10_ui_design.md` for the full design, inventory, and sign-off log.
 - [x] Text rendering (TrueType fonts). `engine/renderer/font.{h,cpp}` — FreeType-backed TTF loader with `GlyphInfo` atlas (per-codepoint UV offset + size, pixel bitmap size, baseline bearing, horizontal advance in 1/64-pixel units); atlas uploaded once at load to an `r8` `Texture`. `engine/renderer/text_renderer.{h,cpp}` — screen-space `renderText2D(text, x, y, scale, color, screenWidth, screenHeight)` and world-space 3D `renderText3D` paths over the glyph atlas, with upper-bound-per-call batching and an ortho projection built per draw so callers don't have to juggle matrices. Consumed by the Phase 10 UI widget library (`UILabel`, `UIButton`, `UIFpsCounter`, `UINotificationToast`, `UIInteractionPrompt`, menu prefabs) — the bullet ships the rendering primitive that every in-game UI surface already relies on. Covered by `tests/test_text_rendering.cpp`.
 - [x] Scene/level configuration files (define scenes in data, not code)
@@ -610,7 +610,7 @@ All existing subsystems wrapped in formal domain system classes. Audio, UI, and 
 - [x] Information plaques — approach an object to see a text description
   Resolved (2026-06-17): verified shipped — composed from UIInteractionPrompt + UIWorldLabel + InteractableComponent (promptText); UIInteractionPrompt/InteractableComponent tests green.
 
-#### Audio System
+##### Audio System
 Full spatial audio pipeline with dynamic mixing, occlusion, and adaptive music. The Audio domain system (Phase 9C) provides the system wrapper and basic functionality; the detailed feature specs below define the complete implementation.
 - [x] Audio engine integration (OpenAL Soft chosen over FMOD — zlib-compatible, vendored via FetchContent, no runtime licensing concerns for MIT-open-source launch). Streaming playback via `engine/audio/audio_music_stream.{h,cpp}` — `MusicStreamState` + `planStreamTick(state, decoderAtEof)` model the decode-side state machine (frames decoded vs. consumed, sample-rate-aware buffered-seconds math, min/max buffered targets for back-pressure, chunk-sized refill, loop-policy routing). One-shot playback shipped via `AudioEngine::playSound` (pre-loaded via `AudioClip::loadFromFile`, cached per-path in `AudioEngine::loadBuffer`). Audio source component shipped as `AudioSourceComponent` with all the Phase 10 accumulated fields (attenuation / velocity / occlusion). 16 new unit tests cover buffered-seconds math, consumed/decoded notification, finished-after-full-drain invariant, back-pressure at max-buffered cap, chunk-sized refill when below min, EOF-triggered rewind under infinite + finite loop policy, finished state hold.
 - [x] Spatial audio (3D positioned sound sources — crackling torch, splashing water) — distance-attenuation curves (4 models incl. pass-through) + Doppler shift with listener/source velocity + HRTF selection (Auto / Forced / Disabled with dataset picker). Pure-function cores under `engine/audio/` keep CPU-side math and OpenAL native evaluation in agreement. 44 new unit tests across the three slices.
@@ -622,7 +622,7 @@ Full spatial audio pipeline with dynamic mixing, occlusion, and adaptive music. 
 - [x] Environmental ambient audio — 3 pure-function primitives in `engine/audio/audio_ambient.{h,cpp}` that the engine-side AmbientSystem composes. (1) `AmbientZone` (clipPath + coreRadius + falloffBand + maxVolume + priority) with `computeAmbientZoneVolume(zone, distance)` reusing the reverb-zone falloff profile so both subsystems share a single sphere-with-linear-falloff curve. (2) `TimeOfDayWindow` enum (Dawn/Day/Dusk/Night) + `TimeOfDayWeights` struct + `computeTimeOfDayWeights(hourOfDay)` — triangle-envelope mapping of a 24-hour clock to the four windows, normalised so weights always sum to 1.0 (crickets → birdsong crossfades continuously, no hard cuts at midnight). (3) `RandomOneShotScheduler` + `tickRandomOneShot(scheduler, dt, sampleFn)` — cooldown-based scheduler that draws fresh `[min, max]` intervals from an injected uniform-sample callback so tests stay deterministic; fires at most once per tick so a framerate stall can't avalanche one-shots. Weather-driven modulation (rain/wind/thunder) is deferred to the Phase 15 weather controller — no coupling in this module. 17 new unit tests cover zone volume (core / falloff / outside / clamp), time-of-day labels + weights-always-sum-to-one + per-peak-dominance + 24h-wrap + midnight-night-dominates, scheduler fire/cooldown, single-fire-per-tick cap, interval selection from sampler value, sampler clamp, null-sampler fallback, negative-dt no-op, and deterministic sampler-sequence fire chain.
 - [x] Dynamic music system — three independent primitives in `engine/audio/audio_music.{h,cpp}` that the engine-side MusicSystem composes. (1) `MusicLayer` enum (Ambient / Tension / Exploration / Combat / Discovery / Danger) + `MusicLayerState` (currentGain, targetGain, fadeSpeedPerSecond) + `advanceMusicLayer(state, dt)` — per-layer slew toward `targetGain` without overshoot, so per-frame target pokes never produce audible zipper artifacts. (2) `intensityToLayerWeights(intensity, silence)` — maps a single [0, 1] gameplay signal to the per-layer mix via triangle envelopes with peaks at 0.00 (Ambient) / 0.25 (Exploration) / 0.50 (Tension + Discovery subtler bed) / 0.75 (Combat) / 1.00 (Danger). The `silence` parameter multiplicatively scales every layer so scripted quiet beats drop the full mix without disturbing the intensity routing. (3) `MusicStingerQueue` — FIFO queue with fixed capacity (DEFAULT_CAPACITY=8), push-newest / drop-oldest eviction so the latest event always wins; `advance(dt)` decrements delays and returns the stingers that fired this tick in FIFO order. 21 new unit tests cover layer labels, slew (reaches target / no overshoot / fades down / clamps / zero-delta no-op), intensity routing at every anchor point + blend midpoints + out-of-range clamp, silence scaling + uniformity across layers, and the stinger queue (fire after delay, FIFO multi-fire, capacity eviction, setCapacity trims in place, zero capacity rejects, clear, negative delta no-op).
 - [x] Audio mixing and priorities — three pure-function primitives in `engine/audio/audio_mixer.{h,cpp}` that the engine-side AudioSystem composes. (1) `SoundPriority` enum (Low/Normal/High/Critical) + `soundPriorityRank` numeric ordering; (2) `AudioBus` enum (Master/Music/Voice/Sfx/Ambient/Ui) + `AudioMixer` struct with per-bus gains + `effectiveBusGain(mixer, bus)` returning `master * bus` clamped to [0, 1]; (3) `DuckingState` + `DuckingParams` (attackSeconds, releaseSeconds, duckFactor) + `updateDucking(state, params, dt)` — symmetric dB-distance slew toward `duckFactor` (triggered) / 1.0 (released), floor-clamped both ways; (4) `VoiceCandidate` (priority + effectiveGain + ageSeconds) + `voiceKeepScore` (priority·1000 + gain·10 − age, so priority dominates and age is a tiebreaker) + `chooseVoiceToEvict(voices)` picks the lowest keep-score for pool-pressure eviction. 19 new unit tests cover priority labels + monotonic ranks, bus labels + per-bus unity default + master multiplication + master-ignores-self-double + clamp, ducking attack/release/floor/unity caps + negative-dt no-op + zero-duration epsilon-guard, and eviction (empty sentinel, lower-priority-first, quieter-within-tier, oldest-within-tier, Critical-dominates, keep-score ordering).
-##### Audio enhancements (research update 2026-05-26 — modern spatial-audio + procedural-audio survey)
+###### Audio enhancements (research update 2026-05-26 — modern spatial-audio + procedural-audio survey)
 *Audio is one of the most-forgotten engine surfaces but a disproportionate part of "this game feels alive". The pure-function primitives shipped above (HRTF, distance attenuation, reverb zones, ambient, mixer, ducking, voice eviction) cover the bedrock. The bullets below are the next-decade items that distinguish a serviceable audio engine from a great one — selected against the rendering / threading / accessibility surfaces we already invest in, so audio ships at the same standard. License-safe references only: **Steam Audio** (Apache 2.0, open-source since 2017, ray-traced occlusion + acoustic simulation), **libsoundio** (MIT), **r8brain-free-src** (MIT, resampling), **Opus / libopus** (BSD, network voice + ambisonics encoding), **mySofa** (BSD-3, SOFA-format HRTF datasets), **SOFAtoolbox** (CC-BY). NOT used: Wwise (proprietary), FMOD (proprietary commercial license tier), AudioKinetic (proprietary).*
 
 - [x] **AX1. Geometric / ray-traced audio occlusion.** Current occlusion is per-source material + raycast fraction set by the gameplay layer. Lift to a proper geometric pass: cast N rays per source per frame against the physics world, derive open-path fraction + diffraction edge + transmission material from the actual scene geometry (no manual per-source labelling). Pool of jobs scheduled via MT2 (Phase 10.6) so cost stays off the audio thread. Reference: Steam Audio's direct-sound model (Apache 2.0, source code readable as the algorithmic spec). Closes the "I added a wall but the sound still goes through it cleanly" gap that the current path requires the level designer to think about.
@@ -647,10 +647,10 @@ Full spatial audio pipeline with dynamic mixing, occlusion, and adaptive music. 
 - [ ] **AX14. AI-Director-aware music transitions** — when Phase 16's AI Director changes encounter score (calm → tension → combat), music transitions hit on musical sync points (bar / beat / phrase) rather than crossfading mid-bar. Requires per-clip BPM / beat-grid metadata and the `MusicStingerQueue` already shipped. Cheap, huge perceptual upgrade vs. naïve crossfade.
 - [x] Editor integration — `AudioPanel` in `engine/editor/panels/audio_panel.{h,cpp}` ships a four-tab editor surface over the Phase 10 audio pipeline: **Mixer** (per-bus gains for Master/Music/Voice/Sfx/Ambient/Ui + dialogue-duck trigger + attack/release/floor controls + live current-gain readout), **Sources** (iterates scene via `Scene::forEachEntity` picking `AudioSourceComponent`, per-entity mute/solo checkboxes + volume/pitch/min-max-distance sliders + attenuation model readout), **Zones** (reverb-zone add/remove/select with name + center + core radius + falloff band + preset combo; mirror placement surface for ambient zones with clipPath + priority), **Debug** (audio-availability indicator + distance model + Doppler factor + speed-of-sound + HRTF mode/status/dataset + available-dataset enumeration). Panel exposes `computeEffectiveSourceGain(entityId, bus)` — mute beats solo, solo-exclusive routing when any source soloed, otherwise `master · bus · duckGain` clamped to [0, 1]. Registered via `Engine::initialize` → `Editor::setAudioSystem(m_systemRegistry.getSystem<AudioSystem>())` + drawn each editor frame alongside NavigationPanel. 18 headless unit tests cover defaults, open/close toggle, zone add/remove/selection-shift, mute/solo state, effective-gain routing, and overlay toggle.
 
-#### Camera Modes
+##### Camera Modes
 *Moved to Phase 10.8 — see that phase for the full list. Retained here as a pointer so anyone reading Phase 10 knows where the section went.*
 
-#### Localization
+##### Localization
 *All four bullets are covered by one design doc — `docs/phases/phase_10_localization_design.md` (rev 3, reviewer decisions locked 2026-06-06; cold-eyes 5 loops run 2026-06-06, converged — ready for implementation at slice L1). Slices L1–L6 land per § 2 of the doc; the 4 bullets below tick as their owning slices ship. Font plan (reviewer decision 3): Arimo (OFL) renders Latin + basic/polytonic Greek; a dedicated biblical-Hebrew serif — **Frank Ruhl Libre** (OFL, bundled this revision) — renders Hebrew, making the `FontStack` a 2-font default. (The rev-2 "Arimo covers Hebrew, no Hebrew bundle needed" plan was superseded — Arimo's sans-serif Hebrew clashed with the biblical serif aesthetic.)*
 
 - [x] Multi-language text support (UTF-8, language selection) — covered by slices L1 (UTF-8 decoder + codepoint Font API) + L4 (LocalizationService + language switching) in the design doc.
@@ -672,7 +672,7 @@ Full spatial audio pipeline with dynamic mixing, occlusion, and adaptive music. 
   Kind: feature.
   Source: user-request-2026-07-04.
 
-#### Accessibility
+##### Accessibility
 - [x] Colorblind modes (Deuteranopia, Protanopia, Tritanopia LUT modes applied post-tonemap — ref: IGDA GA-SIG GDC 2026 roundtable) — `ColorVisionMode` enum + `colorVisionMatrix()` lookup in `engine/renderer/color_vision_filter.{h,cpp}`. Canonical Viénot/Brettel/Mollon 1999 3×3 RGB simulation matrices. `Renderer::setColorVisionMode` feeds `u_colorVisionEnabled` + `u_colorVisionMatrix` to `screen_quad.frag`, applied between the artistic LUT and the sRGB gamma stage. Identity is a fast path (no multiply when Normal). 12 new unit tests.
 - [x] Subtitle / closed caption system for spatial audio cues, with size presets (Small / Medium / Large / XL) — `SubtitleQueue` (FIFO with per-tick countdown, push-newest/drop-oldest on overflow, default cap 3 per BBC / Romero-Fresco caption guidelines) + `Subtitle` / `ActiveSubtitle` structs + `SubtitleCategory` enum (Dialogue / Narrator / SoundCue) + spatial `directionDegrees` field in `engine/ui/subtitle.{h,cpp}`. `SubtitleSizePreset` ladder (Small 1.00× / Medium 1.25× / Large 1.50× / XL 2.00×) mirrors `UIScalePreset` and composes with it. Headless core; rendering slice is deferred pending audio-event wiring. 17 new unit tests.
 - [x] Fully remappable controls (keyboard, mouse, gamepad) — action-map architecture (Unity Input System / Unreal Enhanced Input / Godot InputMap pattern). `engine/input/input_bindings.{h,cpp}` ships `InputDevice` enum (None / Keyboard / Mouse / Gamepad), `InputBinding` with factory helpers + equality + `isBound()`, `InputAction` (id / label / category + primary / secondary / gamepad slots + `matches()`), and `InputActionMap` (insertion-order registry with parallel defaults snapshot; `findAction` / `findActionBoundTo` / `findConflicts(binding, excludeSelfId)` / per-slot setters / `clearSlot` / `resetToDefaults` / `resetActionToDefaults`). `bindingDisplayLabel(binding)` returns a readable name for every GLFW key / mouse button / gamepad button. Pure-function `isActionDown(map, id, bindingChecker)` is the query path; `InputManager::isBindingDown` + `isActionDown` are thin GLFW shims that poll every connected gamepad slot. 30 new unit tests. Persistence (JSON save/load) + actual gamepad polling wiring to game code are follow-ups.
@@ -683,13 +683,13 @@ Full spatial audio pipeline with dynamic mixing, occlusion, and adaptive music. 
 - [x] Motion-blur toggle (off by default in accessibility preset) — `PostProcessAccessibilitySettings::motionBlurEnabled`. Same pattern as DoF (default on, `safeDefaults()` flips off). WCAG 2.2 SC 2.3.3 + Game Accessibility Guidelines "Avoid motion blur; allow it to be turned off". 5 unit tests cover default state, safe-preset distinctness, equality, and per-field independence.
 - [x] Screen-reader friendly UI labels (ARIA-like semantic tags on ImGui widgets where feasible) — **infrastructure only; OS-side bridge deferred to Phase 11+.** `UIAccessibleRole` enum (Button / Checkbox / Slider / Dropdown / KeybindRow / Label / Panel / Image / ProgressBar / Crosshair / Unknown) + `UIAccessibleInfo` (role + label + description + hint + value) in `engine/ui/ui_accessible.{h,cpp}`. Every `UIElement` carries `m_accessible`; every widget sets its role in its constructor. `UIElement::collectAccessible()` walks the tree, skips hidden subtrees entirely, and emits a flat `UIAccessibilitySnapshot` list for a future TTS bridge. `UICanvas::collectAccessible()` returns the canvas-wide enumeration. 13 unit tests pin the data-shape contract. **What is not wired today (per Phase 10.9 W4):** the platform consumer that pushes those snapshots to a real screen reader (AT-SPI on Linux, UIA on Windows). Phase 11+ adds that bridge against the existing collector — see `engine/ui/ui_accessible.h` header note for the design intent. Scope note: the in-game `UIElement` tree is covered; ImGui editor widgets are a separate surface and are deferred — they need per-widget label attachment at call sites rather than per-type constructor-set roles.
 
-#### Decal System
+##### Decal System
 *Moved to Phase 10.8 — see that phase for the full list.*
 
-#### Post-Processing Effects Suite
+##### Post-Processing Effects Suite
 *Moved to Phase 10.8 — see that phase for the full list, including the tonemapping policy note.*
 
-#### Rendering Enhancements
+##### Rendering Enhancements
 - [x] Subsurface scattering (SSS) — light transmission through thin/translucent materials
   - Per-material SSS parameters: thickness, transmission color, scattering distance
   - Wrap lighting model for thin surfaces (curtains, fabric, leaves, candle wax)
@@ -2052,7 +2052,7 @@ Full spatial audio pipeline with dynamic mixing, occlusion, and adaptive music. 
   Lanes: docs, perf.
   Source: in-session-2026-09-02 (3D_E-0626).
 
-#### Fog, Mist, and Volumetric Lighting
+##### Fog, Mist, and Volumetric Lighting
 - [x] Distance fog (linear, exponential, exponential-squared) — pure-function primitives shipped in `engine/renderer/fog.{h,cpp}`. `FogMode` enum (`None` / `Linear` / `Exponential` / `ExponentialSquared`) + `FogParams` (linear-RGB colour, start, end, density). `computeFogFactor(mode, params, distance)` implements the three canonical forms: Linear `(end-d)/(end-start)`, GL_EXP `exp(-density·d)`, GL_EXP2 `exp(-(density·d)²)` — returns *surface visibility* in [0,1], matches OpenGL Red Book §9 / D3D9 fog-formulas. Guards every degenerate param (zero span, negative density, sub-camera distance) with pass-through behaviour. 15 unit tests cover knees, monotonicity, and edge cases.
 - [x] Height fog — exponential fog that thickens below a configurable altitude (ground-hugging mist, valley fog). `HeightFogParams` (colour, fogHeight, groundDensity, heightFalloff, maxOpacity) + closed-form `computeHeightFogTransmittance(params, cameraY, rayDirY, rayLength)` — Quílez 2010 analytic integral of `d(y) = a·exp(-b·(y - fogHeight))` along a view ray. Uses `expm1` for numerical stability near horizontal rays; separate `|rd.y| < 1e-5` branch collapses to Beer-Lambert so the horizon line stays smooth. `maxOpacity` clamp mirrors UE `FogMaxOpacity` so the sky doesn't fully vanish on long sightlines. 7 unit tests cover zero-length, zero-density, monotonic decay, horizontal ↔ Beer-Lambert equivalence, altitude thinning, maxOpacity floor, small-angle ↔ horizontal-branch agreement. **Desert heat haze** variant (subtle distortion) is a follow-up.
 - [x] Sun inscatter lobe — directional brightening toward the sun (UE "DirectionalInscatteringColor" pattern). `SunInscatterParams` (colour, exponent, startDistance) + `computeSunInscatterLobe(params, viewDir, sunDir, viewDistance)` evaluates `pow(max(dot(viewDir, -sunDir), 0), exponent)` with zero below startDistance and zero on backlit rays. 5 unit tests. Enables the "haze glow at sunset" look without committing to volumetric fog's compute-shader cost.
@@ -2077,22 +2077,22 @@ Full spatial audio pipeline with dynamic mixing, occlusion, and adaptive music. 
   - Use case: morning mist around the Bronze Laver, dust clouds near the altar ^3d_e-0018
   Marked complete 2026-06-20 (implemented 2026-06-18): Phase 10 fog slice 11.11 placeable mist / ground-fog volumes, commit 160b10c. CHANGELOG recorded. ROADMAP status was stale.
 
-#### Milestone
+##### Milestone
 A complete walkthrough experience with UI, spatial audio with occlusion and dynamic music, information displays, multi-language support, accessibility options, decals, cinematic post-processing, and advanced material rendering (SSS, volumetric fog, god rays).
 
 ---
 
-### Phase 10.9: Post-Ultrareview Remediation
+#### Phase 10.9: Post-Ultrareview Remediation
 **Goal:** Close findings from the 2026-04-23 independent multi-agent code review (14 subsystems, 14 independent reviewers, each given the design docs + source but *not* the tests — deliberately breaking the "self-marking homework" loop that let several Phase 10.7 features ship with passing tests but silently-broken behaviour). **Second /indie-review on 2026-04-23 (12 reviewers, post-F1–F5)** added Slices 14–17 (scripting/formula safety, audio ergonomics, shader parity relabel, cloth regressions) and Slice 0 (ROADMAP truth-up) — three independent lanes converged on SSR-zombie (W9), Mesa sampler-binding (R6), atomic-write inconsistency (F7), and ~20 other `[x]`-boxes grep proved false. Slices are ordered by dependency: truth-up → foundations → Phase 10.7 gaps → safety / rendering / parsing / animation / physics / wiring / input / splines / systems / editor / performance → scripting → audio → shader parity → cloth regressions. Later slices can be parallel-tracked once their upstream slices land.
 
 **Context.** The review surfaced 14 CRITICAL and ~47 HIGH findings. Five of the CRITICAL findings were Phase 10.7 features that passed every test we wrote but delivered a subset of the design doc — the tests encoded what the code did, not what the design doc said. This phase closes those gaps before Phase 11 builds on top.
 
 **Process discipline for this phase.** Every slice follows the design-doc-first-tests pattern: failing regression tests authored from the design-doc or external-standard clause (cited in the test name — e.g. `TEST(Photosensitive, WCAG_2_3_1_*)`) land as a "red" commit; the fix lands as a "green" commit. Each slice also triggers an independent-reviewer subagent pass before ship.
 
-#### Slice 0: ROADMAP truth-up — prerequisite for all downstream zombie-feature remediation
+##### Slice 0: ROADMAP truth-up — prerequisite for all downstream zombie-feature remediation
 - [x] **T0.** Grep-audit every `[x]` DONE claim in this ROADMAP for ≥1 non-declaration, non-test call site of its primary entry-point. Demote falsely-claimed items (expected hits: Ragdoll, Fracture, Dismemberment, `GrabSystem`, `StasisSystem`, `BreakableComponent::fracture`, `MotionMatcher`, `MotionDatabase`, `LipSyncPlayer`, `FacialAnimator`, `EyeController`, `MirrorGenerator`, `Inertialization::apply`, `SpritePanel`, `TilemapPanel`, SSR, contact-shadow, `GpuCuller::cull`) to `[ ]` or relocate to `engine/experimental/` with a note. Subsequent slices (W12–W15) can then trust the baseline. Second /indie-review 2026-04-23 confirmed ≥20 such zombies against `[x]` boxes. **Shipped 2026-04-24.** Grep audit run against the full list. **Confirmed zombies (17):** `Ragdoll`, `Fracture`, `BreakableComponent::fracture`, `Dismemberment`, `GrabSystem`, `StasisSystem`, `MotionMatcher`, `MotionDatabase`, `LipSyncPlayer`, `FacialAnimator`, `EyeController`, `MirrorGenerator`, `Inertialization::apply`, `SpritePanel`, `TilemapPanel`, SSR pipeline, `GpuCuller::cull` — all have implementation + unit tests but zero non-test instantiation in `engine/` / `app/` / `tools/`. **Confirmed false positive (1):** contact-shadow pipeline is LIVE at `renderer.cpp:1162-1185` (stage 5c of render loop); W10 amended to closed-wrong-premise rather than deleted-or-gated. **Ambiguous (1):** `DestructionSystem::update` is a 41-line empty pump — the ISystem is registered but the `update()` body is a no-op, so W13's "wire or relocate" choice still stands. **Documentation actions taken:** T0 audit block notes added at (a) Phase 7 header (line 402) listing the animation-cluster zombies → W12, (b) Phase 8 header (line 487) listing the destruction/ragdoll/grab/dismemberment-cluster zombies → W13, (c) Phase 9B "Domain Systems to Wrap" header (line 710) noting the wrap ISystem is live but the wrapped primitives include W12/W13 zombies, (d) Phase 9F-6 Editor panels line (883) noting SpritePanel + TilemapPanel never reach `Editor::drawPanels` → W14. Phase-section `[x]` boxes retained because the original "class shipped + tests pass" half of the claim holds; the demotion-to-`[ ]` per-line is deferred until W12/W13/W14 either wire or relocate — demoting now would understate work that does exist at the primitive layer. SSR and `GpuCuller::cull` have no false `[x]` in any Phase section (only in W9 / W11 which already correctly mark them as open); no demotion needed. W12–W14 can now trust this baseline: every zombie they're asked to resolve has been grep-verified, and the list will not grow underneath them.
 
-#### Slice 1: Foundations — enable everything else
+##### Slice 1: Foundations — enable everything else
 Small, isolated fixes with no upstream dependencies. Every downstream slice benefits.
 
 - [x] **F1.** `engine.cpp:412` — fix `m_assetPath + "/captions.json"` double-concatenation. Regression test loads a fixture caption file and verifies key lookup. **Shipped 2026-04-23** (red `7b9f116`, green `5572aa5`, nit `4641124`). Extracted the join into `engine/core/engine_paths.{h,cpp}` as a unit-testable helper; `stripTrailingSlash(assetPath) + "/captions.json"`. Four spec tests in `tests/test_engine_paths.cpp` pin the single-slash join and the bare-filename short-circuit. Independent reviewer pass: accept-with-nit.
@@ -2108,7 +2108,7 @@ Small, isolated fixes with no upstream dependencies. Every downstream slice bene
 - [x] **F11.** "Max strobe Hz" slider honesty at `settings_editor_panel.cpp:516` — drop slider max to `3.0f` OR render "Capped at WCAG 2.2 SC 2.3.1 ceiling of 3 Hz in safe mode" helper text. Current UI persists 7.00 while F5 enforces 3.0 — partially-sighted user is being lied to. **Shipped 2026-04-24** (red `c6db868`, green `5d52006`). `SettingsEditorPanel::SAFE_MODE_STROBE_HZ_SLIDER_MAX` added to the panel header and initialised to `WCAG_MAX_STROBE_HZ` (3.0 Hz, per WCAG 2.2 SC 2.3.1 "Three Flashes or Below Threshold"); slider call at `settings_editor_panel.cpp:516` refactored to consume the constant so the panel header and the runtime clamp in `PhotosensitiveSafety::clampStrobeHz` now share one source of truth. Safe-mode slider values above 3 Hz that were previously persisted and silently discarded are no longer reachable. Settings-schema `validate()` still clamps the persisted field to `[0, 30]` — F11 closes the narrower "what can the safe-mode UI offer" gap which is strictly tighter. Two RED tests in `tests/test_settings.cpp` (`SafeModeStrobeSliderMaxEqualsWcagCeiling_F11`, `SafeModeStrobeSliderMaxIs3Hz_F11`) both failed at runtime on the deliberately-encoded 10.0 lie; both pass post-fix. Net +3 / -1 lines in one header; 2793/2793 pass (1 pre-existing skip unchanged; +2 new tests vs. F10). Slice 1 status post-F11: 11 of 12 shipped (F12 remains). Next: **Slice 2 (Phase 10.7 completion)** — Slice 1 can close alongside in parallel.
 - [x] **F12.** Close `entity_serializer` component-registry gap (~18 unregistered types: `ClothComponent`, `RigidBody`, `BreakableComponent`, `CameraComponent`, `SkeletonAnimator`, `TilemapComponent`, 2D physics/camera/sprite components, `InteractableComponent`, `PressurePlateComponent`, `GPUParticleEmitter`, `FacialAnimator`, `TweenManager`, `LipSyncPlayer`, `NavAgentComponent`, `CameraMode`). Either register via F3's registry OR emit a loud save-time warning for entities owning unregistered components. F3 registered 8; reality has ~26. Silent data-loss round-tripping save→load today. **Shipped 2026-04-24**. Took the warning path — registering 18 new round-trip implementations in one slice multiplies bug surface, while the drop-detection is a 16-line addition to `serializeEntity` that makes every silent-drop loud without touching any component. `serializeEntity` now counts registry hits while walking the `ComponentSerializerRegistry`; when `Entity::getComponentTypeIds().size()` exceeds that hit count, it emits `Logger::warning("EntitySerializer: entity '<name>' has N component(s) whose type is not registered with ComponentSerializerRegistry — silently dropped from the serialised output. Register via ComponentSerializerRegistry::instance().registerEntry(...) or relocate to engine/experimental/.")`. The warning names the entity and the drop count so an operator reviewing saves can tell "1 dropped on HeroRig" from "3 dropped on WaterfallEmitter" at a glance. Individual component types migrate into the registry in their own slices (CameraMode already deferred to Slice 10; `RigidBody` / `ClothComponent` gated on their owning systems' own remediation slices). **Tests**: 4 new `EntitySerializerUnregisteredComponentWarning.*` in `test_entity_serializer_registry.cpp` using two test-local `Component` subclasses (`UnregisteredTestComponent`, `OtherUnregisteredTestComponent`) the registry never knows about; 3 failed at runtime on shipping code (single-unregistered warns, multi-unregistered warns with count, two-entities each warn independently); 1 passed vacuously (registered-only silent case). 2866/2867 pass; +4 vs P8's 2862 (1 pre-existing skip unchanged). **Scope boundary**: the warning names the entity but not the component types — detection is count-based, not name-based, because `Component` has no `getTypeName()` virtual today. Adding that would force a 26-subclass override patch for marginal warning-text improvement; the entity name + drop count is sufficient for operators to locate the affected scene and identify the missing component types via `getComponentTypeIds()` in a debugger. Child entities are checked as they're recursed into `serializeEntity`, so a parent with zero unregistered components doesn't mask a child that has some. **Slice 1 complete** — F1…F12 all shipped.
 
-#### Slice 2: Phase 10.7 completion — what actually shipped vs. what was spec'd
+##### Slice 2: Phase 10.7 completion — what actually shipped vs. what was spec'd
 Finish the gain-chain, subtitle, caption, and HRTF features that passed tests but delivered subsets of the design. Depends on Slice 1.
 
 - [x] **P1.** Subtitle 40-char soft-wrap + 2-line cap + plate sizing from `max(lineWidth)` (PHASE10_7_DESIGN.md §4.2). Unit-test word-boundary wrap, overlong tokens, line-count cap. **Shipped 2026-04-24** (red `23f845a`, green `3248476`). `wrapSubtitleText(text, maxChars=SUBTITLE_SOFT_WRAP_CHARS=40, maxLines=SUBTITLE_MAX_LINES=2)` in `engine/ui/subtitle.{h,cpp}` — greedy word-boundary packing; hard-breaks single tokens over the char limit at the limit (so a 55-char URL doesn't silently overflow the plate); truncates with a U+2026 ellipsis when the full input would produce more than `maxLines` rows (so the reader sees that content was trimmed, not lost). `SubtitleLineLayout` gains `wrappedLines` + `lineStepPx`; `computeSubtitleLayout` sizes the plate off `max(measureTextPx(row))` (longest rendered row, not pre-wrap total) with height `lineHeightPx + (rows - 1) × (basePx + lineSpacingPx)`; Y anchor stays pinned at `screenHeight × (1 - bottomMarginFrac)` so taller plates rise upward. `renderSubtitles` emits one `renderText2D` call per wrapped row stepped by `lineStepPx`. 13 new tests across `tests/test_subtitle.cpp` + `tests/test_subtitle_renderer.cpp` — 8 failed at runtime on the deliberately-wrong single-line stub; all 13 pass post-fix. Net +193 / -37 lines across four files; 2806 / 2806 pass (1 pre-existing skip unchanged; +13 new tests vs. F11).
@@ -2120,7 +2120,7 @@ Finish the gain-chain, subtitle, caption, and HRTF features that passed tests bu
 - [x] **P7.** Voice-eviction wiring — `chooseVoiceToEvict` into `playSound*` retry when pool is exhausted. Adds `SoundPriority` to `AudioSourceComponent`. **Shipped 2026-04-24**. Adds `chooseVoiceToEvictForIncoming(voices, incomingPriority)` to `audio_mixer.h/.cpp` — a strict-greater admission gate over the existing `chooseVoiceToEvict` keep-score math. Ties go to the incumbent so same-priority bursts don't churn the pool. `AudioEngine::acquireSource` gained a `SoundPriority incomingPriority = SoundPriority::Normal` parameter and a third lookup step: after the free-slot scan + reclaim pass, it walks `m_livePlaybacks` into a `VoiceCandidate` vector (effective gain via 4-arg `resolveSourceGain`; age via `steady_clock::now() - startTime`), calls `chooseVoiceToEvictForIncoming`, releases the victim if one qualifies, retries the scan. `SourceMix` grew `SoundPriority priority` + `std::chrono::steady_clock::time_point startTime` so tracking works without extra bookkeeping at play-time. All four `playSound*` overloads gained a trailing priority parameter (default `Normal`) that threads through to `acquireSource` and is recorded in `SourceMix`. `AudioSystem` passes `comp->priority` when auto-acquiring component-driven sources. `AudioSourceComponent` grew a `SoundPriority priority = SoundPriority::Normal` field, preserved by `clone()` and round-tripped via `entity_serializer.cpp` as a JSON string (`"Low"` / `"Normal"` / `"High"` / `"Critical"` — absent field deserialises as `Normal`, so pre-P7 scenes stay identical). **Tests**: 8 new `AudioEvictionAdmission.*` in `test_audio_mixer.cpp` (empty-list, lower-incoming-loses, equal-incoming-loses, strict-higher-wins, picks-lowest-keep-score, all-Critical-ties-to-incumbent, ineligible-victim-falls-through, mixed-tier-High-evicts-Low); 3 new in `test_audio_source_component.cpp` (default-is-Normal, assignable, clone-preserves); 1 line added to `EntitySerializerRegistry.AudioSourceAllFieldsRoundTrip` covering priority round-trip. 2855/2855 tests pass; +12 vs P2 shipping total. **Scope boundary**: eviction retry is one-shot — if releaseSource somehow fails to free a slot, a `Logger::warning` fires and 0 is returned (no retry loop, which would hide a desync bug). Evicted voices are lost, not paused/resumed (matches FMOD/Wwise eviction semantics: the caller chose tiers to say "this moment is more important than whatever that Low voice was doing"). Default Normal priority + tie-to-incumbent rule means shipping callers that don't opt in see no behavioural change.
 - [x] **P8.** HRTF init-order fix + `HrtfStatusChanged` device-reset event so the Settings UI can surface "Requested: Forced / Actual: Denied (UnsupportedFormat)". **Shipped 2026-04-24**. Two wiring changes: (1) `AudioEngine::initialize()` now sets `m_available = true` *before* calling `applyHrtfSettings()` so the first-pass device reset actually runs — the previous order silently short-circuited on the `!m_available` guard, meaning pre-init `setHrtfMode` / `setHrtfDataset` calls had no effect until a subsequent mid-session change re-triggered the apply. (2) Added `HrtfStatusEvent { HrtfMode requestedMode; std::string requestedDataset; HrtfStatus actualStatus; }` (`audio_hrtf.h`) plus the pure composer `composeHrtfStatusEvent(settings, status)` and `AudioEngine::setHrtfStatusListener(HrtfStatusListener)` (mirrors the `CaptionAnnouncer` pattern). `applyHrtfSettings()` fires the listener at the end of every invocation — gated *not* on `m_available` so pre-init user choices still notify the Settings UI (the listener sees `actualStatus = Unknown` until the device opens). Post-init, the event carries whatever `ALC_HRTF_STATUS_SOFT` returned, so a `Forced + UnsupportedFormat` downgrade surfaces as different `requestedMode` / `actualStatus` fields in a single callback — the UI can render "Requested: Forced / Actual: Denied (UnsupportedFormat)" without a follow-up `getHrtfStatus()` call. **Tests**: 3 new `AudioHrtfStatusEvent.*` cover the pure composer (Forced+KEMAR+Enabled, Forced+UnsupportedFormat downgrade, Auto+Unknown for uninit); 5 new `AudioEngineHrtfStatusListener.*` cover the engine wiring (fires on set-mode from uninit engine, fires on set-dataset, no-fire on unchanged-value early-return, fires-once-per-change over a 3-change sequence, no-crash when no listener registered). 2862/2863 pass; +8 vs P7 total (1 pre-existing skip unchanged). **Scope boundary**: the listener is a point-in-time notification, not a persistent subscription with replay — registering *after* an `applyHrtfSettings()` call does not see prior events. **Slice 2 status post-P8: 7 of 8 shipped** (P6 narrator styling still open — blocked on italic-atlas asset choice).
 
-#### Slice 3: Safety surfaces
+##### Slice 3: Safety surfaces
 Crash vectors + accessibility claims that passed tests but leak to real users.
 
 - [x] **S1.** `Scene::removeEntity` nulls `m_activeCamera` if the deleted subtree contains it. Regression test: delete camera entity, assert `getActiveCamera() == nullptr`. **Shipped 2026-04-24.** `unregisterEntityRecursive` (scene.cpp) now checks `entity->getComponent<CameraComponent>() == m_activeCamera` and nulls the pointer before the entity is destroyed. The recursion handles both the direct case (removed entity owns the active camera) and the subtree case (removed entity's descendant owns it) — same function, same check. Dangling `CameraComponent*` from the renderer's per-frame dereference is closed. **Also closes S7** — the roadmap duplicated this fix under two ID's (S1 and S7 described the same change in different words). 4 new `SceneEntityLifecycle.*` tests in `test_scene.cpp` cover: direct-active-camera removal, descendant-active-camera removal, unrelated-entity-removal false-positive guard, `clearEntities` invariant pin. 2870/2871 pass post-fix.
@@ -2133,7 +2133,7 @@ Crash vectors + accessibility claims that passed tests but leak to real users.
 - [x] **S8.** `NavMeshQuery::findPath` surfaces `DT_PARTIAL_RESULT` (tuple return or out-param). Agents currently arrive silently 20m short of unreachable targets; AI has no hook to re-plan or notify. **Shipped 2026-04-24.** Introduced `PathResult { waypoints, partial }` + `findPathWithStatus(start, end)` overload in `nav_mesh_query.h/.cpp`. Existing `findPath` forwards to the new overload and drops the flag — `NavigationSystem::findPath` call site unchanged. Bit-extraction lives in `detail::isPartialPathStatus(dtStatus)`, exposed so the Detour-status-to-bool translation is unit-testable without building a live Recast/Detour nav mesh. The helper treats `DT_FAILURE` as dominant: a failed query never reports partial even if the partial bit is incidentally set (failure means no waypoints at all, and "partial path" semantically requires a valid-but-short path). 8 new tests in `tests/test_nav_mesh_query.cpp`: 5 `NavMeshPartialStatus.*` pin the helper (success-without-partial, success-with-partial, failure-with-partial, success-with-DT_OUT_OF_NODES, bare-partial-without-success); 3 `NavMeshQueryWithStatus.*` pin the uninitialised-query contract + legacy overload backward-compat. 2890/2891 pass post-fix.
 - [x] **S9.** `UITheme` default contrast — bump `textDisabled` and `panelStroke` defaults to satisfy WCAG 1.4.11 (3:1 non-text) and 1.4.3 (4.5:1 text-disabled comfort). Current Vellum `panelStroke` alpha 0.22 yields ≈1.8:1 over base. Load-bearing for partially-sighted primary user. **Shipped 2026-04-24.** Introduced `Vestige::ui_contrast::` free-function namespace with `relativeLuminance`, `contrastRatio`, `compositeOver` — pure-math WCAG 2.2 helpers so palette correctness is arithmetically verifiable in CI rather than "by eye". Vellum `textDisabled` (0.361, 0.329, 0.278) → (0.560, 0.520, 0.440), contrast 2.4 → 4.84:1; `panelStroke.a` 0.22 → 0.48, composited contrast 1.6 → 3.23:1; `panelStrokeStrong.a` 0.48 → 0.72 to preserve the hover-vs-rest distinction post-bump. Plumbline `textDisabled` (0.290, 0.282, 0.271) → (0.570, 0.550, 0.520), contrast 2.1 → 5.82:1; `panelStroke.a` 0.12 → 0.45, composited 1.3 → 3.96:1; strong 0.36 → 0.68. High-contrast register already passed; now pinned. Visible design shift (panel borders are plainly visible rather than decorative hairlines) — intentional per the partially-sighted-primary-user priority. 16 new tests (8 `UIContrast.*` helper-math: luminance endpoints, black-on-white=21, symmetry, composite alpha-0/-1/-half; 8 `UIThemeContrast.*` palette-WCAG across Vellum + Plumbline + HighContrast, plus the hover-louder-than-rest invariant on both registers). 2906/2907 pass post-fix.
 
-#### Slice 4: Rendering correctness
+##### Slice 4: Rendering correctness
 IBL corruption is load-bearing: every PBR material since day one has been lit with corrupted irradiance / prefilter values. Fix early.
 
 - [x] **R1.** Wrap IBL capture paths in `ScopedForwardZ` — `EnvironmentMap::generate`, `LightProbe::generateFromCubemap`, prefilter, convolution. Also the init-time first-generation path in `renderer.cpp:683-692` (currently no save/restore at all). Parity test: render a probe with + without the wrap, diff the prefilter output. **Shipped 2026-04-25** (red `e27e53e`, green `c570101`). Lifted the bracket pattern into a single helper `engine/renderer/ibl_capture_sequence.{h,cpp}` exposing `runIblCaptureSequenceWith<Guard>(steps)` (template, testable with a recording mock) plus a non-template `runIblCaptureSequence` overload that fixes `Guard = ScopedForwardZ`. `EnvironmentMap::generate` (capture / irradiance / GGX prefilter / BRDF LUT) and `LightProbe::generateFromCubemap` (irradiance / prefilter) now call the helper, replacing four bare sub-call sequences with one bracketed invocation each. The init-time first-generation call at `renderer.cpp:683-692` inherits the wrap by virtue of living inside `EnvironmentMap::generate`; no caller-side change required, closing the "no save/restore at all" note. Per-pass `glGetError()` drains preserved inside each lambda so the existing diagnostic behaviour is unchanged. 6 new `IblCaptureSequenceTest.*_R1` tests in `tests/test_ibl_capture_sequence.cpp` inject a `RecordingGuard` whose ctor pushes "BEGIN" and dtor pushes "END" to a per-test trace and pin: empty-steps still brackets, guard opens before first step, steps run in order between begin/end, guard destructs after last step (load-bearing for the post-`generate` reverse-Z restore contract), null `std::function<void()>` skipped, and the strong-form invariant that every step's index falls strictly between BEGIN's and END's. RED commit shipped a stub body (steps run, guard not constructed) and saw all 6 fail; GREEN replaced the stub with `Guard guard;` and all 6 pass. 2953/2954 pass post-fix (1 pre-existing skip unchanged; +6 vs P6's 2947).
@@ -2148,7 +2148,7 @@ IBL corruption is load-bearing: every PBR material since day one has been lit wi
 - [x] **R9.** Bloom `bloom_downsample.frag.glsl` Karis path — restore 0.5 centre + 0.125×4 corner energy weighting (Jimenez 2014 slide 147 / Unreal `BloomDownsample.usf`). Current Karis path drops first-mip centre weight → "softness pop" and energy loss. **Shipped 2026-04-25** (red `73c8045`, green `45c0452`). Lifted the bloom Karis combine into a CPU mirror `engine/renderer/bloom_downsample_karis.h` per CLAUDE.md Rule 7 (CPU spec + GPU runtime, pinned by parity test). Public inline helpers `bloomLuminance(c)`, `bloomKarisWeight(c)`, and `combineBloomKarisGroups(centre, TL, TR, BL, BR)`. The combine helper applies per-group Karis luminance suppression (Karis 2013 SIGGRAPH — `1/(1+luma)` per group) modulated by the canonical Jimenez 2014 slide 147 fixed weights (`CENTRE_WEIGHT = 0.5`, `CORNER_WEIGHT = 0.125`, sum to 1.0). `assets/shaders/bloom_downsample.frag.glsl` Karis branch updated to mirror the helper byte-for-byte: same numerator/denominator structure, same constants. The bug closed: the inner-4-sample group's weight in the first-mip Karis output went from `1/5` (equal-weighting) to `0.5 / 1.0 = 4/5` (Jimenez), eliminating the visible "softness pop" between mip 0 (Karis path) and mip 1+ (standard 0.5/0.125 path). Karis fireflies suppression preserved — bright outliers in any group still get small Karis weights and contribute proportionally less. 7 new `BloomDownsampleKaris.*_R9` tests in `tests/test_bloom_downsample_karis.cpp` pin: uniform input → uniform output, **centre group has 4× weight of corner group** (the headline — failed RED with `result.r ≈ 0.0714` for centre=0.5/corners=0; passes GREEN with `result.r ≈ 0.2`), zero input → zero output (NaN guard), corners-symmetric (rotation invariance), corner firefly suppressed, centre firefly suppressed, **energy preserved for uniform luma** (the second distinguishing case — feeds 5 isolume colours and asserts result equals Jimenez weighted average; failed RED because the bug averages by 5 instead of by 0.5/0.125 weights). The 5 non-distinguishing tests pass against both bug and fix and act as regression pins. 2978 / 2979 pass post-fix (1 pre-existing skip unchanged; +7 vs R3's 2971).
 - [x] **R10.** `m_prevWorldMatrices` unconditional clear at `renderScene` entry (currently cleared only in TAA branch — grows unbounded across MSAA/SMAA/None modes and hands stale mat4s to motion-overlay on mode switches). **Shipped 2026-04-25** (red `cea1d96`, green `b7d7858`). Lifted the cache update into a templated free helper `updateMotionOverlayPrevWorld<ItemRange>(cache, isTaa, renderItems, transparentItems)` (`engine/renderer/motion_overlay_prev_world.h`). Body: `cache.clear()` runs unconditionally, then the per-entity populate from `renderItems` + `transparentItems` runs only when `isTaa` is true (the cache is read by the per-object motion-vector overlay only in TAA mode; non-TAA modes need only the clear). Templated so production passes `std::vector<SceneRenderData::RenderItem>` while tests pass a duck-typed `std::vector<MockRenderItem>` without pulling `scene/scene.h` into the test target. `Renderer::renderScene` refactored to call the helper between the existing TAA `swapBuffers` / `nextFrame` block and the `m_currentRenderData = nullptr` clear; the original outer `if (isTaa)` was split into two halves so the helper sits in the middle. The bug closed: previously TAA → MSAA toggle left the cache populated with frame-N matrices forever; a subsequent TAA toggle-back read those matrices on frame N+k for entityIds that may have been freed and reused by unrelated meshes in between, blending current geometry against an unrelated mesh's old transform. 8 new `MotionOverlayPrevWorld.*_R10` tests in `tests/test_motion_overlay_prev_world.cpp` pin every branch: non-TAA clears (the headline), non-TAA-with-items still clears, TAA clears + populates from current + drops stale, TAA includes transparent items, `entityId == 0` skipped, empty render data + TAA still clears, repeated calls converge on latest, explicit TAA → non-TAA mode-switch wipes the cache. RED commit shipped an empty stub body and saw all 8 fail; GREEN replaced with the real body and all 8 pass. 2965 / 2966 pass post-fix (1 pre-existing skip unchanged; +8 vs R7's 2957).
 
-#### Slice 5: Data / asset parsing robustness
+##### Slice 5: Data / asset parsing robustness
 Security + correctness for untrusted or malformed inputs. Gates community-mod / Steam-Workshop futures.
 
 - [x] **D1.** Path sandbox in `ResourceManager::loadTexture` / `loadMesh` — move the `resolveUri`-style base-dir check to a choke-point inside ResourceManager. Every scene-JSON path flows through it automatically. **Shipped 2026-04-25.** Lifted `gltf_loader::resolveUri` (originally Phase 5 / AUDIT M16) into a shared `engine/utils/path_sandbox.{h,cpp}` exposing two functions: `resolveUriIntoBase(base, uri)` for relative URIs (replaces the static helper inside `gltf_loader.cpp`) and `validateInsideRoots(absPath, roots)` for absolute paths from trusted callers. The AUDIT M16 separator-suffix rule (preventing sibling-prefix-collision attacks like `base=/assets/foo` accepting `/assets/foo_evil/x.png`) is centralised in one private `insideOrEqual` helper that both public functions share. `ResourceManager` gained `setSandboxRoots(std::vector<fs::path>)` + private `validatePath(filePath)`; `loadTexture`, `loadMesh`, `loadModel` each call `validatePath` before opening the file. Empty roots = sandbox disabled (the default), preserving backwards compatibility — production wires `[install_root, project_root, asset_library_root]` once at startup; tests can leave it empty so existing fixture paths keep working. `gltf_loader.cpp::resolveUri` now forwards to `PathSandbox::resolveUriIntoBase`, retaining the glTF-specific `Logger::warning` message on rejection but eliminating the duplicated traversal-guard logic. 15 new tests across `tests/test_path_sandbox.cpp` (10) + `tests/test_resource_manager_sandbox.cpp` (5) pin: relative URI accepted inside base, parent-traversal rejected, sibling-prefix-collision rejected, empty URI returns empty, base-itself accepted, absolute path accepted inside root, absolute path rejected outside root, multiple-roots accepts any, empty-roots returns canon unchanged (backwards-compat path), absolute path's sibling-prefix-collision rejected, `getSandboxRoots()` starts empty, `setSandboxRoots()` records, `loadMesh` outside root returns nullptr, `loadModel` outside root returns nullptr, no-sandbox-configured accepts any path. 3010 / 3011 pass (1 pre-existing skip; +15 vs Slice 8 W11's 2995).
@@ -2164,7 +2164,7 @@ Security + correctness for untrusted or malformed inputs. Gates community-mod / 
 - [x] **D11.** Path-traversal guards on `AudioClip::loadFromFile`, `LipSyncPlayer::loadTrack`, `MotionDatabase` load paths. **Shipped 2026-04-25.** Closes the audio-side analogue of D1's path sandbox by reusing the same `PathSandbox::validateInsideRoots` helper rather than authoring the "reject absolute + `..` unless trusted" pattern in the original entry — the roots-list approach is strictly stronger (canonicalises and verifies inside-roots, defeating relative-traversal too). `AudioEngine` gains `setSandboxRoots` / `getSandboxRoots` / private `validatePath` mirroring `ResourceManager`'s API. `loadBuffer` runs the validator *before* the `m_available` short-circuit so callers can't probe paths via the audio API on machines without a device. Empty roots = sandbox disabled (default), preserving backwards compatibility. `LipSyncPlayer` (in `engine/experimental/animation/` after W12) gains *static* `setSandboxRoots` / `getSandboxRoots` because per-instance state would have been awkward (LipSyncPlayer is a `Component` instantiated many times per scene); the static lives in an anonymous-namespace function-local `std::vector` for well-defined initialisation order. `MotionDatabase` does NOT gain a guard — it has no file load path (builds in memory from `MotionPreprocessor`-passed clips); when serialisation lands, that loader inherits the pattern. 10 new tests across `tests/test_audio_engine_sandbox.cpp` (5) + `tests/test_lip_sync_sandbox.cpp` (5) pin the round-trip + rejection contract. **Plus a CI parallel-test race fix:** verifying D11 surfaced a pre-existing race in `test_path_sandbox.cpp` / `test_resource_manager_sandbox.cpp` where `ctest -j $(nproc)` ran their shared `/tmp/vestige_*_sandbox_test` SetUp/TearDown concurrently across processes (CMake's `gtest_discover_tests` spawns one process per TEST_F); CI Linux Release lost the race with `cannot remove: Directory not empty`. Fixed by appending `getpid()` + the gtest test name to the temp-dir path (the pattern `test_atomic_write_routing.cpp` already used). 3030 / 3031 pass (+10 vs D12's 3020).
 - [x] **D12.** tinygltf `extensionsRequired` allowlist in the loader — fail (don't skip) on unknown required extensions per glTF 2.0 §3.12. Silent fallback today. **Shipped 2026-04-25.** Added an `extensionsRequired` check in `GltfLoader::load` immediately after the tinygltf load-success branch. The Vestige glTF loader does not explicitly handle any glTF extension (tinygltf transparently handles a few on the parse side, but our material / mesh paths ignore extension data entirely), so the allowlist (`kSupportedRequiredExtensions`) is deliberately empty — every required extension is unknown to us. Files declaring required extensions log `Logger::error("glTF: unsupported required extensions: <names> in <path> — refusing to load (per glTF 2.0 §3.12)")` and return `nullptr`. Add entries as specific extension support lands (KHR_materials_unlit, KHR_lights_punctual, KHR_texture_transform, etc.).
 
-#### Slice 6: Animation correctness
+##### Slice 6: Animation correctness
 Three silent-corruption bugs affecting anyone importing glTF characters.
 
 - [x] **A1.** Skeleton DFS update order — build `m_updateOrder: std::vector<int>` in DFS pre-order at `Skeleton` construction; iterate that in `computeBoneMatrices`. Debug-build assert parent-idx < child-idx. Remap animation channel joint indices if joints are reordered. **Shipped 2026-04-27.** `Skeleton::buildUpdateOrder()` walks `m_rootJoints` DFS pre-order and populates `m_updateOrder` (a permutation of joint indices, parent visited before children); `gltf_loader::loadSkin` calls it after populating m_joints + m_rootJoints. `SkeletonAnimator::computeBoneMatrices` iterates `m_updateOrder` if its size matches the joint count, falls back to storage order otherwise (legacy hand-built skeletons keep working). Debug-build assert in `buildUpdateOrder` pins the parent-position-precedes-child invariant. No remap of animation channel joint indices was needed because `m_joints` storage order is preserved — the reorder lives only in `m_updateOrder`. 7 new tests across `tests/test_skeleton.cpp` (6) and `tests/test_skeleton_animator.cpp` (1: shuffled-vs-sorted bone-matrix equivalence). 3063 / 3064 pass (+7 vs Sy1's 3056).
@@ -2173,7 +2173,7 @@ Three silent-corruption bugs affecting anyone importing glTF characters.
 - [x] **A4.** IK pole-vector alignment uses post-solve mid position, not re-rotated pre-solve mid. **Shipped 2026-04-27.** Two-bone IK pole alignment in `engine/animation/ik_solver.cpp::solveTwoBoneIK` rewrites the post-solve mid offset using forward kinematics on `newStartGlobal` and a named bone-vector-in-start-local, instead of "re-rotating" the pre-solve world bone vector ad-hoc. Found and fixed a second related defect on the way: `poleRot` was post-multiplied in start's *local* frame (`newStartLocal = newStartLocal * poleRot`), but `poleRot` is a world-space rotation around the start→target axis; post-multiplication put it before `r0`/`r2` in the FK chain, so the start-bend correction unwound the pole alignment for the canonical vertical-chain case. Now pre-multiplied in start's *parent* frame: `newStartLocal = poleRotInParentFrame * newStartLocal`, where the rotation is expressed around `inv(parentGlobal) * at`. Test `PoleVectorPlacesMidOnPoleSidePostSolve_A4` failed before this second fix and passes after; the pole-flip control test pins the symmetric -X case. 2 new tests in `tests/test_ik_solver.cpp`; FootIK regressions all green (5/5).
 - [x] **A5.** Inertialisation axis-angle stability — `sqrt(1-w²)` + clamp instead of `acos(w)` + `sin(angle/2)`. **Shipped 2026-04-27.** `engine/experimental/animation/inertialization.cpp::Inertialization::start` now derives axis-angle via `sinHalf = sqrt(max(0, 1 - w²))` + `angle = 2*atan2(sinHalf, w)` rather than `2*acos(w)` + `sin(angle/2)`. `acos(w)` loses precision near `w≈±1` (small rotations) and `sin(angle/2)` recomputes the same quantity the sqrt(1-w²) form already has; `atan2` is monotone and well-defined across the full hemisphere. Bit-identical for the well-conditioned cases, stable across the small-rotation cliff that the old form lost. 3 new tests in `tests/test_motion_matching.cpp` (`AxisAnglePreservesPiRotation_A5`, `AxisAngleStableNearIdentity_A5`, `AxisAngleZeroForIdenticalRotations_A5`).
 
-#### Slice 7: Physics determinism — gates Phase 11A replay
+##### Slice 7: Physics determinism — gates Phase 11A replay
 Phase 11A's Replay Recording Infrastructure requires deterministic physics. These findings break that contract today.
 
 - [x] **Ph1.** Move character-controller + breakable-constraint checks inside the fixed-step loop. Divide breakable lambda by `m_fixedTimestep`, not frame dt. **Shipped 2026-05-02 (`e54b3a5`).** New `PhysicsWorld::update(dt, callback)` overload fires the callback once per substep with `dt == m_fixedTimestep`; new `getFixedTimestep()` accessor. `Engine::update` precomputes velocity once per frame (`computeDesiredVelocity` already ignored its dt arg) and passes a callback that drives `m_physicsCharController->update(fixedDt, velocity)` and `checkBreakableConstraints(fixedDt)` per substep. Removes the duplicate frame-rate character-update block. Pre-Ph1 the breakable check divided `GetTotalLambdaPosition()` by frame dt — wrong by a factor of substeps-per-frame, and silently dropped any non-final-substep impulse spikes. 6 new tests in `test_physics_fixed_step_callback.cpp`; 188 physics-suite tests still green.
@@ -2186,7 +2186,7 @@ Phase 11A's Replay Recording Infrastructure requires deterministic physics. Thes
 - [x] **Ph8.** Constraint creation uses `BodyLockMultiWrite` on `{bodyA, bodyB}` (no more dangling `JPH::Body*` from a single-body `BodyLockWrite` scope). **Shipped 2026-05-02 (`67f42c6`).** New `PhysicsWorld::withBodyPair(bodyA, bodyB, fn)` template in `physics_world.h` acquires the multi-lock for the duration of `fn` and invokes `fn(Body& bA, Body& bB)`; world-anchored case (bodyA invalid) locks only bodyB and passes `JPH::Body::sFixedToWorld` as bA. All five constraint creators (hinge / fixed / distance / point / slider) refactored to build settings outside the lock then call `withBodyPair`. `resolveBodyA` retained but deprecated in the header. 261 physics / joint / ragdoll / constraint tests still green.
 - [x] **Ph9.** `RigidBody::syncTransform` stop round-tripping rotation through Euler (`rigid_body.cpp:174-175`). Gimbal loss past ±90° pitch on tumbling bodies. Store quaternion in `Transform` and write directly. **Shipped 2026-04-27 (Wave 4, matrix-override path).** Took the matrix-override path rather than restructuring `Transform` from Euler-vec3 to quat (36 read-sites across `engine/`, beyond fast-win scope). `RigidBody::syncTransform`'s DYNAMIC branch now builds the local TRS matrix directly from the physics quaternion + position + scale and stores it via `Transform::setLocalMatrix`, so the rendered orientation is preserved exactly past ±π/2 pitch. The Euler `Transform.rotation` field is still updated as a best-effort approximation for legacy readers (editor inspector display, scripting) but the rendered orientation now goes through the override matrix and bypasses the `glm::eulerAngles` singularity. New `RigidBody.DynamicSyncSetsMatrixOverrideQuaternionExact_Ph9` test pins the quaternion-exact invariant at the gimbal-lock pitch via quaternion-dot tolerance.
 
-#### Slice 8: Subsystem wiring / dead-code cleanup
+##### Slice 8: Subsystem wiring / dead-code cleanup
 Per CLAUDE.md Rule 6 (no over-engineering) + Rule 10 (no workarounds-as-fixes). Finish-or-delete, not cargo-cult.
 
 - [x] **W1.** `AsyncTextureLoader` — either construct it + guard placeholder texture during upload (`Texture::isReady()` atomic), or delete the header + member + `processAsyncUploads()`. **Deleted 2026-04-27 (Wave 4).** Took the delete path. `ResourceManager::m_asyncLoader` was never constructed in any production code path, so `processAsyncUploads()` was a permanent no-op — the only uses were the standalone `tests/test_async_texture_loader.cpp` fixture which constructed `AsyncTextureLoader` directly. Removed `engine/resource/async_texture_loader.{h,cpp}`, the `m_asyncLoader` field + `processAsyncUploads()` method on ResourceManager, the `m_resourceManager->processAsyncUploads()` call in `Engine::run`, and the per-side CMakeLists entries (engine + tests). Same wire-or-delete framing as W2 (FileWatcher). Per CLAUDE.md Rule 6 (no half-finished implementations); when async texture loading is wired for real it can be authored fresh against the actual consumer (a streaming pipeline). 7 dead tests removed; net -7 in pass count, +13 from Wave 4 additions = +13 net for the wave.
@@ -2208,7 +2208,7 @@ Per CLAUDE.md Rule 6 (no over-engineering) + Rule 10 (no workarounds-as-fixes). 
 - [x] **W14.** `SpritePanel`, `TilemapPanel` — wire into `Editor::drawPanels` (add members + draw call) OR delete `sprite_panel.cpp`, `tilemap_panel.cpp`, and their tests. Currently compiled + tested, not instantiated. Depends on Slice 0. **Wired 2026-04-25** (commit `c91c5ed`). Took the wire path — 380 LoC of working Phase 9F-6 panels with passing tests; the missing piece was just instantiation in `Editor`. Added `m_spritePanel` + `m_tilemapPanel` members, the two header includes, `getSpritePanel()` / `getTilemapPanel()` accessors mirroring the AudioPanel / NavigationPanel pattern, and `m_spritePanel.draw(scene, &m_selection)` + `m_tilemapPanel.draw(scene, &m_selection)` calls in `Editor::drawPanels` alongside the other panel draws. No new tests; the RAII contract for panel construction + the per-panel logic in Phase 9F-6 unit tests already cover the surface. 2994 / 2995 pass.
 - [x] **W15.** Inspector per-entity `AudioSource` draw section (mirror `drawParticleEmitter`). Closes F3's round-trip gap visibly; `AudioPanel` is scene-wide, not a per-entity editor. **Implemented 2026-04-25** (commit `e429b95`). Added `InspectorPanel::drawAudioSource()` mirroring `drawParticleEmitter`'s pattern. Inspector view sections: clip path + autoplay/loop/spatial; bus combo (Master/Music/Voice/Sfx/Ambient/Ui) + volume + pitch sliders; Spatial collapsible (min/max distance, rolloff, attenuation model combo, Doppler velocity vec3); Occlusion collapsible (material preset combo across 8 materials + fraction slider); Priority combo (Low/Normal/High/Critical). Wired in the inspector dispatch list — when an entity has an `AudioSourceComponent`, `drawAudioSource()` is called right after `drawParticleEmitter()`. Undo brackets deferred to the Phase 10.5 Slice 12 Ed1/Ed2 inspector-undo retrofit (shared across multiple inspector surfaces). 2994 / 2995 pass.
 
-#### Slice 9: Input subsystem — spec-vs-code reconciliation
+##### Slice 9: Input subsystem — spec-vs-code reconciliation
 Spec mandates scancode; code stores keycode. Fix the contradiction and the missing axis-binding path.
 
 - [x] **I1.** `InputBinding::code` stores scancode. Rename factory to `InputBinding::scancode(int glfwScancode)`; capture `glfwGetKeyScancode(key)` at rebind; translate back via `glfwGetKeyName(key, scancode)` for display. Fixes WASD-on-AZERTY silent-layout-flip. **Shipped 2026-05-02.** `InputBinding::key(int)` retired; `InputBinding::scancode(int)` is the new factory and `code` documents itself as a GLFW scancode for keyboard slots (mouse + gamepad unchanged). Capture path in `engine/editor/panels/settings_editor_panel.cpp:598` runs `glfwGetKeyScancode(glfwCode)` on the ImGui-derived keycode and drops the binding if the platform reports `-1` rather than persisting an unbound entry. Default hotkeys in `engine/core/engine.cpp:321-327` (F1/F2/F11/F12) re-resolved at registration time via the same call. Poll path in `InputManager::isBindingDown` switches from `glfwGetKey(window, code)` (keycode-style) to a sparse `std::unordered_map<int, bool> m_keyDownByScancode` driven by the existing `keyCallback` (the `scancode` parameter that was previously `/*unused*/`); side benefit is event-driven rather than per-frame poll. Display path in `bindingDisplayLabel` is two-stage: a lazy scancode→name fallback table (built once at first call by walking GLFW_KEY_* through `glfwGetKeyScancode`) catches non-printable keys (Space, Shift, F-row, numpad, system keys) — preserving the I6 surface — and `glfwGetKeyName(GLFW_KEY_UNKNOWN, code)` is the second-stage layout-aware path for printable letters/digits/punctuation that should *change* under a layout swap (`"W"` on QWERTY, `"Z"` on AZERTY for the same physical key). The fallback table runs first because GLFW returns a literal `" "` for Space and printable strings for some locale keys (WORLD_1/2 on certain layouts) which would clobber the rebind UI. 7 new tests (`InputBinding.ScancodeFactoryProducesBoundKeyboardBinding_I1`, `ScancodeFactoryEqualityIsValueBased_I1`, `ScancodeFactoryRejectsNegativeAsUnbound_I1`, `InputBindingsWire.ScancodeRoundTripPreservesPhysicalIdentity_I1`, `BindingDisplayLabel.KeyboardScancodePrintableUsesGlfwKeyName_I1`, `KeyboardScancodeNonPrintableUsesFallbackTable_I1`, `MouseGamepadEmDashUnaffectedByScancodeMove_I1`) plus the I6 numpad/system-key test reframed under a `glfwInit`-fenced helper that gracefully skips on display-less CI. The pre-I1 `InputActionMap.KeyboardNamesAreReadable` headless display unit test was deleted — it was testing the prior keycode→name table directly, not a contract; coverage for printable display now lives in the GLFW-fenced I1 tests + runtime engine launch, matching the project's `test_gpu_cloth_simulator.cpp` precedent for runtime-only verification. No settings.json migration needed (no shipped binaries with persisted bindings predating I1). 3146 / 3147 pass (+6 vs Slice 10 E2 baseline; 1 pre-existing skip unchanged).
@@ -2218,7 +2218,7 @@ Spec mandates scancode; code stores keycode. Fix the contradiction and the missi
 - [x] **I5.** `addAction` re-registration — assert / warn when called after `Settings::load()` has populated user rebinds; silent nuke today. **Shipped 2026-04-27.** `InputActionMap::addAction` now compares the existing entry's primary/secondary/gamepad slots against the new action's defaults; if any slot differs, it logs a `Logger::warning` naming the action id and noting that user rebinds for it are being discarded. Same-defaults re-registration (genuine hot-reload) stays silent. The behaviour change is purely diagnostic — the existing entry is still overwritten because that's the documented hot-reload contract — but the warning gives callers a fingerprint to track down the registration-after-Settings::load mis-ordering. 3 new tests in `tests/test_input_bindings.cpp` (divergent → warns, identical → silent, first-time → silent).
 - [x] **I6.** `keyboardName()` in `input_bindings.cpp:151` completes numpad (`KP_0..KP_9`, `KP_ADD`, `KP_SUBTRACT`, `KP_MULTIPLY`, `KP_DIVIDE`, `KP_ENTER`, `KP_DECIMAL`, `KP_EQUAL`), `Pause`, `PrintScreen`, `ScrollLock`, `NumLock`, `Menu`, `F13..F25`, `WORLD_1/WORLD_2`. Keyboard-primary user currently sees `"Key 320"` in rebind UI for half their keyboard. **Shipped 2026-04-27.** Added all listed cases to the switch in `engine/input/input_bindings.cpp::keyboardName`. Pause/PrintScreen/ScrollLock/NumLock/Menu return their familiar UI labels; the keypad gets `"Numpad N"` / `"Numpad +"` / `"Numpad Enter"` etc. so they read as keypad keys distinct from the main row; F13..F25 return `"FNN"`; WORLD_1/2 return `"World 1"` / `"World 2"` (locale-specific keys for ISO 105-key non-US and Japanese layouts). 1 new test pins coverage of every category.
 
-#### Slice 10: Environment / splines
+##### Slice 10: Environment / splines
 Research-doc conformance + Phase 10.8 CM7 cinematic-camera dependencies.
 
 - [x] **E1.** `SplinePath::catmullRom` → centripetal parameterisation. Per FOLIAGE_VEGETATION + CSM_FOLIAGE research docs. Unit-test against a known cusp case. **Shipped 2026-05-02.** Switched from polynomial uniform Catmull-Rom to the Barry-Goldman recursive form with knots spaced by chord^0.5 (Yuksel et al. 2011, "Parameterization and Applications of Catmull-Rom Curves", Computer-Aided Design 43.7). Coincident-control-point safety via a 1e-6 floor on knot intervals. `catmullRomDerivative` switched to a centred finite difference (`±1e-3` in u-space) — `evaluateTangent` normalises so the small magnitude error vs the analytic-uniform form is irrelevant for tangent direction. New `SplinePathTest.CentripetalAvoidsCusp` pins the canonical Yuksel four-point setup (10:1 spacing skew); uniform produced ~0.48 x-overshoot at the centre segment, centripetal stays under 0.1. Existing 9 SplinePath tests pass unchanged; downstream consumers (DensityMap `clearAlongPath`, FoliageManager `clearAlongPath`, mesh generation) verified green via full test-suite run. The parallel `engine/utils/CatmullRomSpline` (editor path-tool authoring class) intentionally not touched — same uniform-CR limitation applies but its only consumer is the editor preview, not gameplay-determinism-critical paths.
@@ -2226,12 +2226,12 @@ Research-doc conformance + Phase 10.8 CM7 cinematic-camera dependencies.
 - [x] **E3.** ~~GPU foliage culling via the existing `frustum_cull.comp.glsl` (currently unwired). Rule 12 compliance — per-instance scale + pure arithmetic + packable.~~ **Closed-by-finding 2026-05-02 (mirrors W11).** Pre-implementation audit revealed the same architectural redundancy that closed W11 in the renderer's MDI path: `FoliageManager::getVisibleChunks` (`engine/environment/foliage_manager.cpp:528`) already runs CPU per-chunk frustum culling via `isAabbInFrustum` (`engine/utils/frustum.h:62`) before the chunk list reaches `FoliageRenderer::render` — same p-vertex test the compute shader performs, just on the CPU. Wiring `frustum_cull.comp.glsl` at per-(chunk×type) MDI granularity would re-test AABBs the CPU already accepted, with dispatch + buffer-upload overhead exceeding the few-µs CPU loop on a typical ~few-thousand-chunk world. The kernel only pays rent at **per-instance** scale (~millions of grass blades), and that requires the same per-instance compaction redesign W11 named: per-instance AABB SSBO, atomic-counter compaction, MDI command-build on GPU — multi-slice work that is a phase, not a slice item. Action: kept `assets/shaders/frustum_cull.comp.glsl` (its `commands[]`-SSBO + `objects[]`-SSBO contract still matches what per-instance compaction needs); retargeted the future-caller comment in `engine/renderer/renderer.h:691-694` from "ROADMAP E3" to "future per-instance compaction phase" so the architectural pointer survives this closure. No production code changed; no test-count delta. Recorded as a finding rather than work because the right answer was "don't add code." If a future phase takes up per-instance GPU compaction, it should re-open under a new ticket scoped explicitly at that granularity, not inherit E3's framing.
 - [x] **E4.** `FoliageChunk::getBounds` Y-range queried from terrain, not magic `[-100, 200]` ceiling. **Shipped 2026-04-27 (Wave 4, instances-as-proxy path).** Took the "derive Y from instance positions" path rather than plumbing a `Terrain&` reference through the chunk (FoliageManager does not currently hold one). Instance positions are already terrain-anchored at scatter time, so they're the right proxy. `FoliageChunk::getBounds` now scans `m_foliage`, `m_scatter`, and `m_trees` for min/max `position.y`, then pads `+50 m` ceiling (tree-height headroom) and `-1 m` floor margin. Empty chunks fall back to a `±1 m` default — callers (`FoliageManager::getVisibleChunks`, `FoliageRenderer`) skip empty chunks before invoking `getBounds`, so the fallback is purely defensive. A typical 16 m × 16 m chunk shrinks from a 300 m vertical span to ~50 m, tightening the frustum culler. 2 new `FoliageChunkTest.*BoundsTrack*_E4` / `*EmptyChunkBoundsAreCompact_E4` tests.
 
-#### Slice 11: Systems update-order mechanism
+##### Slice 11: Systems update-order mechanism
 Registration-order is an implicit contract that Phase 11A / 11B AI systems will break.
 
 - [x] **Sy1.** `ISystem::getUpdateOrder()` or coarse phase tags (`PreUpdate / Update / PostCamera / PostPhysics / Render`). Stable-sort `m_systems` once after `registerSystem` returns. AudioSystem = PostCamera; UI = late; physics-sync = early. Unblocks W6. **Shipped 2026-04-27.** `engine/core/i_system.h` introduces `enum class UpdatePhase { PreUpdate = -100, Update = 0, PostCamera = 100, PostPhysics = 200, Render = 300 }` and a default-virtual `ISystem::getUpdatePhase()` returning `UpdatePhase::Update`. `SystemRegistry::sortByUpdatePhase()` runs a `std::stable_sort` by phase tag (within-phase order preserved as registration order — bulk of default-Update systems keep their existing relative ordering). The sort fires automatically at `initializeAll()` start, before any per-system `initialize()` runs, so per-frame dispatch is deterministic without callers needing to know about the mechanism. Two production overrides ship with the foundation: `AudioSystem` → `PostCamera` (closes the W6 listener-after-camera dependency); `UISystem` → `Render` (UI prepares render-time state). Slot semantics documented on the enum: PreUpdate = transform-sync; Update = default; PostCamera = camera-state consumers; PostPhysics = reserved for Phase 11A; Render = render-time state preparation. The integer values exist only to make the comparator trivial — production code should not depend on the specific numbers, only their relative ordering. `SystemRegistry::getSystemsForTest()` exposes the live `m_systems` layout for phase-ordering tests without going through full engine init. 7 new tests in `tests/test_system_registry.cpp`'s `*_Sy1` suite pin: default phase is Update, sort orders across all five slots, stable-sort preserves within-phase order, stable-sort preserves interleaved-phase order, sort is idempotent, `initializeAll` runs the sort before per-system init, `updateAll` calls systems in phase order. 3056 / 3057 pass (+7 vs Slice 5 D2's 3049; 1 pre-existing skip unchanged).
 
-#### Slice 12: Editor undo / hygiene
+##### Slice 12: Editor undo / hygiene
 Five inspector types bypass undo entirely today; several write files non-atomically.
 
 - [x] **Ed1.** Replace `IsItemDeactivatedAfterEdit`-at-end-of-block pattern with per-widget pre-snapshot + any-deactivated bracket. **Shipped 2026-05-02 (`0957638`) for the particle-emitter inspector** (7 blocks: emission, start properties, shape, over-lifetime, forces, renderer, light coupling). New `EditTracker` helper (anonymous namespace in `inspector_panel.cpp`) called immediately after each widget aggregates per-widget `IsItemActivated` / `IsItemDeactivatedAfterEdit` correctly across the whole block; `shouldCommit()` triggers one undo per drag (or per click for instant toggles). Side fixes: over-lifetime block previously pushed undo every-frame-changed (no Deactivated guard at all) — now once per drag; renderer block's stray `before = cfg` is now load-bearing as the running snapshot threads through all blocks; light-coupling block dropped its block-local `lightBefore` for the shared `before`. Custom gradient/curve widgets keep instant-push (no observable activation state) — out of scope. 132 inspector+particle+editor+undo+command tests still green. **Pattern now applied to particle emitter only**; Ed2 covers the same fix for water / cloth / rb / light / material inspector blocks.
@@ -2246,7 +2246,7 @@ Five inspector types bypass undo entirely today; several write files non-atomica
 - [x] **Ed10.** `recent_files.cpp:101` — `fs::absolute` with `error_code` overload. Current throw on invalid-UTF-8 path escapes the ImGui frame. **Shipped 2026-04-27.** `RecentFiles::addPath` now uses the `error_code` overload of `std::filesystem::absolute`; if it fails (Windows invalid-UTF-8, deleted-CWD on POSIX, etc.) the path is recorded as-supplied with a `Logger::warning` instead of unwinding through ImGui. No new test (the failure mode requires Windows or a manually-deleted CWD scenario; the change is a four-line defensive refactor that mirrors the scene_serializer error_code pattern at the I/O boundary).
 - [x] **Ed11.** Scene-save envelope atomicity: fold `environment` + `terrain` JSON + heightmap + splatmap into a single manifest-backed atomic sequence (no partial-state post-crash). Depends on F7. **Shipped 2026-05-16.** Pre-Ed11 the env-aware `SceneSerializer::saveScene` overload did four separate atomic commits across four files (write scene.json with entities-only, re-read it, inject environment + terrain settings, re-write scene.json, save heightmap, save splatmap) — a crash between any pair left a hybrid (new heightmap referencing a scene.json that still pointed at "no terrain", or worse, partially-fresh splatmap with stale heightmap). Ed11 collapses this to one logical commit by making scene.json itself the manifest. The terrain JSON section gets two new keys `heightmap_file` / `splatmap_file` naming epoch-suffixed side-files (e.g. `myStem.heightmap.1747349123456-7.r32`, where the token is UTC-ms + a process-counter so two rapid saves can't collide). New save order: (1) mint epoch token, (2) build the full envelope JSON up-front (entities + env + terrain settings + manifest entries) — kills the save-twice re-read-inject-rewrite anti-pattern, (3) write the epoch-suffixed heightmap, (4) write the epoch-suffixed splatmap, both through the existing F7 `AtomicWrite::writeFile` so each side-file is durable on its own, (5) atomic-write scene.json — **this is the commit**: before it returns Ok, the previous epoch is authoritative (or no terrain at all); after it returns Ok, the new epoch is referenced and durable. Failure of step 3 or 4 short-circuits before step 5 — the on-disk scene.json stays at the old epoch and the half-written side-file becomes an orphan that the next successful save GCs. New `SceneSerializer::garbageCollectEpochFiles(dir, stem, keepHeightmap, keepSplatmap)` runs after the scene.json commit succeeds; it sweeps every `<stem>.heightmap.*.r32` / `<stem>.splatmap.*.splat` that isn't the keep-pair, plus the pre-Ed11 unsuffixed legacy names (`<stem>.heightmap.r32` / `<stem>.splatmap.splat`), so a save migrating from the old layout doesn't leave orphans. Files belonging to a different stem (e.g. `otherScene.heightmap.foo.r32`) are untouched — two scenes can share a directory. GC errors are logged but never propagated; a leftover stale file is harmless and the next save retries. Backwards-compatible load: `loadScene` reads `terrain.heightmap_file` / `splatmap_file` if present, otherwise falls back to `<stem>.heightmap.r32` / `<stem>.splatmap.splat` so existing scene files on disk keep loading without migration. 8 new `SceneEnvelopeAtomicityTest.*_Ed11` tests in `tests/test_scene_envelope_atomicity.cpp` pin the GC contract directly (the public helper makes this exercisable without the GL context the save path needs): keeps the named pair / sweeps stale-epoch heightmaps + splatmaps / sweeps legacy unsuffixed names / leaves unrelated stems alone / no-op on empty dir / no-op on missing dir / multi-epoch dogpile collapses to one keep-pair / readMetadata still parses scenes carrying the new manifest keys / readMetadata still parses pre-Ed11 terrain shape. The full Terrain round-trip is exercised at engine launch (same precedent as the existing `test_terrain_size_caps` note that `initialize()` needs GL). 3260 tests green (+8 vs Ed5 baseline).
 
-#### Slice 13: Performance hygiene
+##### Slice 13: Performance hygiene
 Post-10.7, pre-11 performance sweep. Not 60-FPS-critical today but blocks the Phase 11 load.
 
 - [x] **Pe1.** `TextRenderer` batch across strings per frame — `begin/queue/end` semantics; one draw call for all HUD labels + subtitles + toasts (currently ~18 draws/frame in a normal HUD). **Shipped 2026-05-02.** Two coordinated changes: (1) Shaders updated — `text.vert.glsl` gains `layout(location = 1) in vec3 a_color` plus `out vec3 v_color`; `text.frag.glsl` reads `v_color` instead of the prior `u_textColor` uniform. Per-vertex colour means a single batch can mix HUD element colours (white FPS counter, accent-coloured menu labels, themed key labels, etc.) without splitting the draw. (2) `TextRenderer` API + state machine — vertex layout grew from 4 floats (xy + uv) to 7 floats (xy + uv + rgb); VBO storage bumped from 1024 to 8192 glyphs (`MAX_GLYPHS_PER_BATCH`, ≈1.34 MB) for headroom. New public API `beginBatch2D(int w, int h)` / `endBatch2D()` / `isBatching()`. While a batch is open, every `renderText2D` / `renderText2DOblique` call accumulates glyphs into `m_batchVerts` instead of issuing its own upload + draw; `endBatch2D` flushes the whole queue in one `glNamedBufferSubData` + `glDrawArrays`. Outside a batch, calls keep their pre-Pe1 single-string upload + draw behaviour for compatibility. `appendGlyphVerts` extracted as a free helper so the immediate path, batched path, and `generateTextHeightMap` share one source of truth (CLAUDE.md Rule 3). `UISystem::renderUI` wraps the entire HUD pass (root canvas + modal canvas + subtitles) in `beginBatch2D` ↔ `endBatch2D` so all ~18 widgets that call `renderText2D` collapse to one draw — zero migration cost at the 21 call sites because they keep their existing API. 4 new `TextRendering.*_Pe1` tests pin the begin/end state machine headlessly (start-closed default, uninitialised begin no-op, uninitialised end no-op, queue-during-uninitialised-batch is safe); GL-dependent flush is verified at engine launch per the `test_gpu_cloth_simulator.cpp` precedent. Engine boot smoke-tested clean — shader compiles, scene renders, HUD batch flushes without errors.
@@ -2259,7 +2259,7 @@ Post-10.7, pre-11 performance sweep. Not 60-FPS-critical today but blocks the Ph
 - [x] **Pe8.** Cloth LRA regen `generateLraConstraints` O(P·N) → row-indexed bucket / KD-tree. 16.8M iterations per `rebuildLRA()` at 256² with 256 pins. **Shipped 2026-05-02 (uniform 3D bucket path).** `ClothSimulator::buildLRAConstraints` (`engine/physics/cloth_simulator.cpp`) now bucket-hashes pin positions into an `std::unordered_map<int64_t, std::vector<uint32_t>>` keyed on `(cellX, cellY, cellZ)` packed into a single int64 (21 bits / axis biased on 0, plenty for any sane cloth). Cell size = `4 × m_config.spacing` so a typical bucket spans 16 grid cells in 2D — most lookups hit ring 0 or ring 1. Per non-pinned particle, walks concentric Chebyshev rings around its cell; after each ring the lower-bound `r * cellSize` on any remaining-ring pin is compared against `sqrt(bestDist²)` and the loop exits when no further ring could contain a closer pin. Defensive brute-force fallback retained for the unreachable case (kMaxRing reached without finding any pin) so the output is always correct. Hand-rolled rather than reusing the cloth's existing `SpatialHash` because that class hashes *all particles* per substep on a rolling-radius query — different shape; the LRA build only ever indexes pins (~256 entries) and queries with an unknown radius. Picked uniform-bucket over KD-tree because the cloth grid is gridded by construction and a depth-balanced tree gives no asymptotic edge over a flat hash at this scale (256 pins → ~3 levels of tree descent vs. ~27 cells visited; both ~hundreds of ops). The new public surface adds `LRAConstraint` (moved from private nested to public nested) + `getLraConstraints() const` accessor so test code can inspect the constraint set directly. Per CLAUDE.md Rule 3 the existing `solveLRAConstraints` consumer is unchanged — only the build path is touched. 5 new `ClothSimulator.BuildLRA*_Pe8` tests in `tests/test_cloth_simulator.cpp` pin: every non-pinned particle gets exactly one tether (coverage), nearest-pin assignment + distance match brute force on an 8×8 corner-pinned grid, brute-force agreement on a 16×16 grid with scattered pins (every 11th index — relatively prime to width=16, exercises bucket-boundary cases), single-pin tethers everything to it with correct distance, and idempotent rebuild produces identical results. The scattered-pins test is the headline correctness pin: any algorithm change that returns a non-nearest pin or wrong distance fails here. 3192 / 3191 (+5 vs Pe1 baseline; 1 pre-existing GL-context skip unchanged).
 - [x] **Pe9.** Cloth `applyCollisions` per substep — build spatial hash once, pass to both collision passes. **Shipped 2026-05-02 (`a5588c9`).** New `rebuildSelfCollisionHashIfEnabled()` helper hoisted out of `applySelfCollision`; substep loop calls it once immediately before the first `applyCollisions()`, then both `applyCollisions()` passes share the result. Validity gate: hash cell size = 2× selfCollisionDist, particle motion within a substep is bounded well below cell size (that's why we substep), so a one-pass-old broad-phase candidate set is fine — narrow-phase distance check reads live positions. All 159 cloth+collision+simulator tests still green. Frame cost at 16 substeps drops from 32 hash rebuilds to 16.
 
-#### Slice 14: Scripting / formula safety
+##### Slice 14: Scripting / formula safety
 Gates Phase 11B AI + any user-authored graph or preset.
 
 - [x] **Sc1.** Exec fan-out in `script_context.cpp:129` — iterate all matching `PinConnection`s (save/restore `m_entryPin` per callee). Shipped templates `DoOnce.Then → {PlayAnim, PlaySound}` currently half-fire. Delete the "runtime quirk" comment in `script_compiler.cpp:176-179`. **Shipped 2026-04-27 (Wave 4).** `ScriptContext::triggerOutput` now fires every connection fanning out from a single execution-output pin via the new `ScriptInstance::forEachOutputConnection<F>` template accessor, not just the first match returned by `findOutputConnection`. The `m_entryPin` save/restore is now per-callee (saved once at the top of `triggerOutput`, the body sets fresh `m_entryPin` per visit, restored once at the end) so back-to-back fan-out targets all observe their own input pin. The "runtime quirk to fix separately" comment in `script_compiler.cpp` is deleted; exec fan-out is no longer a quirk. 2 new `NodeLibraryTest.ExecOutput*_Sc1` tests cover both-targets-fire (a `DoOnce.Then` connected to two `PrintToScreen` nodes — both `[Script]` lines emitted) and per-callee `m_entryPin` save/restore (no UB across the fan-out).
@@ -2271,12 +2271,12 @@ Gates Phase 11B AI + any user-authored graph or preset.
 - [x] **Sc7.** `passDetectDataCycles` — iterative explicit stack (match the existing comment at `script_compiler.cpp:314`) OR fix the comment. Today the lambda is recursive; a 5000-node pure chain recurses 5000 deep. **Shipped 2026-04-27 (Wave 4, true iterative path).** Took the iterative-rewrite path — the previous code claimed "explicit stack" in its comment but actually used a recursive `std::function<bool(std::size_t)>` lambda. Replaced with a true iterative DFS over `std::vector<Frame>` where `Frame = {idx, cursor}`; the cursor stores the next-input-to-descend so a frame can resume scanning after a child descent returns. The cycle-found state is checked after each descent step rather than propagated back through `return true`. `<functional>` include removed (no longer used). New `ScriptCompiler.DeepPureChainNoStackOverflow_Sc7` test compiles a 10k-node acyclic pure chain — would have blown the C++ stack on the previous recursive form.
 - [x] **Sc8.** `WhileLoop` iteration cap — surface `Clamped` output pin (mirror `ForLoop`) OR document as hard safety rail in tooltip + ROADMAP. Resolves CLAUDE.md Rule 10 workaround-dressed-as-fix. **Shipped 2026-04-27 (Clamped pin).** Took the Clamped-pin path because in-graph branching is strictly stronger than out-of-band log warnings — graph authors can now `Clamped → BranchTrue → Notify designer` without grepping the engine log. Mirrors the existing `ForLoop.Clamped` pattern. The `Completed` exec pin still fires after a clamp so chained logic continues. Tooltip + log message updated to point at `WaitForSeconds` / event nodes as the override path for legitimate long loops. `MAX_WHILE_ITERATIONS = 10000` retained — the test `WhileLoopTerminatesAtSafetyCap` now also passes through the Clamped path.
 
-#### Slice 15: Audio ergonomics
+##### Slice 15: Audio ergonomics
 - [x] **Au1.** `playSound(loop=true)` returns `AudioSourceHandle` OR force looping sounds exclusively through `AudioSourceComponent`. 32 looping calls currently freeze the mixer with no caller-side stop path. Ship-stopper for any ambient (waterfall, wind, torch). **Shipped 2026-04-27.** P7 in Wave 2 (Slice 2) already changed every `playSound*` overload from `void` to `unsigned int`, so the source ID was always returned — but the caller-side stop path was named `releaseSource`, which read like a generic resource-management op rather than the `playSound`/`stopSound` symmetric pair audio APIs typically expose. Au1 added a public `AudioEngine::stopSound(unsigned int handle)` thin alias for `releaseSource` and a docstring that spells out the looping-caller's contract: hold the handle from `playSound*`, call `stopSound(handle)` to terminate, otherwise the looping voice holds a pool slot for the OpenAL context's lifetime and 32 such leaks freeze the mixer. Passing 0 (the failure return) and stale handles are explicit safe-no-op invariants. 4 new `AudioEngineStopSound.*_Au1` tests in `tests/test_audio_stop_sound.cpp` pin: zero-handle no-op, stale-handle no-op, stopSound-aliases-releaseSource, and playSound's return-value contract.
 - [x] **Au2.** `DopplerParams{}` default `speedOfSound` ≠ 0 sanity — initial `alSpeedOfSound(0)` is rejected by OpenAL and leaves the internal default unchanged. Either fix the default member initialiser or apply the existing clamp before push at `audio_engine.cpp:73-74`. **Shipped 2026-04-27 (apply clamp).** The default member initialiser already shipped at `343.3f` so the originally-described bug doesn't reproduce — but the runtime setter at line 524 clamps `<= 0` to `1e-3f` whereas the init-time push at line 76 didn't. Defence-in-depth clamp added at init time so a caller stamping `DopplerParams{0.0f, 1.0f}` into the engine before initialise can't desync OpenAL's internal default from the engine's CPU-side `computeDopplerPitchRatio`. Documented the strict-positive invariant on `DopplerParams::speedOfSound`. The existing `DefaultParamsMatchSpecDefaults` test pins the 343.3 default; no new test for the init-time clamp because that path requires a real OpenAL device which the headless CI runner doesn't have.
 - [x] **Au3.** `audio_engine.cpp:186` — init `ALuint buffer = 0` before `alGenBuffers` and short-circuit on error. Currently an uninitialised name goes into `alDeleteBuffers` on failure. **Shipped 2026-04-27.** `audio_engine.cpp::loadBuffer` initialises `ALuint buffer = 0;` before `alGenBuffers(1, &buffer)`. The error-path `alDeleteBuffers(1, &buffer)` lower in the same function would otherwise ask the driver to delete an indeterminate handle if `alGenBuffers` failed (rare, but possible under context loss / OOM). The audit's "short-circuit on error" suggestion is already covered by the existing `if (err != AL_NO_ERROR)` block immediately after `alBufferData` — that branch returns 0 to the caller so a failed buffer never enters `m_bufferCache`.
 
-#### Slice 16: Shader parity relabel / fix
+##### Slice 16: Shader parity relabel / fix
 Resolves CPU↔GPU cloth divergences that make CLAUDE.md Rule 7 parity-test impossible today.
 
 - [x] **Sh1.** ~~`cloth_constraints.comp.glsl` XPBD claim: either accumulate `λ` across iterations (canonical XPBD per Macklin 2016 §3.5) OR rename to `cloth_pbd_constraints.comp.glsl` + update header comment. Current form is PBD-with-compliance, not XPBD.~~ **Shipped 2026-05-02 (header doc fix).** Took the relabel-via-doc path — the underlying math is small-steps XPBD (Macklin "Small Steps in Physics Simulation" 2018), not classical PBD; the original /indie-review reviewer conflated the two. CPU side at `cloth_simulator.cpp:961` already uses the same per-substep λ-reset and explicitly cites the small-steps approach, so renaming the GPU file would have desynchronised it from a CPU file that's correctly named. Header comment now cites Macklin 2018 small-steps + cross-references the CPU `λ = 0 per-substep` comment so a future reviewer can trace the parity. No code change.
@@ -2286,7 +2286,7 @@ Resolves CPU↔GPU cloth divergences that make CLAUDE.md Rule 7 parity-test impo
   Sh4a SHIPPED 2026-06-02 (user-approved the staged path). Per-triangle aerodynamic drag now runs on GPU via colour-grouped dispatch (atomics-free, cross-run deterministic): colourTriangleConstraints + GpuTriangle in cloth_constraint_graph; cloth_wind_drag.comp.glsl; BIND_TRIANGLES=9 SSBO; per-colour dispatch wired into simulate() after the gravity init pass. cloth_wind.comp.glsl reduced to gravity-only (its placeholder per-particle drag was superseded). 4 commits (steps 1-4), each with verify tests; full suite green (3309 tests). Parity test asserts |v_GPU - v_CPU(colour-ordered oracle)| <= 1e-5 m/s. STILL OPEN — Sh4b: per-particle FBM + per-triangle turbulence (FULL tier) and per-tier gating (SIMPLE = no drag; currently drag dispatches for all tiers). Cl1 parity harness gates on Sh4b.
   Sh4b SHIPPED 2026-06-03. FULL-tier wind now runs on GPU: per-particle FBM perturbation (cloth_wind_fbm.comp.glsl) + per-triangle turbulence (cloth_wind_drag.comp.glsl u_useTurbulence) + per-tier gating (SIMPLE=no force, APPROXIMATE=gust-folded uniform drag, FULL=FBM+turbulence). Gust state machine + FBM/turbulence precompute were extracted into a shared ClothWindModel (engine/physics/cloth_wind_model.{h,cpp}) that both ClothSimulator (CPU) and GpuClothSimulator own — user-chosen over a GPU-local duplicate — so both backends produce identical wind inputs from the same seed (the property Cl1 parity needs, by construction). u_windVelocity is now the gust-folded baseWindVelocity, closing the Sh4a gust-divergence caveat. New SSBO bindings 10/11; GpuTriangle.pad repurposed as origIndex for the colour-reordered turbulence lookup. 2 commits (c0033f8 shared model refactor; 5668af2 GPU FULL tier). 9 new tests; full suite green (3318). Unblocks Cl1's SIMPLE+APPROXIMATE+FULL parity trio.
 
-#### Slice 17: Cloth + renderer regressions — depends on Sh1–Sh4
+##### Slice 17: Cloth + renderer regressions — depends on Sh1–Sh4
 - [x] **Cl1.** CPU↔GPU cloth parity harness: headless test that drives identical `ClothConfig` on both backends for 2s, asserts per-particle position delta < `epsilon`. Depends on Sh1–Sh4. CLAUDE.md Rule 7 parity gate.
   Shipped 2026-06-03. tests/test_cloth_cpu_gpu_parity.cpp drives CPU + GPU backends from an identical ClothConfig. The harness caught real backend drift that was never previously pinned. Two CPU↔GPU defects surfaced: (1) damping convention — the GPU divided ClothConfig::damping by the substep count (per-frame) while the CPU applies it per-substep as documented; the GPU damped ~substeps× less and diverged by ~10m in a 2s free-fall. FIXED (gpu_cloth_simulator.cpp now matches the CPU per-substep convention; free-fall parity test PASSES at 1.7% of diagonal, was 685%). (2) constraint under-convergence — the GPU coloured-parallel sweep settles a stiff pinned cloth ~8x too soft; filed as Cl9 (convergence accelerator). The stiff-drape parity test is SKIP-gated (asserts pin-held + finite + sagged; strict 5%-Hausdorff pending Cl9). CPU-only feature gaps (adaptive damping / rest-pose blending / sleep) filed as Cl10. Full suite 3319 pass / 1 skip / 0 fail.
 - [x] **Cl2.** `ClothComponent::syncMesh()` stops calling `simulate(0.0001f)` at `cloth_component.cpp:99` — expose `syncBuffersOnly()` on `IClothSolverBackend`. Refresh should not integrate gravity / wind. **Shipped 2026-04-27 (Wave 4).** Added `virtual void syncBuffersOnly() = 0` to `IClothSolverBackend`. CPU implementation: just `recomputeNormals()` since CPU positions are always current (no mirror staleness). GPU implementation: re-runs only the cloth_normals shader (factored out of `simulate()` into a new private `dispatchNormalsShader(GLuint particleGroups)` helper) and flags the normal mirror dirty. `ClothComponent::syncMesh` calls `syncBuffersOnly()` instead of `simulate(0.0001f)` — the previous call silently injected a 100 µs gravity tick on every pin-drag refresh and scene-load reset. New `ClothSimulator.SyncBuffersOnlyDoesNotIntegrate_Cl2` test pins position-invariance across the call.
@@ -2307,7 +2307,7 @@ Resolves CPU↔GPU cloth divergences that make CLAUDE.md Rule 7 parity-test impo
   Kind: implement.
   Source: in-session-2026-06-03 Cl1 parity harness.
 
-#### Slice 18: Cold-eyes test-suite review
+##### Slice 18: Cold-eyes test-suite review
 The test surface has grown to 3146 tests across 400 suites over Phases 9–10.9 with multiple authoring waves. A fresh-subagent (no authoring context) review per project rule 9 (cold-eyes documentation reviews) extended to the test surface, surfacing four classes of issue that a self-review would miss:
 
 - [x] **Ts1.** Tests that **do not test what they claim** — e.g. asserting a mock's behaviour rather than the SUT's contract; a test name promising X but the body checking Y; "regression test" entries that pass identically on both pre-fix and post-fix code. Pattern set by the spec-writer-hallucinations memory. **Shipped 2026-05-16.** 8 cold-eyes subagents partitioned the 185-file test surface and surfaced 45 Ts1 findings. Resolutions: 28 renames (test name now honestly reflects what the body pins — e.g. `WaveCountClamped` → `WaveCountInRangeRoundTrips`, `FailsSoftOnUnattachedScene` → `BothTemplatesProduceDistinctRoots`, `AllVerticesHaveNormals` → `AllVertexNormalsAreUnitLength`); 12 deletions of tautology / no-SUT-call tests (`text_rendering` doc-expectation trio, `ssao` occlusion-arithmetic trio, `taa` static-camera-zero-motion + GLM-vs-itself, `color_grading` half-texel offsets, `emissive_lighting` HDR-product, `pressure_plate` clone-non-null tautology, etc.); 5 strengthenings where the test claim was meaningful but the assertion was too weak (`PhysicsWorld.CreateKinematicBody` now also asserts `getBodyMotionType() == Kinematic`; `ApplyImpulse` now compares against a no-impulse control body; `CpuProfiler.ScopeTimingsAreRelativeToFrameStart` now uses frame-relative ceiling not `< 100ms`; `EnvironmentForces.WetnessDriesWithoutRain` now reads pre-wetting state first; `ParticlesExpireAfterLifetime` now zeroes emissionRate so existing particles actually age out instead of testing the unsigned-counter tautology).
@@ -2319,10 +2319,10 @@ The test surface has grown to 3146 tests across 400 suites over Phases 9–10.9 
 
 This slice is **non-blocking** for Phase 11 — it pays down test-suite debt rather than gating new features. Schedule between Phase 10.9 closure and Phase 11A start, or interleave with Phase 11A bring-up if test-suite churn from new gameplay code makes it worth doing in stages.
 
-#### 🧪 Test Audit 2026-05-17 — Slice 19 follow-ups
+##### 🧪 Test Audit 2026-05-17 — Slice 19 follow-ups
 Framework: GoogleTest via ctest. Files scanned: 188. Dimensions: 18 (performance, flakiness, duplication, isolation, determinism, accuracy, security, verbosity, naming, coverage_gaps, splitting, fixtures, assertions, hardcoded_data, setup_teardown, parametrisation, error_handling, doc_strings). Raw findings: 520. Actionable after triage: 94. **Same-session fixes:** `countWarningsContaining` level-filter bug + 3-file extraction to `test_helpers.h`; `LoggerTest` fixture (snapshot/restore level + entries) + `yield()` in concurrent-logging spin-waits; 11 `EXPECT_NE(&ref, nullptr)` tautologies in `test_domain_systems.cpp` replaced with `(void)`-cast accessors; `Logger::clearEntries()` added to `test_cube_loader_hardening.cpp::TearDown`; `ConstraintOrdering.SimulateOneFrameDoesNotInvalidateWithPinnedRow` widened from `isInitialized()` survival to NaN-scan + initialised. Triaged false positives + verification notes: `docs/private/test-audit/false-positives.md`.
 
-##### Duplication
+###### Duplication
 - [x] **Ts19-D1.** Remove three forwarding wrappers (`smallConfig` / `smallClothConfig`) in `tests/test_cloth_{simulator,collision,solver_improvements}.cpp` — replace ~50 call-sites with `Testing::clothSmallConfig(...)` and delete the local stubs. (Slice 18 Ts3 extracted the body; the stubs were left behind.)
 - [x] **Ts19-D2.** `makeTestSkeleton` is duplicated across `tests/test_advanced_physics.cpp`, `tests/test_motion_matching.cpp`, `tests/test_crossfade.cpp` (and 1-2 more animation files). Extract to a shared header.
 - [x] **Ts19-D3.** `UITheme::defaultTheme()` is constructed inline at 30+ call sites across `tests/test_ui_theme_accessibility.cpp`, `tests/test_ui_runtime_panel.cpp`, `tests/test_ui_system_screen_stack.cpp`, `tests/test_ui_widgets.cpp`. Extract to a `UIThemeFixture` (or one shared helper).
@@ -2330,43 +2330,43 @@ Framework: GoogleTest via ctest. Files scanned: 188. Dimensions: 18 (performance
 - [x] **Ts19-D5.** Atlas-JSON-to-temp-file helpers duplicated in `tests/test_sprite_atlas.cpp:22`, `tests/test_sprite_panel.cpp:25`, `tests/test_sprite_renderer.cpp:27`. Extract to `sprite_test_helpers.h`.
 - [x] **Ts19-D6.** `makeIdentityLut` / `lutLookup_cpu` in `tests/test_color_grading_parity.cpp` are byte-identical to `generateNeutralLut` / `lutLookup` in `tests/test_color_grading.cpp`. Extract to `color_grading_test_helpers.h`.
 
-##### Fixtures
+###### Fixtures
 - [x] **Ts19-F1.** `DefaultHudPrefab` 9 tests in `tests/test_default_hud.cpp` each reconstruct `UICanvas` + `UITheme` + `UISystem`. Extract a fixture.
 - [x] **Ts19-F2.** `UISystemFocus` 12 tests in `tests/test_ui_focus_navigation.cpp` construct `UISystem` on the stack with no fixture. Convert to `TEST_F`.
 - [x] **Ts19-F3.** `ControllerFixture` in `tests/test_character_controller_2d.cpp:23` is a plain struct used inline. Convert to a proper `::testing::Test` fixture so ctor/`SetUp` failures are reported cleanly.
 
-##### Assertions
+###### Assertions
 - [x] **Ts19-A1.** `tests/test_advanced_physics.cpp:877` — volume-conservation `EXPECT_GT(totalVolume, 0.1f)` is too loose to detect a real loss. Tighten to the analytical fragment-sum value with ~1% tolerance.
 - [x] **Ts19-A2.** `tests/test_ik_solver.cpp:43` — `ReachableTarget` uses `startChanged || midChanged`; a single-joint regression (one joint locked) still passes. Use `&&` for the unambiguous two-joint reach case.
 - [x] **Ts19-A3.** `tests/test_scene_serializer.cpp:194` — `EntityJsonShapeReferenceDocument` / `SceneEnvelopeShapeReferenceDocument` assert values the test itself just wrote. Replace with a real round-trip or mark explicitly as a documentation snapshot.
 - [x] **Ts19-A4.** `tests/test_cloth_simulator.cpp:335` — `GetConstraintCount` asserts `EXPECT_GT(count, 0u)`; analytical value for a 3×3 stretch+shear+bend grid is 26. Tighten to `EXPECT_GE(count, 26u)`.
 
-##### Flakiness / tolerances
+###### Flakiness / tolerances
 - [x] **Ts19-FL1.** `tests/test_root_motion.cpp:112,170` — `EXPECT_NEAR` tolerances of 0.2/0.5 on analytically exact linear-interpolated deltas. Tighten to ~1e-3.
 - [x] **Ts19-FL2.** `tests/test_particle_data.cpp:150` — `SpawnsParticlesOnUpdate` accepts ±50% on a deterministic emission. Replace with the exact expected count.
 
-##### Isolation
+###### Isolation
 - [x] **Ts19-I1.** `tests/test_color_grading_parity.cpp:140` — `ASSERT_TRUE(prog.valid())` aborts after `lutTex` allocation but before `glDeleteTextures` → GL texture leak on failure. Wrap `lutTex` in a `ScopedGLTexture` RAII guard.
 - [x] **Ts19-I2.** `tests/test_settings.cpp:81` — `ConfigPath` tests use manual `setenv`/`unsetenv` save+restore. Extract an `EnvGuard` RAII helper so an early-exit path can't pollute later tests.
 
-##### Coverage gaps
+###### Coverage gaps
 - [x] **Ts19-CG1.** `tests/test_rigid_body.cpp:59` — `destroyBody()` on a dynamic body is never explicitly tested; a Jolt body-remove leak for dynamic bodies wouldn't be caught.
 - [x] **Ts19-CG2.** `tests/test_gpu_cloth_simulator.cpp:461` — `reset()` before `initialize()` contract is unpinned. Add `ResetBeforeInitIsNoOp`.
 - [x] **Ts19-CG3.** `tests/test_terrain_size_caps.cpp` — no happy-path test; the acceptance branch of the validator is untested. Add `TerrainValidationAcceptsWithinLimits`.
 - [x] **Ts19-CG4.** `tests/test_pbr_material.cpp:232` — `AlphaCutoffRoundTrips` / `DoubleSidedToggles` use `EXPECT_NO_THROW` only; no getter exists. Expose getters or use the serializer round-trip to assert the value.
 
-##### Accuracy
+###### Accuracy
 - [x] **Ts19-AC1.** `tests/test_color_grading.cpp:180` — warm/cool/contrast/desaturate transform tests reimplement the production formula locally. Drive via real `ColorGradingLut` (upload + sample, parity-test style) so production drift is detected.
 
-##### Parametrisation
+###### Parametrisation
 - [x] **Ts19-PA1.** `tests/test_cloth_presets.cpp:21,35,49,64` — 5-element preset initializer list copy-pasted across 4 tests; adding a preset requires 4 edits. Convert to `TEST_P` over `ValuesIn(allPresetsExceptCustom)`. Also: `CUSTOM` is in the name-list test but missing from the mass/substeps/compliance property checks.
 
-##### Naming (LOW, opportunistic)
+###### Naming (LOW, opportunistic)
 - [x] **Ts19-N1.** `tests/test_fabric_material.cpp:231` — typo `FineLInenMatchesExistingPreset` → `FineLinenMatchesExistingPreset`.
 - [x] **Ts19-N2.** `tests/test_ibl.cpp:210` — typo `RoughSurfaceSpreadssamples` → `RoughSurfaceSpreadsSamples`.
 - [x] **Ts19-N3.** `tests/test_ruler_tool.cpp:41` — `SecondClickCompleteMeasurement` → `SecondClickCompletesMeasurement`.
 
-##### Performance (LOW)
+###### Performance (LOW)
 - [x] **Ts19-P1.** `tests/test_cloth_simulator.cpp:226` — `GroundPlaneStopsParticles` runs 300 frames at 5 substeps (1500 XPBD iters) for a trivial floor check; cloth reaches the floor in <60 frames at g=-9.81. Reduce to 60 frames.
 - [x] **Ts19-P2.** `tests/test_memory_tracker.cpp` — `MemoryTracker::update()` reads sysfs 120× in a loop. Reduce to 1–3 samples; the contract is observability, not statistical convergence.
 
@@ -2384,7 +2384,7 @@ Framework: GoogleTest via ctest. Files scanned: 188. Dimensions: 18 (performance
 - **Naming (N1–N3):** three typos fixed (`FineLInen`→`FineLinen`, `RoughSurfaceSpreadssamples`→`RoughSurfaceSpreadsSamples`, `SecondClickComplete`→`SecondClickCompletes`).
 - **Performance (P1–P2):** cloth ground-plane test cut from 300 to 60 frames; memory-tracker sysfs polling cut from 120× to 3×.
 
-#### 🧪 Test Audit 2026-05-18 — Ts20 follow-ups
+##### 🧪 Test Audit 2026-05-18 — Ts20 follow-ups
 
 **Framework:** ctest+GoogleTest · **Files scanned:** 188 · **Raw findings:** 206 · **Actionable after triage:** 81 · **Filtered (FP / mitigated / cross-chunk):** 125
 
@@ -2407,30 +2407,30 @@ Full triaged report at `/tmp/test-audit-e5e42211/_triaged.md` (ephemeral); false
 
 **Deferred (acted on incrementally as adjacent files are touched, per Ts19 precedent):**
 
-##### Big-bucket items (need their own design pass before fix)
+###### Big-bucket items (need their own design pass before fix)
 - [x] **Ts20-SY1.** `tests/test_system_registry.cpp:178` (CRITICAL, isolation) — `dummyEngine()` `reinterpret_cast<Engine&>(char[1])` is UB under UBSan even though never dereferenced. Fix needs either a minimal `EngineStub` translation-unit or a `SystemRegistry::initializeAll(Engine*)` nullable overload. Production-API decision, not a test-only change.
 - [x] **Ts20-DE1, Ts20-DE2.** `tests/test_environment_forces.cpp:105,176` (HIGH, determinism) — `WindVelocityAfterGusting` and `GustStateTransitions` rely on unseeded RNG. Fix needs `EnvironmentForces::setGustRngSeed(uint32_t)` SUT API addition. ^3d_e-0001
 - [x] **Ts20-SP3.** `tests/test_scripting.cpp:1` (HIGH, splitting) — 2485 lines, 12+ test suites. Split into `test_script_value.cpp`, `test_blackboard.cpp`, `test_node_type_registry.cpp`, `test_script_graph.cpp`, `test_script_context.cpp`, `test_node_library.cpp`, `test_scripting_system_bridge.cpp`. Multi-hour refactor with attendant CMakeLists.txt churn.
 
-##### Flakiness (4)
+###### Flakiness (4)
 - [x] **Ts20-FL1.** `tests/test_async_driver.cpp:287,339` — `sleep_for(50ms/100ms)` before `cancel()` assumes OS spawn timing. Poll until `isRunning()` is true.
 - [x] **Ts20-FL2.** `tests/test_reference_harness.cpp:134` — temp-file paths unstamped under `ctest -j`. Use `vestigeTestStamp()`.
 - [x] **Ts20-FL4.** `tests/test_environment_forces.cpp:357` — float accumulation tolerance too tight at 100 ticks. Loosen to `0.05f` or derive expected value from rate.
 - [x] **Ts20-FL5.** `tests/test_photosensitive_retrofit.cpp:99` — flicker phase not pinned at guaranteed-difference point. Drive emitters to half-clamped-period phase offset.
 
-##### Isolation (3)
+###### Isolation (3)
 - [x] **Ts20-IS3.** `tests/test_fit_history.cpp:62` — four tests share `/tmp/fh_*.json` with no PID stamp. Use stamped paths.
 - [x] **Ts20-IS4.** `tests/test_entity_serializer_registry.cpp:265` — `Logger::clearEntries()` in test bodies, order-dependent. Move into fixture `SetUp()`.
 - [x] **Ts20-IS5.** `tests/test_reference_harness.cpp:120` — silent fail on missing reference-cases dir. Guard with `GTEST_SKIP()` if dir missing.
 
-##### Accuracy (1)
+###### Accuracy (1)
 - [x] **Ts20-AC4.** `tests/test_hdr_pipeline.cpp:31` — BT.709 coefficients hardcoded with no shader parity. Extract via source-grep (mirror Ts20-AC2 fix) or remove redundant test.
 
-##### Performance (2)
+###### Performance (2)
 - [x] **Ts20-PE1.** `tests/test_cloth_simulator.cpp:263` — `SphereCollisionPushesParticlesOut` runs 120 frames vs documented 60. Reduce.
 - [x] **Ts20-PE2.** `tests/test_cloth_solver_improvements.cpp:508` — paired simulators run 120 frames unnecessarily. Reduce to 60.
 
-##### Duplication (10)
+###### Duplication (10)
 - [x] **Ts20-DU1.** `tests/test_animation_sampler.cpp:101` — LinearQuat tests share 13 identical lines. Extract `makeQuatChannel(q0, q1)` helper.
 - [x] **Ts20-DU2.** `tests/test_logger.cpp:83` — thread-spawn barrier duplicated in two tests. Extract `runConcurrent(nThreads, body)` helper.
 - [x] **Ts20-DU3.** `tests/test_lip_sync.cpp:478` — blend-shapes setup byte-identical in two fixtures. Extract `setupLipSyncPipeline()`.
@@ -2442,14 +2442,14 @@ Full triaged report at `/tmp/test-audit-e5e42211/_triaged.md` (ephemeral); false
 - [x] **Ts20-DU9.** `tests/test_subtitle.cpp:16` — `makeLine` helper duplicated across `test_subtitle.cpp` + `test_subtitle_renderer.cpp`. Extract to `subtitle_test_helpers.h`.
 - [x] **Ts20-DU10.** `tests/test_ui_theme_accessibility.cpp:354` — Vellum/Plumbline contrast tests byte-identical. Use typed/parametrized test.
 
-##### Splitting (4 — excludes SP3 above)
+###### Splitting (4 — excludes SP3 above)
 - [x] **Ts20-SP1.** `tests/test_cloth_collision.cpp` (698 lines, 6 subsystems) — split into `test_bvh.cpp`, `test_spatial_hash.cpp`, `test_cloth_mesh_collider.cpp`, `test_cloth_simulation_collision.cpp`.
 - [x] **Ts20-SP2.** `tests/test_command_history.cpp:285` (780+ lines, 8 concerns) — extract `EntityActions` tests to `test_entity_actions.cpp`.
 - [x] **Ts20-SP4.** `tests/test_formula_library.cpp:313` — `UnaryFunctions` tests 11 operators in one body. Split into named sub-tests or add `SCOPED_TRACE`.
 - [x] **Ts20-SP5.** `tests/test_lip_sync.cpp` (745 lines, 6 suites) — extract `test_viseme_map.cpp`, `test_audio_analyzer.cpp`, `test_lip_sync_player.cpp`.
 - [x] **Ts20-SP6.** `tests/test_ui_theme_accessibility.cpp:25` — `WithScaleMultipliesEveryPixelSize` packs 32 EXPECTs into one body. Split into 3-4 logical groups.
 
-##### Assertions (10)
+###### Assertions (10)
 - [x] **Ts20-AS2.** `tests/test_animation_state_machine.cpp:247` — `SelfTransitionBlocked` ambiguous guard. Add explicit check or cite mechanism.
 - [x] **Ts20-AS3.** `tests/test_advanced_physics.cpp:888` — `SeedBiasTowardImpact` threshold 5/20=25% barely above baseline. Tighten to `EXPECT_GE(nearImpact, 8)` or document.
 - [x] **Ts20-AS4.** `tests/test_cloth_simulator.cpp:276` — `ClearSphereColliders` asserts only fall, not clearance. Add sphere, confirm penetration after clear.
@@ -2462,7 +2462,7 @@ Full triaged report at `/tmp/test-audit-e5e42211/_triaged.md` (ephemeral); false
 - [x] **Ts20-AS15.** `tests/test_memory_tracker.cpp:100` — `RecordFreeUnderflowClampsAtZero` count-vs-byte underspecified. Add policy comment.
 - [x] **Ts20-BE1.** `tests/test_emissive_lighting.cpp:45` — `AttenuationFormulaMathReference` derives + self-tests. Expose `EmissiveLightComponent::computeAttenuation()` and call it; or delete.
 
-##### Hardcoded data (6)
+###### Hardcoded data (6)
 - [x] **Ts20-HA1.** `tests/test_biome_preset.cpp:40` — `BuiltInPresets` checks names at hard-coded indices. Use set/contains.
 - [x] **Ts20-HA2.** `tests/test_fit_history.cpp:39` — `makeEntry()` timestamp hard-coded; tie-break tests rely on lexicographic order. Add comment or parameterise.
 - [x] **Ts20-HA3.** `tests/test_logger.cpp:127` — `MAX_ENTRIES` hard-coded locally. Expose `Logger::MAX_ENTRIES` as public constant.
@@ -2470,7 +2470,7 @@ Full triaged report at `/tmp/test-audit-e5e42211/_triaged.md` (ephemeral); false
 - [x] **Ts20-HA6.** `tests/test_curve_fitter.cpp:309` — `FormulaPresetLibrary` hardcodes preset names + coefficients. Query at runtime; assert difference not literal.
 - [x] **Ts20-HA7.** `tests/test_skeleton.cpp:61` — `MAX_JOINTS == 128` magic number not cross-referenced to shader. Add comment + `static_assert` if possible.
 
-##### Coverage gaps (15)
+###### Coverage gaps (15)
 - [x] **Ts20-CV1.** `tests/test_aabb.cpp:14` — no test for inverted min/max. Add `min > max` constructed AABB.
 - [x] **Ts20-CV3.** `tests/test_benchmark.cpp:74` — `BenchmarkCsv` temp files unstamped. Use `vestigeTestStamp()`.
 - [x] **Ts20-CV4.** `tests/test_catmull_rom_spline.cpp` — no tangent test at interior segment boundary on 3+ point spline. Add 3-point spline test.
@@ -2487,12 +2487,12 @@ Full triaged report at `/tmp/test-audit-e5e42211/_triaged.md` (ephemeral); false
 - [x] **Ts20-CV15.** `tests/test_pbr_material.cpp:294` — `BlinnPhongDefaultsUnchanged` only checks 3 of 5+ fields. Add ambient/opacity.
 - [x] **Ts20-CV16.** `tests/test_skeleton_animator.cpp` — no ROTATION/SCALE channel tests; only TRANSLATION. Add rotation (90° Y) + scale tests.
 
-##### Fixtures (3)
+###### Fixtures (3)
 - [x] **Ts20-FX1.** `tests/test_script_templates.cpp:25` — `TemplateRegistry` static initialised once with bool guard, not per-test. Replace with `::testing::Test` fixture.
 - [x] **Ts20-FX2.** `tests/test_settings.cpp:42` — `TmpDir` local reimplements `vestigeTestStamp()`. Consolidate.
 - [x] **Ts20-FX3.** `tests/test_editor_viewers.cpp:21` — `TextureViewerTest`/`HdriViewerTest`/`ModelViewerTest` empty fixtures. Convert to `TEST()`.
 
-##### Parametrisation (6)
+###### Parametrisation (6)
 - [x] **Ts20-PA1.** `tests/test_caption_map.cpp:200` — `FiresOnPlaySound*` tests repeat identical setup. Use `PlaySoundInvoker` struct with `TEST_P`.
 - [x] **Ts20-PA2.** `tests/test_color_vision_filter.cpp:49` — `Protanopia/Deuteranopia/Tritanopia` blocks identical. `INSTANTIATE_TEST_SUITE_P` over `{mode, expected-matrix}`.
 - [x] **Ts20-PA3.** `tests/test_pbr_material.cpp:87` — `Metallic/Roughness/Ao/Emissive/Clearcoat` clamp pattern identical. Parametrise.
@@ -2500,26 +2500,26 @@ Full triaged report at `/tmp/test-audit-e5e42211/_triaged.md` (ephemeral); false
 - [x] **Ts20-PA5.** `tests/test_instanced_rendering.cpp:131` — `SingleInstanceBelowThreshold`/`TwoInstancesMeetsThreshold` assert counts not path. Expose `batchUsesInstancing` flag or rename.
 - [x] **Ts20-PA6.** `tests/test_ui_world_projection.cpp:89` — `FadeAlpha` boundary tests separate per distance variant. Table-driven `{distance, expectedAlpha}`.
 
-##### Doc-strings (4)
+###### Doc-strings (4)
 - [x] **Ts20-DS1.** `tests/test_aabb.cpp:63` — `IntersectsTouching` undocumented closed/half-open. Add comment: "touching AABBs treated as intersecting (closed intervals)".
 - [x] **Ts20-DS2.** `tests/test_audio_ambient.cpp:192` — `deltaSeconds=0.0f` unclear intent. Add comment explaining `>=` semantics.
 - [x] **Ts20-DS4.** `tests/test_cloth_solver_backend.cpp:38` — seed parameter undocumented. Add comment; use explicit seed on line 60.
 - [x] **Ts20-DS5.** `tests/test_foliage_chunk.cpp` — original FoliageManager tests have no per-test comments. Add contract notes (density/spacing/jitter).
 - [x] **Ts20-DS7.** `tests/test_water_surface.cpp:1` — no GL-context precondition in file header. Add to `@brief`: "tests run without GL context (VAO/mesh ops skipped)".
 
-##### Verbosity (3)
+###### Verbosity (3)
 - [x] **Ts20-VE2.** `tests/test_stasis_system.cpp:54` — `DefaultValues` checks 9 fields individually. Use `EXPECT_EQ(state, StasisState{})` if `operator==` available.
 - [x] **Ts20-VE3.** `tests/test_scripting.cpp:1029` — `NodeLibraryTest` math tests repeat long accessor chain 10+ times. Extract `getOutputFloat(...)` helper.
 - [x] **Ts20-VE4.** `tests/test_navigation_panel.cpp:44` — `OverlayColorIsInZeroToOneRange` packs GE/LE per line. Split / add labels.
 
 **Scope.** All Ts20 follow-ups are non-blocking (same posture as Ts19). The 12 in-session fixes were chosen for clear bounded scope (single-line assertion tightening, RAII guard introduction, single-helper consolidation); deferred items either need their own design pass (Ts20-SY1, DE1/DE2, SP3) or are best picked up incrementally as adjacent files are touched. Per-finding suppressions and false positives are recorded in `docs/private/test-audit/false-positives.md` (FP-9 through FP-12 added this round).
 
-#### Milestone
+##### Milestone
 Every Phase 10.7 design-doc promise is verified by a test authored **from the design doc, not from the code**. Every dead-code item is either wired or deleted. Phase 11A's determinism contract is backed by regression tests. Phase 10.8 CM3 / CM4 / CM7 prerequisites (`sphereCast`, centripetal spline, arc-length evaluator) are live. Slice 0 ROADMAP claims are grep-true. Slices 14–17 close the second /indie-review's scripting / audio / shader-parity / cloth cross-cutting findings. Slice 18 reconciles the test-suite surface itself via cold-eyes review. After Slice 17 + 18, the next slice of Phase 10.8 can ship without inheriting remediation debt or load-bearing-test ambiguity.
 
 **Scope honesty.** This phase is larger than any single prior Phase 10 sub-phase. If Phase 10.8 Camera Modes is time-critical, Slices 1–3 are genuinely blocking (foundations + 10.7 gaps + safety); Slices 4–13 can be interleaved with Phase 10.8 work or deferred into respective original phases' "correctness update" entries. Revisit the ordering at each slice gate rather than treating the whole phase as atomic.
 
-#### 📝 Cold-eyes 2026-06-01 — `self_learning_pattern.md` (Audit/FW X2)
+##### 📝 Cold-eyes 2026-06-01 — `self_learning_pattern.md` (Audit/FW X2)
 
 **Docs reviewed: 1. Loops to clean: 7. Findings fixed: 18 (1 CRITICAL).** Single-doc review of the new unified self-learning pattern doc. All findings were verified against current source and fixed in-loop — zero deferred. Loop count ran past the default cap of 5 because the doc is citation-dense and makes paired "both tools" claims that the reviewer verified ever-deeper into the C++ side each pass. The fixed classes, as an audit trail:
 
@@ -2530,7 +2530,7 @@ Every Phase 10.7 design-doc promise is verified by a test authored **from the de
 - **MEDIUM** — over-generalised "both tools" invariants (schema-mismatch logging, transparency channel) → each invariant now names the per-tool idiom (Python logs / C++ returns-bool / UI badge).
 - **MEDIUM/LOW** — "silently" vs "logged" inconsistency, `.fit_history.json` dotfile name, §6 attribution (advisory-vs-automatic framing is this doc's own synthesis, not the design doc's §6), cross-ref index completeness.
 
-#### 📝 Cold-eyes 2026-05-18 — Documentation review follow-ups
+##### 📝 Cold-eyes 2026-05-18 — Documentation review follow-ups
 
 **Scope:** Full-tree `/cold-eyes` sweep across 8 lanes (contracts-root, standards, engine-specs-core, engine-specs-runtime, phase-10-current, phase-forward, launch-and-release, active-research-and-index). ~150 verified findings; the in-session fixes (~110 items) landed inline across the doc tree (rule-number citations, line-number drift in engine specs, third-party version drift in `THIRD_PARTY_NOTICES.md`, `ARCHITECTURE.md` accuracy refresh, phase-design rule corrections, archive headers on launch docs, research-doc status reconciliation, etc.). Loop 2 returned a clean pass on the 16 most-edited docs. The bullets below are the **deferred** items — design decisions, code-side fixes (out of scope for a docs-review skill), and follow-ups that need owner judgement rather than mechanical edits. False positives from the sweep are logged in `docs/private/test-audit/false-positives.md` (sweep produced no new FPs separate from prior `/test-audit` rounds).
 
@@ -2587,7 +2587,7 @@ Every Phase 10.7 design-doc promise is verified by a test authored **from the de
   Kind: doc-fix.
   Source: cold-eyes-2026-06-01 (CE-bundle review loop 4).
 
-### Phase 10.10: Whole-Tree Review Remediation (2026-08-31)
+#### Phase 10.10: Whole-Tree Review Remediation (2026-08-31)
 
 Deferred findings from a whole-tree check-code + review-code sweep on
 2026-08-31. 26 cold lanes over 147k LoC of engine, 92 GLSL shaders, the editor,
@@ -2981,28 +2981,28 @@ shipped that have no invocation path at all.
 
 Breaks: the scene format. Editor work changes what a scene stores.
 
-### Phase 10.5: Editor Usability Pass
+#### Phase 10.5: Editor Usability Pass
 **Goal:** Make the editor genuinely usable for people who have never opened it — both solo creators working without AI help and AI-assisted users who need the editor to meet them halfway.
 
 Phases 5A–9D have built an extensive editor (entity inspector, scene viewport, model / texture / HDRI viewers, navigation panel, audio panel, formula workbench, node graph editor). The surface is wide, but discoverability, workflow ergonomics, and first-run experience haven't had a dedicated pass. This phase is where the editor becomes something a new user can open and get useful work done in without reading the source code first.
 
 **Scope principle:** no new major features. Every item is about *making existing functionality findable, obvious, and fast*. If a proposed item would add a feature rather than polish one, it belongs in another phase.
 
-#### Discoverability — "where is the thing?"
+##### Discoverability — "where is the thing?"
 - [ ] Command palette (Ctrl+Shift+P / Cmd+Shift+P) — fuzzy search over every menu item, panel, tool, and action with keyboard-only navigation. One surface to find anything without memorising menus.
 - [ ] "What can I do here?" contextual help overlay (F1 over any viewport / panel shows a tooltip of its purpose + the keyboard shortcuts + the 5 most-used actions).
 - [ ] Searchable settings / preferences (the accessibility + input + graphics preferences are scattered; a single Ctrl+, search-over-keys dialog surfaces them).
 - [ ] Panel launcher with pinning — first-run shows a pinnable "Most-used panels" strip so the common Window submenu discovery isn't a memorisation exercise.
 - [ ] In-editor glossary — hover any domain term (e.g. "navmesh", "froxel", "cascade", "IBL") to see a 1-2 sentence definition + link to the relevant docs page.
 
-#### Onboarding — "I just installed this; now what?"
+##### Onboarding — "I just installed this; now what?"
 - [ ] First-run welcome dialog — project template picker (empty / 3D first-person / 2.5D / isometric / biblical walkthrough / blank biblical template) with live preview thumbnails. Already partially covered by Phase 9D template system; this adds the first-run wrapper.
 - [ ] Guided tour (dismissable, resumable) — highlights the 6 things a new user needs to know: viewport navigation, panel layout, entity inspector, assets panel, save/load, play mode. ~2 minutes total, spatially anchored callouts.
 - [ ] "Next step" hint pane — surfaces the single most useful next action given the current scene state ("scene has no lighting — add a directional light?", "entity has no collider — add a box collider?"). Dismissable per-project.
 - [ ] Sample scenes shipped with the engine — each template project opens with a minimal scene that shows the system working, not a blank viewport.
 - [ ] Opt-in telemetry (local file only, never uploaded) — tracks which panels the user opens so the first-run tour can adapt.
 
-#### Editor UX extras (research update 2026-05-26 — Blender / Godot 4 / Unity 6 / JetBrains parity)
+##### Editor UX extras (research update 2026-05-26 — Blender / Godot 4 / Unity 6 / JetBrains parity)
 *Source: in-session research 2026-05-26 (Godot 4 docs, Unity 6 editor release notes, Blender 4.x workspace system, JetBrains IDE UX). Aimed at gaps the existing Phase 10.5 items don't already cover.*
 - [ ] **EU1. Workspace presets** — named layouts (`Modeling` / `Lighting` / `Audio` / `Scripting` / `Animation` / `Play-test`) selectable from a top-bar tab strip à la Blender. Each preset stores panel arrangement + open assets + last-used tool. Per-project override of the global default. Saves the "I just opened the editor and now I have to redock 8 panels" friction every time the user task-switches.
 - [ ] **EU2. Detachable / multi-monitor panels** — any panel can be torn off into a free-standing OS window (ImGui docking branch already supports `ImGuiConfigFlags_ViewportsEnable`; just needs wiring + persistence). Massive QoL on 2-monitor setups (Inspector on the second display while Viewport fills the main).
@@ -3014,7 +3014,7 @@ Phases 5A–9D have built an extensive editor (entity inspector, scene viewport,
 - [ ] **EU8. Embedded REPL / console** — `View → Console` panel with a Lua / Wren / chosen-scripting REPL bound to the live scene. Type `Scene.findByName('Wall_03').transform.position.y = 2.5` and watch it apply. Mirrors Godot's REPL + Unity's debug console; speeds up "what does this object's state look like right now?" debugging.
 - [ ] **EU9. Viewport shading modes hotkey** — `Alt+1..6` cycles Wireframe / Shaded / Unlit / Lighting-only / Overdraw / Wireframe-on-shaded. Standard across Blender / Unreal / Unity. Today the project has none of these surface-able shortcuts; deeply useful when diagnosing artifacts.
 
-#### Workflow ergonomics — "I know what to do; make it fast"
+##### Workflow ergonomics — "I know what to do; make it fast"
 - [ ] Keyboard-driven workflow parity — every mouse action in the scene viewport should have a keyboard shortcut (move, rotate, scale, duplicate, delete, parent, frame-selected, toggle-gizmo-space).
 - [ ] Chord shortcuts (Ctrl+K Ctrl+S, Leader-style) for advanced actions — matches VSCode/Emacs user expectations and avoids key-space starvation.
 - [ ] Undo/redo everywhere, not just scene edits — panel layouts, preference changes, asset operations, workbench fits, shader parameters. Phase 9 started this; polish across remaining surfaces.
@@ -3024,33 +3024,33 @@ Phases 5A–9D have built an extensive editor (entity inspector, scene viewport,
 - [ ] Auto-save + recovery — every N minutes, on window lose-focus, on process crash. File-based, not memory-only.
 - [ ] Project-relative paths — the editor must never bake absolute paths into saved scenes (moving a project directory shouldn't break it).
 
-#### Tooltips & contextual help — "what does this do?"
+##### Tooltips & contextual help — "what does this do?"
 - [ ] Every widget has a tooltip with a 1-sentence description + the keyboard shortcut if any. Audit every panel.
 - [ ] Status-bar hints — hovering a menu item shows the full description + link to the relevant docs page.
 - [ ] Inline warnings on invalid inputs (red outline + explanation of what's wrong + "fix" button where possible). Already partial in the Formula Workbench; extend to every numeric / enum / path input across the editor.
 - [ ] "Why is this greyed out?" — right-click a disabled control and get the reason ("Bake button disabled: no navmesh geometry tagged in the scene").
 
-#### AI assistance integration hooks
+##### AI assistance integration hooks
 - [ ] Editor-exposed command API — every menu action, panel operation, and entity mutation callable via a stable string-based command ID. Same surface as the command palette. Enables AI assistants to drive the editor without hooking directly into C++ headers.
 - [ ] Scene-state snapshot / diff format — JSON serialisation of the current scene suitable for feeding to an AI assistant as context (entity list, component values, current selection). Already exists partially via scene serialisation; this formalises the contract.
 - [ ] AI chat panel (optional, off-by-default) — hostable via any Claude API / Anthropic SDK key in the user's environment. Does NOT require an AI vendor to use the editor; the editor is fully functional without it. Matches the Rule "editor must be usable without AI".
 - [ ] Prompt templates stored per-project — "add a point light near the selected entity", "generate 5 variations of this material", "create a character controller for this mesh". Users without AI get a "prompt library" of suggested workflows as a discovery aid.
 - [ ] Keyboard-driven agent invocation (Alt+Enter) — text box where the user types a short description, agent interprets → proposes a diff → user accepts / rejects. Deferred until there's a stable command API.
 
-#### Performance & responsiveness — "the editor shouldn't feel slow"
+##### Performance & responsiveness — "the editor shouldn't feel slow"
 - [ ] Audit every editor panel's per-frame cost; target < 1 ms per panel at idle. The editor overlay should never push the scene-viewport frame time below 60 FPS on target hardware.
 - [ ] Async asset imports — model / texture / HDRI imports must not block the editor UI. Progress shown in a status bar.
 - [ ] Incremental scene saves — a 10,000-entity scene shouldn't take 2 seconds to save. Chunk by dirty regions.
 - [ ] Panel-level collapse to single line — users rarely need all 30 panels visible; aggressive one-line collapse of inactive panels reclaims screen space.
 
-#### Accessibility (editor-side, complementing the engine-side Phase 10 work)
+##### Accessibility (editor-side, complementing the engine-side Phase 10 work)
 - [ ] Editor UI scaling presets (independent of the game UI scaling shipped in Phase 10) — 1.0× / 1.25× / 1.5× / 2.0×.
 - [ ] Editor high-contrast mode — mirrors the game UI high-contrast toggle but applied to ImGui panels, menu chrome, and the scene viewport gizmos.
 - [ ] Screen-reader labels on every ImGui widget (extends the Phase 10 `UIAccessibleRole` enum to the editor surface — currently only the in-game `UIElement` tree is covered).
 - [ ] Colourblind-safe gizmo / wireframe / selection palettes.
 - [ ] Keyboard-only workflow — verify every panel is navigable with Tab / Shift+Tab / Enter / Space and no mouse. This is the big-ticket item from partially-sighted / motor-impaired users.
 
-#### Docs surface — "how do I learn this?"
+##### Docs surface — "how do I learn this?"
 - [ ] **In-editor help browser** — dedicated `Help → Documentation` panel (or `F1` shortcut) that renders the shipped docs inline as a searchable, navigable markdown viewer. No external browser needed. Contents:
   - Every markdown file under the engine's `docs/` directory (auto-indexed by `.md` filename; shipped alongside the engine binary in a `help/` resource folder so offline users still get the full manual).
   - Tree-of-contents sidebar grouped by subsystem (rendering / physics / audio / UI / scripting / editor / settings / …).
@@ -3068,11 +3068,11 @@ Phases 5A–9D have built an extensive editor (entity inspector, scene viewport,
 - [ ] Video / GIF embeds in panel tooltips for complex operations (one-shot 3-5 second MP4s).
 - [ ] Troubleshooting decision tree — "my scene doesn't render" → click-through diagnostic ending in a fix or a GitHub-issue prefill.
 
-#### Code-hygiene tooling — stop the clang-tidy whack-a-mole
+##### Code-hygiene tooling — stop the clang-tidy whack-a-mole
 - [ ] **Principled clang-tidy baseline.** Replace the current `bugprone-*,performance-*,modernize-*,readability-*,cppcoreguidelines-*` wildcard (with its ~8 excludes accumulated across audit tool 2.15.0 → 2.17.0) with an explicit enumeration of the ~30 checks the project actually wants active. Commit as a project-level `.clang-tidy` file so IDE / editor integrations pick it up too. Ends the "suppress the top rule, next layer appears" pattern documented in audit tool 2.15–2.17 CHANGELOG entries.
 - [ ] **Bulk clang-format sweep.** Whole-codebase `clang-format -i` pass against the existing `.clang-format` config (which has been deliberately deferred per the file's own header comment). Land in a single dedicated commit so git blame damage is contained to one reviewable unit. Re-enables `readability-braces-around-statements` once the unbraced sites are cleaned up by this pass or by the hybrid-adoption path (CODING_STANDARDS.md §3).
 
-#### Feedback loops & lifecycle — connecting users to the project
+##### Feedback loops & lifecycle — connecting users to the project
 Three user-facing features wire the editor to its own GitHub repo: bug reporter, feature tracker, auto-updater. Plus a release-management policy that makes the auto-updater's `stable` and `nightly` channels meaningful pre-1.0.
 
 **Full spec:** [`docs/superpowers/specs/2026-04-25-editor-feedback-and-lifecycle-design.md`](docs/superpowers/specs/2026-04-25-editor-feedback-and-lifecycle-design.md). Brainstormed via `superpowers:brainstorming` 2026-04-25 (Q1–Q17, six design sections + addenda). The spec covers components / data flow / error handling / testing per feature, plus shared infrastructure (HTTPS client, GitHub auth, release-manifest schema, project + config backup), plus the pre-1.0 release-management policy (every push → nightly auto-tagged; phase-boundary or 7-day-soak → stable, manually triggered). Decisions captured: GitHub Issues only as bug destination (configurable endpoint and dual-mode deferred), anonymous-bot-default auth with one-click GitHub OAuth promotion, deterministic keyword + GitHub-native dedup, hybrid privacy scrubbing, GitHub Discussions Ideas for feature requests with bundled-and-static `ROADMAP.md` dedup gate (network fallback prompt on missing local roadmap), single archive replace updates with CHANGELOG-front-matter breaking-feature metadata + per-feature C++ migrations + auto-rebake fallback, auto-rollback on first-frame-crash, settings preservation hard invariant, post-relaunch `PostUpdateWelcomePanel` review surface.
@@ -3148,49 +3148,49 @@ Three user-facing features wire the editor to its own GitHub repo: bug reporter,
   Lanes: editor, docs.
   Source: user-request-2026-08-19.
 
-#### Milestone
+##### Milestone
 A person who has never opened Vestige can open it, follow the first-run tour, create a scene, place a few entities, bake a navmesh, export a build — all without reading source code, watching a tutorial, or asking anyone. AI-assisted users get the same surface plus an optional chat panel. Keyboard-only users can drive every action without a mouse. The editor feels responsive even with 10k-entity scenes.
 
 ---
 
-### Phase 10.6: Multi-Threading & Concurrency Architecture
+#### Phase 10.6: Multi-Threading & Concurrency Architecture
 **Goal:** Get off the single-threaded engine tick before the engine reaches the same wall Unreal hit. **Added 2026-05-26** after Epic's UE6 reveal at RLCS Paris (24 May 2026) where the central announced change was breaking UE4/UE5's single-threaded simulation. Vestige today threads only `Logger` (mutex), `AsyncTextureLoader` (one worker), autosave (`std::async`), and tile streaming (Phase 11A). Every other system runs serially on the main loop. With 6 cores on the dev box (Ryzen 5 5600) and 8–16 the modern average, we are leaving 80–90 % of CPU silicon idle.
 
 **Source:** in-session research 2026-05-26 (Wccftech / GetJar UE6 coverage; GDC Vault "Multithreading the Entire Destiny Engine" Bungie 2015; Christian Gyrling "Parallelizing the Naughty Dog Engine Using Fibers" GDC 2015; Bevy ECS scheduler; Jolt Physics multi-threading docs). Cross-cutting infrastructure — gates Phase 11A AI perception parallelism, Phase 11B vehicle physics, Phase 13 GPU-driven render-command building, Phase 14 adaptive geometry, and Phase 17 terrain streaming.
 
 **License-safe deps to evaluate (MIT / Apache / zlib / public-domain only):** `enkiTS` (zlib, Doom Eternal / Avalanche), `taskflow` (MIT, header-only, modern C++20), `marl` (Apache 2.0, Google, fiber-based), `concurrencpp` (MIT, C++20 coroutines), `moodycamel::ConcurrentQueue` (BSD-2, MPMC lock-free). **Explicitly out of scope:** Intel TBB (now oneAPI but check redistribution), UE Task Graph (proprietary), Verse runtime (Epic proprietary).
 
-#### Foundation — pick a job system before anything else
+##### Foundation — pick a job system before anything else
 - [ ] **MT1.** Evaluate enkiTS vs Taskflow vs marl vs in-house. Decision doc `docs/phases/phase_10_6_design.md`: API ergonomics, dependency-graph support, fiber vs OS-thread, build-system fit, license, binary-size cost, dependency-injection seams for tests. Default presumption: **enkiTS** (Doom Eternal's choice; minimal API; zlib; ~3 KLOC; the project's load profile matches its design point). Decision blocks every other MT* bullet.
 - [ ] **MT2.** `engine/core/job_system.{h,cpp}` thin wrapper over the chosen library. Surface: `submit(fn) → JobHandle`, `submitGraph(deps) → JobHandle`, `wait(handle)`, `runOnMainThread(fn)` (deferred queue drained at the top of the frame). Worker-thread count = `std::thread::hardware_concurrency() − 1` by default (leave one core for OS + audio mixer thread). Single global instance owned by `Engine`; passed to subsystems via existing `SystemRegistry`.
 - [ ] **MT3.** **Thread-safety policy doc** — `docs/standards/THREADING.md`. Per-subsystem ownership rules: which class is "main-thread only", which is "any-thread-with-lock", which is "lock-free reader". Locking order convention to prevent deadlocks. Forbidden patterns (e.g. allocating from job threads; logging from inside the renderer's per-frame critical section). Every PR touching a job-system call cross-checks this doc.
 - [ ] **MT4.** ThreadSanitizer build target + CI gate. `cmake -DENGINE_TSAN=ON` + a tagged test suite that exercises the threaded subsystems (cloth GPU dispatch, async texture, logger, autosave) — extended each time a system goes multi-threaded. Gate on the nightly workflow that already exists for the cppcheck audit.
 
-#### Render path
+##### Render path
 - [ ] **MT5.** **Render-thread split** — the existing single-threaded loop becomes: (sim thread) gameplay + physics + animation + culling → produces a `RenderCommandBuffer` snapshot → (render thread) issues GL calls + swap. One-frame latency added; ~15–25 % FPS uplift on the average CPU-bound scene (the editor's per-panel ImGui passes alone are ~3 ms today). Sim thread runs at the desired tick rate; render thread runs at vsync. Prerequisite for MT6 and for the Vulkan backend in Phase 13.
 - [ ] **MT6.** **Parallel render-command building** — split the `RenderCommandBuffer` into N spatial buckets (typically frustum octants); each bucket built by one job in parallel. Per-bucket buffer then merged via deterministic ordering before submission. Mirrors UE4/idTech 7 secondary-command-buffer pattern. Pairs with the GPU-driven MDI work in Phase 13 `gpu-driven-rendering`; CPU prep stops being the bottleneck before that work lands.
 - [ ] **MT7.** **Parallel frustum culling + draw-list build** — current `Renderer::cull` walks all entities serially. Convert to a parallel-for over `m_drawables` with per-thread output vectors merged at the end. Cheap, no API change for callers, immediate win on dense scenes. Foundation for MT6.
 
-#### Simulation path
+##### Simulation path
 - [ ] **MT8.** **Wire Jolt's existing job system** — Phase 8 chose Jolt explicitly for "superior multi-threading" but the project today runs it on a default-constructed `JobSystemSingleThreaded`. Swap to `JobSystemThreadPool` (Jolt's built-in) sharing our MT2 worker pool via a `JobSystem` adaptor. Free 2–4× physics throughput on RX 6600-class CPU; mandatory before vehicle physics (Phase 11B) and ragdoll cluster (Phase 10.9 Slice 8 W13) ship.
 - [ ] **MT9.** **Parallel ECS system scheduler** — extend `SystemRegistry` with per-system read/write component declarations (`reads<Transform>(), writes<Velocity>()`). Build a per-frame dependency DAG; non-conflicting systems run in parallel. Pattern from Bevy's ECS scheduler + Unity DOTS — both are documented in papers/blog posts, no proprietary code reuse needed. **Replay-determinism gate:** systems on the determinism set (Phase 11A § 3.4) stay on a single ordered worker; the scheduler ensures stable ordering across runs.
 - [ ] **MT10.** **Parallel animation + IK update** — skeletal animation tick is embarrassingly parallel per-skeleton. Convert `AnimationSystem::update` to a job-per-skeleton parallel-for; same for IK solvers. Closes one of the largest CPU costs in any scene with > 30 NPCs.
 - [ ] **MT11.** **Parallel-safe event bus** — current `EventBus` (Phase 9A) was authored single-threaded. Audit + lock: either (a) MPMC queue for cross-thread events + drain on main thread, or (b) per-thread queues merged each frame. Picks the simpler option that preserves ordering guarantees the existing 130+ event-bus tests pin.
 
-#### Asset + I/O path
+##### Asset + I/O path
 - [ ] **MT12.** **Generalise the async loader** — `AsyncTextureLoader` (existing) is texture-only. Promote to `AsyncAssetLoader<T>` covering model / texture / HDRI / audio / scene-tile loads. Use C++20 coroutines (`co_await loadAsync(path)`) so the call sites stay linear-looking. License-safe coroutine helper: `concurrencpp` (MIT) or a tiny in-house wrapper over `<coroutine>` — both fit the global rule on latest-idiom external-library use.
 - [ ] **MT13.** **io_uring path for Linux asset loads** (DirectStorage-equivalent without proprietary dep) — batch async reads via `liburing` (LGPL-2.1 with linking exception; fine for our use). GPU-side BCn / BC7 decompression in a compute shader (clean-room from public KhronosGroup / Compressonator notes, no proprietary GDeflate / RTX-IO dependency). Closes the "level load takes 8s vs 1.5s" gap with AAA engines.
 
-#### Audit / safety
+##### Audit / safety
 - [ ] **MT14.** **Per-system "main-thread-only" assertions** — `VESTIGE_ASSERT_MAIN_THREAD()` macro using `std::this_thread::get_id()` vs a captured main-thread id. Apply to every GL call site + ImGui call + GLFW input poll. Catches the inevitable "called GL from a worker" bug in debug builds before TSAN does in CI.
 - [ ] **MT15.** **Lock-contention profiler hook** — record contention events to the existing performance overlay (`engine/core/frame_diagnostics.cpp`). Surfaces "X% of frame time waiting on lock Y" so we tune from data, not guesses.
 
-#### Milestone
+##### Milestone
 On a 6-core / 12-thread dev box, the engine drives ≥ 6 cores at ≥ 70 % utilisation under a 10k-entity scene with vehicle + cloth + audio + AI active. Replay determinism (Phase 11A) is preserved. ThreadSanitizer CI is green. No subsystem outside the documented allow-list calls GL or ImGui from a worker. The "single-thread wall" UE6 reveals does not become Vestige's ceiling.
 
 ---
 
-### Phase 10.7: Accessibility + Audio integration ✅ **Complete (2026-04-23)**
+#### Phase 10.7: Accessibility + Audio integration ✅ **Complete (2026-04-23)**
 Retrofit completed across 8 commits — every Phase-10 Settings-store consumer now reads at runtime, closing the "set in Settings, nothing happens" gap. **Audio mixer → playback** (A1–A3): `AudioBus` field on `AudioSourceComponent`, `AudioEngine` playback registry + per-frame `updateGains()` resolving `master × bus × source`, `AudioPanel` bus sliders route through `SettingsEditor::mutate` (mute/solo/ducking stay panel-local). **Subtitles** (B1–B3): `SubtitleQueue::tick(dt)` in `Engine::run`, `activeSubtitles()` rendered via `SpriteBatchRenderer` + `TextRenderer` as last overlay pass, declarative `assets/captions.json` auto-enqueue on clip playback. **Photosensitive caps** (C1–C2): bloom via `Renderer::setPhotosensitive` clamping `u_bloomIntensity`, strobe/flicker via `ParticleEmitterComponent::getCoupledLight` Hz conversion + clamp. Camera-shake (`clampShakeAmplitude`) and flash-overlay (`clampFlashAlpha`) retrofits deferred to Phase 11 — those subsystems do not exist in the codebase yet. Full design + slice breakdown in `docs/phases/phase_10_7_design.md`.
 
 ---
@@ -3199,14 +3199,14 @@ Retrofit completed across 8 commits — every Phase-10 Settings-store consumer n
 
 Breaks: the scene format's material and lighting blocks.
 
-### Phase 10.8: Rendering & Camera Prerequisites
+#### Phase 10.8: Rendering & Camera Prerequisites
 **Goal:** Complete the Phase 10 rendering and camera subsystems that Phase 11B depends on. This phase was split out of Phase 10's tail bullets to make the dependency chain explicit: Phase 11B combat, damage feedback, and vehicle work cannot build without these.
 
 **Note:** The three sections below — Camera Modes, Decal System, Post-Processing Effects Suite — were previously bullets in Phase 10. They have been lifted into their own phase so the ordering is enforced rather than implicit. Phase 10's remaining bullets (in-game UI, text rendering, audio, localization, accessibility, fog, rendering enhancements) stay in Phase 10; they have either landed or can land in parallel with Phase 11A infrastructure work without blocking it.
 
 **Cross-phase prerequisite note.** Three items originally planned inside Phase 10.8 — `PhysicsWorld::sphereCast` (CM3 / CM4 third-person wall-probe), centripetal Catmull-Rom parameterisation and arc-length spline evaluation (CM7 cinematic camera) — moved to Phase 10.9 Slices 7 + 10. Reason: the 2026-04-23 ultrareview surfaced that the existing uniform-Catmull-Rom implementation contradicts the research doc, and `sphereCast` is a more general primitive than a single-consumer Phase 10.8 slice. They land in Phase 10.9 with their tests, and Phase 10.8 consumes them rather than authoring them. CM1 (base types) already shipped 2026-04-23; CM2 begins after Phase 10.9 Slices 1 + 3 land.
 
-#### Camera Modes
+##### Camera Modes
 - [ ] Camera mode system (switchable projection and control schemes per scene/game)
 - [ ] First-person camera (existing — WASD + mouse look, perspective projection)
 - [ ] Third-person camera (follow entity with orbit controls, perspective projection)
@@ -3215,7 +3215,7 @@ Breaks: the scene format's material and lighting blocks.
 - [ ] Top-down camera (overhead orthographic, suitable for strategy or map views)
 - [ ] Cinematic camera (spline-based flythrough for guided tours and cutscenes) — splines already shipped (`engine/utils/catmull_rom_spline.{h,cpp}`, `engine/environment/spline_path.{h,cpp}`).
 
-#### Decal System
+##### Decal System
 Projected textures for blood splatters, scorch marks, claw scratches, bullet holes, and environmental storytelling.
 - [ ] Deferred decal rendering (project decal texture onto G-buffer geometry)
   - Box-projected decals (oriented bounding box defines projection volume)
@@ -3237,7 +3237,7 @@ Projected textures for blood splatters, scorch marks, claw scratches, bullet hol
   decal  *= (1.0 - v_mask);  // or use as blend weight for decal history
   ```
 
-#### Post-Processing Effects Suite
+##### Post-Processing Effects Suite
 Cinematic and atmospheric post-processing for horror, drama, and stylized rendering.
 
 **Tonemapping policy:** ACES 1.3 remains the default (matches current `HDR rendering and tone mapping` item from Phase 4). ACES 2.0 is opt-in only — the 2.0 committee prioritised SDR compatibility over HDR gamut usage, which desaturates HDR highlights by design (ref: Tarpini / Gilbert commentary, March 2026 — https://daejeonchronicles.com/2026/03/11/aces-2-0-we-are-in-for-some-further-years-of-bad-hdr/). Author any custom exposure / highlight curves via the Formula Workbench.
@@ -3253,24 +3253,24 @@ Cinematic and atmospheric post-processing for horror, drama, and stylized render
 - [ ] Lens flare (anamorphic streaks and ghost artifacts from bright lights)
 - [ ] Sharpen filter (contrast-adaptive sharpening for post-upscale clarity)
 
-#### Milestone
+##### Milestone
 Every Phase 11B gameplay hook that depends on rendering (hit decals, bullet-hole decals, damage screen effects, death fade, vehicle cameras, camera-mode switching) has a working sink. Phase 11A infrastructure can land in parallel; Phase 11B cannot ship until both 10.8 and 11A are complete.
 
 **Cross-phase prerequisite note.** Phase 10.9 Slice 7 ships `PhysicsWorld::sphereCast`, Slice 10 ships centripetal Catmull-Rom + arc-length-parameterised spline evaluation. Both are consumed by Phase 10.8 CM3 / CM4 / CM7 and were originally scheduled inside this phase; they move to Phase 10.9 so the remediation sweep can land them alongside their test coverage rather than under Phase 10.8's slice count.
 
 ---
 
-### Phase 13: Advanced Rendering
+#### Phase 13: Advanced Rendering
 **Goal:** Push visual fidelity with modern techniques.
 
-#### Screen-Space Effects
+##### Screen-Space Effects
 - [ ] Screen-space reflections / SSR (real-time reflections on wet floors, polished bronze/gold — complements IBL)
 - [ ] Screen-space global illumination / SSGI (one-bounce diffuse indirect lighting from depth+color buffers — practical "free" GI layer, complements probe-based approaches)
 - [ ] Depth of field (cinematic focus effect for guided tours and screenshots)
 - [ ] Motion blur (per-object and camera-based)
 - [ ] Bent normals (GTAO-derived least-occluded direction — feeds specular occlusion and gives diffuse GI / IBL a directional term instead of a flat AO scalar; runtime path extends the existing SSAO, with optional baked bent-normal maps as the offline complement)
 
-#### Advanced Materials
+##### Advanced Materials
 - [ ] Subsurface scattering / SSS (light bleeding through thin materials — linen curtains, wax candles, marble, skin; hybrid screen-space diffusion approach or ReSTIR-path-tracing diffusion when RT available; ref: NVIDIA SIGGRAPH 2025). *Basic per-material SSS (thickness + transmission + scattering distance + wrap lighting) lands in Phase 10 "Rendering Enhancements"; this Phase 13 item is the hybrid-screen-space / ReSTIR upgrade.*
 - [ ] Anisotropic reflections (brushed metal, hair, silk fabrics)
 - [ ] Strand-based hair and fur rendering (physically-based hair model with proper light scattering — relevant for animal fur, priestly garment fringes; ref: MachineGames/Indiana Jones, SIGGRAPH 2025)
@@ -3287,7 +3287,7 @@ Every Phase 11B gameplay hook that depends on rendering (hit decals, bullet-hole
   Kind: research.
   Source: user-request-2026-06-19.
 
-#### Global Illumination
+##### Global Illumination
 - [ ] Baked lightmaps with SH-fit storage (WishGI approach — pre-computed GI for static architectural scenes stored as per-mesh SH probes via inverse distribution; ~5% of classic lightmap memory, fragment-shader sampling with no extra pass; ref: Zhu et al. "WishGI" SIGGRAPH 2025 — https://dl.acm.org/doi/10.1145/3730935)
 - [ ] Light probes (capture local lighting conditions at probe positions — varying lighting between rooms)
 - [ ] Reflection probes (local cubemap captures for accurate indoor reflections — Holy Place vs Holy of Holies)
@@ -3312,7 +3312,7 @@ Every Phase 11B gameplay hook that depends on rendering (hit decals, bullet-hole
   Kind: implement.
   Source: design-of-record 2026-06-24 (cold-eyes converged, 6 loops).
 
-#### Vulkan and Ray Tracing
+##### Vulkan and Ray Tracing
 - [ ] Vulkan rendering backend (alternative to OpenGL)
 - [ ] Vulkan descriptor heap (VK_EXT_descriptor_heap — simplified resource binding, replaces legacy descriptor set model)
 - [ ] Ray tracing — reflections (hardware-accelerated on supported GPUs)
@@ -3327,13 +3327,13 @@ Every Phase 11B gameplay hook that depends on rendering (hit decals, bullet-hole
 - [ ] Forward+ / clustered forward rendering (tiled/clustered light culling so the current single-pass forward renderer scales to hundreds of dynamic lights without a G-buffer — keeps MSAA and ordered transparency working; complements the deferred pipeline above rather than replacing it)
 - [ ] Visibility buffer rendering (store triangle ID + barycentric coords instead of full G-buffer — compute-based material dispatch and deferred texturing; ref: idTech 8, DOOM: The Dark Ages)
 
-#### Tessellation and Geometry
+##### Tessellation and Geometry
 - [ ] Tessellation (adaptive subdivision for nearby geometry)
 - [ ] Displacement mapping (height maps that actually move geometry, unlike normal maps)
 - [ ] Tessellated water surfaces (wave simulation via height maps)
 - [ ] Tessellated terrain (adaptive detail for landscapes)
 
-#### 3D Gaussian Splatting (Captured-Asset Rendering)
+##### 3D Gaussian Splatting (Captured-Asset Rendering)
 **Why this is in core-renderer territory for Vestige:** the primary use case (architectural walkthroughs of real biblical sites — Tabernacle, Solomon's Temple references, excavation digs, museum artefacts) is the canonical 3DGS application. Capturing a real excavation as a Gaussian splat scene and rendering it natively beats any photogrammetry-to-mesh pipeline for fidelity. As of 2026-04 the technique is production-mature: Khronos finalised `KHR_gaussian_splatting` glTF (Feb 2026), `UnrealSplat` renders 2 M splats at 60 FPS via Niagara, and < 1 M splats at 60 FPS on RX 6600-class hardware is documented (matches the dev box).
 
 - [ ] **3DGS forward rasterizer** — compute-shader pre-sort by view-depth, then alpha-blended quad rasterization of anisotropic 3D Gaussians, depth-tested against the engine's existing Z-buffer so splat scenes composite cleanly with rasterized triangle geometry (no separate render pass required). Target: 60 FPS at ≤ 1 M splats on RX 6600. Ref: Kerbl et al. SIGGRAPH 2023 — https://repo-sam.inria.fr/fungraph/3d-gaussian-splatting/ ; UnrealSplat reference UE5 plugin — https://github.com/JI20/unreal-splat
@@ -3346,7 +3346,7 @@ Every Phase 11B gameplay hook that depends on rendering (hit decals, bullet-hole
 
 **Suggested ordering:** rasterizer → importer → cluster culling → motion vectors → editor / asset tooling. The first two together produce a usable end-to-end demo (load a `.glb` splat scene, render it). LOD + motion vectors are performance refinements landed once a real captured scene is in hand.
 
-#### Voxel Techniques
+##### Voxel Techniques
 **Why voxels for Vestige:** the engine's existing GI roadmap (surfels, radiance cascades, SH probe grid, Brixelizer-style SDF tracing) covers most of the indirect-lighting surface area without voxels. Voxels still earn a place for two specific reasons: (a) **Voxel Cone Tracing (VCT)** is the most production-mature, hardware-RT-free real-time GI option for indoor architectural scenes (Tabernacle, Holy of Holies — exactly the engine's primary use case) and pairs well with the deferred renderer planned in this phase; (b) **sparse voxel data structures** (SVO, SVDAG) are a strong acceleration-structure backbone for Phase 14 (Adaptive Geometry) and Phase 19 (Procedural Generation) — destructible terrain, archaeological-dig debris fields, weathered/eroded stone — that don't lend themselves to mesh-based representation. Voxels as a *primary rendering primitive* (Minecraft-style blocky worlds) are explicitly **not** on the path; biblical architecture is mesh-native.
 
 - [ ] **Voxel Cone Tracing GI (VCT)** — voxelize the scene each frame into a sparse 3D texture, cone-trace from each shaded fragment for indirect diffuse + glossy + AO + soft shadows. Two-bounce diffuse + glossy at 25-70 FPS on mid-range GPUs documented in production references. Compute-only; runs on RDNA2 / OpenGL 4.5. **Complementary, not redundant** with the existing surfel + SH-probe-grid + radiance-cascade items above: VCT lands first as the production-ready baseline, the others slot in once their respective pipelines mature. Refs: NVIDIA VXGI GTC 2012 https://developer.download.nvidia.com/GTC/PDF/GTC2012/PresentationPDF/SB134-Voxel-Cone-Tracing-Octree-Real-Time-Illumination.pdf · Friduric reference impl https://github.com/Friduric/voxel-cone-tracing · jose-villegas deferred VCT https://jose-villegas.github.io/post/deferred_voxel_shading/
@@ -3357,25 +3357,25 @@ Every Phase 11B gameplay hook that depends on rendering (hit decals, bullet-hole
 
 **Suggested ordering:** SVO data structure → VCT GI (consumes the SVO) → SVDAG compression (consumes VCT to identify hot-spots) → weathering/accumulation field → destructible debris. VCT is the highest-impact item — it lands real-time GI on the engine's primary use case without hardware RT.
 
-#### Shadow Techniques
+##### Shadow Techniques
 - [ ] Virtual shadow maps (massive virtual texture shadow map — only allocate tiles visible to camera, consistent detail at all distances, eliminates cascade seams; data-structure portion feasible on OpenGL 4.5 via `ARB_sparse_texture`, mesh-shader-optimal version deferred to the Vulkan backend)
 - [ ] Percentage-closer soft shadows / PCSS (contact-hardening shadows — sharp near caster, soft further away; author the filter-radius curve via the Formula Workbench)
 - [ ] HypeHype stochastic tile-based lighting (first, simpler many-lights rung — two-stage tile resampling with stratified reservoirs, no RT or mesh shaders required; ref: Lempinen SIGGRAPH 2025 — https://advances.realtimerendering.com/s2025/content/s2025_stb_lighting_v1.1_notes.pdf)
 - [ ] MegaLights stochastic area shadows (fixed-budget evaluation of hundreds-to-thousands of shadow-casting lights via tile-based reservoir sampling + temporal reuse; SVGF-style denoiser; supersedes PCSS for area lights once SDF ray-marching is in place; ref: Narkowicz & Costa SIGGRAPH 2025 — https://advances.realtimerendering.com/s2025/content/MegaLights_Stochastic_Direct_Lighting_2025.pdf)
 
-#### Upscaling
+##### Upscaling
 - [ ] Render scale slider (render at 50%–100% internal resolution, upscale to display resolution)
 - [ ] AMD FSR 1.0 spatial upscaler (open-source, GPU-agnostic, single post-process pass)
 - [ ] AMD FSR 2.x temporal upscaler (motion-vector-based, requires engine motion vectors and depth; higher quality than spatial; works on all GPUs including RDNA 2 / RX 6600)
 - [ ] Custom spatial upscaler (Lanczos/bicubic + CAS sharpening — built from scratch as a learning exercise)
 - [ ] Frame generation (interpolate additional frames between rendered frames — AMD FSR 3.x or custom optical-flow-based approach; doubles perceived framerate at the cost of latency)
 
-#### Anti-Aliasing and Filtering
+##### Anti-Aliasing and Filtering
 - [ ] Global anisotropic filtering quality setting (1x/2x/4x/8x/16x — applied to all scene textures)
 - [ ] Specular anti-aliasing (Toksvig or LEAN mapping — reduces distant surface shimmer from normal maps)
 - [ ] FXAA (fast approximate anti-aliasing — single-pass luminance-edge post-process; the cheapest AA option, added as a fifth `AntiAliasMode` alongside None / MSAA 4x / TAA / SMAA for low-end GPUs and performance mode where MSAA's cost or TAA's motion smear are unwanted)
 
-#### GPU-Driven Rendering
+##### GPU-Driven Rendering
 - [ ] **[Highest-ROI OpenGL 4.5 item]** GPU-driven MDI with Hi-Z occlusion culling (compute-shader Hi-Z build + `glMultiDrawElementsIndirectCount`; expected 10-30% FPS gain on >1k-object scenes; ref: Anno 117 Pax Romana GDC 2026, idTech 8 SIGGRAPH 2025 — https://schedule.gdconf.com/session/all-rays-lead-to-rome-next-gen-graphics-in-anno-117-pax-romana/915067)
 - [ ] GPU frustum and occlusion culling (Hi-Z occlusion culling in compute shader — skip objects hidden behind other objects; lands as part of the GPU-driven MDI item above)
 - [ ] Variable-rate shading / variable-rate compute (control shading rate per screen region — full rate for detail areas, reduced rate for flat surfaces; ref: idTech 8 VRCS)
@@ -3383,11 +3383,11 @@ Every Phase 11B gameplay hook that depends on rendering (hit decals, bullet-hole
 - [ ] Bindless textures and resources (eliminate texture binding overhead — all textures resident and GPU-addressable)
 - [ ] Shader language unification via Slang (migrate GLSL shaders to Slang IR — compiles to SPIR-V for OpenGL 4.5 today via `ARB_gl_spirv` + `ARB_spirv_extensions`, and to Vulkan + DXIL + OptiX + CUDA for future backends; supports generics, interfaces, differentiable shaders; Khronos governance; production use in Source 2 (CS2, Dota 2); prerequisite for low-friction Vulkan backend — ref: https://shader-slang.org/)
 
-#### Performance
+##### Performance
 - [x] Frustum culling (skip objects outside camera view)
 - [ ] Volumetric lighting (god rays, fog) — *Basic god rays and volumetric fog land in Phase 10 "Fog, Mist, and Volumetric Lighting"; this Phase 13 item covers the froxel-volume + temporal-reprojection rendering upgrade. Phase 15 weather modulates the Phase 10 primitives; Phase 13 upgrades what those primitives render.*
 
-#### VR / Immersive Rendering
+##### VR / Immersive Rendering
 - [ ] OpenXR integration (cross-platform VR/AR runtime)
 - [ ] Stereoscopic rendering (dual-eye viewpoints with correct IPD)
 - [ ] VR locomotion system (teleport, smooth movement, comfort options)
@@ -3395,10 +3395,10 @@ Every Phase 11B gameplay hook that depends on rendering (hit decals, bullet-hole
 - [ ] VR performance target (90 FPS stereo — requires aggressive optimization)
 - [ ] Foveated rendering (reduce detail in peripheral vision on supported headsets)
 
-#### Milestone
+##### Milestone
 Hybrid rendering with software and hardware ray-traced effects, real-time global illumination (probe-based and/or surfel GI), GPU-driven rendering pipeline, VR walkthroughs, and tessellation on supported hardware. Scalable from integrated GPUs (SSGI + probes) to discrete RT hardware (ReSTIR + full path tracing).
 
-#### 2026-04 Research Update — GDC 2026 / SIGGRAPH 2025 shader survey
+##### 2026-04 Research Update — GDC 2026 / SIGGRAPH 2025 shader survey
 
 Sourced from a 2026-04-19 research sweep (GDC 2026 rendering track + 2024-2026
 general shader research). Each item is rated ★1-5 on impact-per-effort for
@@ -3483,7 +3483,7 @@ already listed above are cross-referenced so we don't duplicate work.
 - **Neural radiance cache** — GL4.5 lacks the cooperative-matrix ops that
       make ML-in-shader practical; defer until Vulkan + matrix extensions.
 
-#### 2026-05 Research Update — post-UE6 reveal + open-engine survey (2026-05-26)
+##### 2026-05 Research Update — post-UE6 reveal + open-engine survey (2026-05-26)
 
 Sourced from a 2026-05-26 sweep following Epic's Unreal Engine 6 reveal at RLCS Paris (24 May 2026) plus the broader 2025–2026 open-engine + open-standard landscape. The biggest UE6 headline — breaking the single-threaded simulation wall — is a CPU concern and lands as its own Phase 10.6 (above). The items below are the *renderer / asset-pipeline / cross-cutting* gaps the same sweep surfaced. License-safe only: clean-room from papers and open-source reference impls (MIT / Apache / BSD / zlib). NVIDIA RTX Kit, DLSS, Substrate, Nanite, Verse are explicitly *not* used — open equivalents listed where they exist.
 
@@ -3509,13 +3509,13 @@ Sourced from a 2026-05-26 sweep following Epic's Unreal Engine 6 reveal at RLCS 
 
 ---
 
-### Phase 14: Adaptive Geometry System
+#### Phase 14: Adaptive Geometry System
 **Goal:** Handle massive geometric complexity automatically — original approach, not a copy of any existing engine.
 
-#### Problem Statement
+##### Problem Statement
 High-fidelity 3D scenes (like a fully detailed Solomon's Temple) can contain hundreds of millions of triangles. Without automatic geometry management, artists must manually create LOD variants and the engine wastes GPU time rendering detail the player can't see.
 
-#### Research Direction (Original Approach)
+##### Research Direction (Original Approach)
 Rather than replicating existing commercial solutions, Vestige will explore its own approach to automatic geometry management. Possible research areas:
 - [ ] Automatic mesh simplification (quadric error metrics, academic literature)
 - [ ] Cluster-based mesh decomposition (splitting meshes into independently cullable/LOD-able chunks — meshlets of ~64-256 triangles)
@@ -3528,23 +3528,23 @@ Rather than replicating existing commercial solutions, Vestige will explore its 
 - [ ] RT acceleration structure co-management (partitioned TLAS that tracks geometry LOD — when geometry detail changes, only affected BVH partitions rebuild; ref: NVIDIA RTX Mega Geometry foliage system)
 - [ ] Novel approaches: SDF-based geometry, surfel-based rendering, or other non-traditional representations
 
-#### Design Principles
+##### Design Principles
 - Solve the problem from first principles — don't reverse-engineer other engines
 - Build on published academic research (SIGGRAPH papers, GPU Pro/Gems, etc.)
 - Innovate where possible — this is an opportunity to do something new
 - Incremental: start with traditional LOD, evolve toward fully automatic
 
-#### Milestone
+##### Milestone
 A system that lets artists import film-quality assets and the engine automatically manages complexity in real time.
 
 ---
 
-### Phase 15: Atmospheric Rendering
+#### Phase 15: Atmospheric Rendering
 **Goal:** Procedural sky, weather, time of day, and dynamic atmosphere.
 
 **Note:** The Atmosphere & Weather domain system (Phase 9B) wraps `EnvironmentForces` and provides the weather state machine, wind field, and system logic. This phase focuses on the advanced *rendering* side: procedural sky, volumetric clouds, precipitation rendering, and atmospheric scattering. The weather controller logic from Phase 9B drives the rendering features here.
 
-#### Procedural Sky
+##### Procedural Sky
 - [ ] Procedural sky model (Rayleigh/Mie scattering) — physically-based atmosphere
   - Wavelength-dependent scattering for realistic blue sky, orange sunsets, red sunrises
   - Configurable atmosphere parameters: planet radius, atmosphere height, scattering coefficients
@@ -3562,7 +3562,7 @@ A system that lets artists import film-quality assets and the engine automatical
   - Milky Way band (subtle texture overlay)
   - Star brightness modulated by atmospheric extinction near horizon
 
-#### Volumetric Clouds
+##### Volumetric Clouds
 - [ ] Ray-marched volumetric clouds — 3D noise-based cloud shapes rendered via ray marching
   - Cloud layer altitude, thickness, and coverage controls
   - Worley + Perlin noise combination for realistic cloud shapes (cumulus, stratus, cirrus)
@@ -3577,7 +3577,7 @@ A system that lets artists import film-quality assets and the engine automatical
   - Noise offset animation for cloud evolution over time
   - Weather-dependent coverage (clear sky → partly cloudy → overcast transitions)
 
-#### Weather System
+##### Weather System
 - [ ] Weather controller — central system that drives all weather-related subsystems
   - Weather state machine: Clear, Cloudy, Overcast, Light Rain, Heavy Rain, Storm, Snow, Dust Storm
   - Smooth transitions between weather states (gradual cloud buildup, wind increase)
@@ -3628,16 +3628,16 @@ A system that lets artists import film-quality assets and the engine automatical
   - Calm in clear weather, moderate in rain, strong gusts in storms
   - Wind direction shifts during storm transitions
 
-#### God Rays with Clouds
+##### God Rays with Clouds
 - [ ] Crepuscular rays through cloud gaps — volumetric light shafts from sun through cloud openings
   - Cloud density used as shadow volume for volumetric lighting
   - Rays visible in dusty/humid atmosphere (Phase 10 volumetric fog integration)
   - Anti-crepuscular rays (converging rays opposite the sun) for sunset/sunrise
 
-#### Milestone
+##### Milestone
 A living sky with dynamic clouds, day/night transitions, weather effects (rain, snow, hail, dust storms), and atmospheric lighting that transforms the scene mood.
 
-#### 2026-04 Research Update — Dynamic weather state-of-the-art
+##### 2026-04 Research Update — Dynamic weather state-of-the-art
 
 Sourced from a 2026-04-28 sweep of UE5 Ultra Dynamic Sky / Weather, CryEngine community weather, and Unity UniStorm. The Phase 15 design above is already aligned with current best practice; this note pins specific technique choices and a recommended ship order.
 
@@ -3658,12 +3658,12 @@ Refs: UE5 Ultra Dynamic Sky https://www.unrealengine.com/marketplace/en-US/produ
 
 ---
 
-### Phase 17: Terrain and Landscape (CORE COMPLETE — Phase 5I)
+#### Phase 17: Terrain and Landscape (CORE COMPLETE — Phase 5I)
 **Goal:** Large-scale terrain with heightmap-based elevation for hills, valleys, and natural landscapes.
 
 Core terrain system implemented in Phase 5I. Remaining items are enhancements.
 
-#### Terrain System
+##### Terrain System
 - [x] Heightmap-based terrain (import or paint elevation in-editor) — Phase 5I-1
 - [x] CDLOD quadtree LOD with per-vertex morphing — Phase 5I-1
 - [x] Normal map + splatmap texturing (4 layers) — Phase 5I-2
@@ -3678,7 +3678,7 @@ Core terrain system implemented in Phase 5I. Remaining items are enhancements.
 - [x] Triplanar mapping for steep slopes — Phase 5I enhancement
 - [ ] Terrain chunking (split large terrains into tiles for streaming and culling) — deferred to a future phase (needed for general-purpose engine use with 4km+ terrains)
 
-#### Milestone
+##### Milestone
 Outdoor landscapes surrounding the Temple complex — hills, valleys, and the Kidron Valley with terrain elevation, ready for environment painting from Phase 5G.
 
 ---
@@ -3688,12 +3688,12 @@ Outdoor landscapes surrounding the Temple complex — hills, valleys, and the Ki
 Breaks: visual scripting graphs. 3D_E-0627 lands the first real consumer, so
 the node semantics stop being unreachable and become a surface a user relies on.
 
-### Phase 11A: Gameplay Infrastructure
+#### Phase 11A: Gameplay Infrastructure
 **Goal:** The runtime subsystems every Phase 11B gameplay feature consumes — camera shake, screen flash, save-file compression, replay recording, behavior-tree runtime, and AI perception. Split out of the original single Phase 11 so the consumer-before-system dependencies surface at planning time rather than at implementation time.
 
 **Note:** Behavior Trees and AI Perception were previously in Phase 16 (Scripting & Interactivity). They are load-bearing for every Phase 11B enemy / traffic / opponent AI bullet, so they land here instead. Phase 16 retains the advanced AI features that build on them (AI Director pacing, Cutscene, Dialogue).
 
-#### Camera Shake System
+##### Camera Shake System
 *Phase 10.7 deferred `clampShakeAmplitude` to this subsystem. The clamp helper is already shipped; this section is what finally consumes it.*
 - [ ] `CameraShakeComponent` attached to the camera rig — drives a per-frame offset to the current CameraMode view matrix without disturbing the underlying camera transform.
 - [ ] Shake types: impulse (one-shot peak + decay — weapon kick, footfall), continuous (earthquake, rumble), directional (recoil along a vector), trauma (Dead Space-style gore-cam — amplitude tied to recent damage intake).
@@ -3702,7 +3702,7 @@ the node semantics stop being unreachable and become a surface a user relies on.
 - [ ] Composes with Phase 10.8 Camera Modes — shake is applied post-mode, so first-person / third-person / cinematic / vehicle modes all get shake without per-mode code.
 - [ ] Editor preview — a slider in the camera inspector that triggers each shake type for tuning.
 
-#### Screen Flash / Hit Flash System
+##### Screen Flash / Hit Flash System
 *Phase 10.7 deferred `clampFlashAlpha` to this subsystem. The clamp helper is already shipped; this section is what finally consumes it.*
 - [ ] Full-screen overlay pass (post-tonemap, pre-UI) with per-flash colour + alpha + envelope curve.
 - [ ] Flash types: hit flash (red, short — damage taken), pickup flash (green, short — item gained), stasis flash (cyan, short — Dead Space stasis cast), screen-wipe transition (any colour, long — scene/chapter change), death fade (black, slow — player death).
@@ -3711,12 +3711,12 @@ the node semantics stop being unreachable and become a surface a user relies on.
 - [ ] Queueable — multiple simultaneous flashes blend additively with per-flash colour and independent envelopes.
 - [ ] Integrated with Phase 10.8 Post-Processing Effects Suite as the last overlay before UI compositing.
 
-#### Save File Compression
+##### Save File Compression
 - [ ] zstd integration — vendored via FetchContent (same mechanism as existing deps). **Shared with Phase 12 asset packaging** — both consumers use one integration, not two.
 - [ ] Compressed binary chunk writer/reader primitive — `writeCompressedChunk(ostream, bytes)` / `readCompressedChunk(istream)` with a versioned header so forward compatibility is explicit.
 - [ ] Save-file format header — engine version stamp + scene ID + chunk table + per-chunk zstd payload. Designed so the Phase 11B save/checkpoint system just fills in the chunks.
 
-#### Replay Recording Infrastructure
+##### Replay Recording Infrastructure
 *Moved from the original Phase 11 Replay System — the recording / determinism primitives are infrastructure; the playback / ghost / MP4-export features stay in Phase 11B.*
 - [ ] Input-recording replay (baseline)
   - Record per-frame / per-tick input state (keyboard, mouse, gamepad axes + buttons) keyed to the fixed-timestep game tick so replay is bit-identical given deterministic physics
@@ -3734,7 +3734,7 @@ the node semantics stop being unreachable and become a surface a user relies on.
   - `ReplayRecorder` / `ReplayPlayer` unit tests with a headless scene
   - Determinism harness: N-step input-recording replay against scripted inputs, bit-exact state assertion
 
-#### Behavior Tree Runtime
+##### Behavior Tree Runtime
 *Moved from Phase 16 — load-bearing for every Phase 11B enemy, traffic, and opponent AI bullet.*
 
 Advanced AI decision-making system — far more expressive than state machines for complex enemy behavior.
@@ -3751,7 +3751,7 @@ Advanced AI decision-making system — far more expressive than state machines f
   - Highest-scoring action wins — emergent behavior without explicit tree authoring
   - Useful for varied NPC behavior (not all enemies act identically)
 
-#### AI Perception System
+##### AI Perception System
 *Moved from Phase 16 — every Phase 11B enemy / NPC reads from this.*
 
 Sensory system for NPC awareness — sight, sound, and proximity detection.
@@ -3771,12 +3771,12 @@ Sensory system for NPC awareness — sight, sound, and proximity detection.
   - Alert propagation (alerted enemies alert nearby allies)
   - Search patterns (systematic area search after losing target)
 
-#### Milestone
+##### Milestone
 Every infrastructure piece that Phase 11B gameplay consumes exists as a tested primitive: camera shake drives view-matrix offsets for any camera mode, screen flashes upload through the photosensitive clamp, save files round-trip through compressed chunks, replays record and play back deterministically, and the behavior-tree runtime can evaluate a three-node `Sequence(Patrol, CheckPlayerVisible, Attack)` on a scripted NPC using perception data.
 
 ---
 
-### Phase 11B: Gameplay Features
+#### Phase 11B: Gameplay Features
 **Goal:** Core gameplay mechanics for action, survival, horror, and racing games — combat, inventory, health, saves, environmental interaction, and vehicle physics. Consumes the render prerequisites from Phase 10.8 and the runtime infrastructure from Phase 11A.
 
 These systems transform Vestige from an exploration/walkthrough engine into a full game engine capable of shipping:
@@ -3786,7 +3786,7 @@ These systems transform Vestige from an exploration/walkthrough engine into a fu
 - **Arcade racing** — the *Burnout 3 / Burnout: Revenge* archetype: exaggerated arcade vehicle physics, boost meter, takedowns, traffic, crash cameras, damage model.
 - **Simulation racing** — the *Gran Turismo* archetype: realistic tyre / suspension / aero / drivetrain physics, licence tests, tuning, photo mode, pit stops, driving assists.
 
-#### Combat / Weapon System
+##### Combat / Weapon System
 - [ ] Weapon component — attach to entity for ranged or melee combat
   - Fire rate, damage, ammo capacity, reload time, spread/accuracy
   - Hitscan weapons (raycast on fire — pistols, rifles, plasma cutters)
@@ -3809,7 +3809,7 @@ These systems transform Vestige from an exploration/walkthrough engine into a fu
   - Upgrade slots per weapon (damage, capacity, reload speed, special)
   - Upgrade bench interaction (dedicated UI for weapon modification)
 
-#### Health and Damage System
+##### Health and Damage System
 - [ ] Health component — per-entity health pool with damage/heal methods
   - Maximum health, current health, regeneration rate (optional)
   - Damage resistance per type (armor reduces kinetic, insulation reduces fire)
@@ -3828,7 +3828,7 @@ These systems transform Vestige from an exploration/walkthrough engine into a fu
   - Death screen overlay with fade (Phase 10.8 PP "Death screen effects" + Phase 11A death-fade ScreenFlash type)
   - Respawn at last checkpoint or save point
 
-#### Inventory System
+##### Inventory System
 - [ ] Inventory component — grid or list-based item storage per entity
   - Item slots with stack limits and weight limits
   - Item categories: weapons, ammo, health, key items, upgrades, consumables
@@ -3847,7 +3847,7 @@ These systems transform Vestige from an exploration/walkthrough engine into a fu
   - Rarity tiers with drop probability weights
   - Level-scaled loot (harder areas drop better items)
 
-#### Save / Checkpoint System
+##### Save / Checkpoint System
 - [ ] Full world state serialization
   - Entity states (position, health, inventory, animation state)
   - Scene state (doors opened, items collected, enemies killed, triggers fired)
@@ -3866,7 +3866,7 @@ These systems transform Vestige from an exploration/walkthrough engine into a fu
   - Version stamping for forward compatibility
   - Compression (zstd) via Phase 11A Save File Compression integration — the infrastructure is owned by 11A and shared with Phase 12 asset packaging.
 
-#### Environmental Hazards
+##### Environmental Hazards
 - [ ] Hazard zones — volumes that apply damage/effects to entities inside
   - Fire zones (burning damage, fire particles)
   - Electric zones (periodic shock damage, spark particles, stun effect)
@@ -3883,10 +3883,10 @@ These systems transform Vestige from an exploration/walkthrough engine into a fu
   - Steam vents (periodic burst, push force on entities)
   - Collapsing floor/ceiling (trigger-based destruction + damage)
 
-#### Vehicle Physics & Racing
+##### Vehicle Physics & Racing
 Dual-archetype support: arcade racing (*Burnout 3 / Burnout: Revenge*) and simulation racing (*Gran Turismo*). The underlying vehicle physics model is shared; arcade vs sim is a tuning and assist-enabled-by-default difference, not a code fork. Vehicles are built on the existing Jolt physics world.
 
-##### Vehicle core (shared)
+###### Vehicle core (shared)
 - [ ] `VehicleComponent` — entity-level wrapper around a Jolt `VehicleConstraint`. Stores chassis body + per-wheel state + drivetrain + engine + aero.
 - [ ] Suspension model per wheel — spring stiffness, damping, travel limits, anti-roll bar coupling front/rear; Jolt `WheeledVehicleController` is the baseline.
 - [ ] Tyre model — for arcade: simplified grip curve + slip-angle factor. For sim: Pacejka "Magic Formula" longitudinal + lateral with load sensitivity. Per-compound (slick / road / wet / off-road) parameters in `FormulaLibrary`. CPU (per-wheel, ~4/frame); Formula Workbench is the authoring tool (Rule 6).
@@ -3898,7 +3898,7 @@ Dual-archetype support: arcade racing (*Burnout 3 / Burnout: Revenge*) and simul
 - [ ] Vehicle cameras — Cockpit (interior first-person with dashboard rendering), Chase (third-person behind + slightly above, spring-smoothed), Hood, Bumper, Photo-mode (free-orbit), Cinematic (spline + look-at chase). Composes with the Phase 10.8 Camera Modes system — "vehicle" is a context that provides camera presets, not a new camera class.
 - [ ] Force-feedback / steering-wheel support — `InputDevice::SteeringWheel` enum value alongside Keyboard/Mouse/Gamepad. GLFW doesn't expose FFB directly; plug in SDL2's haptic API or libuinput under a thin shim. Axes: steering, throttle, brake, clutch, handbrake, paddle-shift. Button mapping runs through the existing `InputBindings`. Deferred to a follow-up slice but the binding enum goes in day one.
 
-##### Arcade racing (Burnout 3 / Burnout: Revenge archetype)
+###### Arcade racing (Burnout 3 / Burnout: Revenge archetype)
 - [ ] Boost meter — fills from risk behaviour: near-miss (oncoming traffic within N metres), drafting (trailing another vehicle in slipstream for T seconds), drifting (slip-angle exceeds threshold for T seconds), airtime (wheels off ground for T seconds), crash (triggers a *Crashbreaker* bonus in Revenge). Tunable weights per game.
 - [ ] Boost activation — throttle multiplier + FOV kick + radial blur + audio filter sweep. Crashbreaker detonates the wrecked vehicle into a directed explosion (leverages Phase 8 destruction).
 - [ ] Takedowns — directed collision mechanic. Raycast + impulse-angle check classifies a collision as a takedown when the initiating vehicle is in boost and the struck vehicle loses control. Registers in a "takedowns" score with a short hitstop + camera cut.
@@ -3906,7 +3906,7 @@ Dual-archetype support: arcade racing (*Burnout 3 / Burnout: Revenge*) and simul
 - [ ] Road Rage / Crash Mode / Burning Lap / Grand Prix game-mode primitives — each is a scoring ruleset + win condition + HUD layout. `GameMode` interface with plug-in rulesets; engine ships the four named modes as starters and games compose their own.
 - [ ] Signature Takedown tracking — per-opponent persistent record of the most spectacular takedown cam; viewable from a garage UI.
 
-##### Simulation racing (Gran Turismo archetype)
+###### Simulation racing (Gran Turismo archetype)
 - [ ] Driving assists toggles — ABS, Traction Control (TCS), Stability Control (ESC / ASM), active steering, braking line overlay. Each on its own slider (Off / Weak / Standard / Strong) not just a binary. Pro preset turns everything off.
 - [ ] Tyre wear + thermal model — tyres accumulate wear % per km based on slip energy; grip degrades with wear. Per-compound temperature windows (cold / optimal / overheated) — off-window tyres slide. Feeds strategy (endurance pit-stop timing).
 - [ ] Fuel model — consumption per lap scales with throttle position + gear + lean map. Empty tank = engine stall.
@@ -3918,13 +3918,13 @@ Dual-archetype support: arcade racing (*Burnout 3 / Burnout: Revenge*) and simul
 - [ ] Lap / sector timing + timing HUD — live split against best lap + rival + car-ahead / car-behind.
 - [ ] Photo Mode — pause simulation, free-orbit camera, aperture / focal length / shutter / ISO controls (plumbed into the existing post-process chain), LUT preset picker, 16:9 / 2.39:1 / square / vertical crop grids, export to PNG with optional film-grain overlay. Respects accessibility (no motion in the viewport when reduced-motion is on).
 
-##### Testing surface
+###### Testing surface
 - [ ] Deterministic unit tests for the tyre model against published Pacejka coefficient tables.
 - [ ] Per-wheel suspension step against known rebound curves.
 - [ ] Takedown classifier unit tests (collision angles + speed thresholds).
 - [ ] Opponent AI behaviour harness — scripted scenarios (car ahead braking late, overtaking opportunity on straight) with deterministic PASS/FAIL.
 
-#### Horror Action Polish (Dead Space archetype)
+##### Horror Action Polish (Dead Space archetype)
 Fills the gaps between the generic Combat / Health / Inventory / Save systems above and the *Dead Space* feature set specifically. Most generic horror-action pieces (dismemberment, stasis, ragdoll, decal gore, ADS, weapon upgrade bench, vacuum zones, checkpoint saves) already live in earlier phases or in Phase 11 above — this section covers what remains.
 
 - [ ] **Kinesis (telekinesis) component** — pick-up-and-throw tied to a dedicated input. Grab any `PhysicsBody` tagged `kinesisTarget`; charge launches it with a force magnitude + direction from the crosshair. Used both for combat (throw spikes / limbs) and puzzles (move heavy crates, align circuits). Leverages the existing `physics/grab_system` primitive.
@@ -3941,7 +3941,7 @@ Fills the gaps between the generic Combat / Health / Inventory / Save systems ab
 - [ ] **Ammo / health scarcity tuning helpers** — survival-horror economy depends on drops being rare but not *too* rare. Editor tool: simulated playthrough harness that reports expected ammo / health surplus per chapter against a target curve, so designers can retune loot tables without full playthroughs.
 - [ ] **Co-op session support (Dead Space 3 archetype)** — scope note: the generic networking primitives live in **Phase 20**. This bullet just calls out that the horror-specific design — divergent player perspectives, co-op-only encounters, revive mechanic — needs per-scene authoring and a split-inventory flag once Phase 20 lands. Not shippable before Phase 20.
 
-#### Replay Features
+##### Replay Features
 *Infrastructure (recording, state snapshots, determinism contract, recorder/player tests) lives in Phase 11A. This section covers the user-facing replay features built on top of that infrastructure.*
 
 - [ ] Replay playback controls
@@ -3960,7 +3960,7 @@ Fills the gaps between the generic Combat / Health / Inventory / Save systems ab
   - Replays record inputs + entity state — never phone home, only written locally
   - Per-game opt-in: a game built with Vestige decides whether to enable recording at all (engine primitive is off by default)
 
-#### Milestone
+##### Milestone
 A complete gameplay loop for three archetypes:
 
 - **Horror action (Dead Space-shaped)** — explore a RIG-spined character through low-light corridors, dismember necromorphs with upgradeable weapons, use stasis and kinesis for combat and puzzles, traverse zero-G sections, save at checkpoints, and progress through chapters. All HUD is diegetic.
@@ -3971,25 +3971,25 @@ All systems configurable in the editor.
 
 ---
 
-### Phase 16: Scripting and Interactivity
+#### Phase 16: Scripting and Interactivity
 **Goal:** Allow scene creators to add behavior and interactivity without writing C++.
 
 **Note:** Basic visual scripting (event-to-action chains) and basic AI/navigation are introduced in Phase 9C/9E as domain systems. This phase covers the *advanced* features: behavior trees, AI perception, AI director, cutscene system, and dialogue. The node graph infrastructure from Phase 9E is the foundation for visual scripting here.
 
-#### Visual Scripting
+##### Visual Scripting
 - [ ] Node-based visual scripting system (connect trigger → action blocks in the editor)
 - [ ] Event triggers: player enters area, player looks at object, player presses interact key, timer
 - [ ] Actions: open/close door, play sound, show text, move object, toggle light, teleport player
 - [ ] Waypoint system — define guided tour paths the player can follow
 - [ ] Trigger zones — invisible volumes that fire events when the player enters
 
-#### Simple Behaviors
+##### Simple Behaviors
 - [ ] Animated objects (rotating, bobbing, swinging — set in the inspector)
 - [ ] Door component (opens on interact, with animation)
 - [ ] Torch component (auto-generates fire particles + flickering light)
 - [ ] Water component (auto-generates water surface shader + sound)
 
-#### AI and Navigation
+##### AI and Navigation
 - [ ] Navigation mesh generation (automatic walkable surface detection from scene geometry)
 - [ ] NavMesh pathfinding (A* or similar on the navigation mesh)
 - [ ] NPC component (entity that follows paths, plays animations, responds to triggers)
@@ -3997,13 +3997,13 @@ All systems configurable in the editor.
 - [ ] Crowd simulation (multiple NPCs navigating without colliding — Temple visitors, priests)
 - [ ] Line-of-sight checks (NPCs react to player visibility)
 
-#### Behavior Trees
+##### Behavior Trees
 *Moved to Phase 11A — see "Behavior Tree Runtime" there. The BT runtime, editor, and utility-AI bullets live in Phase 11A because every Phase 11B enemy / traffic / opponent AI bullet consumes them; scheduling them here would be a consumer-before-system inversion.*
 
-#### AI Perception System
+##### AI Perception System
 *Moved to Phase 11A — see "AI Perception System" there. Same rationale: Phase 11B NPCs and encounter AI depend on perception, so perception ships before them.*
 
-#### AI Director / Encounter Pacing
+##### AI Director / Encounter Pacing
 Dynamic system that controls encounter intensity and pacing — inspired by Left 4 Dead and Dead Space.
 - [ ] Tension tracking — measure player's current stress level
   - Metrics: recent damage taken, ammo remaining, health level, time since last encounter
@@ -4021,7 +4021,7 @@ Dynamic system that controls encounter intensity and pacing — inspired by Left
   - Mandatory encounters (story-critical, always spawn regardless of tension)
   - Random encounters (optional, director-controlled frequency)
 
-#### Cutscene and Cinematic System
+##### Cutscene and Cinematic System
 In-engine cinematics for story moments, guided tours, and dramatic reveals.
 - [ ] Camera track editor — keyframed camera paths with easing
   - Position, rotation, FOV keyframes along a timeline
@@ -4045,17 +4045,17 @@ In-engine cinematics for story moments, guided tours, and dramatic reveals.
   - Door slam, lights flicker, enemy scripted entrance
   - Environmental destruction sequences
 
-#### Milestone
+##### Milestone
 A scene where doors open, torches flicker, guided tours run, NPCs walk patrol routes using behavior trees and perception systems, enemies dynamically spawn based on AI director pacing, cutscenes play for story moments, and dialogue advances the narrative — all configured in the editor without code.
 
 ---
 
-### Phase 24: Structural / Architectural Physics
+#### Phase 24: Structural / Architectural Physics
 **Goal:** Make every hanging / tethered / socketed asset obey the laws of physics, not just look like it does.
 
 Design doc: [`docs/phases/phase_24_structural_physics_design.md`](docs/phases/phase_24_structural_physics_design.md)
 
-#### Features
+##### Features
 - [ ] XPBD cloth particle ↔ Jolt rigid body kinematic attachment (curtains pinned to moving poles)
 - [ ] Inextensible tether / distance-max constraint with tagged-union endpoints (particle / rigid body / static anchor)
 - [ ] Slider-ring authoring on top of the existing `Jolt::SliderConstraint` wrapper (bronze rings on acacia poles)
@@ -4065,10 +4065,10 @@ Design doc: [`docs/phases/phase_24_structural_physics_design.md`](docs/phases/ph
 - [ ] Formula Workbench entries for every new tuning coefficient (ring friction, tether compliance, pendulum damping, cord tensile modulus) — per CLAUDE.md Rule 6
 - [ ] Tabernacle structural pass: re-rig the demo scene so nothing hangs in mid air (48 boards + 5 bars/side + 10 inner curtains + 11 goat-hair curtains + 2 coverings + veil + screen + 60 outer pillars + linen walls + tent-pegs-and-cords)
 
-#### Milestone
+##### Milestone
 Load the demo scene, let it settle — every particle above Y=0 is attached through a chain of joints to a static anchor. Apply a wind gust and the linen panels swing in a coordinated ~4 s pendulum without rubber-banding. Pull the entrance screen aside via script and the rings bunch along the pole and stay bunched.
 
-#### Why This Is Its Own Phase, Not Part of the Rendering-Realism Track
+##### Why This Is Its Own Phase, Not Part of the Rendering-Realism Track
 The rendering research update (Phase 13 "2026-04 Research Update") makes pixels look photoreal. Without Phase 24, the result is photoreal curtains floating in mid air — *worse* than the current lower-fidelity-but-also-floating state, because the realism of the material makes the physics error more visible, not less. Phases 13 and 24 should land in parallel; neither is useful alone for the Tabernacle / Temple showcase projects.
 
 ---
@@ -4077,13 +4077,13 @@ The rendering research update (Phase 13 "2026-04 Research Update") makes pixels 
 
 Breaks: the command-line flags and the packaging layout.
 
-### Phase 12: Distribution
+#### Phase 12: Distribution
 **Goal:** Package and distribute the application — both finished experiences and the engine itself.
 
-#### Cross-Platform Compilation
+##### Cross-Platform Compilation
 The engine targets Linux and Windows from the start (CLAUDE.md). The codebase is mostly portable (CMake, GLFW, GLM, OpenGL, stb, FreeType — all cross-platform), but a small number of platform-specific calls need `#ifdef` guards and the build pipeline needs configuring for both platforms.
 
-##### Platform Portability Fixes
+###### Platform Portability Fixes
 - [ ] `localtime_r` → `localtime_s` on MSVC (frame_diagnostics.cpp, visual_test_runner.cpp, recent_files.cpp)
 - [ ] `getenv("HOME")` → `getenv("USERPROFILE")` on Windows (frame_diagnostics.cpp, window.cpp)
 - [ ] `/proc/self/status` memory tracking → Windows API equivalent (memory_tracker.cpp)
@@ -4092,14 +4092,14 @@ The engine targets Linux and Windows from the start (CLAUDE.md). The codebase is
 - [ ] Path separator handling (`/` vs `\`) — use `std::filesystem::path` where needed
 - [ ] Verify `std::filesystem` links without `-lstdc++fs` on target compilers (GCC < 9 needs it)
 
-##### Windows Build Setup
+###### Windows Build Setup
 - [ ] Verify CMake generates valid MSVC / Ninja build on Windows
 - [ ] Test with Visual Studio 2022 (MSVC 17) and MinGW-w64
 - [ ] Resolve any GLFW / OpenGL context differences on Windows (driver-specific)
 - [ ] Verify all FetchContent dependencies build cleanly on MSVC
 - [ ] Windows-specific icon and manifest for the executable
 
-##### CI / CD Pipeline
+###### CI / CD Pipeline
 - [ ] GitHub Actions workflow: Linux build (GCC + Clang)
 - [ ] GitHub Actions workflow: Windows build (MSVC)
 - [ ] Automated test run on both platforms (unit tests + visual test runner)
@@ -4116,12 +4116,12 @@ The engine targets Linux and Windows from the start (CLAUDE.md). The codebase is
   steps also call, so the two can't drift. Optionally wire as an opt-in
   `pre-push` git hook.
 
-##### Cross-Compilation (Optional)
+###### Cross-Compilation (Optional)
 - [ ] MinGW-w64 toolchain file for building Windows binaries from Linux
 - [ ] Verify GLFW cross-compiles cleanly with MinGW
 - [ ] Test cross-compiled binary on Windows (or Wine)
 
-#### Asset Pipeline
+##### Asset Pipeline
 - [ ] Texture compression (BC7/KTX2 for desktop, ASTC for mobile — compress on import, load directly to GPU)
 - [ ] Texture channel packing + material atlasing (pack occlusion / roughness / metallic into a single ORM texture on import, and atlas small material textures to cut sampler binds and draw calls — distinct from the shipped 2D sprite atlas, which handles TexturePacker-JSON sprite sheets)
 - [ ] Automatic mipmap generation with quality filtering options
@@ -4130,7 +4130,7 @@ The engine targets Linux and Windows from the start (CLAUDE.md). The codebase is
 - [ ] Hot-reload during development (detect changed assets, reload without restarting)
 - [ ] Offline video rendering pipeline (ffmpeg) — frame-by-frame render to MP4 / WebM / image sequence. Primary consumer is the Phase 11B replay editor's MP4 export; secondary consumers are future cutscene rendering and editor screenshot-burst capture. Integration is a thin `ffmpeg` invocation layer, not a library link, so the tool stays optional at runtime and only required for export.
 
-#### Compression and Size Optimization
+##### Compression and Size Optimization
 - [ ] GPU texture compression pipeline (BC7/BC1 via KTX2 — ~4x VRAM reduction, faster loads)
 - [ ] Asset packaging (bundle assets into compressed archives with zstd/LZ4 for distribution)
 - [ ] Animation data compression (16-bit half-float positions, smallest-3 quaternion encoding)
@@ -4138,7 +4138,7 @@ The engine targets Linux and Windows from the start (CLAUDE.md). The codebase is
 - [ ] Strip source assets from builds (exclude .blend, raw PSD/EXR source files)
 - [ ] Binary size optimization (link-time optimization, dead code stripping for release builds)
 
-#### Application Distribution
+##### Application Distribution
 - [ ] Steam SDK integration
 - [ ] Steam achievements (if applicable)
 - [ ] Installer/packaging for Windows
@@ -4147,22 +4147,22 @@ The engine targets Linux and Windows from the start (CLAUDE.md). The codebase is
 - [ ] Controller button prompts (show correct icons for connected controller)
 - [ ] Loading screens (with progress indicators for large scenes)
 
-#### Scene Packaging and Sharing
+##### Scene Packaging and Sharing
 - [ ] Export scene as standalone package (scene + all referenced assets in one archive)
 - [ ] Import packaged scenes from other creators
 - [ ] Scene versioning — track which engine version a scene was built with
 
-#### Milestone
+##### Milestone
 Application published on Steam. Scenes can be packaged and shared between users.
 
 ---
 
-### Phase 21: Build Wizard — Project Creation and Export
+#### Phase 21: Build Wizard — Project Creation and Export
 **Goal:** A comprehensive guided wizard that walks users through creating, configuring, and building a complete game or experience from start to finish.
 
 The wizard transforms Vestige from a tool that experts use into a platform that anyone can ship a product with. It combines project setup, scene configuration, gameplay selection, platform targeting, and final build into a single guided flow.
 
-#### Project Creation Wizard
+##### Project Creation Wizard
 - [ ] New Project wizard — step-by-step project setup
   - Project name, save location, template selection
   - Templates: Empty, First-Person Exploration, Horror, Action, Architectural Walkthrough, Biblical Scene
@@ -4173,7 +4173,7 @@ The wizard transforms Vestige from a tool that experts use into a platform that 
   - Auto-populate with biome preset (desert, forest, courtyard, interior)
   - Lighting preset (daytime, sunset, night, torchlit interior)
 
-#### Game Configuration Wizard
+##### Game Configuration Wizard
 - [ ] Gameplay mode selector — choose what kind of experience to build
   - Exploration (no combat, walk and observe)
   - Horror (combat, inventory, limited resources, atmospheric effects)
@@ -4190,7 +4190,7 @@ The wizard transforms Vestige from a tool that experts use into a platform that 
   - Ambient sound zone configuration
   - Spatial audio source placement guide
 
-#### Build and Export Wizard
+##### Build and Export Wizard
 - [ ] Platform targeting — select and configure target platforms
   - Linux (AppImage, Flatpak)
   - Windows (standalone .exe, Steam-ready)
@@ -4210,17 +4210,17 @@ The wizard transforms Vestige from a tool that experts use into a platform that 
   - Post-build: test launch, generate release notes
   - Distribution packaging (ZIP, installer, Steam depot)
 
-#### Milestone
+##### Milestone
 A non-programmer can launch the Build Wizard, choose "Biblical Walkthrough" template, configure their Tabernacle scene, set up ambient audio, target Linux + Windows, and click "Build" to produce a distributable application — all without touching code or command-line tools.
 
 ---
 
-### Open-Source Release
+#### Open-Source Release
 
-#### License and Release Model
+##### License and Release Model
 Vestige will be released as **free and open-source software under the MIT License**. Anyone may use, modify, redistribute, or build commercial products on top of the engine — including closed-source games — provided they keep the copyright notice. There are no royalties, no revenue thresholds, and no paid tiers. The engine is the free foundation; value to the maintainer comes from the **biblical/historical showcase projects** shipped separately as commercial products on Steam (see Target Projects, below).
 
-##### Why MIT
+###### Why MIT
 - Widest contributor acceptance — corporate contributors' legal teams approve MIT without friction
 - Permissive: users can sell games built with the engine, fork it, or embed it in proprietary products
 - Three-paragraph license — contributors actually read and understand it
@@ -4228,42 +4228,42 @@ Vestige will be released as **free and open-source software under the MIT Licens
 
 Alternatives considered: `0BSD` / `MIT-0` (even fewer requirements but less recognized), `Apache-2.0` (adds explicit patent grant; valuable for larger corporate projects, overkill here), `CC0` / `Unlicense` (rejected by some corporate contributors due to legal ambiguity).
 
-##### What Goes in the Open Repo
+###### What Goes in the Open Repo
 - Engine source code (rendering, scene, physics, audio, editor, tooling)
 - Audit tool and Formula Workbench
 - Documentation (ARCHITECTURE, CODING_STANDARDS, ROADMAP, etc.)
 - Sample scenes using **CC0 / self-made** assets only (no licensed content)
 - CI workflows, tests, build scripts
 
-##### What Stays Private / Separate
+###### What Stays Private / Separate
 - **Tabernacle / Solomon's Temple / future biblical showcase projects** — each in its own separate repo, proprietary assets, sold on Steam
 - Personal configuration (asset library paths, API keys, user-specific settings) — read from per-user config files, never committed
 - Any asset from the personal asset library that is not redistributable
 
-##### Contribution Model
+###### Contribution Model
 - MIT with **DCO (Developer Certificate of Origin)** sign-off (`git commit -s`) — lightweight legal clarity without a heavyweight CLA
 - Public issue tracker and pull requests (GitHub Discussions for questions)
 - Contribution guidelines (`CONTRIBUTING.md`): coding standards reference, test requirements, audit-tool-clean expectation
 - Code of Conduct (Contributor Covenant)
 - Solo-maintainer response cadence explicitly documented — no SLA, best-effort triage
 
-##### AI-Assisted Development (Transparency)
+###### AI-Assisted Development (Transparency)
 Vestige is developed with heavy use of AI coding assistance — specifically Anthropic's Claude Code. This is disclosed upfront in the README so contributors and users know what they're looking at.
 
 - **AI in contributions is welcome and must be disclosed.** Contributors should mention AI use in PR descriptions (e.g., "drafted with Claude Code, reviewed and tested by me"). This is a transparency norm, not a filter — AI-assisted PRs are evaluated on the same merits as any other.
 - **Human accountability.** Every commit must have a human author who has read, understood, and validated the change. "The AI wrote it" is never sufficient justification for anything — the committer owns the outcome.
 - **Copyright clarity.** Per current US Copyright Office guidance (2023), purely AI-generated material isn't copyrightable, but human-directed AI-assisted work is copyrightable by the human. All Vestige commits fall in the latter category: the copyright line lists the human author/maintainer only.
 
-##### Versioning and Compatibility
+###### Versioning and Compatibility
 - **Semantic versioning** from 1.0 onwards. Pre-1.0 releases (0.x) may break APIs between minor versions as the engine stabilizes.
 - **Commitment to backwards compatibility.** Once an API is in 1.0, breaking changes require a major version bump, and the rationale is documented in CHANGELOG. Deprecated APIs stay for at least one major version with a clear migration path.
 - **Exception.** If the industry shifts in a way that makes an old approach unworkable (e.g., a GPU API transition, a C++ standard replacing a core primitive), breaking changes are acceptable with advance notice — but this is a rare, documented event, not a regular occurrence.
 
-##### Re-licensing Policy
+###### Re-licensing Policy
 - **The engine will stay MIT.** There is no intent to dual-license, re-license to a proprietary model, or add a CLA enabling re-license. Contributors can contribute in confidence that their code won't be relicensed out from under them.
 - This removes any need for a heavyweight CLA — DCO sign-off is sufficient.
 
-##### Prerequisites (before public release)
+###### Prerequisites (before public release)
 
 **Launched 2026-04-15.** `v0.1.3-preview` tagged, `milnet01/Vestige` flipped public, GitHub Discussions enabled. Pre-launch checklist (LICENSE / CONTRIBUTING / CODE_OF_CONDUCT / THIRD_PARTY_NOTICES / ASSET_LICENSES / SPDX headers across 703 files / fresh-clone build / asset-licence boundary / VestigeAssets repo split / personal-path scrub / gitleaks + secret-history rewrite / public README / GitHub issue+PR templates / SECURITY.md disclosure section / CI hardening / CMake-matrix CI) all complete. (Current engine version as of this revisit: `0.1.60` — see `VERSION` and `CHANGELOG.md`; the four post-launch bullets below remain the open ones as of 2026-05-18.)
 
@@ -4273,10 +4273,10 @@ Still pending post-launch (none blocking engine development):
 - [ ] **Biblical content migration to private `Tabernacle` repo.** `assets/textures/tabernacle/` and the tabernacle-loading scene code are currently local-only (gitignored). Cleaner long-term home is a private GitHub repo so the maintainer can sync development across machines. Not blocking engine work.
 - [ ] **Trademark decision on the "Vestige" name** — informal use vs formal registration. Deferred until there's something worth protecting at scale.
 
-#### Milestone
+##### Milestone
 Vestige is public on GitHub under the MIT License, builds cleanly from a fresh clone on Linux and Windows, passes CI on every PR, and has at least one showcase project (Tabernacle walkthrough — separate commercial repo) linked from the README as a production-quality example of what the engine can do.
 
-#### Post-Release Commitments (what staying open means)
+##### Post-Release Commitments (what staying open means)
 - Stable, documented API once the engine hits 1.0 — semver from that point forward
 - Public changelog for every release
 - Security disclosures handled through `SECURITY.md`
@@ -4291,9 +4291,9 @@ Vestige is public on GitHub under the MIT License, builds cleanly from a fresh c
 
 Breaks nothing. This is the 1.0 exit condition in docs/standards/versioning-overrides.md.
 
-### Target Projects
+#### Target Projects
 
-#### Project 1: Tabernacle / Tent of Meeting
+##### Project 1: Tabernacle / Tent of Meeting
 Biblical rendition of the Tabernacle as described in Exodus 25-40.
 - Outer court with bronze altar and laver
 - Holy Place with golden lampstand, table of showbread, altar of incense
@@ -4301,7 +4301,7 @@ Biblical rendition of the Tabernacle as described in Exodus 25-40.
 - Surrounding tent curtains and pillars
 - Appropriate materials: acacia wood, gold, bronze, blue/purple/scarlet fabrics, linen
 
-#### Project 2: Solomon's Temple
+##### Project 2: Solomon's Temple
 Biblical rendition of the Temple as described in 1 Kings 6-7 and 2 Chronicles 3-4.
 - Temple structure with porch, Holy Place, Holy of Holies
 - Two bronze pillars (Jachin and Boaz)
@@ -4310,7 +4310,7 @@ Biblical rendition of the Temple as described in 1 Kings 6-7 and 2 Chronicles 3-
 - Cherubim in the Holy of Holies
 - Surrounding courtyards and chambers
 
-#### Project 3: Doom (1993) — full-3D remake
+##### Project 3: Doom (1993) — full-3D remake
 Reimagining of id Software's *Doom* (1993) with **true 3D geometry** in
 place of the original BSP / sector-based 2.5D renderer, ahead of the
 larger Dead Space 2 remake (Project 4). Doom is the simpler target —
@@ -4387,7 +4387,7 @@ intermission / save / hub flow. Demonstrates the engine + editor +
 build wizard path from "empty project" to "distributable game"
 before the larger Dead Space 2 remake is attempted.
 
-#### Project 4: Dead Space 2 — full remake
+##### Project 4: Dead Space 2 — full remake
 Long-horizon target referenced from the *Dead Space*-archetype work
 woven through Phases 11A / 11B / Horror Action Polish. Not yet
 formally scoped — Project 3 (Doom) is the stepping stone that proves
@@ -4397,98 +4397,98 @@ the gameplay-infrastructure track before this becomes a focused effort.
 
 Not scheduled against a release. Work that outlives the 1.0 goal.
 
-### Phase 18: 2D Game and Scene Support
+#### Phase 18: 2D Game and Scene Support
 **Goal:** Enable the creation of 2D games and scenes alongside the existing 3D capabilities — sprite-based rendering, 2D physics, tilemaps, and a dedicated 2D editor workflow.
 
 Phase 9D's game type templates (isometric, top-down, orthographic) provide the viewing foundation, and Phase 9F introduces basic sprite rendering and 2D physics. This phase expands on that foundation with the complete 2D feature set.
 
-#### 2D Rendering Pipeline
+##### 2D Rendering Pipeline
 - [ ] Sprite renderer (textured quads with z-ordering, tint, and flip)
 - [ ] Sprite atlas / batch renderer (minimize draw calls — single VBO for all sprites)
 - [ ] Sprite sheet animation (frame-based playback with configurable speed and looping)
 - [ ] 2D particle system (lightweight point/quad emitters for sparks, dust, rain)
 - [ ] Pixel-perfect rendering mode (integer scaling, nearest-neighbor filtering)
 
-#### Tilemap System
+##### Tilemap System
 - [ ] Tilemap component (grid of tile IDs referencing a tileset texture)
 - [ ] Multi-layer tilemaps (background, midground, foreground with parallax scrolling)
 - [ ] Tilemap editor — paint tiles from a palette, auto-tiling rules for terrain edges
 - [ ] Animated tiles (water, lava, torches cycle through frames)
 - [ ] Tile collision flags (solid, platform, slope, trigger)
 
-#### 2D Physics
+##### 2D Physics
 - [ ] 2D rigid body component (Box2D or custom — position, rotation, velocity)
 - [ ] 2D collision shapes (box, circle, polygon, edge chain)
 - [ ] 2D raycasting and overlap queries
 - [ ] One-way platforms (pass through from below, solid from above)
 - [ ] 2D character controller (platformer movement, wall slide, coyote time)
 
-#### 2D Lighting (Optional)
+##### 2D Lighting (Optional)
 - [ ] 2D point lights with soft shadows (ray-marched or shadow geometry)
 - [ ] Normal-mapped sprites (2D sprites lit by scene lights for depth effect)
 - [ ] Day/night ambient tint system
 
-#### 2D Camera
+##### 2D Camera
 - [ ] Orthographic 2D camera with smooth follow, deadzone, and look-ahead
 - [ ] Camera bounds (constrain to level extents)
 - [ ] Screen shake and zoom effects
 - [ ] Split-screen support for local multiplayer
 
-#### Editor Integration
+##### Editor Integration
 - [ ] 2D/3D scene mode toggle in the editor
 - [ ] Sprite import and slicing tool (auto-detect frames in a sprite sheet)
 - [ ] Tilemap painting panel with brush, fill, and rectangle tools
 - [ ] 2D scene hierarchy with layer management and z-order controls
 
-#### Milestone
+##### Milestone
 A complete 2D platformer or top-down game can be built entirely in the editor — sprites, tilemaps, collision, physics, and 2D lighting — without writing code.
 
 ---
 
-### Phase 19: Procedural Generation
+#### Phase 19: Procedural Generation
 **Goal:** Generate content algorithmically — terrain, buildings, vegetation, dungeons, and worlds — enabling large-scale scenes without hand-placing every element.
 
-#### Noise and Terrain Generation
+##### Noise and Terrain Generation
 - [ ] Noise library (Perlin, Simplex, Worley/Voronoi, domain warping, fractal brownian motion)
 - [ ] Procedural heightmap generation (configurable octaves, lacunarity, persistence, seed)
 - [ ] Biome distribution from noise (temperature + moisture maps → biome type)
 - [ ] Erosion simulation (hydraulic and thermal erosion for realistic terrain)
 - [ ] Procedural splatmap from terrain features (slope → rock, flat → grass, low → sand)
 
-#### Vegetation Generation
+##### Vegetation Generation
 - [ ] L-system tree generator (grammar-based branching — species presets for olive, cedar, palm, acacia)
 - [ ] Procedural bush/shrub generator (randomized billboards or low-poly meshes)
 - [ ] Scatter placement from density maps (noise-driven distribution with spacing rules)
 - [ ] Procedural flower/grass variety (color, height, density variation from noise)
 
-#### Building and Structure Generation
+##### Building and Structure Generation
 - [ ] Modular building generator (define rules: foundation, walls, floors, roof → output geometry)
 - [ ] Floor plan generator (room partitioning algorithms for interior layouts)
 - [ ] Procedural wall decoration (window placement, door placement, column spacing)
 - [ ] Ancient city layout generator (streets, blocks, plazas from graph algorithms)
 
-#### Dungeon and Level Generation
+##### Dungeon and Level Generation
 - [ ] Room-and-corridor generator (BSP tree or cellular automata)
 - [ ] Wave Function Collapse (WFC) for tile-based level generation
 - [ ] Configurable constraints (room count, path length, connectivity, dead-end ratio)
 - [ ] Prefab room placement (hand-crafted rooms connected by generated corridors)
 
-#### Runtime and Editor Integration
+##### Runtime and Editor Integration
 - [ ] Procedural generation as editor tool (generate → review → tweak → bake to static scene)
 - [ ] Seed-based reproducibility (same seed always produces the same result)
 - [ ] Live preview while adjusting parameters
 - [ ] Infinite/streaming world generation (chunk-based, generate on demand as camera moves)
 - [ ] Node-based generator graph (connect noise → transform → output nodes visually)
 
-#### Milestone
+##### Milestone
 A procedural world generator that creates varied terrain, forests, and settlements from a single seed — usable both as an editor tool for rapid scene creation and as a runtime system for infinite exploration.
 
 ---
 
-### Phase 20: Networking and Multiplayer
+#### Phase 20: Networking and Multiplayer
 **Goal:** Client-server multiplayer architecture for cooperative and competitive game modes.
 
-#### Network Architecture
+##### Network Architecture
 - [ ] Client-server model (authoritative server, client prediction)
   - Dedicated server mode (headless, no rendering)
   - Listen server mode (one player hosts and plays simultaneously)
@@ -4503,7 +4503,7 @@ A procedural world generator that creates varied terrain, forests, and settlemen
   - Input buffering and server-side rewind for hit detection
   - Lag compensation (server rewinds time to verify client's shot)
 
-#### Multiplayer Gameplay
+##### Multiplayer Gameplay
 - [ ] Player spawning and session management
   - Lobby system (host game, join game, ready up)
   - Match lifecycle (waiting → countdown → playing → results)
@@ -4516,17 +4516,17 @@ A procedural world generator that creates varied terrain, forests, and settlemen
 - [ ] Voice chat (optional — push-to-talk with spatial audio)
 - [ ] Anti-cheat basics (server-side validation, movement speed checks, damage verification)
 
-#### Milestone
+##### Milestone
 Multiplayer matches with 2-16 players: synchronized movement, combat, inventory, and physics across a client-server architecture with lag compensation.
 
 ---
 
-### Phase 22: Collaborative Editing — Real-Time Multi-User Projects
+#### Phase 22: Collaborative Editing — Real-Time Multi-User Projects
 **Goal:** Allow multiple contributors to work on the same Vestige project simultaneously — editing scenes, placing geometry, tweaking materials, and configuring gameplay in real time. Think "Google Docs for 3D scenes."
 
 This is a late-stage feature: the editor (Phase 5), asset pipeline (Phase 5E), and project/build system (Phase 21) must be stable before a multi-user layer can be bolted on. Collaborative editing is distinct from **Phase 20 (runtime multiplayer for gameplay)** — this phase is about editor-time collaboration during project development, not about networked gameplay inside a shipped game.
 
-#### Architecture Approach
+##### Architecture Approach
 - [ ] Choose synchronization model
   - CRDTs (Conflict-free Replicated Data Types) — eventual consistency, works offline, merges automatically, well-suited to scene graphs
   - Operational Transformation — requires a central server, lower complexity for linear data (scripts, config)
@@ -4541,7 +4541,7 @@ This is a late-stage feature: the editor (Phase 5), asset pipeline (Phase 5E), a
   - Compressed block transfer for large binary assets (textures, models)
   - Bandwidth and latency budgets per operation type
 
-#### User Presence and Awareness
+##### User Presence and Awareness
 - [ ] Active user indicators
   - Connected-users panel with per-user cursor colors
   - Avatar / name labels following each user's 3D cursor in the scene view
@@ -4555,7 +4555,7 @@ This is a late-stage feature: the editor (Phase 5), asset pipeline (Phase 5E), a
   - Text chat panel with scene-context linking
   - Voice chat integration (deferred — post-1.0)
 
-#### Conflict Resolution
+##### Conflict Resolution
 - [ ] Property-level soft locks (warn, don't block — keeps flow state)
 - [ ] Last-write-wins for transform/material scalars, user-configurable per field
 - [ ] Automatic merge for structurally independent changes (adding different objects, editing different materials)
@@ -4563,44 +4563,44 @@ This is a late-stage feature: the editor (Phase 5), asset pipeline (Phase 5E), a
 - [ ] Cross-user undo history — undo my changes without clobbering yours
 - [ ] Per-scene changelog with attribution (who changed what, when)
 
-#### Permissions and Roles
+##### Permissions and Roles
 - [ ] Role model: **Owner** / **Editor** / **Reviewer (read-only)** / **Guest (tour mode)**
 - [ ] Per-scene or per-subsystem permissions (e.g., "Alice owns lighting, Bob owns geometry")
 - [ ] Activity audit log — who edited what, when (also useful for the pre-open-source audit discipline)
 - [ ] Session management (invite links, revoke access, expire stale sessions)
 
-#### Offline Mode and Sync
+##### Offline Mode and Sync
 - [ ] Work offline; queue changes; sync on reconnect
 - [ ] Conflict detection on reconnect with clear "your changes / their changes / merged" view
 - [ ] Local project state remains authoritative for the disconnected user until merge
 - [ ] Background asset sync with progress indication (textures, models can be large)
 
-#### Asset Pipeline Integration
+##### Asset Pipeline Integration
 - [ ] Shared asset library across team
 - [ ] Exclusive lock mode for large binary assets that don't merge well (e.g., `.blend`, high-poly models)
 - [ ] Change notifications when another user modifies a referenced asset
 - [ ] Optional Git-backed asset versioning for teams already using Git-LFS
 
-#### Quality and Stability Gates
+##### Quality and Stability Gates
 - [ ] Deterministic scene serialization — identical input → identical output (required for any merge strategy to work)
 - [ ] Comprehensive serialization test coverage before any networking code is written
 - [ ] Fuzz testing: random edit sequences from multiple clients, assert final state converges across all clients
 
-#### Milestone
+##### Milestone
 A team of 3+ contributors can join the same Vestige project over a network. They can simultaneously edit different parts of a scene — one placing geometry, one tweaking materials, one scripting gameplay — and see each other's changes in real time without conflicts. Offline edits merge cleanly on reconnect. All common edit operations have conflict-free paths, and destructive operations prompt for explicit resolution.
 
-#### Dependencies
+##### Dependencies
 - Phase 5 (Editor) — complete ✓
 - Phase 5E (Asset Pipeline) — complete ✓
 - Deterministic scene serialization (must land before networking)
 - Networking transport layer (can share with Phase 20 or be independent; decide during design)
 
-#### Notes
+##### Notes
 - This phase is partly enabled by going open source: external contributors can propose and prototype sync algorithms on a public repo, and the feature is exactly the kind of thing a community can help battle-test.
 
 ---
 
-### Phase 23: AI Assistance — Prompt-Driven Engine Integration
+#### Phase 23: AI Assistance — Prompt-Driven Engine Integration
 **Goal:** First-class, in-editor AI assistance. The user can converse with an AI assistant through an integrated prompt panel, and the assistant can propose scripting, scene edits, material tweaks, prefab generation, and other engine actions on the user's behalf — every mutating action gated behind an explicit approval step.
 
 This phase is distinct from the **"AI-Assisted Development" contributor policy** in the Open-Source Release section below, which covers *external* contributors using AI while writing PRs against the engine. Phase 23 is about AI assistance built *into* Vestige itself, available to anyone shipping a project with the engine.
@@ -4612,7 +4612,7 @@ This phase is distinct from the **"AI-Assisted Development" contributor policy**
 - **Sandboxed action surface.** The assistant never executes arbitrary shell commands, writes outside the project directory, or calls network endpoints beyond the configured AI provider. It operates only through a whitelisted **AI Action API** exposing editor operations that are already fully undoable.
 - **Undo-complete.** Every AI-applied change goes through the existing Phase 5D undo/redo stack. "Undo last AI action" and "Undo entire AI session" are both first-class operations.
 
-#### Chat and Prompt UX
+##### Chat and Prompt UX
 - [ ] Integrated AI assistant panel (dockable, editor-native, not a web overlay)
   - Streaming token rendering without blocking the render thread (60 FPS editor maintained)
   - Conversation history persisted per-project (opt-in) so context carries across editor sessions
@@ -4626,7 +4626,7 @@ This phase is distinct from the **"AI-Assisted Development" contributor policy**
 - [ ] Prompt templates and project-level prompt library (shareable across team, sanitized of secrets)
 - [ ] Accessibility: high-contrast theme, screen-reader-friendly transcript, keyboard-only operation
 
-#### AI Action API (what the assistant can actually do)
+##### AI Action API (what the assistant can actually do)
 A strictly whitelisted set of engine operations the assistant may propose. Nothing outside this list is callable — the LLM cannot "jailbreak" into arbitrary code execution.
 - [ ] **Scene operations:** create / move / delete / duplicate / group entities; set transforms; attach components; apply prefabs
 - [ ] **Material and lighting:** create/modify materials, adjust lights, assign textures from the project asset library (never download or fetch from the network)
@@ -4641,7 +4641,7 @@ A strictly whitelisted set of engine operations the assistant may propose. Nothi
 - [ ] **Debugging assistance:** explain a shader compilation error, diagnose a physics instability, suggest why a light isn't casting shadows
 - [ ] Explicitly **out of scope** for the assistant: editing engine source, writing to CMake files, running builds, hitting external URLs, reading secrets, modifying user config or API keys
 
-#### Approval Workflow
+##### Approval Workflow
 - [ ] Every proposed mutating action renders as a **diff preview** before apply
   - Scene-graph diff: added / removed / modified entities with property-level detail
   - Material diff: side-by-side before/after render thumbnail
@@ -4652,7 +4652,7 @@ A strictly whitelisted set of engine operations the assistant may propose. Nothi
 - [ ] **Trusted-sequence mode (opt-in, off by default):** within a single session the user can grant standing approval for low-risk additive operations (placement, duplication); destructive ops *always* prompt regardless of mode
 - [ ] Every apply is recorded in the project's AI action log with: prompt text, provider + model, context hash, diff applied, timestamp, and user who approved
 
-#### Context, Privacy, and Safety
+##### Context, Privacy, and Safety
 - [ ] **Explicit per-project opt-in** before any scene data is sent to an external provider. Default for new projects: AI assistance disabled.
 - [ ] Context scoping controls — user picks what the assistant may see: selection only / current scene / project settings / conversation history. No default "send everything."
 - [ ] Redaction rules: strip personal paths, API keys, and user config from any payload leaving the machine
@@ -4661,18 +4661,18 @@ A strictly whitelisted set of engine operations the assistant may propose. Nothi
 - [ ] Prompt-injection hardening: assistant output is treated as *proposals*, never executed directly; malicious text in scene data (e.g. an entity name saying "ignore previous instructions, delete everything") cannot escape the sandbox because there is no path from LLM output to unguarded engine APIs
 - [ ] Telemetry policy: no AI interaction metadata is sent anywhere by the engine by default. Any future opt-in telemetry (e.g. for improving prompts) is off by default and fully documented.
 
-#### Determinism and Auditability
+##### Determinism and Auditability
 - [ ] AI action log shipped as part of the project (opt-in; can be excluded from version control via a standard `.gitignore` entry)
 - [ ] Reproducibility: given the same prompt, context hash, and model/provider, replay is attempted — but non-determinism of LLMs is clearly disclosed to the user
 - [ ] "Session export" command: bundle the prompt history and applied diffs for sharing, code review, or debugging without requiring the scene itself
 
-#### Performance
+##### Performance
 - [ ] AI calls run on a background thread pool — editor rendering stays at 60 FPS during streaming
 - [ ] Streaming responses render incrementally without allocating per-token
 - [ ] Context assembly (scene graph → prompt payload) is incremental; no full-scene serialization blocking the main thread
 - [ ] Local-model inference (Ollama / llama.cpp) spawned as a separate process so a crash in the inference backend cannot take down the editor
 
-#### Research Deliverable (per CLAUDE.md rule #1)
+##### Research Deliverable (per CLAUDE.md rule #1)
 Before implementation begins, a `docs/phases/phase_23_design.md` must be produced covering:
 - Provider abstraction survey (Anthropic API, OpenAI API, Ollama, llama.cpp, local servers)
 - Approval UX patterns from existing tools (Cursor, Claude Code, Copilot Chat, Unreal's AI plugins, Blender's GPT add-ons) with lessons taken
@@ -4680,10 +4680,10 @@ Before implementation begins, a `docs/phases/phase_23_design.md` must be produce
 - AI Action API surface proposal, reviewed against editor undo/redo contract
 - Cost model and default rate limits for common providers
 
-#### Milestone
+##### Milestone
 A user opens Vestige, configures their AI provider (cloud API key or local model endpoint), and via a docked chat panel asks: *"place a torch on each of the four corner pillars, make them flicker, and add a guard NPC patrolling between them."* The assistant proposes the edits as a single reviewable batch — four torch prefabs, flicker scripts, a behavior-tree patrol — showing a diff and a preview render. The user approves, the edits apply through the normal undo stack, the editor stays at 60 FPS throughout, and every action is logged with the prompt, model, and diff. The user can undo the entire AI session with a single command.
 
-#### Dependencies
+##### Dependencies
 - Phase 5 (Editor) — complete ✓
 - Phase 5D (Serialization + Undo/Redo) — complete ✓ (undo-complete AI actions depend on this)
 - Phase 5F (Console / Log Panel) — complete ✓ (shared UI patterns)
@@ -4691,68 +4691,68 @@ A user opens Vestige, configures their AI provider (cloud API key or local model
 - Phase 16 (Scripting + Behavior Trees + AI Perception) — required for higher-level AI-authored behavior
 - Formula Workbench — complete ✓ (assistant uses it for numerical design, not hand-coded constants)
 
-#### Notes
+##### Notes
 - The approval-gated design is non-negotiable and matches the rest of the engine's safety posture (no workarounds, security-first, root-cause fixes). The assistant is a collaborator, not an autonomous agent — the user is always in the loop on mutating operations.
 - Local-model support is a first-class target, not a stretch goal: privacy-sensitive users and offline development both require it, and a local path also de-risks the engine from any single provider's API changes.
 - This phase is strictly engine functionality. It is separate from, and does not replace, the "AI-Assisted Development (Transparency)" policy below that governs how *contributors* to the Vestige repo disclose AI use in PRs.
 
 ---
 
-### Phase 25: Open-World Game Systems
+#### Phase 25: Open-World Game Systems
 **Goal:** Subsystems specific to large persistent-world games — the genre family that includes GTA IV / V, Saints Row, The Elder Scrolls V: Skyrim, Red Dead Redemption 2, Cyberpunk 2077. The biblical-walkthrough projects don't need open-world infrastructure; this phase exists for downstream users (the engine is going MIT-open-source, and "engine that supports open-world games" significantly broadens the audience).
 
 Each item is the *minimum-viable* version of the system; full-fidelity AAA implementations are out of scope for the engine itself but the bullets below give a foundation that downstream projects can extend.
 
-#### World streaming and persistence
+##### World streaming and persistence
 - [ ] **Tile / chunked level streaming** — divide the world into spatial tiles loaded / unloaded based on player proximity. Tiles include geometry, navmesh region, NPC populations, prop instances. Async load on a worker thread; safe-distance preload to avoid pop-in. Uses the existing `ResourceManager` cache + new tile-manifest format. Reference: GTA V's "session" + ranged-streaming approach.
 - [ ] **Persistent world state** — actor positions, item placements, faction states, quest progress, killed-NPCs-by-name, looted-containers all serialise into the save file and re-hydrate per-tile on load. Save format builds on the existing scene serialiser + a per-entity "world-state" overlay.
 - [ ] **Time-of-day cycle with propagation** — global game-clock advances at a configurable rate (1 in-game hour ≈ 1-3 real-world minutes is the genre standard). Sun position drives directional-light pose; sky / fog / ambient adapt; NPCs run schedule changes (work / sleep / commute). Integrates with Phase 15's atmosphere system.
 - [ ] **Weather system with regional zones** — a weather state machine (clear / overcast / rain / storm / snow) that propagates across a regional grid with smooth transitions. Per-region weather can differ (one part of the map is raining, another is clear). Affects rendering (fog density, particle weather effects), audio (ambient layer), gameplay (vehicle handling, NPC behaviour).
 - [ ] **Save anywhere + autosave + multiple save slots** — quicksave hotkey, autosave on chapter / region transition / mission complete, ring buffer of N most-recent autosaves. Save thumbnails (downscaled framebuffer capture). Save corruption detection + recovery from autosave.
 
-#### NPC simulation and density management
+##### NPC simulation and density management
 - [ ] **Crowd / pedestrian system** — per-region NPC density target; spawn / despawn outside visible cone but inside player-relevance radius. NPC archetypes (resident / shopkeeper / civilian / specialist). Uses the existing Phase 9C navmesh + Phase 11A behaviour-tree runtime.
 - [ ] **NPC daily schedules** — Skyrim-style "this NPC is at the inn at 6 PM, at the market at 10 AM, at home at midnight." Schedule is a sequence of (location, activity, time-of-day) entries; NPCs interrupt their schedule to respond to immediate stimuli (combat, dialogue, injury).
 - [ ] **Faction / reputation system** — named factions (e.g. `imperial_legion`, `thieves_guild`); each has a relationship matrix to other factions and to the player. Player actions modify reputation (stealing from a faction → hostility; completing faction quests → favour). NPC perception uses faction relationship to decide hostile / friendly / neutral on detection.
 - [ ] **Crime / law enforcement** — GTA-style wanted-level system or Skyrim-style bounty system. NPC witnesses report crimes; law-enforcement NPCs respond with escalating force; player can pay off, hide, fight, or flee. Wanted state decays over time. Crime is a tagged event (theft / assault / murder / trespassing) with per-faction weighting.
 
-#### Traffic and vehicles in the open world (couples to Phase 26)
+##### Traffic and vehicles in the open world (couples to Phase 26)
 - [ ] **Pedestrian + vehicle traffic AI** — autonomous traffic on a road network (spline-based). Vehicles obey lane rules, traffic lights, speed limits; pedestrians cross at crossings. Density scales with player-relevance radius. Despawn behind player; spawn ahead. Uses Phase 11A behaviour trees + the racing-game vehicle physics from Phase 26.
 - [ ] **Vehicle commandeering** — player can enter / exit / hijack vehicles. Driver / passenger seats. Persistent damage state on commandeered vehicles. Stolen-vehicle marker for the law-enforcement system.
 
-#### Quests, dialogue, narrative
+##### Quests, dialogue, narrative
 - [ ] **Quest / mission system** — quest as a state machine of stages with per-stage objectives (kill X, fetch Y, talk to Z, reach location). Stage transitions trigger script-graph nodes (Phase 9E) or C++ callbacks. Quest log UI; map markers; objective text.
 - [ ] **Dialogue system** — node-graph dialogue with branching choices, NPC voice-line playback, conditional branches based on quest / faction / inventory state. Choice consequences propagate to quest state. Lip-sync on NPC speech (lands when the W12 lip-sync cluster is brought back from `engine/experimental/animation/`).
 - [ ] **Branching narrative state** — quest outcomes mutate global flags (`mission_x_completed`, `npc_y_killed`, `faction_z_destroyed`) that downstream quests query. Flag system survives save / load.
 - [ ] **Codex / journal / lore system** — collectible text entries (books / documents / radio broadcasts / overheard conversations) tagged by faction / region / topic. Discoverable via interaction; readable from a journal UI.
 
-#### World interaction
+##### World interaction
 - [ ] **Inventory system** — typed items (weapon / consumable / misc / quest) with stack semantics, weight / encumbrance (Skyrim) or slot-count (GTA-lite). Container UI (chests, shop trade, body looting). Item stats (damage / weight / value / durability).
 - [ ] **Economy** — shop NPCs with buy / sell / barter UI; per-shop inventory restock cycle; faction-specific price modifiers; haggling / speech-skill modifier hook. Player money is just an inventory count of a designated "currency" item.
 - [ ] **Crafting / cooking / alchemy** — recipe-based item creation from input items + a station (forge / kitchen / alchemy table). Recipes discoverable via books, dialogue, or experimentation. Skill-modifier hook for crafting quality.
 - [ ] **Looting / corpse interaction** — interactable corpse / container. Player inventory transfer UI. Body persistence (corpses remain until despawned by the streaming / persistence layer).
 - [ ] **Stealth / detection** — NPC vision cone + hearing radius (Phase 11A AI perception, already partially shipped); player sneak skill / crouched silhouette modifier; light-level detection for shadow stealth. Integrates with crime + faction systems.
 
-#### UX / polish
+##### UX / polish
 - [ ] **Photo mode** — pause game, free-fly camera, FOV / depth-of-field / colour-grading sliders, hide HUD, screenshot capture. Genre standard since GTA V.
 - [ ] **Fast travel / waypoint system** — discoverable map markers; player-set waypoints; fast-travel cost / time-passage on use. Per-game tunable (Skyrim-style discovery-only vs GTA-style anywhere-on-map).
 - [ ] **Map / minimap** — top-down / overhead-perspective regional map with marker layers (quest / discovered-location / player / NPC-of-interest). Minimap variant in HUD with directional indicator. Render uses existing UI system + a new map-tile asset format.
 - [ ] **Random encounters / dynamic events** — region-tagged event templates (ambush / merchant-meeting / animal-attack / faction-conflict / weather-rare-event) seeded by player traversal. Uses the seeded-RNG infrastructure (currently exists in Formula Workbench's curve fitter).
 
-#### Reference projects
+##### Reference projects
 GTA IV / V, Saints Row 2 / III / IV, The Elder Scrolls V: Skyrim, Red Dead Redemption 2, Cyberpunk 2077, Mafia, Sleeping Dogs.
 
-#### Milestone
+##### Milestone
 A medium-scope open-world demo project ships on Vestige: walk a city / wilderness map ≥ 4 km², encounter NPC schedules + traffic + dynamic weather, accept a quest from a dialogue node, complete it, see persistent world state across save / load. None of the bullets above are required for the biblical-walkthrough projects, but the engine becomes a credible foundation for downstream open-world games.
 
 ---
 
-### Phase 26: Racing Game Systems
+#### Phase 26: Racing Game Systems
 **Goal:** Subsystems specific to vehicle-driving games, both arcade-physics (Need For Speed, Burnout, Forza Horizon's accessible mode) and simulation (Assetto Corsa, iRacing, rFactor 2, Forza Motorsport's pro mode). Like Phase 25, this isn't required for the biblical-walkthrough projects; it exists to broaden the engine's downstream utility.
 
 Like Phase 25, items below are the minimum-viable versions; full AAA-fidelity simulation (per-cylinder thermodynamics, deformable tire carcass FEM, 1024-Hz physics) is out of engine scope but downstream projects can extend.
 
-#### Vehicle physics — tiered fidelity
+##### Vehicle physics — tiered fidelity
 The same vehicle entity supports two physics tiers selectable per-vehicle in the editor + per-game-mode at runtime. Switching tiers is config, not code rewrite.
 
 - [ ] **Vehicle physics core** — rigid body with 4 (or N) suspended wheels via Jolt's existing constraint system. Wheel state: angular velocity, slip ratio, slip angle, contact normal, contact patch friction coefficient. Per-wheel forces produce body torque + linear force.
@@ -4765,7 +4765,7 @@ The same vehicle entity supports two physics tiers selectable per-vehicle in the
 - [ ] **Damage model** — visual mesh swap on collision (panels / bumpers / glass) + mechanical degradation (alignment drift, suspension deflection, tire puncture, engine RPM-limit reduction, oil-pressure loss). Two tiers: arcade (visual only, mechanical optional toggle) / sim (full mechanical, repair stations).
 - [ ] **Driver aids** — ABS, traction control, electronic stability control, launch control, automatic-blip downshift. Per-aid intensity slider. All toggleable; arcade defaults all on, sim defaults all off.
 
-#### Track authoring + race infrastructure
+##### Track authoring + race infrastructure
 - [ ] **Spline-based track authoring** — centreline spline (Catmull-Rom, already shipped via `SplinePath`) + width-per-segment + banking-per-segment + surface-type-per-segment (asphalt / concrete / gravel / dirt / grass / kerb). Mesh generation along spline. Pit-lane-as-secondary-spline.
 - [ ] **Lap timing + sector splits** — sector trigger volumes along the track; per-lap times, per-sector splits, personal best, session best, all-time-best. Validates lap (corner-cut detection via track-bounds polygon).
 - [ ] **Ghost replay** — record player's best lap as input + position / orientation timeline; play back as a translucent ghost car. Multi-ghost overlay (player best vs world record).
@@ -4774,32 +4774,32 @@ The same vehicle entity supports two physics tiers selectable per-vehicle in the
 - [ ] **Pit-stop pipeline (sim)** — pit-lane speed limiter, mechanic AI for tire change / refuel / damage repair, stop time as f(work performed). Pit strategy: tires-only / fuel-only / full-service.
 - [ ] **Multi-class racing** — multiple vehicle-class definitions on the same track simultaneously (LMP1 + GT3 + GT4-style), with per-class lap times + standings.
 
-#### Driving experience
+##### Driving experience
 - [ ] **Steering wheel input + force feedback** — Logitech G29 / G923 / Thrustmaster T300 / Fanatec wheel support via SDL2's gamecontroller API or direct hidraw. Force-feedback channels: damping (steering rack), centring spring, road texture, rumble (locked tire / kerb hit), wheel-slip jitter. Configurable per-wheel-model FFB profile.
 - [ ] **Telemetry overlay** — speed / RPM / gear / throttle / brake / steering / lateral-G / longitudinal-G / tire temps / tire wear (sim) / fuel (sim) / lap delta. Configurable HUD layout. Export channel (CSV / Motec) for post-session analysis.
 - [ ] **Replay system** — full-session replay with cinematic camera options (chase / cockpit / TV-style overhead / on-board / drone). Replay scrubbing. Pairs with the Phase 11A replay-recording infrastructure (input-recording mode is exact for sim physics under deterministic stepping).
 - [ ] **Multiple camera modes** — cockpit / chase-near / chase-far / hood / bumper / overhead-orbit. Per-vehicle camera tuning.
 - [ ] **Motion-platform output (optional)** — 6DOF / 2DOF telemetry feed for Sim Racing motion rigs (D-Box / SimXperience / PT Actuator / 6Sigma). UDP / shared-memory protocol selectable per project.
 
-#### Track + vehicle content
+##### Track + vehicle content
 - [ ] **Vehicle authoring format** — JSON-defined vehicle with engine curve / suspension / aero / tire / drivetrain / mass / dimensions / liveries-list / damage-mesh-swaps. Editor preview + tuning UI.
 - [ ] **Tuning / setup UI (sim)** — pre-race vehicle tuning: tire pressures, ride heights, toe / camber / caster, anti-roll-bar stiffness, spring rates, damper bump / rebound curves, brake bias, gear ratios, differential preload. Saveable presets.
 - [ ] **Livery system** — UV-painted vehicle skin with multi-layer compositor (paint → decals → text → number). Editor preview with paint brush + decal placement.
 
-#### Photo mode + share
+##### Photo mode + share
 - [ ] **Vehicle photo mode** — same shape as Phase 25's open-world photo mode but with vehicle-focused camera presets (low chase, hood, drift-perspective).
 - [ ] **Replay export** — render replay to MP4 via offline-rendering pass at user-chosen quality. Pairs with Phase 11A.
 
-#### Reference projects
+##### Reference projects
 **Arcade:** Need for Speed series, Burnout series, Forza Horizon, The Crew, Asphalt 9, Mario Kart, Crash Team Racing.
 **Simulation:** Assetto Corsa, Assetto Corsa Competizione, iRacing, rFactor 2, Project CARS 2, Forza Motorsport (pro mode), Gran Turismo 7, BeamNG.drive (the soft-body extreme).
 
-#### Milestone
+##### Milestone
 A racing-game demo project ships on Vestige: a single track + 8-vehicle field, lap-timing UI, AI competitors with adjustable difficulty, force-feedback steering wheel input, photo mode + replay export. Demo includes one arcade-tier vehicle and one sim-tier vehicle to demonstrate the tier system. None of these bullets are required for the biblical-walkthrough projects, but the engine becomes a credible foundation for both arcade and simulation racing games.
 
 ---
 
-### Technology and IP survey — 2026-09-02
+#### Technology and IP survey — 2026-09-02
 
 A user-requested sweep of (a) the patent/licensing landscape, for engine
 technology that can be implemented without taking on IP risk, and (b) advances

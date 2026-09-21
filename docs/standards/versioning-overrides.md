@@ -141,10 +141,16 @@ limitation of the gate rather than a property this file may assert away.
 `ROADMAP.md` groups its open work under **release headings** of the form
 `## <MAJOR>.<MINOR>.0 — <theme>`, each holding the phases that close it.
 
-**A release heading is not a `### Milestone` block, and this rule reaches only
-the first.** The roadmap carries many `### Milestone` subsections; each states
-a goal in prose and most of them break nothing. They are untouched by
-everything in this section.
+**A release heading is not a `Milestone` block, and this rule reaches only the
+first.** The roadmap carries many `Milestone` subsections at various heading
+depths; each states a goal in prose and most of them break nothing. They are
+untouched by everything in this section.
+
+**A release heading is the only section inside its own span.** Everything below
+it — the phases it closes, and their subsections — is heading text rather than
+a section, so the roadmap viewer groups the work queue by release. That is the
+point of the arrangement: a reader scanning what is planned sees releases, not
+phases.
 
 Under § 4 a MINOR bump inside `0.x` means a breaking change, so **every MINOR
 release heading is followed by a line naming the surface it breaks.** Work that
