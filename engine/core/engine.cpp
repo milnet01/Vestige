@@ -1419,6 +1419,26 @@ void Engine::run()
                     glm::vec3 hitPoint;
                     bool hasHit = BrushTool::rayGroundIntersect(mouseRay, hitPoint);
 
+                    // Ruler / measure tool (3D_E-0639).
+                    //
+                    // FIRST in the chain, and it CONSUMES the click. Both are
+                    // required by RulerTool's own contract: isActive() returns
+                    // true in MEASURED because a click in that state restarts
+                    // the measurement, and ruler_tool.h says outright that
+                    // "callers must not route those clicks to other tools".
+                    // Placed after any tool, a restart click would also drop a
+                    // wall segment or a room corner.
+                    RulerTool& rulerTool = m_editor->getRulerTool();
+                    if (rulerTool.isActive())
+                    {
+                        rulerTool.queueDebugDraw();
+                        if (clicked && hasHit)
+                        {
+                            rulerTool.processClick(hitPoint);
+                            clicked = false;
+                        }
+                    }
+
                     // Wall tool
                     WallTool& wallTool = m_editor->getWallTool();
                     if (wallTool.isActive())

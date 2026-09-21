@@ -5,6 +5,7 @@
 /// @brief CutoutTool implementation -- cut door/window openings in walls.
 #include "editor/tools/cutout_tool.h"
 #include "editor/command_history.h"
+#include "editor/commands/cutout_opening_command.h"
 #include "scene/scene.h"
 #include "scene/entity.h"
 #include "scene/mesh_renderer.h"
@@ -64,7 +65,7 @@ void CutoutTool::selectWall(uint32_t entityId, Scene& scene)
 }
 
 void CutoutTool::drawConfigDialog(Scene& scene, ResourceManager& /*resources*/,
-                                  CommandHistory& /*history*/)
+                                  CommandHistory& history)
 {
     if (m_state != State::CONFIGURE)
     {
@@ -159,13 +160,29 @@ void CutoutTool::drawConfigDialog(Scene& scene, ResourceManager& /*resources*/,
                 auto newMesh = std::make_shared<Mesh>(
                     ProceduralMeshBuilder::createWallWithOpenings(
                         wallWidth, wallHeight, wallThickness, openings));
-                renderer->setMesh(newMesh);
 
-                // Update entity name to reflect the opening
                 std::string typeName = (openingType == OpeningType::DOOR)
                                            ? "Door"
                                            : "Window";
-                entity->setName("Wall with " + typeName);
+
+                // 3D_E-0632: go through the undo stack rather than mutating in
+                // place. Beyond undo itself, FileMenu::isDirty() delegates
+                // entirely to CommandHistory -- so before this, cutting an
+                // opening left the scene "clean" and quitting discarded it with
+                // no unsaved-changes prompt.
+                //
+                // The command APPLIES the change; do not also apply it here.
+                // CommandHistory::execute() runs execute() on the first push,
+                // not only on redo (see place_tree_command.h, where doing both
+                // placed every tree twice).
+                history.execute(std::make_unique<CutoutOpeningCommand>(
+                    renderer,
+                    entity,
+                    renderer->getMesh(),
+                    newMesh,
+                    entity->getName(),
+                    "Wall with " + typeName,
+                    "Cut " + typeName + " opening"));
 
                 Logger::info("CutoutTool: applied " + typeName + " opening ("
                              + std::to_string(openingWidth) + "m x "

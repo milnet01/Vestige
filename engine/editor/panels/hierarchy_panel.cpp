@@ -19,6 +19,8 @@
 
 #include <imgui.h>
 
+#include <string>
+
 #include <algorithm>
 #include <cctype>
 #include <cstring>
@@ -456,6 +458,45 @@ void HierarchyPanel::drawEntityNode(Entity& entity, Scene& scene, Selection& sel
     // Save tree node interaction state before drawing overlapping buttons
     bool treeNodeClicked = ImGui::IsItemClicked(0) && !ImGui::IsItemToggledOpen();
 
+    // Same hazard as the drag/drop pair below, for the context menu (3D_E-0632).
+    // BeginPopupContextItem() tests IsItemHovered() on the LAST submitted item
+    // whatever id you pass it, so once the lock button had been drawn the whole
+    // row's right-click menu lived on that ~16px square. Capture the request
+    // here, while the tree node is still the last item, and open the popup
+    // explicitly further down where the menu body sits.
+    bool rowContextRequested =
+        ImGui::IsItemHovered(ImGuiHoveredFlags_AllowWhenBlockedByPopup)
+        && ImGui::IsMouseReleased(ImGuiMouseButton_Right);
+
+    // --- Drag source / drop target (3D_E-0632) ---
+    //
+    // These MUST sit here, while the tree node is still ImGui's "last item".
+    // They used to live below the visibility/lock buttons, and ImGui binds an
+    // item-scoped call to the last item SUBMITTED -- which by then was the lock
+    // button. So reparent-by-drag was reachable only by grabbing a ~16px square
+    // at the far right of the row, and dropping onto a row meant hitting that
+    // same square.
+    //
+    // The comment directly above is the same hazard, already handled for clicks:
+    // the author saved treeNodeClicked before the buttons for exactly this
+    // reason and did not carry it to the drag, drop and context-menu calls.
+    if (ImGui::BeginDragDropSource())
+    {
+        ImGui::SetDragDropPayload("ENTITY_ID", &id, sizeof(uint32_t));
+        ImGui::Text("%s", entity.getName().c_str());
+        ImGui::EndDragDropSource();
+    }
+
+    if (ImGui::BeginDragDropTarget())
+    {
+        if (const ImGuiPayload* payload = ImGui::AcceptDragDropPayload("ENTITY_ID"))
+        {
+            m_pendingReparentEntityId = *reinterpret_cast<const uint32_t*>(payload->Data);
+            m_pendingReparentTargetId = id;
+        }
+        ImGui::EndDragDropTarget();
+    }
+
     // --- Visibility / Lock icon buttons (right-aligned on the row) ---
     bool visClicked = false;
     bool lockClicked = false;
@@ -557,27 +598,13 @@ void HierarchyPanel::drawEntityNode(Entity& entity, Scene& scene, Selection& sel
         }
     }
 
-    // --- Drag source ---
-    if (ImGui::BeginDragDropSource())
-    {
-        ImGui::SetDragDropPayload("ENTITY_ID", &id, sizeof(uint32_t));
-        ImGui::Text("%s", entity.getName().c_str());
-        ImGui::EndDragDropSource();
-    }
-
-    // --- Drop target ---
-    if (ImGui::BeginDragDropTarget())
-    {
-        if (const ImGuiPayload* payload = ImGui::AcceptDragDropPayload("ENTITY_ID"))
-        {
-            m_pendingReparentEntityId = *reinterpret_cast<const uint32_t*>(payload->Data);
-            m_pendingReparentTargetId = id;
-        }
-        ImGui::EndDragDropTarget();
-    }
-
     // --- Right-click context menu ---
-    if (ImGui::BeginPopupContextItem())
+    const std::string rowContextId = "##rowctx" + std::to_string(id);
+    if (rowContextRequested)
+    {
+        ImGui::OpenPopup(rowContextId.c_str());
+    }
+    if (ImGui::BeginPopup(rowContextId.c_str()))
     {
         if (ImGui::MenuItem("Create Empty Child"))
         {
