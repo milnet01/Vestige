@@ -610,12 +610,29 @@ nlohmann::json FoliageManager::serialize() const
     }
 
     j["chunks"] = chunksArr;
+
+    // 3D_E-0632: the painted mask travels with the scene. Only written when
+    // something actually painted, so a scene that never touched it gains no key.
+    if (m_densityMap.isInitialized())
+    {
+        j["densityMap"] = m_densityMap.serialize();
+    }
+
     return j;
 }
 
 void FoliageManager::deserialize(const nlohmann::json& j)
 {
     clear();
+
+    // BEFORE the chunks guard below, deliberately. That guard returns early
+    // when "chunks" is absent, and a scene can carry a painted mask with no
+    // foliage instances at all — restoring the mask after it would silently
+    // drop exactly that case (3D_E-0632).
+    if (j.contains("densityMap"))
+    {
+        m_densityMap.deserialize(j["densityMap"]);
+    }
 
     if (!j.contains("chunks") || !j["chunks"].is_array())
     {
@@ -642,6 +659,12 @@ void FoliageManager::deserialize(const nlohmann::json& j)
 void FoliageManager::clear()
 {
     m_chunks.clear();
+
+    // The mask is scene state, so it clears with the scene (3D_E-0632).
+    // Without this, loading a scene that never painted would inherit the
+    // previous scene's mask and silently modulate its foliage.
+    // DensityMap has no de-initialise, so assign a fresh one.
+    m_densityMap = DensityMap{};
 }
 
 uint64_t FoliageManager::packChunkKey(int gridX, int gridZ)

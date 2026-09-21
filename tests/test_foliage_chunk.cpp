@@ -346,3 +346,71 @@ TEST(FoliageManagerTest, ClearRemovesAll)
     EXPECT_EQ(manager.getTotalFoliageCount(), 0);
     EXPECT_EQ(manager.getChunkCount(), 0);
 }
+
+// --- Density map travels with the scene (3D_E-0632) -------------------------
+//
+// The mask used to live on the editor's EnvironmentPanel, which the scene
+// serialiser cannot reach — so DensityMap::serialize() had no caller and every
+// painted mask was discarded on save. FoliageManager owns it now, and these two
+// pin the halves that made that a silent loss rather than an obvious one.
+
+TEST(FoliageManagerTest, DensityMapSurvivesSerializeRoundTrip)
+{
+    FoliageManager manager;
+    DensityMap& mask = manager.getDensityMap();
+    mask.initialize(-16.0f, -16.0f, 32.0f, 32.0f, 1.0f);
+    mask.fill(1.0f);
+    // Paint a hole so the round-trip has something to lose beyond "initialised".
+    mask.paint(glm::vec3(0.0f, 0.0f, 0.0f), 4.0f, 0.0f, 1.0f, 0.0f);
+
+    const float paintedCentre = mask.sample(0.0f, 0.0f);
+    const float untouchedEdge = mask.sample(14.0f, 14.0f);
+    ASSERT_LT(paintedCentre, untouchedEdge);
+
+    FoliageManager loaded;
+    loaded.deserialize(manager.serialize());
+
+    EXPECT_TRUE(loaded.getDensityMap().isInitialized());
+    EXPECT_FLOAT_EQ(loaded.getDensityMap().sample(0.0f, 0.0f), paintedCentre);
+    EXPECT_FLOAT_EQ(loaded.getDensityMap().sample(14.0f, 14.0f), untouchedEdge);
+}
+
+// A scene JSON carrying a mask and NO "chunks" key at all must still restore
+// the mask. deserialize() early-returns on a missing/!array "chunks", so the
+// mask is restored BEFORE that guard; after it, this case drops silently.
+//
+// The JSON is hand-built on purpose. A serialize() round-trip cannot reach this
+// path -- serialize() always writes j["chunks"], empty array included, so the
+// guard never fires on our own output. Written as a round-trip first, this test
+// passed with the restore on the WRONG side of the guard, which is the whole
+// reason it is built by hand now.
+TEST(FoliageManagerTest, DensityMapRestoredWhenJsonHasNoChunksKey)
+{
+    FoliageManager source;
+    DensityMap& mask = source.getDensityMap();
+    mask.initialize(-8.0f, -8.0f, 16.0f, 16.0f, 1.0f);
+    mask.fill(0.25f);
+
+    nlohmann::json legacy;
+    legacy["densityMap"] = mask.serialize();
+    ASSERT_FALSE(legacy.contains("chunks"));
+
+    FoliageManager loaded;
+    loaded.deserialize(legacy);
+
+    EXPECT_TRUE(loaded.getDensityMap().isInitialized());
+    EXPECT_FLOAT_EQ(loaded.getDensityMap().sample(0.0f, 0.0f), 0.25f);
+}
+
+// clear() must drop the mask too. Without this a scene that never painted
+// inherits the previous scene's mask and silently modulates its foliage.
+TEST(FoliageManagerTest, ClearDropsTheDensityMap)
+{
+    FoliageManager manager;
+    manager.getDensityMap().initialize(-8.0f, -8.0f, 16.0f, 16.0f, 1.0f);
+    ASSERT_TRUE(manager.getDensityMap().isInitialized());
+
+    manager.clear();
+
+    EXPECT_FALSE(manager.getDensityMap().isInitialized());
+}

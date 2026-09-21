@@ -172,26 +172,31 @@ void EnvironmentPanel::draw(BrushTool& brushTool, FoliageManager& manager,
     // Density map controls (only in DENSITY mode)
     if (brushTool.mode == BrushTool::Mode::DENSITY)
     {
+        // 3D_E-0632: paint into the SCENE's mask, held by FoliageManager, not
+        // into a panel-local one. The panel is not reachable from the scene
+        // serialiser, so a mask owned here was discarded on every save.
+        DensityMap& densityMap = manager.getDensityMap();
+
         ImGui::Text("Density Map");
 
-        if (!m_densityMap.isInitialized())
+        if (!densityMap.isInitialized())
         {
             if (ImGui::Button("Create Density Map"))
             {
                 // Default: covers 256x256m centered at origin, 1 texel/m
-                m_densityMap.initialize(-128.0f, -128.0f, 256.0f, 256.0f, 1.0f);
-                brushTool.densityMap = &m_densityMap;
+                densityMap.initialize(-128.0f, -128.0f, 256.0f, 256.0f, 1.0f);
+                brushTool.densityMap = &densityMap;
             }
             ImGui::TextDisabled("No density map. Create one to start painting.");
         }
         else
         {
-            brushTool.densityMap = &m_densityMap;
+            brushTool.densityMap = &densityMap;
 
             ImGui::Text("Size: %dx%d (%.0fm x %.0fm)",
-                        m_densityMap.getWidth(), m_densityMap.getHeight(),
-                        static_cast<double>(m_densityMap.getWorldExtent().x),
-                        static_cast<double>(m_densityMap.getWorldExtent().y));
+                        densityMap.getWidth(), densityMap.getHeight(),
+                        static_cast<double>(densityMap.getWorldExtent().x),
+                        static_cast<double>(densityMap.getWorldExtent().y));
 
             ImGui::SliderFloat("Paint Value", &brushTool.densityPaintValue, 0.0f, 1.0f, "%.2f");
             ImGui::TextDisabled("0 = block foliage, 1 = allow foliage");
@@ -200,21 +205,24 @@ void EnvironmentPanel::draw(BrushTool& brushTool, FoliageManager& manager,
 
             if (ImGui::Button("Fill All"))
             {
-                m_densityMap.fill(1.0f);
+                densityMap.fill(1.0f);
             }
             ImGui::SameLine();
             if (ImGui::Button("Clear All"))
             {
-                m_densityMap.fill(0.0f);
+                densityMap.fill(0.0f);
             }
         }
     }
     else
     {
-        // When not in density mode, still link density map if it exists
-        if (m_densityMap.isInitialized())
+        // When not in density mode, still link density map if it exists.
+        // Fetched here rather than reusing the reference above — that one is
+        // scoped to the density-mode branch (3D_E-0632).
+        DensityMap& sceneDensityMap = manager.getDensityMap();
+        if (sceneDensityMap.isInitialized())
         {
-            brushTool.densityMap = &m_densityMap;
+            brushTool.densityMap = &sceneDensityMap;
         }
         else
         {

@@ -42,7 +42,6 @@ public:
     void setOpen(bool open) override { m_open = open; }
 
     /// @brief Gets the density map (creates on first access if terrain is set).
-    DensityMap& getDensityMap() { return m_densityMap; }
 
 private:
     bool m_open = false;
@@ -50,7 +49,6 @@ private:
     int m_selectedBiome = 0;
 
     // Density map
-    DensityMap m_densityMap;
 
     // Bank blend
     Terrain::BankBlendConfig m_bankBlendConfig;

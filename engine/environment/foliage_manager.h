@@ -163,6 +163,18 @@ public:
     /// @brief Gets the total number of active chunks.
     int getChunkCount() const;
 
+    /// @brief The scene's paintable density mask (3D_E-0632).
+    ///
+    /// Owned HERE rather than by the editor's EnvironmentPanel, because the
+    /// panel is not reachable from the scene serialiser — which is why
+    /// DensityMap::serialize() had no caller and every painted mask was
+    /// discarded on save. Living beside the foliage chunks it modulates, it
+    /// rides the existing scene-save path with no serialiser change.
+    DensityMap& getDensityMap() { return m_densityMap; }
+
+    /// @brief The scene's paintable density mask (const overload).
+    const DensityMap& getDensityMap() const { return m_densityMap; }
+
     /// @brief Serializes all environment data to JSON.
     nlohmann::json serialize() const;
 
@@ -187,6 +199,9 @@ private:
 
     /// Maps packed (gridX, gridZ) key -> chunk.
     std::unordered_map<uint64_t, std::unique_ptr<FoliageChunk>> m_chunks;
+
+    /// The scene's density mask. Uninitialised until something paints into it.
+    DensityMap m_densityMap;
 };
 
 } // namespace Vestige
