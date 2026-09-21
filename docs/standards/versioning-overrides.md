@@ -177,7 +177,7 @@ condition, and `Breaks nothing.` is correct there.
 
 **Two kinds of heading are not release headings at all, and nothing above
 applies to them.** The completed phases keep their own `## Phase N` headings,
-because they shipped before this convention existed. `## After 1.0.0` holds
+because they shipped before this convention existed. `## Unscheduled — no release committed` holds
 work not scheduled against any release; it names no surface, and an item
 sitting there is not a claim that it breaks nothing.
 

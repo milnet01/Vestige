@@ -43,7 +43,10 @@ grouping level cannot be made by demoting — something would have to flatten.
 - [0.5.0 — Interactivity](#050--interactivity)
 - [0.6.0 — Shipping a walkthrough](#060--shipping-a-walkthrough)
 - [1.0.0 — Tabernacle walkthrough ships](#100--tabernacle-walkthrough-ships)
-- [After 1.0.0](#after-100)
+
+**Open work with no release**
+
+- [Unscheduled — no release committed](#unscheduled--no-release-committed)
 
 **Completed phases, and the phases inside each release**
 
@@ -3268,6 +3271,106 @@ shipped that have no invocation path at all.
   Kind: fix.
   Source: rule-14 gate on docs/standards/versioning-overrides.md, 2026-09-21.
 
+- ✅ [3D_E-0684] **Roadmap milestones: place the survey items, close shipped 2D duplicates, rename the unscheduled section.**
+  **Layman:** The plan file had already-built 2D work listed as still to do, and engine upgrades filed behind work nobody has committed to.
+  Kind: chore.
+  Source: lean-workflow-effort-2026-09-21.
+
+#### Technology survey follow-ups (2026-09-02)
+
+- 📋 [3D_E-0673] **Five cheap dependency bumps with no API risk.**
+  All verified against upstream release data on 2026-09-02. None changes a
+  licence.
+
+  - OpenAL-soft 1.25.1 to 1.25.2 (2026-05-12). Includes a fix for an STL
+    hardening assertion in REVERB PROCESSING, which is directly on the
+    convolution and parametric reverb path AX2/AX3 shipped. No
+    convolution/HRTF/ambisonics behaviour changes.
+  - GLM 1.0.1 to 1.0.3 (2025-12-31). Header-only.
+  - enkiTS v1.11 to v1.12 (2026-07-04), its first release since 2022:
+    significantly improved performance on many-thread systems, Windows
+    processor groups above 64 threads. SOFT BREAK -- GetIsRunning() is
+    deprecated in favour of !GetIsShutdownRequested(); grep the job system
+    before bumping.
+  - GoogleTest v1.15.2 to v1.18.0 (2026-08-10). Raises the minimum to
+    C++17, which this project already is, so it is a non-event here.
+  - GLFW 3.4 to 3.5.1 (2026-07-31). 3.5 was skipped upstream over a bad git
+    tag. Removes Windows XP/Vista and original MinGW support, neither of
+    which we use. KEEP the GLFW_BUILD_WAYLAND OFF override across the bump
+    and verify it at configure time -- the published news does not say
+    whether Wayland-by-default changed, and that is the one risk here.
+  **Layman:** Routine updates that should take minutes each.
+  Kind: chore.
+  Lanes: deps.
+  Source: tech-survey-2026-09-02.
+
+- 📋 [3D_E-0674] **Two dependency pins carry reasons that are expired or false.**
+  Project rule 8 allows a non-latest pin only with a valid written reason at
+  the pin site. Two fail that test today, which makes this a rule-8
+  compliance item rather than a version question.
+
+  ImGuizmo -- the pin comment records a GCC 14 compile failure and says
+  "Re-evaluate the pin when upstream lands a fix". Upstream has since tagged
+  1.9 (2026-05-02) and 1.10 (2026-05-11), so the stated re-test trigger has
+  fired and the hold owes a re-test. Whether the constructor bug is actually
+  fixed was NOT verified -- that needs a build, not a fetch. Note the tag
+  ordering is misleading: 1.83 is from 2021, so 1.10 is the newest despite
+  reading lower.
+
+  ImPlot -- the pin comment says the latest tagged release (v0.16) predates
+  the ImGui 1.92.x API. That is now false: upstream tagged v0.17
+  (2025-11-30) and v1.0 (2026-04-05). The PIN ITSELF IS FINE -- the commit
+  is dated after v1.0 and matches the post-1.0 ImPlotSpec API the spectrum
+  viewer uses -- so the fix is to correct the justification text, or move to
+  the v1.0 tag. Be aware v1.0 is genuinely breaking: SetNextLineStyle,
+  SetNextFillStyle, SetNextMarkerStyle and SetNextErrorBarStyle are removed
+  in favour of ImPlotSpec.
+
+  Also worth recording, not a violation: libebur128 (2021) and
+  imgui-node-editor (2023) are both pinned to the genuine latest release,
+  but both upstreams are effectively dormant. That is a supply-chain fact to
+  know, not a bump to make.
+  **Layman:** Two version freezes have written justifications that are no longer true.
+  Kind: doc-fix.
+  Lanes: deps, docs.
+  Source: tech-survey-2026-09-02.
+
+- 📋 [3D_E-0681] **What the 2026-09-02 survey did not examine at all.**
+  Filed because this section otherwise reads as complete coverage of its own
+  question, and it is not. Every item below was in scope and was never
+  reached -- each research lane exhausted its search budget before getting
+  there.
+
+  NOT EXAMINED, technology side:
+
+  - CLOTH SIMULATION advances since 2024 -- XPBD variants, GPU solvers,
+    collision handling. Vestige has CPU and GPU cloth with a parity test
+    (Cl9/Cl10, 3D_E-0009), so this was a real question with a real subject
+    and it has no answer here.
+  - A direct sweep of the SIGGRAPH 2024, 2025 and 2026 technical-papers
+    listings. The rendering and physics findings rest on repository
+    artefacts, licence files and specific papers found by search, not on a
+    systematic proceedings pass.
+
+  NOT EXAMINED, IP side (3D_E-0679 holds the detail):
+
+  - ASTC, PVRTC and ETC texture-compression encumbrances.
+  - Ray-tracing patents, which matter to the planned RT work.
+  - Vulkan and mesh-shader patents, which matter to Phase 14's runtime.
+  - The entire audio side.
+
+  Separately, and more serious than an omission: 3D_E-0679 records that
+  SSAO, temporal anti-aliasing and cascaded shadow maps could not be
+  CLEARED, and all three already ship.
+
+  The cheapest of these to close is the cloth question, which needs one
+  research session with search budget and no patent work in it.
+  **Layman:** A list of things we meant to look into and ran out of time for, so nobody assumes they were checked.
+  Kind: research.
+  Lanes: research.
+  Source: tech-survey-2026-09-02.
+
+
 ## 0.3.0 — An editor a builder can use
 
 Breaks: the scene format. Editor work changes what a scene stores.
@@ -3483,6 +3586,41 @@ On a 6-core / 12-thread dev box, the engine drives ≥ 6 cores at ≥ 70 % utili
 
 #### Phase 10.7: Accessibility + Audio integration ✅ **Complete (2026-04-23)**
 Retrofit completed across 8 commits — every Phase-10 Settings-store consumer now reads at runtime, closing the "set in Settings, nothing happens" gap. **Audio mixer → playback** (A1–A3): `AudioBus` field on `AudioSourceComponent`, `AudioEngine` playback registry + per-frame `updateGains()` resolving `master × bus × source`, `AudioPanel` bus sliders route through `SettingsEditor::mutate` (mute/solo/ducking stay panel-local). **Subtitles** (B1–B3): `SubtitleQueue::tick(dt)` in `Engine::run`, `activeSubtitles()` rendered via `SpriteBatchRenderer` + `TextRenderer` as last overlay pass, declarative `assets/captions.json` auto-enqueue on clip playback. **Photosensitive caps** (C1–C2): bloom via `Renderer::setPhotosensitive` clamping `u_bloomIntensity`, strobe/flicker via `ParticleEmitterComponent::getCoupledLight` Hz conversion + clamp. Camera-shake (`clampShakeAmplitude`) and flash-overlay (`clampFlashAlpha`) retrofits deferred to Phase 11 — those subsystems do not exist in the codebase yet. Full design + slice breakdown in `docs/phases/phase_10_7_design.md`.
+
+#### Technology survey follow-ups (2026-09-02)
+
+- 📋 [3D_E-0670] **Move tinyexr to the v3.x API as its own scheduled migration.**
+  Separate from the security patch above, and deliberately after it.
+
+  tinyexr v3.0.0 (2026-06-09) through v3.2.0 (2026-07-08) restructure the
+  API. The release notes carry no migration guide, and v3.2.0 adds PIZ
+  decode performance work, runtime zlib backend selection, freestanding ZSTD
+  decode and a texture toolchain -- none of which Vestige needs today.
+
+  Budget a day-plus and read the diff rather than the notes. Nothing here is
+  urgent once v1.0.13 has closed the memory-safety exposure.
+  **Layman:** A later, bigger update to the EXR library that changes how we call it.
+  Kind: chore.
+  Lanes: deps.
+  Source: tech-survey-2026-09-02.
+
+- 📋 [3D_E-0672] **tinygltf v2.9.4 to v3.0.1 — a real migration, not a bump.**
+  v3 formally deprecates the v2 API, replaces the JSON path with a custom
+  parser (optional SIMD), removes `using namespace` from the header, and
+  switches calloc/free to new/delete. It also fixes empty-versus-absent
+  string conflation and an integer-token parse bug, both of which matter for
+  an asset parser.
+
+  This is the one dependency bump that deserves its own spec rather than a
+  drive-by edit. Budget 1-2 days.
+
+  glTF loading is on the asset-ingest path, so the parser-correctness fixes
+  are worth having even though nothing is currently known to be broken.
+  **Layman:** The 3D model loader has a new major version that changes how it is called.
+  Kind: chore.
+  Lanes: deps.
+  Source: tech-survey-2026-09-02.
+
 
 ---
 
@@ -3972,6 +4110,184 @@ Core terrain system implemented in Phase 5I. Remaining items are enhancements.
 ##### Milestone
 Outdoor landscapes surrounding the Temple complex — hills, valleys, and the Kidron Valley with terrain elevation, ready for environment painting from Phase 5G.
 
+#### Technology survey follow-ups (2026-09-02)
+
+- 📋 [3D_E-0658] **Cut the shadow pass by caching the static cascade, not by replacing the technique.**
+  The shadow pass is 4.49 ms, about 38% of the GPU frame and the largest
+  single cost in it (3D_E-0044). Three cheap moves, in order, none of which
+  needs a new API or a new technique:
+
+  1. MEASURE FIRST. Establish how much of the 4.49 ms is wind-animated
+     grass and tree shadow casters. With ~1M Bezier blades already
+     CSM-receiving and wind-animated, they are the prime suspect. UE5.7
+     field data has disabling world-position-offset for shadows on small
+     foliage cutting forest-floor shadow cost 8.2 ms to 3.1 ms on PS5.
+     Do not act on the rest of this bullet before this measurement.
+
+  2. Split the cascade into a cached static layer and a per-frame dynamic
+     layer, compositing dynamic casters over the cached half. Godot
+     proposal 4635 states the problem exactly: directional shadows update
+     every frame as soon as any animated object is present. Architectural
+     walkthroughs are close to the ideal case -- a static structure, a
+     moving camera, a fixed or slow sun -- so the static layer is
+     invalidated only on sun rotation and cascade re-fit.
+
+  3. Stagger distant cascades: cascade 0 every frame, 1 every other, 2 and
+     3 every fourth.
+
+  Explicitly NOT virtual shadow maps. VSM is a GPU-driven-rendering-sized
+  project whose benefit is bounded by exactly the caching step 2 captures,
+  and Fortnite's own postmortem records that animated deformation plus a
+  continuously moving sun destroys the caching that makes it pay. The one
+  OpenGL reference (ktstephano/StratusGFX) publishes no timings and warns
+  against hardware sparse textures. Watch, do not build.
+  **Layman:** Shadows cost more than a third of each frame; most of that work is redrawn every frame even when nothing moved.
+  Kind: perf.
+  Lanes: renderer, perf.
+  Source: tech-survey-2026-09-02.
+
+- 📋 [3D_E-0659] **Add a temporal upscaler so the render-scale system buys quality, not just speed.**
+  The render-scale system already trades resolution for frame time, but a
+  plain downscale at 0.5x is visibly soft. A temporal upscaler converts that
+  into roughly 0.67x that reads as near-native, which is the most direct
+  lever available on the GTX 1050's 60 FPS floor. TAA motion vectors and
+  jitter are the hard prerequisite and Vestige already has both.
+
+  Primary candidate: Snapdragon Game Super Resolution 2 (SGSR 2),
+  BSD-3-Clause, github.com/SnapdragonStudios/snapdragon-gsr. Designed to be
+  cheap and portable, with no subgroup or SPIR-V floor.
+
+  Secondary, as an AMD-side quality tier: FSR 2.2.1 has a working OpenGL
+  port at github.com/JuanDiegoMontoya/FidelityFX-FSR2-OpenGL. Two caveats
+  found in its source rather than its README: it loads SPIR-V via
+  glShaderBinary/glSpecializeShader and HARD-REQUIRES GL_KHR_shader_subgroup,
+  so it needs a GL 4.6 context rather than our 4.5 (both target GPUs expose
+  4.6, so this is a context bump, not a hardware exclusion); and its author
+  reports it running ~3x slower than expected on an RTX 3070 with the cause
+  unidentified, which lands squarely on the GTX 1050 target.
+
+  THE FIDELITYFX LICENCE QUESTION IS NOW SETTLED, and the answer is a trap
+  worth knowing. Both readings were right about different artefacts.
+  GPUOpen-Effects/FidelityFX-FSR2 (standalone, FSR 2.2) is plain MIT, and
+  FidelityFX-SDK at tag v1.1.4 is plain MIT throughout. But the CURRENT SDK
+  main, retitled "AMD FSR SDK 2.3.0", has NO root LICENSE file, and its
+  docs/license.md opens with an AMD redistribution licence granting rights
+  "to install, reproduce, copy and distribute copies of the Software, in
+  binary form only", forbidding reverse engineering and capping liability at
+  US$10 -- with MIT applying only to roughly a thousand ENUMERATED paths
+  listed after it. The README's "available under the MIT license" is
+  narrower than it reads.
+
+  So: take FSR2 from the standalone MIT repo, not from the current SDK. If
+  FSR 3.1 is wanted, vendor only specific Kits/FidelityFX/upscalers/fsr3/
+  files and check each path against that enumerated list first. Never vendor
+  Kits/FidelityFX/signedbin/. Vendoring the SDK wholesale would put a
+  binary-only redistribution default over an MIT source tree.
+
+  Note the standalone repo has not been pushed since 2023-08-26, so pinning
+  it needs a written rule-8 reason -- most likely case (B), that upstream's
+  maintained line moved into a bundle whose default licence we decline.
+
+  Rejected with reasons. FSR 4: signed Windows DLLs, ML-based, and its MIT
+  source publication was confirmed by AMD as a mistake -- not a licence to
+  ship from. XeSS 2/3: binary-only Windows DLLs, licence forbids reverse
+  engineering, no OpenGL, no Linux. DLSS: vendor-locked to the wrong GPU.
+  **Layman:** Rendering smaller and upscaling well is what gets the weak graphics card to 60 FPS without looking blurry.
+  Kind: perf.
+  Lanes: renderer, perf.
+  Source: tech-survey-2026-09-02.
+
+- 📋 [3D_E-0660] **Swap the sampling noise for filter-adapted spatio-temporal (FAST) noise.**
+  FAST (Donnelly, Wolfe, Butepage, Valdes -- EA SEED, 2024) generalises
+  spatiotemporal blue noise from being optimised for a Gaussian low-pass to
+  being optimised for the filter actually in use -- including the
+  exponential moving average that TAA is.
+
+  EA ship pre-generated 128x128x32 array textures plus the generator at
+  github.com/electronicarts/importance-sampled-FAST-noise (follow-up:
+  Wolfe, Donnelly, Halen, JCGT 14(1) art. 8, 2025). CHECK THE LICENCE FILE
+  BEFORE VENDORING -- the survey could not read its terms.
+
+  Drop-in for whatever jitter/dither the froxel injection, SSGI, SSAO,
+  god-ray gather and contact shadows use today. Same sample count, less
+  visible noise after TAA. Works on GL 4.5, needs no ray tracing, and costs
+  a texture swap and a sampling call.
+
+  The cheapest quality win in the survey, and the one genuine 2024+
+  improvement to froxel volumetrics -- there was no froxel talk in SIGGRAPH
+  Advances 2024 or 2025, so the fog pipeline is otherwise at the state of
+  practice.
+  **Layman:** A better random-number texture makes five existing effects look cleaner for almost nothing.
+  Kind: enhancement.
+  Lanes: renderer.
+  Source: tech-survey-2026-09-02.
+
+- 📋 [3D_E-0661] **De-risk Phase 14 now by taking the offline cluster-LOD builder.**
+  clusterlod.h generates the cluster LOD hierarchy -- the DAG construction
+  and locked-boundary simplification that is the hardest part of
+  Nanite-without-Nanite. MIT, and offline, so it costs no runtime budget and
+  no API surface.
+
+  Verified 2026-09-02, with a correction to the survey that raised it: the
+  file is at demo/clusterlod.h in zeux/meshoptimizer, NOT src/. Its own
+  header calls it "a small 'library'/example ... intended to either be used
+  as is, or as a reference for implementing similar functionality in your
+  engine" -- reference code rather than a supported library API, so
+  vendoring it means owning it. Current meshoptimizer release is v1.2
+  (2026-06-30).
+
+  The runtime is the Vulkan-shaped part and is NOT proposed here. OpenGL has
+  no core mesh-shader path and AMD ships no GL mesh-shader extension, so on
+  the RX 6600 the only route is compute plus glMultiDrawElementsIndirect.
+  That this works is demonstrated rather than theoretical --
+  Scthe/nanite-webgpu does it on WebGPU, an API with fewer features than
+  GL 4.5, packing depth and an octahedral normal into 32 bits because WebGPU
+  lacks 64-bit atomics; GL 4.5 has the same 32-bit image atomics. NVIDIA's
+  vk_lod_clusters is the Vulkan reference and itself uses clusterlod.h.
+
+  Reality check against the 60 FPS floor: a 1.64-billion-triangle scene
+  reportedly renders in 16 ms rasterised on an RTX 3050. Architectural
+  walkthroughs are a far smaller input, but virtualised geometry is not
+  free.
+
+  IP position, and it qualifies the choice above -- see 3D_E-0678 for the
+  evidence. Epic holds no findable patent here, so this is buildable. But
+  NVIDIA has two live published applications on the cluster-GROUPING step
+  specifically, and nvpro-samples/vk_lod_clusters is NVIDIA's own
+  Apache-2.0 code, whose section 3 carries an express patent grant that MIT
+  does not. So: take clusterlod.h as the general reference, and for the
+  grouping cost function specifically mirror the Apache-2.0 code rather than
+  reimplementing the heuristic, declaring Apache-2.0 in
+  THIRD_PARTY_NOTICES.md.
+  **Layman:** The hardest part of Nanite-style geometry can be borrowed today, years before we build the rest.
+  Kind: investigate.
+  Lanes: renderer, tools.
+  Source: tech-survey-2026-09-02.
+
+- 📋 [3D_E-0664] **Replace V-HACD with CoACD in the asset pipeline — upstream has ended V-HACD.**
+  V-HACD's README now opens with a deprecation notice added 2025-07-13:
+  "DEPRECATED & ARCHIVED -- This project is no longer maintained ... please
+  see CoACD", and "All new development and bug-fixes have moved to CoACD."
+  Its last release was v4.1.0 (2022-10-24).
+
+  CoACD (github.com/SarahWeiii/CoACD) is MIT, actively released -- 1.0.14 on
+  2026-08-28 -- and a recent commit makes decomposition deterministic with
+  respect to thread scheduling, which matters if collision assets are to be
+  reproducible in version control. Paper: Wei et al., ACM TOG 41(4), 2022.
+
+  Offline batch tool only, never at runtime: it takes seconds to minutes per
+  mesh. Wire it into an asset-bake script.
+
+  Note that Blast 5.0.6 still bundles V-HACD for its authoring collision
+  builder, so adopting Blast's authoring tool inherits the dead library.
+  That is offline-only and therefore harmless, but it is not an endorsement
+  of V-HACD for new work.
+  **Layman:** The tool that turns detailed shapes into simple collision shapes has been retired; its own authors point at the replacement.
+  Kind: chore.
+  Lanes: tools, physics.
+  Source: tech-survey-2026-09-02.
+
+
 ---
 
 ## 0.5.0 — Interactivity
@@ -4362,6 +4678,132 @@ Load the demo scene, let it settle — every particle above Y=0 is attached thro
 ##### Why This Is Its Own Phase, Not Part of the Rendering-Realism Track
 The rendering research update (Phase 13 "2026-04 Research Update") makes pixels look photoreal. Without Phase 24, the result is photoreal curtains floating in mid air — *worse* than the current lower-fidelity-but-also-floating state, because the realism of the material makes the physics error more visible, not less. Phases 13 and 24 should land in parallel; neither is useful alone for the Tabernacle / Temple showcase projects.
 
+#### Technology survey follow-ups (2026-09-02)
+
+- 📋 [3D_E-0662] **Structural physics: take NVIDIA Blast from the PhysX 5 repo, and know which repo.**
+  THE LICENSING TRAP IS THE HEADLINE, and both halves were verified
+  directly on 2026-09-02 by reading the licence files.
+
+  github.com/NVIDIAGameWorks/Blast -- the repo a search for "NVIDIA Blast"
+  finds -- is PROPRIETARY. Its license.txt opens "This code contains NVIDIA
+  Confidential Information and is disclosed to you under a form of NVIDIA
+  software license agreement provided separately to you." It is also
+  abandoned (last commit 2019-09-17), is not archived, carries no
+  deprecation notice, and does not point at its successor. Do not vendor
+  from it.
+
+  The live Blast is the blast/ subtree of github.com/NVIDIA-Omniverse/PhysX,
+  relicensed to BSD-3-Clause, "Copyright (c) 2016-2024 NVIDIA Corporation".
+  Version 5.0.6, feature-frozen since 2024-05 but still kept building as
+  recently as 2026-08.
+
+  Why it fits: extensions/stress/NvBlastExtStressSolver.h implements a real
+  per-bond structural stress solver -- compression, tension and shear with
+  limits in pascals -- not just a shatterer. That is load-bearing-wall
+  collapse driven by gravity, which is exactly Phase 24's subject.
+
+  The runtime slice is small and PhysX-free: lowlevel + common + globals +
+  extensions/stress is roughly 460 KB, and the stress solver includes only
+  Blast-internal headers plus <algorithm> and <set>. The heavy authoring
+  half (Voronoi/slicing/cutout fracture) is offline only.
+
+  Two things to plan around. Blast's build pulls Python 2.7 and Boost 1.64
+  via NVIDIA's packman -- against project rule 8 -- so build the authoring
+  tool once in a container and vendor only the runtime slice, where none of
+  those appear. And graphReductionLevel > 0, the obvious perf knob, is
+  documented-broken by NVIDIA's own header comment ("can lead to interlocked
+  actors") and will not be fixed; budget for level 0 and control cost with
+  fewer, larger authored chunks.
+
+  Unreal's Chaos is REJECTED and not merely inconvenient: the UE EULA permits
+  distributing Engine Code only to third parties separately licensed for the
+  same engine version, so shipping Chaos inside Vestige binaries is barred
+  outright, with no royalty path that legitimises it. Fractured meshes
+  exported from the UE editor as ASSET files are fine.
+  **Layman:** The library that makes buildings collapse realistically is free to use, but the version a search finds first is not.
+  Kind: implement.
+  Lanes: physics.
+  Source: tech-survey-2026-09-02.
+
+- 📋 [3D_E-0663] **Prototype breakable structures on Jolt constraints before adopting anything.**
+  Jolt has no fracture support -- a code search across the repo for
+  "fracture" returns zero results, and the hits for "destruction" are all
+  C++ object-lifetime code. What it does have is one paragraph in
+  Docs/Architecture.md under Breakable Constraints: check the total lambda
+  applied to each constraint after every simulation step and call
+  Constraint::SetEnabled(false) past a threshold, via
+  SliderConstraint::GetTotalLambdaPosition and
+  HingeConstraint::GetTotalLambdaRotation.
+
+  For the Tabernacle -- a post-and-beam timber structure, not rubble --
+  modelling each board as a body joined by fixed constraints with a
+  per-joint lambda threshold should give believable collapse with ZERO new
+  dependencies. Do this BEFORE the Blast work: it proves the feel, and it is
+  the cheapest thing in the survey.
+
+  It fails on masonry, where per-bond pascal limits and a chunk hierarchy
+  are wanted -- that is where Blast earns its place.
+
+  Also worth hand-rolling rather than adopting: a support graph for
+  structural integrity (connected components from grounded nodes, re-run
+  only on the changed component when an edge is cut). There is no usable
+  open implementation -- the one GitHub hit has no licence file, and the
+  widely-repeated claim about Teardown's algorithm scaling factorially
+  traces to a Steam forum post rather than to the developer. It is a few
+  hundred lines, costs nothing when nothing breaks, and Blast's support
+  graph is already this data structure.
+  **Layman:** We can get believable collapse in about a week using the physics engine we already have.
+  Kind: implement.
+  Lanes: physics.
+  Source: tech-survey-2026-09-02.
+
+- 📋 [3D_E-0671] **Jolt Physics v5.3.0 to v5.6.0 — the largest free performance win on the list.**
+  Pinned at v5.3.0; upstream latest is v5.6.0 (2026-07-11). Its notes claim
+  up to 40% performance improvement and up to 70% memory reduction depending
+  on scene, with a new friction model described as 15% faster using 40% less
+  memory. Also adds a GPU compute-shader interface and 16-bit height-field
+  samples.
+
+  That lands directly on the 60 FPS floor and on the GTX 1050 target, which
+  is why this is filed as perf rather than chore.
+
+  Plan for breakage even though v5.6.0's notes carry no explicit
+  breaking-changes section: the bump skips v5.4.0 and v5.5.0, whose notes
+  were not read. Budget half a day to a day, and expect to re-green the
+  CPU/GPU cloth parity test.
+
+  Per project rule 8 this upgrade gets a cold-eyes review. Licence unchanged
+  (MIT).
+  **Layman:** A physics engine update that claims large speed and memory improvements.
+  Kind: perf.
+  Lanes: deps, physics, perf.
+  Source: tech-survey-2026-09-02.
+
+- 📋 [3D_E-0676] **AX7 ambisonics needs no new dependency — OpenAL already carries the extensions.**
+  Recorded against the AX7 plan, which may assume more work than is needed.
+
+  OpenAL-soft's include/AL/alext.h already exposes AL_EXT_BFORMAT and
+  AL_EXT_MULAW_BFORMAT for B-format sources, AL_SOFT_bformat_ex, and
+  AL_SOFT_bformat_hoa for HIGHER-order ambisonics rather than just first
+  order. UHJ is there too (AL_SOFT_UHJ, AL_SOFT_UHJ_ex) with encoder and
+  decoder tools shipped.
+
+  Conventions are explicit and selectable: layout AL_FUMA_SOFT /
+  AL_ACN_SOFT, normalisation AL_SN3D_SOFT / AL_N3D_SOFT, and device-level
+  ALC_AMBISONIC_ORDER_SOFT / ALC_MAX_AMBISONIC_ORDER_SOFT.
+
+  Default to ACN/SN3D -- that is what modern tooling and most freely
+  available ambisonic content emits; FuMa is legacy. Query the extension
+  strings at init and fall back rather than assuming they are present.
+
+  So AX7 is days rather than weeks, costs essentially no CPU beyond what
+  OpenAL already spends, and adds no dependency.
+  **Layman:** The planned 360-degree audio feature can be built with what we already link against.
+  Kind: feature.
+  Lanes: audio.
+  Source: tech-survey-2026-09-02.
+
+
 ---
 
 ## 0.6.0 — Shipping a walkthrough
@@ -4684,9 +5126,10 @@ woven through Phases 11A / 11B / Horror Action Polish. Not yet
 formally scoped — Project 3 (Doom) is the stepping stone that proves
 the gameplay-infrastructure track before this becomes a focused effort.
 
-## After 1.0.0
+## Unscheduled — no release committed
 
-Not scheduled against a release. Work that outlives the 1.0 goal.
+No release is committed for anything here, and this heading is not a position
+in the sequence. An item leaves when a release claims it.
 
 #### Phase 18: 2D Game and Scene Support
 **Goal:** Enable the creation of 2D games and scenes alongside the existing 3D capabilities — sprite-based rendering, 2D physics, tilemaps, and a dedicated 2D editor workflow.
@@ -4694,25 +5137,25 @@ Not scheduled against a release. Work that outlives the 1.0 goal.
 Phase 9D's game type templates (isometric, top-down, orthographic) provide the viewing foundation, and Phase 9F introduces basic sprite rendering and 2D physics. This phase expands on that foundation with the complete 2D feature set.
 
 ##### 2D Rendering Pipeline
-- [ ] Sprite renderer (textured quads with z-ordering, tint, and flip)
-- [ ] Sprite atlas / batch renderer (minimize draw calls — single VBO for all sprites)
-- [ ] Sprite sheet animation (frame-based playback with configurable speed and looping)
+- [x] Sprite renderer (textured quads with z-ordering, tint, and flip) — shipped in Phase 9F-1 (`engine/renderer/sprite_renderer.{h,cpp}`; flip on `SpriteComponent`).
+- [x] Sprite atlas / batch renderer (minimize draw calls — single VBO for all sprites) — shipped in Phase 9F-1 (`engine/renderer/sprite_atlas.{h,cpp}`, instance-rate VBO).
+- [x] Sprite sheet animation (frame-based playback with configurable speed and looping) — shipped in Phase 9F-1 (`engine/animation/sprite_animation.{h,cpp}`).
 - [ ] 2D particle system (lightweight point/quad emitters for sparks, dust, rain)
 - [ ] Pixel-perfect rendering mode (integer scaling, nearest-neighbor filtering)
 
 ##### Tilemap System
-- [ ] Tilemap component (grid of tile IDs referencing a tileset texture)
-- [ ] Multi-layer tilemaps (background, midground, foreground with parallax scrolling)
-- [ ] Tilemap editor — paint tiles from a palette, auto-tiling rules for terrain edges
-- [ ] Animated tiles (water, lava, torches cycle through frames)
+- [x] Tilemap component (grid of tile IDs referencing a tileset texture) — shipped in Phase 9F-3 (`engine/scene/tilemap_component.{h,cpp}`).
+- [ ] Multi-layer tilemaps (background, midground, foreground with parallax scrolling) — named layers with sort order shipped in Phase 9F-3; parallax scrolling is the remainder.
+- [ ] Tilemap editor — paint tiles from a palette, auto-tiling rules for terrain edges — palette paint shipped in Phase 9F-6 and wired by W14; auto-tiling is the remainder.
+- [x] Animated tiles (water, lava, torches cycle through frames) — shipped in Phase 9F-3, via frame-sequence definitions on the tilemap.
 - [ ] Tile collision flags (solid, platform, slope, trigger)
 
 ##### 2D Physics
-- [ ] 2D rigid body component (Box2D or custom — position, rotation, velocity)
-- [ ] 2D collision shapes (box, circle, polygon, edge chain)
+- [x] 2D rigid body component (Box2D or custom — position, rotation, velocity) — shipped in Phase 9F-2 (`engine/systems/physics2d_system.{h,cpp}`) — Jolt `Plane2D`, not a second engine.
+- [x] 2D collision shapes (box, circle, polygon, edge chain) — shipped in Phase 9F-2 (`engine/scene/collider_2d_component.{h,cpp}`), plus capsule.
 - [ ] 2D raycasting and overlap queries
 - [ ] One-way platforms (pass through from below, solid from above)
-- [ ] 2D character controller (platformer movement, wall slide, coyote time)
+- [x] 2D character controller (platformer movement, wall slide, coyote time) — shipped in Phase 9F-4 (`engine/scene/character_controller_2d_component.{h,cpp}`).
 
 ##### 2D Lighting (Optional)
 - [ ] 2D point lights with soft shadows (ray-marched or shadow geometry)
@@ -4720,15 +5163,15 @@ Phase 9D's game type templates (isometric, top-down, orthographic) provide the v
 - [ ] Day/night ambient tint system
 
 ##### 2D Camera
-- [ ] Orthographic 2D camera with smooth follow, deadzone, and look-ahead
-- [ ] Camera bounds (constrain to level extents)
+- [ ] Orthographic 2D camera with smooth follow, deadzone, and look-ahead — ortho, smooth follow and deadzone shipped in Phase 9F-4; look-ahead is the remainder.
+- [x] Camera bounds (constrain to level extents) — shipped in Phase 9F-4 (`engine/scene/camera_2d_component.{h,cpp}`).
 - [ ] Screen shake and zoom effects
 - [ ] Split-screen support for local multiplayer
 
 ##### Editor Integration
 - [ ] 2D/3D scene mode toggle in the editor
 - [ ] Sprite import and slicing tool (auto-detect frames in a sprite sheet)
-- [ ] Tilemap painting panel with brush, fill, and rectangle tools
+- [ ] Tilemap painting panel with brush, fill, and rectangle tools — the panel shipped in Phase 9F-6 and was wired by W14; brush, fill and rectangle tools are the remainder.
 - [ ] 2D scene hierarchy with layer management and z-order controls
 
 ##### Milestone
@@ -5106,258 +5549,6 @@ Licensing note: nothing in this section is legal advice. Where an item turns on
 a licence or a patent, the evidence cited is the actual licence file or patent
 record, and a real clearance before commercial release needs counsel.
 
-- 📋 [3D_E-0658] **Cut the shadow pass by caching the static cascade, not by replacing the technique.**
-  The shadow pass is 4.49 ms, about 38% of the GPU frame and the largest
-  single cost in it (3D_E-0044). Three cheap moves, in order, none of which
-  needs a new API or a new technique:
-
-  1. MEASURE FIRST. Establish how much of the 4.49 ms is wind-animated
-     grass and tree shadow casters. With ~1M Bezier blades already
-     CSM-receiving and wind-animated, they are the prime suspect. UE5.7
-     field data has disabling world-position-offset for shadows on small
-     foliage cutting forest-floor shadow cost 8.2 ms to 3.1 ms on PS5.
-     Do not act on the rest of this bullet before this measurement.
-
-  2. Split the cascade into a cached static layer and a per-frame dynamic
-     layer, compositing dynamic casters over the cached half. Godot
-     proposal 4635 states the problem exactly: directional shadows update
-     every frame as soon as any animated object is present. Architectural
-     walkthroughs are close to the ideal case -- a static structure, a
-     moving camera, a fixed or slow sun -- so the static layer is
-     invalidated only on sun rotation and cascade re-fit.
-
-  3. Stagger distant cascades: cascade 0 every frame, 1 every other, 2 and
-     3 every fourth.
-
-  Explicitly NOT virtual shadow maps. VSM is a GPU-driven-rendering-sized
-  project whose benefit is bounded by exactly the caching step 2 captures,
-  and Fortnite's own postmortem records that animated deformation plus a
-  continuously moving sun destroys the caching that makes it pay. The one
-  OpenGL reference (ktstephano/StratusGFX) publishes no timings and warns
-  against hardware sparse textures. Watch, do not build.
-  **Layman:** Shadows cost more than a third of each frame; most of that work is redrawn every frame even when nothing moved.
-  Kind: perf.
-  Lanes: renderer, perf.
-  Source: tech-survey-2026-09-02.
-
-- 📋 [3D_E-0659] **Add a temporal upscaler so the render-scale system buys quality, not just speed.**
-  The render-scale system already trades resolution for frame time, but a
-  plain downscale at 0.5x is visibly soft. A temporal upscaler converts that
-  into roughly 0.67x that reads as near-native, which is the most direct
-  lever available on the GTX 1050's 60 FPS floor. TAA motion vectors and
-  jitter are the hard prerequisite and Vestige already has both.
-
-  Primary candidate: Snapdragon Game Super Resolution 2 (SGSR 2),
-  BSD-3-Clause, github.com/SnapdragonStudios/snapdragon-gsr. Designed to be
-  cheap and portable, with no subgroup or SPIR-V floor.
-
-  Secondary, as an AMD-side quality tier: FSR 2.2.1 has a working OpenGL
-  port at github.com/JuanDiegoMontoya/FidelityFX-FSR2-OpenGL. Two caveats
-  found in its source rather than its README: it loads SPIR-V via
-  glShaderBinary/glSpecializeShader and HARD-REQUIRES GL_KHR_shader_subgroup,
-  so it needs a GL 4.6 context rather than our 4.5 (both target GPUs expose
-  4.6, so this is a context bump, not a hardware exclusion); and its author
-  reports it running ~3x slower than expected on an RTX 3070 with the cause
-  unidentified, which lands squarely on the GTX 1050 target.
-
-  THE FIDELITYFX LICENCE QUESTION IS NOW SETTLED, and the answer is a trap
-  worth knowing. Both readings were right about different artefacts.
-  GPUOpen-Effects/FidelityFX-FSR2 (standalone, FSR 2.2) is plain MIT, and
-  FidelityFX-SDK at tag v1.1.4 is plain MIT throughout. But the CURRENT SDK
-  main, retitled "AMD FSR SDK 2.3.0", has NO root LICENSE file, and its
-  docs/license.md opens with an AMD redistribution licence granting rights
-  "to install, reproduce, copy and distribute copies of the Software, in
-  binary form only", forbidding reverse engineering and capping liability at
-  US$10 -- with MIT applying only to roughly a thousand ENUMERATED paths
-  listed after it. The README's "available under the MIT license" is
-  narrower than it reads.
-
-  So: take FSR2 from the standalone MIT repo, not from the current SDK. If
-  FSR 3.1 is wanted, vendor only specific Kits/FidelityFX/upscalers/fsr3/
-  files and check each path against that enumerated list first. Never vendor
-  Kits/FidelityFX/signedbin/. Vendoring the SDK wholesale would put a
-  binary-only redistribution default over an MIT source tree.
-
-  Note the standalone repo has not been pushed since 2023-08-26, so pinning
-  it needs a written rule-8 reason -- most likely case (B), that upstream's
-  maintained line moved into a bundle whose default licence we decline.
-
-  Rejected with reasons. FSR 4: signed Windows DLLs, ML-based, and its MIT
-  source publication was confirmed by AMD as a mistake -- not a licence to
-  ship from. XeSS 2/3: binary-only Windows DLLs, licence forbids reverse
-  engineering, no OpenGL, no Linux. DLSS: vendor-locked to the wrong GPU.
-  **Layman:** Rendering smaller and upscaling well is what gets the weak graphics card to 60 FPS without looking blurry.
-  Kind: perf.
-  Lanes: renderer, perf.
-  Source: tech-survey-2026-09-02.
-
-- 📋 [3D_E-0660] **Swap the sampling noise for filter-adapted spatio-temporal (FAST) noise.**
-  FAST (Donnelly, Wolfe, Butepage, Valdes -- EA SEED, 2024) generalises
-  spatiotemporal blue noise from being optimised for a Gaussian low-pass to
-  being optimised for the filter actually in use -- including the
-  exponential moving average that TAA is.
-
-  EA ship pre-generated 128x128x32 array textures plus the generator at
-  github.com/electronicarts/importance-sampled-FAST-noise (follow-up:
-  Wolfe, Donnelly, Halen, JCGT 14(1) art. 8, 2025). CHECK THE LICENCE FILE
-  BEFORE VENDORING -- the survey could not read its terms.
-
-  Drop-in for whatever jitter/dither the froxel injection, SSGI, SSAO,
-  god-ray gather and contact shadows use today. Same sample count, less
-  visible noise after TAA. Works on GL 4.5, needs no ray tracing, and costs
-  a texture swap and a sampling call.
-
-  The cheapest quality win in the survey, and the one genuine 2024+
-  improvement to froxel volumetrics -- there was no froxel talk in SIGGRAPH
-  Advances 2024 or 2025, so the fog pipeline is otherwise at the state of
-  practice.
-  **Layman:** A better random-number texture makes five existing effects look cleaner for almost nothing.
-  Kind: enhancement.
-  Lanes: renderer.
-  Source: tech-survey-2026-09-02.
-
-- 📋 [3D_E-0661] **De-risk Phase 14 now by taking the offline cluster-LOD builder.**
-  clusterlod.h generates the cluster LOD hierarchy -- the DAG construction
-  and locked-boundary simplification that is the hardest part of
-  Nanite-without-Nanite. MIT, and offline, so it costs no runtime budget and
-  no API surface.
-
-  Verified 2026-09-02, with a correction to the survey that raised it: the
-  file is at demo/clusterlod.h in zeux/meshoptimizer, NOT src/. Its own
-  header calls it "a small 'library'/example ... intended to either be used
-  as is, or as a reference for implementing similar functionality in your
-  engine" -- reference code rather than a supported library API, so
-  vendoring it means owning it. Current meshoptimizer release is v1.2
-  (2026-06-30).
-
-  The runtime is the Vulkan-shaped part and is NOT proposed here. OpenGL has
-  no core mesh-shader path and AMD ships no GL mesh-shader extension, so on
-  the RX 6600 the only route is compute plus glMultiDrawElementsIndirect.
-  That this works is demonstrated rather than theoretical --
-  Scthe/nanite-webgpu does it on WebGPU, an API with fewer features than
-  GL 4.5, packing depth and an octahedral normal into 32 bits because WebGPU
-  lacks 64-bit atomics; GL 4.5 has the same 32-bit image atomics. NVIDIA's
-  vk_lod_clusters is the Vulkan reference and itself uses clusterlod.h.
-
-  Reality check against the 60 FPS floor: a 1.64-billion-triangle scene
-  reportedly renders in 16 ms rasterised on an RTX 3050. Architectural
-  walkthroughs are a far smaller input, but virtualised geometry is not
-  free.
-
-  IP position, and it qualifies the choice above -- see 3D_E-0678 for the
-  evidence. Epic holds no findable patent here, so this is buildable. But
-  NVIDIA has two live published applications on the cluster-GROUPING step
-  specifically, and nvpro-samples/vk_lod_clusters is NVIDIA's own
-  Apache-2.0 code, whose section 3 carries an express patent grant that MIT
-  does not. So: take clusterlod.h as the general reference, and for the
-  grouping cost function specifically mirror the Apache-2.0 code rather than
-  reimplementing the heuristic, declaring Apache-2.0 in
-  THIRD_PARTY_NOTICES.md.
-  **Layman:** The hardest part of Nanite-style geometry can be borrowed today, years before we build the rest.
-  Kind: investigate.
-  Lanes: renderer, tools.
-  Source: tech-survey-2026-09-02.
-
-- 📋 [3D_E-0662] **Structural physics: take NVIDIA Blast from the PhysX 5 repo, and know which repo.**
-  THE LICENSING TRAP IS THE HEADLINE, and both halves were verified
-  directly on 2026-09-02 by reading the licence files.
-
-  github.com/NVIDIAGameWorks/Blast -- the repo a search for "NVIDIA Blast"
-  finds -- is PROPRIETARY. Its license.txt opens "This code contains NVIDIA
-  Confidential Information and is disclosed to you under a form of NVIDIA
-  software license agreement provided separately to you." It is also
-  abandoned (last commit 2019-09-17), is not archived, carries no
-  deprecation notice, and does not point at its successor. Do not vendor
-  from it.
-
-  The live Blast is the blast/ subtree of github.com/NVIDIA-Omniverse/PhysX,
-  relicensed to BSD-3-Clause, "Copyright (c) 2016-2024 NVIDIA Corporation".
-  Version 5.0.6, feature-frozen since 2024-05 but still kept building as
-  recently as 2026-08.
-
-  Why it fits: extensions/stress/NvBlastExtStressSolver.h implements a real
-  per-bond structural stress solver -- compression, tension and shear with
-  limits in pascals -- not just a shatterer. That is load-bearing-wall
-  collapse driven by gravity, which is exactly Phase 24's subject.
-
-  The runtime slice is small and PhysX-free: lowlevel + common + globals +
-  extensions/stress is roughly 460 KB, and the stress solver includes only
-  Blast-internal headers plus <algorithm> and <set>. The heavy authoring
-  half (Voronoi/slicing/cutout fracture) is offline only.
-
-  Two things to plan around. Blast's build pulls Python 2.7 and Boost 1.64
-  via NVIDIA's packman -- against project rule 8 -- so build the authoring
-  tool once in a container and vendor only the runtime slice, where none of
-  those appear. And graphReductionLevel > 0, the obvious perf knob, is
-  documented-broken by NVIDIA's own header comment ("can lead to interlocked
-  actors") and will not be fixed; budget for level 0 and control cost with
-  fewer, larger authored chunks.
-
-  Unreal's Chaos is REJECTED and not merely inconvenient: the UE EULA permits
-  distributing Engine Code only to third parties separately licensed for the
-  same engine version, so shipping Chaos inside Vestige binaries is barred
-  outright, with no royalty path that legitimises it. Fractured meshes
-  exported from the UE editor as ASSET files are fine.
-  **Layman:** The library that makes buildings collapse realistically is free to use, but the version a search finds first is not.
-  Kind: implement.
-  Lanes: physics.
-  Source: tech-survey-2026-09-02.
-
-- 📋 [3D_E-0663] **Prototype breakable structures on Jolt constraints before adopting anything.**
-  Jolt has no fracture support -- a code search across the repo for
-  "fracture" returns zero results, and the hits for "destruction" are all
-  C++ object-lifetime code. What it does have is one paragraph in
-  Docs/Architecture.md under Breakable Constraints: check the total lambda
-  applied to each constraint after every simulation step and call
-  Constraint::SetEnabled(false) past a threshold, via
-  SliderConstraint::GetTotalLambdaPosition and
-  HingeConstraint::GetTotalLambdaRotation.
-
-  For the Tabernacle -- a post-and-beam timber structure, not rubble --
-  modelling each board as a body joined by fixed constraints with a
-  per-joint lambda threshold should give believable collapse with ZERO new
-  dependencies. Do this BEFORE the Blast work: it proves the feel, and it is
-  the cheapest thing in the survey.
-
-  It fails on masonry, where per-bond pascal limits and a chunk hierarchy
-  are wanted -- that is where Blast earns its place.
-
-  Also worth hand-rolling rather than adopting: a support graph for
-  structural integrity (connected components from grounded nodes, re-run
-  only on the changed component when an edge is cut). There is no usable
-  open implementation -- the one GitHub hit has no licence file, and the
-  widely-repeated claim about Teardown's algorithm scaling factorially
-  traces to a Steam forum post rather than to the developer. It is a few
-  hundred lines, costs nothing when nothing breaks, and Blast's support
-  graph is already this data structure.
-  **Layman:** We can get believable collapse in about a week using the physics engine we already have.
-  Kind: implement.
-  Lanes: physics.
-  Source: tech-survey-2026-09-02.
-
-- 📋 [3D_E-0664] **Replace V-HACD with CoACD in the asset pipeline — upstream has ended V-HACD.**
-  V-HACD's README now opens with a deprecation notice added 2025-07-13:
-  "DEPRECATED & ARCHIVED -- This project is no longer maintained ... please
-  see CoACD", and "All new development and bug-fixes have moved to CoACD."
-  Its last release was v4.1.0 (2022-10-24).
-
-  CoACD (github.com/SarahWeiii/CoACD) is MIT, actively released -- 1.0.14 on
-  2026-08-28 -- and a recent commit makes decomposition deterministic with
-  respect to thread scheduling, which matters if collision assets are to be
-  reproducible in version control. Paper: Wei et al., ACM TOG 41(4), 2022.
-
-  Offline batch tool only, never at runtime: it takes seconds to minutes per
-  mesh. Wire it into an asset-bake script.
-
-  Note that Blast 5.0.6 still bundles V-HACD for its authoring collision
-  builder, so adopting Blast's authoring tool inherits the dead library.
-  That is offline-only and therefore harmless, but it is not an endorsement
-  of V-HACD for new work.
-  **Layman:** The tool that turns detailed shapes into simple collision shapes has been retired; its own authors point at the replacement.
-  Kind: chore.
-  Lanes: tools, physics.
-  Source: tech-survey-2026-09-02.
-
 - 💭 [3D_E-0665] **World-space GI without ray-tracing hardware: AMD Brixelizer GI.**
   Considered rather than planned: it is a multi-slice program, and it is
   gated behind the shadow work paying for the frame time first.
@@ -5485,117 +5676,6 @@ record, and a real clearance before commercial release needs counsel.
   Lanes: deps, security.
   Source: tech-survey-2026-09-02.
 
-- 📋 [3D_E-0670] **Move tinyexr to the v3.x API as its own scheduled migration.**
-  Separate from the security patch above, and deliberately after it.
-
-  tinyexr v3.0.0 (2026-06-09) through v3.2.0 (2026-07-08) restructure the
-  API. The release notes carry no migration guide, and v3.2.0 adds PIZ
-  decode performance work, runtime zlib backend selection, freestanding ZSTD
-  decode and a texture toolchain -- none of which Vestige needs today.
-
-  Budget a day-plus and read the diff rather than the notes. Nothing here is
-  urgent once v1.0.13 has closed the memory-safety exposure.
-  **Layman:** A later, bigger update to the EXR library that changes how we call it.
-  Kind: chore.
-  Lanes: deps.
-  Source: tech-survey-2026-09-02.
-
-- 📋 [3D_E-0671] **Jolt Physics v5.3.0 to v5.6.0 — the largest free performance win on the list.**
-  Pinned at v5.3.0; upstream latest is v5.6.0 (2026-07-11). Its notes claim
-  up to 40% performance improvement and up to 70% memory reduction depending
-  on scene, with a new friction model described as 15% faster using 40% less
-  memory. Also adds a GPU compute-shader interface and 16-bit height-field
-  samples.
-
-  That lands directly on the 60 FPS floor and on the GTX 1050 target, which
-  is why this is filed as perf rather than chore.
-
-  Plan for breakage even though v5.6.0's notes carry no explicit
-  breaking-changes section: the bump skips v5.4.0 and v5.5.0, whose notes
-  were not read. Budget half a day to a day, and expect to re-green the
-  CPU/GPU cloth parity test.
-
-  Per project rule 8 this upgrade gets a cold-eyes review. Licence unchanged
-  (MIT).
-  **Layman:** A physics engine update that claims large speed and memory improvements.
-  Kind: perf.
-  Lanes: deps, physics, perf.
-  Source: tech-survey-2026-09-02.
-
-- 📋 [3D_E-0672] **tinygltf v2.9.4 to v3.0.1 — a real migration, not a bump.**
-  v3 formally deprecates the v2 API, replaces the JSON path with a custom
-  parser (optional SIMD), removes `using namespace` from the header, and
-  switches calloc/free to new/delete. It also fixes empty-versus-absent
-  string conflation and an integer-token parse bug, both of which matter for
-  an asset parser.
-
-  This is the one dependency bump that deserves its own spec rather than a
-  drive-by edit. Budget 1-2 days.
-
-  glTF loading is on the asset-ingest path, so the parser-correctness fixes
-  are worth having even though nothing is currently known to be broken.
-  **Layman:** The 3D model loader has a new major version that changes how it is called.
-  Kind: chore.
-  Lanes: deps.
-  Source: tech-survey-2026-09-02.
-
-- 📋 [3D_E-0673] **Five cheap dependency bumps with no API risk.**
-  All verified against upstream release data on 2026-09-02. None changes a
-  licence.
-
-  - OpenAL-soft 1.25.1 to 1.25.2 (2026-05-12). Includes a fix for an STL
-    hardening assertion in REVERB PROCESSING, which is directly on the
-    convolution and parametric reverb path AX2/AX3 shipped. No
-    convolution/HRTF/ambisonics behaviour changes.
-  - GLM 1.0.1 to 1.0.3 (2025-12-31). Header-only.
-  - enkiTS v1.11 to v1.12 (2026-07-04), its first release since 2022:
-    significantly improved performance on many-thread systems, Windows
-    processor groups above 64 threads. SOFT BREAK -- GetIsRunning() is
-    deprecated in favour of !GetIsShutdownRequested(); grep the job system
-    before bumping.
-  - GoogleTest v1.15.2 to v1.18.0 (2026-08-10). Raises the minimum to
-    C++17, which this project already is, so it is a non-event here.
-  - GLFW 3.4 to 3.5.1 (2026-07-31). 3.5 was skipped upstream over a bad git
-    tag. Removes Windows XP/Vista and original MinGW support, neither of
-    which we use. KEEP the GLFW_BUILD_WAYLAND OFF override across the bump
-    and verify it at configure time -- the published news does not say
-    whether Wayland-by-default changed, and that is the one risk here.
-  **Layman:** Routine updates that should take minutes each.
-  Kind: chore.
-  Lanes: deps.
-  Source: tech-survey-2026-09-02.
-
-- 📋 [3D_E-0674] **Two dependency pins carry reasons that are expired or false.**
-  Project rule 8 allows a non-latest pin only with a valid written reason at
-  the pin site. Two fail that test today, which makes this a rule-8
-  compliance item rather than a version question.
-
-  ImGuizmo -- the pin comment records a GCC 14 compile failure and says
-  "Re-evaluate the pin when upstream lands a fix". Upstream has since tagged
-  1.9 (2026-05-02) and 1.10 (2026-05-11), so the stated re-test trigger has
-  fired and the hold owes a re-test. Whether the constructor bug is actually
-  fixed was NOT verified -- that needs a build, not a fetch. Note the tag
-  ordering is misleading: 1.83 is from 2021, so 1.10 is the newest despite
-  reading lower.
-
-  ImPlot -- the pin comment says the latest tagged release (v0.16) predates
-  the ImGui 1.92.x API. That is now false: upstream tagged v0.17
-  (2025-11-30) and v1.0 (2026-04-05). The PIN ITSELF IS FINE -- the commit
-  is dated after v1.0 and matches the post-1.0 ImPlotSpec API the spectrum
-  viewer uses -- so the fix is to correct the justification text, or move to
-  the v1.0 tag. Be aware v1.0 is genuinely breaking: SetNextLineStyle,
-  SetNextFillStyle, SetNextMarkerStyle and SetNextErrorBarStyle are removed
-  in favour of ImPlotSpec.
-
-  Also worth recording, not a violation: libebur128 (2021) and
-  imgui-node-editor (2023) are both pinned to the genuine latest release,
-  but both upstreams are effectively dormant. That is a supply-chain fact to
-  know, not a bump to make.
-  **Layman:** Two version freezes have written justifications that are no longer true.
-  Kind: doc-fix.
-  Lanes: deps, docs.
-  Source: tech-survey-2026-09-02.
-
 - 💭 [3D_E-0675] **Correct the record on why Steam Audio was rejected — licensing was not a valid reason.**
   The 2026-07 AX2/AX3 decision is recorded as rejecting Steam Audio on
   "licensing/scope". The licensing half is FALSE and should be struck from
@@ -5627,30 +5707,6 @@ record, and a real clearance before commercial release needs counsel.
   **Layman:** We turned down a spatial-audio library partly for a licensing reason that turns out not to exist.
   Kind: doc-fix.
   Lanes: audio, docs.
-  Source: tech-survey-2026-09-02.
-
-- 📋 [3D_E-0676] **AX7 ambisonics needs no new dependency — OpenAL already carries the extensions.**
-  Recorded against the AX7 plan, which may assume more work than is needed.
-
-  OpenAL-soft's include/AL/alext.h already exposes AL_EXT_BFORMAT and
-  AL_EXT_MULAW_BFORMAT for B-format sources, AL_SOFT_bformat_ex, and
-  AL_SOFT_bformat_hoa for HIGHER-order ambisonics rather than just first
-  order. UHJ is there too (AL_SOFT_UHJ, AL_SOFT_UHJ_ex) with encoder and
-  decoder tools shipped.
-
-  Conventions are explicit and selectable: layout AL_FUMA_SOFT /
-  AL_ACN_SOFT, normalisation AL_SN3D_SOFT / AL_N3D_SOFT, and device-level
-  ALC_AMBISONIC_ORDER_SOFT / ALC_MAX_AMBISONIC_ORDER_SOFT.
-
-  Default to ACN/SN3D -- that is what modern tooling and most freely
-  available ambisonic content emits; FuMa is legacy. Query the extension
-  strings at init and fall back rather than assuming they are present.
-
-  So AX7 is days rather than weeks, costs essentially no CPU beyond what
-  OpenAL already spends, and adds no dependency.
-  **Layman:** The planned 360-degree audio feature can be built with what we already link against.
-  Kind: feature.
-  Lanes: audio.
   Source: tech-survey-2026-09-02.
 
 - 💭 [3D_E-0677] **Offer a user-selectable HRTF, since head-related transfer functions are individual.**
@@ -5780,39 +5836,4 @@ record, and a real clearance before commercial release needs counsel.
   **Layman:** Two libraries we might use are free, but come with small strings attached.
   Kind: doc.
   Lanes: legal, docs.
-  Source: tech-survey-2026-09-02.
-
-- 📋 [3D_E-0681] **What the 2026-09-02 survey did not examine at all.**
-  Filed because this section otherwise reads as complete coverage of its own
-  question, and it is not. Every item below was in scope and was never
-  reached -- each research lane exhausted its search budget before getting
-  there.
-
-  NOT EXAMINED, technology side:
-
-  - CLOTH SIMULATION advances since 2024 -- XPBD variants, GPU solvers,
-    collision handling. Vestige has CPU and GPU cloth with a parity test
-    (Cl9/Cl10, 3D_E-0009), so this was a real question with a real subject
-    and it has no answer here.
-  - A direct sweep of the SIGGRAPH 2024, 2025 and 2026 technical-papers
-    listings. The rendering and physics findings rest on repository
-    artefacts, licence files and specific papers found by search, not on a
-    systematic proceedings pass.
-
-  NOT EXAMINED, IP side (3D_E-0679 holds the detail):
-
-  - ASTC, PVRTC and ETC texture-compression encumbrances.
-  - Ray-tracing patents, which matter to the planned RT work.
-  - Vulkan and mesh-shader patents, which matter to Phase 14's runtime.
-  - The entire audio side.
-
-  Separately, and more serious than an omission: 3D_E-0679 records that
-  SSAO, temporal anti-aliasing and cascaded shadow maps could not be
-  CLEARED, and all three already ship.
-
-  The cheapest of these to close is the cloth question, which needs one
-  research session with search budget and no patent work in it.
-  **Layman:** A list of things we meant to look into and ran out of time for, so nobody assumes they were checked.
-  Kind: research.
-  Lanes: research.
   Source: tech-survey-2026-09-02.
