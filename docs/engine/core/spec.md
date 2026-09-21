@@ -387,7 +387,7 @@ Internal cross-references:
 |---|----------|-------|--------|
 | 1 | Should `Engine::initialize` abort cold-start when an `ISystem::initialize` returns false (current behaviour: log + continue)? | milnet01 | Phase 11 entry |
 | 2 | `applyDisplay` does not yet propagate `qualityPreset` / `renderScale` (flagged in `settings_apply.h:84`). Pending Renderer-side hook. | milnet01 | Phase 11 entry |
-| 3 | Wire-format `scancode` field stores GLFW key codes, not true scancodes — layout-preserving rebind (WASD on AZERTY) requires `glfwGetKeyScancode` + reverse lookup (flagged in `settings_apply.h:351`). | milnet01 | Phase 11 entry |
+| 3 | ~~Wire-format `scancode` field stores GLFW key codes~~ — **CLOSED, shipped in Phase 10.9 Slice 9 I1 (2026-05-02).** `InputBinding::code` is a real scancode for `Keyboard` and the rebind panel captures via `glfwGetKeyScancode`. Corrected 2026-09-21 while gating `docs/engine/input/spec.md`, which carried the identical stale claim: acting on it would insert a SECOND conversion and corrupt every persisted binding. | milnet01 | closed 2026-09-21 |
 | 4 | No `Result<T, E>` / `std::expected` adoption yet — `LoadStatus` / `SaveStatus` enums + bool returns predate the codebase-wide policy. Migration on the broader debt list. | milnet01 | post-MIT release (Phase 12) |
 | 5 | `EventBus::publish` has no exception-safety wrapper — a throwing callback escapes the publisher. Current policy is "callbacks must not throw" (now stated normatively in §10). Defer wrapper until a real use case demands it. | milnet01 | triage (no scheduled phase) |
 | 6 | Performance budgets in §8 are placeholders. Need a one-shot Tracy / RenderDoc capture to fill in measured numbers. | milnet01 | Phase 11 audit (concrete: end of Phase 10.9) |
