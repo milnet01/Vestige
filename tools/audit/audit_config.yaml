@@ -87,19 +87,15 @@ static_analysis:
     enabled: true
     binary: null  # Auto-detected
     compile_commands: "build/compile_commands.json"
-    # 8 checks deliberately excluded — see lib/config.py for the
-    # full rationale per exclusion. Every other check in the broad
-    # categories below stays active.
-    checks: >-
-      bugprone-*,performance-*,modernize-*,readability-*,cppcoreguidelines-*,
-      -modernize-use-trailing-return-type,
-      -modernize-return-braced-init-list,
-      -readability-uppercase-literal-suffix,
-      -bugprone-easily-swappable-parameters,
-      -readability-braces-around-statements,
-      -readability-identifier-length,
-      -cppcoreguidelines-avoid-magic-numbers,
-      -readability-magic-numbers
+    # The check set lives in the repo-root .clang-tidy, not here (3D_E-0654).
+    # Leaving this empty makes the audit omit --checks, so that file governs
+    # every clang-tidy invocation — this one, an editor's, and an ad-hoc run —
+    # instead of only this one. A command-line --checks overrides .clang-tidy
+    # wholesale, which is how two lists drift apart.
+    # The 8 deliberate exclusions moved there unchanged; see lib/config.py for
+    # the full rationale per exclusion.
+    # Set a value here only to override .clang-tidy for an audit run.
+    checks: ""
     fallback_flags: "-std=c++17 -I engine/ -I external/"
     max_files: 50
     # Parallel clang-tidy workers. 0 = auto: min(cpu_count, total_RAM_GB / 2, 6)

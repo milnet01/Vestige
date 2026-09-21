@@ -1,0 +1,46 @@
+# clang-tidy configuration for Vestige.
+#
+# WHY THIS FILE EXISTS (3D_E-0654). Without it, clang-tidy enables NO checks
+# at all and still exits 0 — verified on this box:
+#
+#     $ clang-tidy --list-checks
+#     No checks enabled.
+#
+# So every invocation that does not pass --checks on the command line analysed
+# nothing and reported success: an editor/IDE integration, an ad-hoc run, and
+# the `check-code` skill's default invocation. The project's own tier-1 audit
+# was never blind — tools/audit/lib/tier1_clangtidy.py passes --checks= built
+# from tools/audit/audit_config.yaml — but that made the audit the only path
+# with a check set, and a command-line --checks overrides this file entirely.
+#
+# THIS FILE IS THE HOME FOR THE CHECK SET. audit_config.yaml's clang_tidy.checks
+# is now empty and defers here, so there is one list rather than two that drift
+# (CLAUDE.md: fix the rule's home, not its copies). The audit tool falls back to
+# a built-in list only if this file is missing, and warns when it does.
+#
+# The eight exclusions below were already in force via audit_config.yaml and are
+# carried over unchanged; tools/audit/lib/config.py holds the rationale per
+# exclusion. This file changes no check's state relative to what CI ran before
+# it existed.
+#
+# HeaderFilterRegex is deliberately unset: setting it would analyse headers for
+# the first time and surface a new finding population, which is a separate piece
+# of work from making the tool run at all.
+
+Checks: >-
+  bugprone-*,performance-*,modernize-*,readability-*,cppcoreguidelines-*,
+  -modernize-use-trailing-return-type,
+  -modernize-return-braced-init-list,
+  -readability-uppercase-literal-suffix,
+  -bugprone-easily-swappable-parameters,
+  -readability-braces-around-statements,
+  -readability-identifier-length,
+  -cppcoreguidelines-avoid-magic-numbers,
+  -readability-magic-numbers
+
+# Severity is decided by tools/audit, not here — it maps clang-tidy findings
+# onto its own tiers and gates CI on the `error` level. Setting
+# WarningsAsErrors would take that decision away from the audit tool.
+WarningsAsErrors: ''
+
+FormatStyle: none

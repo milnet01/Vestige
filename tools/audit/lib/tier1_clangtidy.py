@@ -183,6 +183,37 @@ def _ensure_compile_commands(config: Config, cc_path: Path | None) -> bool:
     return generated
 
 
+# Used only when neither audit_config.yaml nor .clang-tidy supplies a set.
+FALLBACK_CHECKS = "bugprone-*,performance-*"
+
+
+def _resolve_checks(ct_config: dict, root: Path) -> str | None:
+    """Decide what to pass to clang-tidy's ``--checks``, or None to omit it.
+
+    The check set's home is the repo-root ``.clang-tidy`` (3D_E-0654). A
+    command-line ``--checks`` overrides that file wholesale, so passing one is
+    how the two lists drift apart — hence ``None`` for "omit the flag and let
+    the file govern".
+
+    Returning a string is the fallback for a tree with neither, because
+    clang-tidy with no check set enables NOTHING and still exits 0, which is
+    indistinguishable from a clean run.
+    """
+    configured = (ct_config.get("checks") or "").strip()
+    if configured:
+        return configured
+
+    if (root / ".clang-tidy").is_file():
+        return None
+
+    log.warning(
+        ".clang-tidy is missing at %s and audit_config.yaml sets no "
+        "clang_tidy.checks -- falling back to %r. Restore .clang-tidy: with "
+        "neither, clang-tidy enables no checks and still exits 0.",
+        root, FALLBACK_CHECKS)
+    return FALLBACK_CHECKS
+
+
 def run(config: Config) -> list[Finding]:
     """Run clang-tidy and parse results into findings."""
     findings: list[Finding] = []
@@ -197,7 +228,7 @@ def run(config: Config) -> list[Finding]:
         return findings
 
     binary = ct_config.get("binary", "clang-tidy")
-    checks = ct_config.get("checks", "bugprone-*,performance-*")
+    checks = _resolve_checks(ct_config, config.root)
     compile_commands = ct_config.get("compile_commands")
     fallback_flags = ct_config.get("fallback_flags", "-std=c++17")
     max_files = ct_config.get("max_files", 50)
@@ -234,13 +265,16 @@ def run(config: Config) -> list[Finding]:
         # -Werror turns that into an abandoned translation unit (3D_E-0637).
         analysis_dir = _write_pch_free_compile_db(
             cc_dir, cc_dir / "audit-clang-tidy")
-        base_cmd: list[str] = [binary, "-p", str(analysis_dir or cc_dir),
-                               f"--checks={checks}"]
+        base_cmd: list[str] = [binary, "-p", str(analysis_dir or cc_dir)]
+        if checks is not None:
+            base_cmd.append(f"--checks={checks}")
         cmd_suffix: list[str] = []
     else:
         # Trailing `--` separates clang-tidy options from compiler flags.
         import shlex as _shlex
-        base_cmd = [binary, f"--checks={checks}"]
+        base_cmd = [binary]
+        if checks is not None:
+            base_cmd.append(f"--checks={checks}")
         cmd_suffix = ["--"] + _shlex.split(fallback_flags)
 
     workers = _clangtidy_workers(ct_config)

@@ -15,7 +15,9 @@ from __future__ import annotations
 import json
 
 from lib.tier1_clangtidy import (
+    FALLBACK_CHECKS,
     _detect_analysis_failures,
+    _resolve_checks,
     _write_pch_free_compile_db,
 )
 
@@ -110,3 +112,44 @@ def test_a_clean_run_produces_no_failure_finding():
     output = ("/repo/a.cpp:10:5: warning: something [bugprone-thing]\n"
               "1 warning generated.\n")
     assert _detect_analysis_failures(output) == []
+
+
+# --- Check-set resolution (3D_E-0654) ---------------------------------------
+#
+# clang-tidy with no check set enables NOTHING and still exits 0, so a tree
+# with neither .clang-tidy nor a configured list reports a clean run having
+# analysed nothing. These pin which of the three sources wins.
+
+
+def test_an_explicit_configured_check_set_is_passed_through(tmp_path):
+    got = _resolve_checks({"checks": "bugprone-*"}, tmp_path)
+
+    assert got == "bugprone-*"
+
+
+def test_an_empty_check_set_defers_to_a_present_clang_tidy_file(tmp_path):
+    (tmp_path / ".clang-tidy").write_text("Checks: 'bugprone-*'\n")
+
+    # None means "omit --checks", which is the only way .clang-tidy governs:
+    # a command-line --checks overrides that file wholesale.
+    assert _resolve_checks({"checks": ""}, tmp_path) is None
+    assert _resolve_checks({}, tmp_path) is None
+    assert _resolve_checks({"checks": "   "}, tmp_path) is None
+
+
+def test_a_configured_set_still_wins_over_the_file(tmp_path):
+    (tmp_path / ".clang-tidy").write_text("Checks: 'bugprone-*'\n")
+
+    assert _resolve_checks({"checks": "readability-*"}, tmp_path) == "readability-*"
+
+
+def test_a_missing_clang_tidy_file_falls_back_rather_than_analysing_nothing(
+        tmp_path, caplog):
+    assert not (tmp_path / ".clang-tidy").exists()
+
+    with caplog.at_level("WARNING", logger="audit"):
+        got = _resolve_checks({"checks": ""}, tmp_path)
+
+    assert got == FALLBACK_CHECKS
+    # The fallback is a degraded mode, so it must not be silent.
+    assert ".clang-tidy is missing" in caplog.text
