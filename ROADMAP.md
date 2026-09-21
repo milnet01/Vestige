@@ -2855,13 +2855,26 @@ shipped that have no invocation path at all.
 
   A tombstone comment stays where the declarations were, per this bullet's own instruction not to leave a placeholder. Build clean, 3916/3921 pass.
 
-- 📋 [3D_E-0642] **The input spec's own regression check cannot detect the regression it describes.**
+- ✅ [3D_E-0642] **The input spec's own regression check cannot detect the regression it describes.**
   `docs/engine/input/spec.md` states normatively: "Every game verb consumed via `InputManager::isActionDown` must be registered on `InputActionMap` -- no `glfwGetKey(...)` short-cuts... Reviewers should grep for `glfwGetKey` outside `engine/core/input_manager.cpp` and treat hits as regressions."
   I ran that grep. It PASSES -- and that is the defect. The tree holds exactly one bare `glfwGetKey(` call, at `input_manager.cpp:43` inside `isKeyDown`, which is the one file the check exempts. `isKeyDown` then has 14 call sites, ALL in `first_person_controller.cpp` (W/A/S/D, Space, Shift, Ctrl), while `isActionDown` has zero production call sites. So 100% of movement verbs bypass the binding system through a wrapper living inside the exemption.
   The fix is to the CHECK as well as to the code (3D_E-0628 owns the code half): a test that a file-scoped exemption defeats is worse than no test, because it returns green and is cited as evidence. Re-state it as "no bare glfwGetKey call may be reachable from gameplay code", or gate it on isKeyDown having no callers outside input_manager.cpp.
   **Layman:** The input design document tells reviewers how to check for a specific mistake, and that check cannot find the mistake, which is present.
   Kind: doc-fix.
   Source: verify-delivery 2026-09-01.
+  Resolved 2026-09-21 (commits ba493d4, fef82da, 2392f2f). The check is now two greps, both searching headers as well as .cpp, and grep 2 covers `isMouseButtonDown` as well as `isKeyDown`. It FAILS today by design — 14 hits, all in first_person_controller.cpp — and is deliberately not wired into a gate until 3D_E-0628, because a gate that fails by design would block every push.
+
+  This bullet's fix bought far more than the check. The rule-14 gate ran 2 loops x 3 cold lanes and found 17 verified defects, of which only 5 sat inside the change that armed it. Two would have caused real damage:
+
+    Open Q1 told an implementer to add `glfwGetKeyScancode` at the wire boundary. That migration shipped 2026-05-02 and the capture path already calls it, so following the spec would have double-converted and corrupted every persisted keyboard binding.
+
+    Open Q2 said axis bindings do not exist and Phase 11 should build a parallel `InputAxisBinding`. They shipped in Slice 9 I3; the parallel shape would have orphaned every saved "gamepadaxis" entry.
+
+    And Open Q4 described an accessibility defect that does not exist — it claimed the label path never calls `glfwGetKeyName` and always renders US-QWERTY, when the path is layout-aware and the curated table is only a non-printable fallback. Acting on it means "fixing" working code.
+
+  One correction to this bullet's own text: it says `isActionDown` has zero production call sites. That is RIGHT, and a correction I made mid-session claiming one caller was wrong — `input_bindings.cpp:493` is the free function's definition and `input_manager.cpp:162` is the method delegating to it.
+
+  Cap was violent on the strict measure (4 of 11 loop-2 findings landed on text loop 1 wrote), with a named, non-recurring cause: loop 1 omitted the blast-radius sweep on this document after closing Open Q1.
 
 - ✅ [3D_E-0643] **CI workflows hardened: template injection, over-broad tokens, credential persistence.**
   Shipped 2026-08-31 in 9cd4935. Four template-injection sites in `.github/workflows/release.yml` interpolated `${{ inputs.tag }}` / `${{ inputs.version }}` straight into `run:` blocks; all four now pass the value through the `env:` block and read it as a shell variable. Workflow-level `permissions: {}` added with `contents: write` pushed down to the jobs that need it. `persist-credentials: false` on 9 of 10 checkout steps -- the tenth, in `release-cadence.yml`, keeps them deliberately because it pushes tags, and that is documented at the step.
