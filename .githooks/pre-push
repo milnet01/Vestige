@@ -62,7 +62,7 @@ done
 # for a rule whose failure mode is a skipped check.
 non_doc="$(printf '%s' "$changed_files" \
     | grep -vE '^\s*$' \
-    | grep -vE '(\.(md|markdown|txt|rst)$|^docs/|^LICENSE|^\.gitignore$|(^|/)CODEOWNERS$)' \
+    | grep -vE '(\.(md|markdown|rst)$|^docs/|^LICENSE|^\.gitignore$|(^|/)CODEOWNERS$)' \
     || true)"
 
 if [[ -z "$non_doc" ]]; then

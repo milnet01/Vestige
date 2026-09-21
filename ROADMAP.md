@@ -3383,6 +3383,12 @@ shipped that have no invocation path at all.
   Kind: test.
   Source: cold review of 3D_E-0669, 2026-09-21.
 
+- ✅ [3D_E-0687] **The pre-push gate treated every CMakeLists.txt as documentation and skipped local CI.**
+  The docs-only exemption in `.githooks/pre-push` excluded `\.txt$`, and `CMakeLists.txt` ends in `.txt`. So a push whose only non-markdown change was a CMake file reported "documentation-only push" and skipped the gate entirely. Six tracked `CMakeLists.txt` files were affected, including `external/CMakeLists.txt`, which holds every dependency pin, plus `tools/tsan_suppressions.txt` and `tools/audit/scope.txt`, where a change most certainly wants CI. Found by reading the hook's own output on the 3D_E-0669 push: it announced documentation-only for a push containing a dependency-pin change. That push was safe because the full local CI had been run by hand first, but the gate did not require it and would not have caught a bad one. Fixed by dropping `txt` from the documentation extensions, which is the direction the hook's own comment asks for: a new file type is gated by default rather than silently exempt, the safe direction for a rule whose failure mode is a skipped check. Verified per path: CMake, suppressions and audit config now arm the gate; markdown, `docs/`, LICENSE and `.gitignore` still skip.
+  **Layman:** Our safety check before publishing skipped itself whenever the change was to a build file, because those files end in .txt and it mistook them for documents.
+  Kind: fix.
+  Source: in-session-2026-09-21, observed on the 3D_E-0669 push.
+
 ## 0.3.0 — An editor a builder can use
 
 Breaks: the scene format. Editor work changes what a scene stores.
