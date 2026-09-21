@@ -2380,6 +2380,35 @@ Resolves CPU↔GPU cloth divergences that make CLAUDE.md Rule 7 parity-test impo
   Surfaced by the Cl1 parity harness. The GPU's coloured-parallel Gauss-Seidel constraint sweep is a far weaker smoother than the CPU's sequential sweep: a 4-corner-pinned rigid 12x12 cloth settles to ~0.18m sag on the CPU but ~0.67m on the GPU (post-Cl1 damping fix; ~1.44m pre-fix). Extra sweeps converge only logarithmically (still ~22% of diagonal at 16 sweeps/substep) — too slow for the 60 FPS budget. The design doc already calls for "multiple Gauss-Seidel sweeps" but the impl does one. Fix: a convergence accelerator — Chebyshev semi-iterative (Wang 2015) or Jacobi + SOR over-relaxation. Needs a design doc + cold-eyes review + 60 FPS profiling (CLAUDE.md Rule 1). Unblocks flipping tests/test_cloth_cpu_gpu_parity.cpp Cl1_StiffDrapeParity_PendingConvergenceFix from SKIP to an EXPECT_LT(haus, 0.05*diagonal) assertion.
   Kind: perf.
   Source: in-session-2026-06-03 Cl1 parity harness.
+  Evidence from 3D_E-0638 (2026-09-21) — a likely CAUSE of the
+  drape-parity gap this item exists to close, found while working the
+  GLSL cold read and recorded here rather than fixed, so whoever takes
+  Cl9 starts from it rather than rediscovering it.
+  `cloth_integrate.comp.glsl` writes `prevPositions[id].xyz = p` on
+  every integrate step and NO shader reads that buffer — verified by
+  search across assets/shaders, where the only occurrences are its own
+  SSBO declaration at binding 1 and that one write. The CPU simulator
+  uses the same quantity for two things the GPU path therefore does not
+  do: it derives velocity from it AFTER constraint solving
+  (`m_velocities[i] = (m_positions[i] - m_prevPositions[i]) / dtSub`,
+  cloth_simulator.cpp), and it uses it for per-constraint damping (`v0 =
+  p0 - m_prevPositions[c.i0]`). The GPU integrate shader instead carries
+  velocity forward explicitly (`velocities[id].xyz = v`), so constraint
+  corrections never feed back into velocity at all. That is a
+  behavioural divergence rather than a dead write: XPBD without the
+  position-based velocity update loses the momentum transfer constraint
+  projection is supposed to produce, which is precisely the class of
+  difference a stiff-drape comparison surfaces — and this item already
+  records the GPU sweep settling a stiff pinned cloth ~8x too soft.
+  Worth checking whether the missing feedback accounts for part of that
+  before reaching for Chebyshev/SOR, because an accelerator tuned
+  against a solver missing its velocity update would be fitted to the
+  wrong curve. The plumbing for a fix exists: the buffer is allocated,
+  bound at binding 1 and uploaded on pin and reset; what is missing is a
+  pass that reads it. NOT fixed under 0638 — it needs a new compute
+  dispatch with its own cost and its own parity test, which project rule
+  1 wants designed first. User decided 2026-09-21 to record it here on
+  the grounds that doing it inside Cl9 is cheaper than doing it twice.
 
 - 📋 [Cl10] **GPU cloth backend lacks three CPU-spec polish features — decide port-vs-document for parity.**
   Surfaced by the Cl1 parity harness. The GPU runs the core XPBD loop without three features the CPU ClothSimulator has: (1) adaptive damping (cloth_simulator.cpp:254-272), (2) rest-pose blending toward the authored pose in calm wind for LRA/pinned cloth (cloth_simulator.cpp:373-391), (3) sleep detection — a settled CPU cloth freezes; the GPU always simulates (cloth_simulator.cpp:408-434). For each, decide whether to port to the GPU dispatch (true parity) or document as an intentional CPU-only behaviour on IClothSolverBackend. Rule 7 parity gate. (Damping convention was the fourth gap and is already fixed; constraint convergence is Cl9.)
@@ -2929,6 +2958,53 @@ shipped that have no invocation path at all.
   **Layman:** Nothing automatically checks the shader code, and that is where several real bugs were found by hand.
   Kind: fix.
   Source: check-code + review-code 2026-08-31 lane shaders-glsl.
+  Progress (2026-09-21). THREE of the four named shader defects fixed;
+  the tooling half and one defect remain open. FIXED: (a)
+  `terrain.frag.glsl` diffuse was `albedo * NdotL * lightColor` -- no
+  1/PI, no kD -- against full Cook-Torrance specular, so the two halves
+  shared no energy budget and terrain sat ~PI x brighter than every
+  surface lit by scene.frag.glsl. Now `(kD * albedo / PI) * NdotL *
+  lightColor` with `kD = 1 - F` (dielectric ground), matching
+  scene.frag.glsl and material_preview.frag.glsl. The comment above the
+  specular block claimed the textured path "matches every other surface
+  exactly", which was true of the specular and false of the diffuse.
+  VISUAL CONSEQUENCE: terrain renders ~PI x darker in diffuse; user
+  decided NOT to retune scene lights to compensate, on the grounds that
+  retuning around a removed bug reintroduces it in another form. (b)
+  `water.frag.glsl` SIMPLE tier perturbed world Z with `texNormal.z`,
+  the blue channel, ~1.0 for a flat normal -- a near-constant tilt
+  across the surface, with green (the channel that encodes slope in that
+  direction) discarded. Now `texNormal.y`, matching the FULL branch
+  above which perturbs X and Z with two different components. SIMPLE
+  tier only, so invisible on hardware selecting FULL. (c)
+  `bloom_downsample.frag.glsl` squashed contribution through `contrib /
+  (contrib + 1.0)`, which SATURATES -- every luminance more than ~1
+  above threshold bloomed identically, so bloom stopped responding to
+  brightness. Replaced with a standard quadratic knee (Unity / Jimenez
+  CoD:AW): zero below threshold-knee, quadratic ramp across the 2*knee
+  band so a light fades in rather than popping, linear above so brighter
+  blooms brighter. User decided to fix rather than ratify, having been
+  shown that two prior authors read the line opposite ways and no
+  document specifies the curve. WHY IT SURVIVED, and it is the
+  transferable part: `test_bloom_parity.cpp` pinned the formula, but its
+  CPU port is a deliberate MIRROR of the shader, so it binds the two
+  implementations to each other and says nothing about whether the
+  shared formula is right -- it agreed with the defect perfectly. A
+  parity test is not a correctness test. Added
+  `SoftThresholdScalesWithBrightness`, which asserts a PROPERTY
+  (contribution strictly rising across three decades, and the gap
+  widening rather than flattening) and is proved red against the
+  restored old formula. The knee fraction is a function-LOCAL const,
+  deliberately: the parity test compiles the extracted function texts
+  alone, so a file-scope constant would not compile there. Carries the
+  rule-6 `TODO: revisit via Formula Workbench` -- 0.5 is hand-picked, no
+  reference curve was available to fit. STILL OPEN: the
+  `cloth_integrate.comp.glsl` prevPositions defect, recorded against Cl9
+  as a likely cause of its drape-parity gap rather than fixed here; and
+  the glslangValidator / SPIR-V linter evaluation, which is the item's
+  headline and untouched -- `tools/shader_lint.py` remains a data-lint
+  (it verifies `#version 450 core` over 92 files) and no semantic
+  analyser covers GLSL.
 
 - ✅ [3D_E-0639] **The Ruler / Measure tool is on the menu and its clicks reach nothing.**
   Verified by call-site enumeration, not inferred. `editor.cpp:609` ships an `ImGui::MenuItem("Ruler / Measure", nullptr, m_rulerTool.isActive())` that toggles the tool active and cancels it -- so a user can reach it and it reports its own state. `engine/core/engine.cpp` contains ZERO references to `rulerTool` (grep -c = 0), and its click handler dispatches wallTool (:1432), roomTool (:1442), roofTool (:1465), stairTool (:1474) and pathTool (:1488). `RulerTool::processClick` (ruler_tool.cpp:25), `startMeasurement`, `cancel` and `queueDebugDraw` are never called from the runtime.

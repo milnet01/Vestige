@@ -29,16 +29,48 @@ float karisWeight(vec3 color)
     return 1.0 / (1.0 + bt709Luminance(color));
 }
 
-/// Soft luminance-keyed bright pass. Pre-R# was an inline SOFT_THRESHOLD
-/// macro; promoted to a function so CPU↔GPU parity tests can extract the
-/// formula from this file without preprocessor games. `contrib / (luma +
-/// epsilon)` rescales each component by the soft-knee factor while
-/// preserving the colour ratio (per-component thresholding shifts hue).
+/// Soft luminance-keyed bright pass with a quadratic knee. Pre-R# was an
+/// inline SOFT_THRESHOLD macro; promoted to a function so CPU↔GPU parity
+/// tests can extract the formula from this file without preprocessor games.
+/// `contrib / (luma + epsilon)` rescales each component by the soft-knee
+/// factor while preserving the colour ratio (per-component thresholding
+/// shifts hue).
+///
+/// 3D_E-0638 — this used to squash `contrib` through `contrib / (contrib +
+/// 1.0)`, which SATURATES: any luminance more than ~1 above the threshold
+/// produced the same contribution, so a dim lamp and a blazing highlight
+/// bloomed identically and bloom stopped responding to brightness. That line
+/// was undocumented and contradicted this docstring, which describes only the
+/// rescale.
+///
+/// The knee below is what that line was reaching for, without the saturation.
+/// Below `threshold - knee` nothing blooms; across the `2 * knee` band the
+/// response ramps quadratically, so a light fades in rather than popping as it
+/// crosses the threshold; above it the response is linear in `luma -
+/// threshold`, so brighter things bloom brighter. Standard quadratic-knee
+/// bright pass (Unity's Bloom; Jimenez, CoD:AW SIGGRAPH 2014).
+///
+/// The knee fraction is a LOCAL, deliberately: the parity test builds its
+/// program from the extracted function texts alone, so a file-scope constant
+/// referenced here would not compile there.
+///
+/// TODO: revisit via Formula Workbench — 0.5 is a hand-picked fraction of the
+/// threshold, not a fitted value; no reference curve was available to fit to.
 vec3 softThreshold(vec3 color, float threshold)
 {
-    float luma    = bt709Luminance(color);
-    float contrib = max(0.0, luma - threshold);
-    contrib       = contrib / (contrib + 1.0);
+    const float kneeFraction = 0.5;
+
+    float luma = bt709Luminance(color);
+    float knee = threshold * kneeFraction;
+
+    // Quadratic ramp across [threshold - knee, threshold + knee].
+    float soft = clamp(luma - threshold + knee, 0.0, 2.0 * knee);
+    soft       = (soft * soft) / (4.0 * knee + 0.0001);
+
+    // Linear beyond the knee. max() also clamps the sub-threshold case to 0.
+    float contrib = max(soft, luma - threshold);
+    contrib       = max(contrib, 0.0);
+
     return color * (contrib / (luma + 0.0001));
 }
 

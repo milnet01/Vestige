@@ -23,6 +23,17 @@ may change any interface without notice.
 
 ## [Unreleased]
 
+### 2026-09-21 Fixed — Bloom stopped responding to brightness (3D_E-0638)
+
+The third of the four shader defects from the GLSL cold read, and the one
+that says the most about why the others survived.
+
+- **Bright lights and dim ones glowed the same amount** (3D_E-0638)
+  `bloom_downsample.frag.glsl` squashed its bright-pass contribution through `contrib / (contrib + 1.0)`, which saturates: any luminance more than about 1 above the threshold produced the same contribution, so a lamp and a blazing highlight bloomed identically and bloom stopped responding to brightness altogether. The line was undocumented and contradicted the function's own description, which mentions only the rescale. Replaced with a standard quadratic knee (Unity's Bloom; Jimenez, CoD:AW SIGGRAPH 2014): nothing blooms below `threshold - knee`, the response ramps quadratically across the `2 * knee` band so a light fades in rather than popping as it crosses, and above the band it is linear in `luma - threshold` so brighter things bloom brighter. Expect HDR highlights to bloom considerably more than before; that difference is the defect being removed.
+
+- **Added: a bloom test that checks the formula is right, not just that two copies agree** (3D_E-0638)
+  The defect had a parity test over it the whole time and the test passed. The reason is worth recording: the CPU side of that test is a deliberate mirror of the shader, so it binds the two implementations to each other and says nothing about whether the shared formula is correct -- it agreed with the saturating version perfectly. A parity test is not a correctness test. The new `SoftThresholdScalesWithBrightness` asserts a property instead: contribution must rise strictly across three decades of brightness, and the gaps must widen rather than flatten, which is the specific signature of the old saturation. It also pins that the knee starts before the threshold and meets the linear response exactly at the top of its band, so a mis-scaled knee cannot pass. Proved red against the restored old formula before being kept.
+
 ### 2026-09-21 Fixed — Two shader defects from the GLSL cold read (3D_E-0638)
 
 Two of the four defects the shaders-glsl review lane left open. Both were
