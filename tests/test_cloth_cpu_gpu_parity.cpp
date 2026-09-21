@@ -257,3 +257,85 @@ TEST_F(ClothCpuGpuParityTest, Cl1_StiffDrapeParity)
         << " m vs GPU sag " << gMinY << " m) — the SOR convergence accelerator "
            "(Cl9) has regressed or under-converged.";
 }
+
+// =============================================================================
+// Cl1 — the GPU must RESPOND to particleMass (3D_E-0630)
+// =============================================================================
+// Deliberately GPU-vs-GPU rather than CPU-vs-GPU, and that is the point.
+//
+// The two backends also differ by the Cl9 convergence gap the skip-gated drape
+// test above pins, so a CPU/GPU comparison at a realistic mass cannot say which
+// divergence it caught. This compares the GPU against ITSELF at two masses, so
+// the convergence difference is common to both runs and cancels exactly.
+//
+// The invariant: XPBD weights every positional correction by inverse mass —
+//
+//     lambda = -C / (w0 + w1 + alphaTilde),   dp = w * lambda * n
+//
+// so with a non-zero compliance a 50x change in mass changes the settled shape.
+// `ClothSimulator` derives `w = 1/particleMass`; the GPU mirror is only ever
+// 1.0 (free) or 0.0 (pinned), so `particleMass` reaches nothing.
+//
+// TWO CONDITIONS THIS FIXTURE MUST HOLD, and the existing tests hold neither —
+// which is why a parity harness written for exactly this rule did not catch it:
+//
+//   1. A NON-UNITY MASS. `clothSmallConfig` uses particleMass = 1.0, and
+//      1/1.0 == 1.0 == the value the GPU hardcodes, so the two agree by
+//      coincidence at the fixture's own value. A harness cannot fail at a
+//      point where the bug is invisible.
+//   2. A NON-ZERO COMPLIANCE AND PINS. At alphaTilde == 0 the w in the
+//      numerator cancels the wSum in the denominator and mass genuinely does
+//      not matter; under free fall gravity is an acceleration, so mass does
+//      not matter there either. The free-fall test above is correct and blind
+//      to this by construction.
+//
+// Masses are 1.0 (the old fixture value) against linenCurtain's shipped 0.02.
+TEST_F(ClothCpuGpuParityTest, Cl1_GpuSolverRespondsToParticleMass)
+{
+    auto settle = [](float mass, std::vector<glm::vec3>& out, bool& ready)
+    {
+        ClothConfig cfg  = parityConfig();
+        cfg.particleMass = mass;
+        // clothSmallConfig's shear/bend compliances are non-zero, which is what
+        // keeps alphaTilde from cancelling w. Assert rather than assume.
+        ASSERT_GT(cfg.bendCompliance, 0.0f) << "fixture cannot detect mass at zero compliance";
+
+        GpuClothSimulator gpu;
+        gpu.setShaderPath(VESTIGE_SHADER_DIR);
+        gpu.initialize(cfg, /*seed=*/0);
+        ready = gpu.isInitialized() && gpu.hasShaders();
+        if (!ready) return;
+        gpu.setWindQuality(ClothWindQuality::SIMPLE);
+
+        pinCorners(gpu);
+        run(gpu, FRAMES_2S);
+
+        const glm::vec3* p = gpu.getPositions();
+        out.assign(p, p + gpu.getParticleCount());
+    };
+
+    std::vector<glm::vec3> heavy, light;
+    bool readyHeavy = false, readyLight = false;
+    settle(1.0f,  heavy, readyHeavy);
+    settle(0.02f, light, readyLight);
+    if (!readyHeavy || !readyLight)
+        GTEST_SKIP() << "GPU compute pipeline unavailable";
+
+    ASSERT_EQ(heavy.size(), light.size());
+
+    const float diagonal = clothDiagonal();
+    const float haus     = hausdorff(heavy.data(), light.data(), uint32_t(heavy.size()));
+
+    // A 50x mass change must move the cloth by more than floating-point noise.
+    // 1% of the diagonal is well inside the 5% parity bound, so this cannot
+    // pass merely because the two runs drifted.
+    const float floorDist = 0.01f * diagonal;
+
+    EXPECT_GT(haus, floorDist)
+        << "GPU settled identically at particleMass 1.0 and 0.02 (Hausdorff "
+        << haus << " m vs floor " << floorDist << " m). The GPU ignores "
+           "particleMass: its inverse-mass mirror is written as 1.0/0.0 and "
+           "never derived from the config, so every XPBD correction is "
+           "weighted w=1 while the CPU uses w=1/mass (50 at linenCurtain's "
+           "0.02 kg). 3D_E-0630.";
+}

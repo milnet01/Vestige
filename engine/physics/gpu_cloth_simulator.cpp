@@ -25,6 +25,25 @@ namespace
 // TODO: revisit via Formula Workbench — fit ω(gridDim, compliance) from a
 // convergence sweep rather than this single empirical constant.
 constexpr float CLOTH_SOR_OMEGA = 1.8f;
+
+/// Inverse mass of a FREE particle, matching `ClothSimulator`'s
+/// `1.0f / config.particleMass` (3D_E-0630).
+///
+/// The GPU packs this into `positions[i].w`, which every constraint shader
+/// consumes as the XPBD weight: `lambda = -C / (w0 + w1 + alphaTilde)` and
+/// `dp = w * lambda * n`. A bare `1.0f` here made the GPU ignore
+/// `particleMass` entirely -- at linenCurtain's shipped 0.02 kg the CPU
+/// solves with w = 50 and the GPU with w = 1, so every compliant constraint
+/// was far weaker on the GPU. A PINNED particle is 0.0 and is not this.
+///
+/// Guarded rather than asserted: `setParticleMass` refuses a non-positive
+/// mass and `initialize` validates the config, so the fallback is
+/// unreachable through the public API. It is here because a zero would
+/// divide into every particle's weight at once.
+inline float freeInverseMass(const ClothConfig& cfg)
+{
+    return (cfg.particleMass > 0.0f) ? (1.0f / cfg.particleMass) : 1.0f;
+}
 }  // namespace
 
 GpuClothSimulator::GpuClothSimulator() = default;
@@ -66,8 +85,21 @@ void GpuClothSimulator::setParticleMass(float mass)
 {
     if (mass <= 0.0f) return;
     m_config.particleMass = mass;
-    // On GPU, particle mass translates to positions[i].w (inverse mass). The
-    // pin buffer upload will re-pack w on next simulate via uploadPinsIfDirty.
+
+    // On GPU, particle mass translates to positions[i].w (inverse mass).
+    // `uploadPinsIfDirty` re-packs w from `m_invMassMirror`, so the mirror
+    // has to move first -- marking the buffer dirty alone re-uploaded the
+    // OLD weights and live mass tuning silently did nothing (3D_E-0630).
+    //
+    // FREE particles only. A pinned particle is 0.0 by definition and must
+    // stay pinned across a mass change; `unpinParticle` restores it to the
+    // new free weight through the same helper.
+    const float w = freeInverseMass(m_config);
+    for (float& slot : m_invMassMirror)
+    {
+        if (slot != 0.0f) slot = w;
+    }
+
     m_pinsDirty = true;
 }
 
@@ -255,7 +287,7 @@ void GpuClothSimulator::unpinParticle(uint32_t index)
     if (index >= m_particleCount) return;
     if (m_invMassMirror[index] == 0.0f)
     {
-        m_invMassMirror[index] = 1.0f;
+        m_invMassMirror[index] = freeInverseMass(m_config);
         m_pinIndices.erase(
             std::remove(m_pinIndices.begin(), m_pinIndices.end(), index),
             m_pinIndices.end());
@@ -873,10 +905,13 @@ void GpuClothSimulator::reset()
     std::vector<glm::vec4> rest(m_particleCount);
     for (uint32_t i = 0; i < m_particleCount; ++i)
     {
-        // Pack the snapshot with `1.0f` in `w` rather than `m_invMassMirror[i]`
-        // because `reset()` is also restoring inverse-mass: pins re-arm by
-        // calling `pinParticle` after reset, mirroring the CPU contract.
-        rest[i] = glm::vec4(m_initialPositions[i], 1.0f);
+        // Pack the snapshot with the FREE inverse mass rather than
+        // `m_invMassMirror[i]` because `reset()` is also restoring
+        // inverse-mass: pins re-arm by calling `pinParticle` after reset,
+        // mirroring the CPU contract. It is the free weight and not a bare
+        // 1.0 -- reset must leave the solver at the config's mass, not at
+        // unit mass (3D_E-0630).
+        rest[i] = glm::vec4(m_initialPositions[i], freeInverseMass(m_config));
     }
     const GLsizeiptr bytes = static_cast<GLsizeiptr>(m_particleCount * sizeof(glm::vec4));
     glNamedBufferSubData(m_positionsSSBO,     0, bytes, rest.data());
@@ -891,7 +926,7 @@ void GpuClothSimulator::reset()
     // again" — same contract the CPU backend honours at
     // `cloth_simulator.cpp:689-693`.
     m_positionMirror = m_initialPositions;
-    m_invMassMirror.assign(m_particleCount, 1.0f);
+    m_invMassMirror.assign(m_particleCount, freeInverseMass(m_config));
     m_pinIndices.clear();
     m_pinsDirty      = false;
     m_positionsDirty = false;
@@ -977,7 +1012,7 @@ void GpuClothSimulator::buildInitialGrid(const ClothConfig& config)
     m_positionMirror.resize(m_particleCount);
     m_normalMirror.resize(m_particleCount, glm::vec3(0.0f, 1.0f, 0.0f));
     m_texCoords.resize(m_particleCount);
-    m_invMassMirror.assign(m_particleCount, 1.0f);  // All free until pin applied.
+    m_invMassMirror.assign(m_particleCount, freeInverseMass(m_config));  // All free until pin applied.
 
     const float wMinus1 = static_cast<float>(W - 1);
     const float hMinus1 = static_cast<float>(H - 1);
