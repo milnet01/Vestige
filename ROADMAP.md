@@ -2691,7 +2691,7 @@ shipped that have no invocation path at all.
   Verified on Mesa 26.2.1 / RX 6600. See 3D_E-0682 for the reserved-word
   defect that had kept this whole subsystem from initialising.
 
-- 📋 [3D_E-0630] **CPU and GPU cloth disagree on particle mass by up to 50x.**
+- ✅ [3D_E-0630] **CPU and GPU cloth disagree on particle mass by up to 50x.**
   CLAUDE.md rule 7 requires a dual CPU/GPU implementation to be pinned with a parity test; docs/engine/physics/spec.md 6 records that the harness does not exist, and the two have diverged.
   cloth_simulator.cpp:83 derives invMass = 1.0f / config.particleMass. gpu_cloth_simulator.cpp m_invMassMirror is only ever 1.0f or 0.0f (lines 258, 894, 980) -- setParticleMass updates m_config and nothing else -- and cloth_constraints.comp.glsl:73 consumes .w as the XPBD weight. At the shipped linenCurtain mass of 0.02 kg that is w=50 on CPU and w=1 on GPU.
   Same lane, same class: m_compliancesDirty is written by three setters and read nowhere (and its SSBO is immutable, so a naive fix still fails silently); GPU reset() clears pins where CPU reset() does not; the GPU backend skips the CPU's config validation entirely, so a large grid wraps uint32 into a multi-gigabyte out-of-bounds write.
@@ -2699,6 +2699,19 @@ shipped that have no invocation path at all.
   **Layman:** Cloth behaves differently depending on which solver the engine picks, and it picks automatically by size.
   Kind: fix.
   Source: review-code 2026-08-31 lane physics.
+  Resolved 2026-09-21 (merge f8bbc16, branch cloth/3D_E-0630). Delegated to the claude-3d session, reviewed and merged here.
+
+  Worse than this bullet said: the GPU packed a bare 1.0 into positions[i].w for every free particle where the CPU derives 1/particleMass — not a wrong weight, NO weight.
+
+  WHY THIS PROJECT'S OWN PARITY HARNESS COULD NEVER HAVE CAUGHT IT, which is the part to keep: clothSmallConfig uses particleMass = 1.0, and 1/1.0 equals the constant the GPU hardcoded — the two agree by coincidence at the fixture's own value. The free-fall test is blind for a second, independent reason: gravity is an acceleration, so mass never enters it. Both tests are correct and neither could ever have failed on this.
+
+  The new test settles the GPU twice (mass 1.0 and 0.02) and compares it with ITSELF, so the Cl9 convergence gap cancels exactly — a CPU/GPU comparison could not have done that. Pre-fix Hausdorff distance between the two runs was exactly 0.
+
+  Second commit closes the hazard rather than the divergence: width * height wrapped uint32 (65536 x 65537 -> 65536), buffers sized for the wrapped count, indexing the real extents — a multi-gigabyte out-of-bounds write, now rejected in 64-bit before allocation.
+
+  Also fixed: setParticleMass set m_pinsDirty and nothing else, so live mass tuning changed no behaviour; and initialize never cleared m_initialized on a reject path.
+
+  STILL OPEN from that lane, each wanting its own commit: GPU reset() clears pins where CPU reset() does not, and m_compliancesDirty is written by three setters and read nowhere behind an immutable SSBO (left undiagnosed deliberately — a naive fix there fails silently).
 
 - 📋 [3D_E-0631] **SMAA ships invented lookup tables, and one of them has no consumer.**
   smaa.cpp:65-66/121/152 generate the area and search textures from placeholder formulas whose own comments say "simplified -- same data for now" and "For simplicity, we fill it with a uniform continue-searching pattern". smaa_blend.frag.glsl:100 addresses them with the genuine reference expression, so a correct consumer reads a table that does not encode the SMAA area function, and the diagonal half is a byte copy of the orthogonal half.
@@ -2708,13 +2721,22 @@ shipped that have no invocation path at all.
   Kind: fix.
   Source: review-code 2026-08-31 lane renderer-effects-vegetation.
 
-- 📋 [3D_E-0632] **Editor data loss: cutout tool has no undo, and the density map is never saved.**
+- ✅ [3D_E-0632] **Editor data loss: cutout tool has no undo, and the density map is never saved.**
   cutout_tool.cpp:66 accepts a CommandHistory& and discards it; :162 mutates the wall mesh with no command pushed. Because FileMenu::isDirty() delegates entirely to CommandHistory (file_menu.cpp:330), the scene is never marked dirty -- so there is no unsaved-changes prompt either. Every sibling tool (wall/roof/stair/room) uses the history correctly.
   Same shape: brush_tool.cpp:263 DENSITY-mode strokes push no command (endStroke has branches for ERASER/FOLIAGE/SCATTER/TREE and none for DENSITY); and DensityMap::serialize() (density_map.cpp:197) has zero callers although docs/engine/environment/spec.md:417 says scene save writes it, so a painted mask is discarded on every save.
   Also: hierarchy_panel.cpp:561/569/580 bind drag-source, drop-target and the context menu to the LAST submitted item, which is the lock button, not the tree row -- so reparent-by-drag and the entity right-click menu are reachable only through a 16px square.
   **Layman:** Cutting a door or window cannot be undone and does not mark the scene dirty, so quitting loses it with no prompt. Painted density masks vanish on save.
   Kind: fix.
   Source: review-code 2026-08-31 lanes editor-shell-tools, environment-terrain.
+  Resolved 2026-09-21 across commits 98f6c6d and 8598766. All three parts.
+
+  CUTOUT UNDO: new CutoutOpeningCommand captures the two reversible writes (mesh pointer, entity name). The second-order effect was worse than the missing undo — FileMenu::isDirty() delegates entirely to CommandHistory, so cutting a door left the scene "clean" and quitting discarded it with NO prompt. The command applies the mutation and the tool no longer does; place_tree_command.h documents why (execute() fires on first push, not only redo — doing both placed every tree twice).
+
+  HIERARCHY PANEL: drag source, drop target and context menu all bound to the LOCK BUTTON, because ImGui binds item-scoped calls to the last item SUBMITTED and the buttons draw after the tree row. The author already knew the hazard — hierarchy_panel.cpp:456 saves treeNodeClicked "before drawing overlapping buttons" — and never carried it to the other three. Drag/drop moved up; the context menu captures its trigger beside the row and opens explicitly, because an explicit id would NOT have helped (BeginPopupContextItem tests IsItemHovered on the last item whatever id it is given).
+
+  DENSITY MAP: ownership moved to FoliageManager per user decision. Needed no serialiser change — scene_serializer.cpp:624/:748 already call environment->serialize()/deserialize(). The mask restores BEFORE deserialize()'s chunks guard, and clear() now resets it.
+
+  One test was wrong first and the mutation check caught it: the "no foliage" case passed with the restore on the wrong side of the guard, because serialize() always writes j["chunks"] so a round-trip can never reach that guard. Rewritten to build the JSON by hand.
 
 - ✅ [3D_E-0633] **Two editor panels cannot be closed, and Environment/Performance disable themselves first.**
   environment_panel.cpp:22 and performance_panel.cpp:25 both pass &m_open to ImGui::Begin (drawing an X that sets it false) but neither draw() starts with `if (!m_open) return;`, and neither call site guards. ImGui does not skip a window because *p_open is false -- the caller must. Four sibling panels do exactly that (terrain_panel.cpp:21, navigation_panel.cpp:18, audio_panel.cpp:157, validation_panel.cpp:21).
@@ -2828,12 +2850,17 @@ shipped that have no invocation path at all.
   Kind: fix.
   Source: check-code + review-code 2026-08-31 lane shaders-glsl.
 
-- 📋 [3D_E-0639] **The Ruler / Measure tool is on the menu and its clicks reach nothing.**
+- ✅ [3D_E-0639] **The Ruler / Measure tool is on the menu and its clicks reach nothing.**
   Verified by call-site enumeration, not inferred. `editor.cpp:609` ships an `ImGui::MenuItem("Ruler / Measure", nullptr, m_rulerTool.isActive())` that toggles the tool active and cancels it -- so a user can reach it and it reports its own state. `engine/core/engine.cpp` contains ZERO references to `rulerTool` (grep -c = 0), and its click handler dispatches wallTool (:1432), roomTool (:1442), roofTool (:1465), stairTool (:1474) and pathTool (:1488). `RulerTool::processClick` (ruler_tool.cpp:25), `startMeasurement`, `cancel` and `queueDebugDraw` are never called from the runtime.
   This is the textbook wired-but-dead shape: both halves review clean in a per-subsystem sweep because neither is wrong on its own -- only the missing edge between them is.
   **Layman:** You can switch on the Ruler tool from the editor menu, click in the scene, and nothing is ever measured.
   Kind: fix.
   Source: verify-delivery 2026-09-01.
+  Resolved 2026-09-21 (commit 98f6c6d). The menu item existed in editor.cpp and engine.cpp — where every other architectural tool's clicks are dispatched — had ZERO references to the ruler. One missing edge; both halves reviewed clean alone.
+
+  The dispatch goes FIRST in the chain and CONSUMES the click, per the tool's own contract: isActive() includes MEASURED because a click there restarts the measurement, and ruler_tool.h says callers must not route those clicks to other tools. Placed later, a restart click would also drop a wall segment.
+
+  The display half already existed (editor.cpp shows "Distance: %.3f m" plus an on-screen overlay), so this single edge completed the path.
 
 - 📋 [3D_E-0640] **PhysicsDebugDraw is compiled and never invoked.**
   `PhysicsDebugDraw::draw` (physics_debug.cpp:46) and `drawConstraints` (:97) are the ONLY .cpp occurrences of the type in the tree -- i.e. its own two definitions and no invocation. There is no menu item, no hotkey and no settings flag reaching it, so unlike the ruler tool this one is not even nominally reachable.

@@ -23,6 +23,26 @@ may change any interface without notice.
 
 ## [Unreleased]
 
+### 2026-09-21 Fixed — Editor work that was silently lost, a tool that measured nothing, and GPU cloth that ignored mass (3D_E-0630, 3D_E-0632, 3D_E-0639)
+
+Five fixes from a review backlog, four of them things that failed quietly —
+the kind where the app looks like it worked and the work is gone.
+
+- **Cutting a door or window can be undone, and no longer loses work silently** (3D_E-0632)
+  The cutout tool changed the wall in place with no undo entry. Because the editor decides whether a scene has unsaved changes by looking at the undo history, a cut door also left the scene marked as saved — so quitting discarded it with no warning.
+
+- **Painted foliage density masks are saved with the scene** (3D_E-0632)
+  A painted mask was held by the editor panel rather than by the scene, so it was silently discarded on every save. It now belongs to the scene's foliage data and is written and restored with it.
+
+- **Entity rows in the hierarchy can be dragged and right-clicked anywhere along the row** (3D_E-0632)
+  Drag-to-reparent and the entity right-click menu were reachable only through the small lock icon at the right-hand end of a row, because those handlers attached to the last button drawn rather than to the row itself.
+
+- **The Ruler / Measure tool now measures** (3D_E-0639)
+  The menu item switched the tool on and reported its own state, and no click ever reached it. The distance read-out already existed; only the connection between the two was missing.
+
+- **GPU cloth respects particle mass, and refuses the configurations the CPU refuses** (3D_E-0630)
+  Cloth simulated on the GPU ignored the particle-mass setting entirely, so the same cloth behaved differently depending on which solver the engine picked — and it picks automatically by size. The GPU path also accepted grid sizes and values the CPU path rejects, including one large enough to overflow an internal size calculation and write outside its own buffers.
+
 ### 2026-09-03 Fixed — Clang-based analysis no longer trips over the GCC precompiled header (3D_E-0637)
 
 The build precompiles its headers with GCC. Clang cannot read a GCC PCH, and the resulting diagnostic carries no source location, so nothing downstream could see it.
