@@ -126,10 +126,10 @@ Don't wait for a break to force a bump (global Rule 5c):
 - For deps without a bot (FetchContent tags, system tools), run the ecosystem's
   `outdated` equivalent at the start of a release cycle.
 
-## 6. Every bump gets a cold-eyes review
+## 6. Every bump gets an independent cold read
 
 Per Rule 8, a dependency upgrade is reviewed by a **fresh subagent with no
-authoring context** (`/cold-eyes` for the notes/registry change, `/indie-review`
+authoring context** (`review-contract` for the notes/registry change, `review-code`
 for any caller-code the bump touches). Lifting a registry pin is a bump — it
 gets the same review. The bump and its caller-idiom refresh (Rule 5b) ship in
 one change, so the codebase never rots into "compiles but nobody meant it."
