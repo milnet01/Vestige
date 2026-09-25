@@ -7,6 +7,11 @@
       "path": "CMakeLists.txt",
       "pattern": "VERSION {OLD}",
       "replace": "VERSION {NEW}"
+    },
+    {
+      "path": "VERSION",
+      "pattern": "{OLD}",
+      "replace": "{NEW}"
     }
   ],
   "$todos_run_before_post_check": "Todo 1 below MUST be done BEFORE running `post_check`. The post_check is the version-edit hook which compares CMakeLists.txt VERSION against CHANGELOG.md's topmost `## [X.Y.Z]` heading; if CHANGELOG still says `[Unreleased]`, the post_check passes (Unreleased is treated as in-sync), but the release is incomplete. Run todo 1, then post_check, then audit + tag.",

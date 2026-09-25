@@ -314,6 +314,8 @@ target_compile_definitions(vestige_tests
         VESTIGE_SCENE_FIXTURES_DIR="${CMAKE_SOURCE_DIR}/tests/fixtures/scenes"
         # 3D_E-0686 — committed 2x3 fp32 EXR for the Texture::decodeExr test.
         VESTIGE_TEXTURE_FIXTURES_DIR="${CMAKE_SOURCE_DIR}/tests/fixtures/textures"
+        # 3D_E-0683 — the scene engine-version stamp is checked against this file.
+        VESTIGE_ROOT_CMAKELISTS="${CMAKE_SOURCE_DIR}/CMakeLists.txt"
         # Phase 10 Localization L1 — bundled fonts dir for the Font ASCII
         # back-compat test (loads arimo.ttf under a real GL context).
         VESTIGE_FONT_DIR="${CMAKE_SOURCE_DIR}/assets/fonts"

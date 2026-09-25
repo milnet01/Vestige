@@ -70,8 +70,10 @@ public:
     /// with an empty `MusicSceneSettings` (backwards-compatible read).
     static constexpr int CURRENT_FORMAT_VERSION = 2;
 
-    /// @brief Engine version string embedded in saved scenes.
-    static constexpr const char* ENGINE_VERSION = "0.5.0";
+    /// @brief Engine version string embedded in saved scenes: the project
+    ///        version of the build that saved the file (set by CMake).
+    ///        Informational only; loaders decide on format_version.
+    static constexpr const char* ENGINE_VERSION = VESTIGE_ENGINE_VERSION;
 
     /// @brief Saves the entire scene to a JSON file.
     /// @param scene The scene to save.

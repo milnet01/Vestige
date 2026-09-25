@@ -17,6 +17,9 @@
 
 #include <filesystem>
 #include <fstream>
+#include <iterator>
+#include <regex>
+#include <string>
 
 #include "test_helpers.h"
 
@@ -81,6 +84,30 @@ TEST_F(SceneSerializerTest, ReadMetadataFromValidFile)
     EXPECT_EQ(meta.name, "Test Scene");
     EXPECT_EQ(meta.engineVersion, "0.5.0");
     EXPECT_EQ(meta.created, "2026-03-20T00:00:00Z");
+}
+
+// 3D_E-0683: the stamp written into every saved scene is the project version
+// of the build that wrote it, read from the top-level CMakeLists.txt, which
+// the release recipe bumps. It read a hard-coded "0.5.0" the project had never
+// been at.
+TEST(SceneSerializerEngineVersion, MatchesTheCMakeProjectVersion)
+{
+    std::ifstream in(VESTIGE_ROOT_CMAKELISTS);
+    ASSERT_TRUE(in.is_open()) << VESTIGE_ROOT_CMAKELISTS;
+    const std::string text((std::istreambuf_iterator<char>(in)),
+                           std::istreambuf_iterator<char>());
+    std::smatch m;
+    ASSERT_TRUE(std::regex_search(
+        text, m, std::regex(R"(project\s*\(\s*Vestige\s+VERSION\s+([0-9]+\.[0-9]+\.[0-9]+))")));
+    EXPECT_EQ(std::string(SceneSerializer::ENGINE_VERSION), m[1].str());
+
+    // The root VERSION file is the release workflows' floor and must name the
+    // same version; it had drifted to 0.1.60 while CMake said 0.1.70.
+    std::ifstream versionFile(fs::path(VESTIGE_ROOT_CMAKELISTS).parent_path() / "VERSION");
+    ASSERT_TRUE(versionFile.is_open());
+    std::string version;
+    std::getline(versionFile, version);
+    EXPECT_EQ(version, m[1].str()) << "VERSION and CMakeLists.txt project(VERSION) disagree";
 }
 
 // Note: serializeToString and the full save/load round-trip require a

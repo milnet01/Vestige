@@ -51,12 +51,12 @@ cheap to judge. It does not bound the promise.
   `migrateScene` carries the old shape forward.
 
   The same header declares `ENGINE_VERSION`, stamped into every saved scene.
-  **No rule here attaches to it, deliberately.** It currently reads a version
-  this project has never released. The loader does parse it back into
-  `SceneMetadata::engineVersion`, but nothing in engine code branches on it —
-  only a test asserts it. Whether it should track the project version at all is
-  undecided; `3D_E-0683` settles that, and this list gains a rule for it in the
-  same change.
+  **It is the top-level `project(VERSION)` of the build that saved the file**,
+  passed in by `engine/CMakeLists.txt`, so a release bump moves it with no
+  further edit (`3D_E-0683`). It is informational: the loader parses it into
+  `SceneMetadata::engineVersion` and no engine code branches on it, so its
+  value changing is never a breaking change. A loader decision keys on
+  `format_version`, never on this stamp.
 
 ### Files an author or translator owns
 

@@ -570,3 +570,10 @@ if(CMAKE_BUILD_TYPE STREQUAL "Debug")
     # (the macro gates a member — must match across TUs to avoid an ODR clash).
     target_compile_definitions(vestige_engine PUBLIC VESTIGE_LOCALIZATION_WARN_MISSING)
 endif()
+
+# 3D_E-0683 — the version stamped into every saved scene
+# (SceneSerializer::ENGINE_VERSION) is the project version of the build that
+# wrote it, so it follows the top-level project(VERSION) the release recipe
+# bumps. PUBLIC because the constant lives in a header.
+target_compile_definitions(vestige_engine PUBLIC
+    VESTIGE_ENGINE_VERSION="${CMAKE_PROJECT_VERSION}")
