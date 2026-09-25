@@ -2570,7 +2570,36 @@ IBL corruption is load-bearing: every PBR material since day one has been lit wi
 - ✅ [3D_E-S0162] **R1. Wrap IBL capture paths in `ScopedForwardZ` — `EnvironmentMap::generate`, `LightProbe::generateFromCubemap`, prefilter, convolution. Also the init-time first-generation path in `renderer.cpp:683-692` (currently no save/restore at all). Parity test: render a probe with + without the wrap, diff the prefilter output. Shipped 2026-04-25 (red `e27e53e`, green `c570101`). Lifted the bracket pattern into a single helper `engine/renderer/ibl_capture_sequence.{h,cpp}` exposing `runIblCaptureSequenceWith<Guard>(steps)` (template, testable with a recording mock) plus a non-template `runIblCaptureSequence` overload that fixes `Guard = ScopedForwardZ`. `EnvironmentMap::generate` (capture / irradiance / GGX prefilter / BRDF LUT) and `LightProbe::generateFromCubemap` (irradiance / prefilter) now call the helper, replacing four bare sub-call sequences with one bracketed invocation each. The init-time first-generation call at `renderer.cpp:683-692` inherits the wrap by virtue of living inside `EnvironmentMap::generate`; no caller-side change required, closing the "no save/restore at all" note. Per-pass `glGetError()` drains preserved inside each lambda so the existing diagnostic behaviour is unchanged. 6 new `IblCaptureSequenceTest.*_R1` tests in `tests/test_ibl_capture_sequence.cpp` inject a `RecordingGuard` whose ctor pushes "BEGIN" and dtor pushes "END" to a per-test trace and pin: empty-steps still brackets, guard opens before first step, steps run in order between begin/end, guard destructs after last step (load-bearing for the post-`generate` reverse-Z restore contract), null `std::function<void()>` skipped, and the strong-form invariant that every step's index falls strictly between BEGIN's and END's. RED commit shipped a stub body (steps run, guard not constructed) and saw all 6 fail; GREEN replaced the stub with `Guard guard;` and all 6 pass. 2953/2954 pass post-fix (1 pre-existing skip unchanged; +6 vs P6's 2947).**
   Kind: implement.
 
-- [~] R2. GPU compute SH projection replacing per-face `glReadPixels` + CPU projection in `captureSHGrid`. Editor "Bake GI" moves from ~1 FPS to full pipeline speed. **Stepping-stone shipped 2026-04-25** (commit `70fed56`); full GPU compute path deferred. The stepping-stone replaces the per-face synchronous `glReadPixels` with a single batched async PBO readback per probe: render 6 cubemap faces (existing loop) → 6 `glGetTextureSubImage` calls into a single Pixel Pack Buffer at per-face offsets (async DMA, no per-call stall) → one `glMapNamedBufferRange` per probe to read all 6 faces' data → existing CPU `SHProbeGrid::computeProbeShFromCubemap` (math unchanged from R7). Net per probe: 6 GPU stalls → 1 GPU stall. Visible improvement to editor "Bake GI" responsiveness without changing any SH math. Map-failure path: log warning + skip probe; next bake retries. **Full GPU compute path is a follow-up bullet** (deferred to a session that can also stand up a GL test harness): the original R2 intent was a compute shader replacing the CPU SH projection itself, which would need ~200-300 lines of new code (compute shader, shared-memory reduction, SSBO output) plus a CPU-vs-GPU parity test per CLAUDE.md Rule 7. The project's tests are CPU-only today; standing up a GL test harness is itself a multi-session item, and shipping the full GPU SH path without parity testing would court the exact silent-divergence pattern R7 just exposed (π-magnitude SH error undetected for years). The stepping-stone closes the most-felt part of the bake stall now; the parity-test-backed full compute path follows. 2994 / 2995 pass (no test-count delta — pure refactor with same SH math output).
+- ✅ [3D_E-0694] **R2. Batch the SH-bake cubemap readback into one async PBO per probe (stepping stone to GPU SH projection).**
+  GPU compute SH projection replacing per-face `glReadPixels` + CPU
+  projection in `captureSHGrid`. Editor "Bake GI" moves from ~1 FPS to
+  full pipeline speed. **Stepping-stone shipped 2026-04-25** (commit
+  `70fed56`); full GPU compute path deferred. The stepping-stone
+  replaces the per-face synchronous `glReadPixels` with a single batched
+  async PBO readback per probe: render 6 cubemap faces (existing loop) →
+  6 `glGetTextureSubImage` calls into a single Pixel Pack Buffer at per-
+  face offsets (async DMA, no per-call stall) → one
+  `glMapNamedBufferRange` per probe to read all 6 faces' data → existing
+  CPU `SHProbeGrid::computeProbeShFromCubemap` (math unchanged from R7).
+  Net per probe: 6 GPU stalls → 1 GPU stall. Visible improvement to
+  editor "Bake GI" responsiveness without changing any SH math. Map-
+  failure path: log warning + skip probe; next bake retries. **Full GPU
+  compute path is a follow-up bullet** (deferred to a session that can
+  also stand up a GL test harness): the original R2 intent was a compute
+  shader replacing the CPU SH projection itself, which would need
+  ~200-300 lines of new code (compute shader, shared-memory reduction,
+  SSBO output) plus a CPU-vs-GPU parity test per CLAUDE.md Rule 7. The
+  project's tests are CPU-only today; standing up a GL test harness is
+  itself a multi-session item, and shipping the full GPU SH path without
+  parity testing would court the exact silent-divergence pattern R7 just
+  exposed (π-magnitude SH error undetected for years). The stepping-
+  stone closes the most-felt part of the bake stall now; the parity-
+  test-backed full compute path follows. 2994 / 2995 pass (no test-count
+  delta — pure refactor with same SH math output).
+  The full GPU compute path is 3D_E-S0163.
+  **Layman:** Baking lighting in the editor stopped stalling six times per probe; the fully GPU version is a separate item.
+  Kind: perf.
+  Source: roadmap-migration-2026-09-25 (was an unparsed "[~]" line).
 
 - 📋 [3D_E-S0163] **R2 follow-up: full GPU compute SH projection — author `assets/shaders/sh_project.comp.glsl` (one workgroup per probe, 256-thread shared-memory reduction, 9-vec3 output to SSBO), refactor `Renderer::captureSHGrid` to dispatch the compute and read the SSBO via `glMapNamedBufferRange` (matches R8's async pattern). Prerequisites: GL test harness for the CPU-vs-GPU SH parity test, gated on a separate ROADMAP item. Removes the remaining 1 stall per probe (the SSBO map of the stepping-stone) and moves the entire SH projection pipeline to GPU, making "Bake GI" hit full pipeline speed as the original R2 ROADMAP entry intended.**
   Kind: implement.
@@ -4770,7 +4799,8 @@ Every Phase 11B gameplay hook that depends on rendering (hit decals, bullet-hole
 
 ##### Advanced Materials
 
-- 📋 [3D_E-S0513] **Subsurface scattering / SSS (light bleeding through thin materials — linen curtains, wax candles, marble, skin; hybrid screen-space diffusion approach or ReSTIR-path-tracing diffusion when RT available; ref: NVIDIA SIGGRAPH 2025). *Basic per-material SSS (thickness + transmission + scattering distance + wrap lighting) lands in Phase 10 "Rendering Enhancements"; this Phase 13 item is the hybrid-screen-space / ReSTIR upgrade.***
+- 📋 [3D_E-S0513] **Subsurface scattering / SSS (light bleeding through thin materials — linen curtains, wax candles, marble, skin; hybrid screen-space diffusion approach or ReSTIR-path-tracing diffusion when RT available; ref: NVIDIA SIGGRAPH 2025). Basic per-material SSS (thickness + transmission + scattering distance + wrap lighting) lands in Phase 10 "Rendering Enhancements"; this Phase 13 item is the hybrid-screen-space / ReSTIR upgrade.**
+  **Layman:** Let light glow softly through thin materials like linen, wax, marble and skin.
   Kind: implement.
 
 - 📋 [3D_E-S0514] **Anisotropic reflections (brushed metal, hair, silk fabrics)**
@@ -5006,7 +5036,8 @@ Every Phase 11B gameplay hook that depends on rendering (hit decals, bullet-hole
 - ✅ [3D_E-S0574] **Frustum culling (skip objects outside camera view)**
   Kind: implement.
 
-- 📋 [3D_E-S0575] **Volumetric lighting (god rays, fog) — *Basic god rays and volumetric fog land in Phase 10 "Fog, Mist, and Volumetric Lighting"; this Phase 13 item covers the froxel-volume + temporal-reprojection rendering upgrade. Phase 15 weather modulates the Phase 10 primitives; Phase 13 upgrades what those primitives render.***
+- 📋 [3D_E-S0575] **Volumetric lighting (god rays, fog) — Basic god rays and volumetric fog land in Phase 10 "Fog, Mist, and Volumetric Lighting"; this Phase 13 item covers the froxel-volume + temporal-reprojection rendering upgrade. Phase 15 weather modulates the Phase 10 primitives; Phase 13 upgrades what those primitives render.**
+  **Layman:** Upgrade god rays and fog to a higher-quality 3D volume that stays stable from frame to frame.
   Kind: implement.
 
 ##### VR / Immersive Rendering
