@@ -23,6 +23,18 @@ may change any interface without notice.
 
 ## [Unreleased]
 
+### 2026-09-25 Changed — Dependency updates: GLM 1.0.3, OpenAL Soft 1.25.2, enkiTS v1.12, GoogleTest v1.18.0; GLFW held at 3.4 (3D_E-0673)
+
+Four of the five surveyed bumps land. OpenAL Soft 1.25.2 fixes an
+STL-hardening assertion in the reverb effect the engine uses. GLFW 3.5.1
+is held back. It now unloads libXext at shutdown, and LeakSanitizer then
+reports the memory libXext still held as leaked, which fails the Debug
+test gate even though every test passes. The hold, its evidence and its
+re-test trigger are in DEPENDENCY_STANDARDS.md §4, the project's
+Breaking-Version Registry. The enkiTS CMake policy workaround is removed,
+since v1.12 declares CMake 3.16. GLM and enkiTS are added to the audit
+tool's CVE watch list.
+
 ### 2026-09-25 Fixed — Selecting an object no longer raises a Dear ImGui error; ImGuizmo updated to 1.10 (3D_E-0674)
 
 The editor's move gizmo came from an ImGuizmo commit that passed a

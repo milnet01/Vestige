@@ -88,8 +88,8 @@ history + the CHANGELOG).
 
 | Dependency | Latest avail. | Pinned at | Breaking version | What breaks (evidence) | Re-test when | Last checked |
 |------------|---------------|-----------|------------------|------------------------|--------------|--------------|
+| GLFW | 3.5.1 | 3.4 | 3.5.1 | 3.5.1 now unloads libXext at glfwTerminate (its changelog: "The `libXext` library was not unloaded at termination"). Memory libXext still holds is then reported by LeakSanitizer as ~92 KB leaked from `<unknown module>`, so the Debug+ASan `vestige_tests` gate fails with all tests passing. Verified 2026-09-25: 3.4 exits clean; with dlclose stubbed out the report vanishes. A teardown false positive, not a runtime leak, but it fails the gate. | A GLFW release after 3.5.1 ships, or the gate gains a way to attribute leaks in unloaded modules | 2026-09-25 |
 
-_No live exceptions right now — every dependency is on its latest release._
 The first entry (`awalsh128/cache-apt-pkgs-action`, held at 1.6.1 while 1.6.2
 reddened CI via a new `empty_packages_behavior: error` default) was **lifted
 2026-07-03** when 1.6.3 shipped and passed the re-test — the standard's re-test

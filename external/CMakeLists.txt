@@ -81,6 +81,10 @@ endmacro()
 # ---------------------------------------------------------------------------
 
 # GLFW — windowing and input
+# HELD at 3.4 below the latest release (3.5.1): 3.5.1 unloads libXext at
+# glfwTerminate, and LeakSanitizer then reports the memory libXext still held
+# as leaked, failing the Debug+ASan test gate. Rule-8 row and re-test trigger:
+# DEPENDENCY_STANDARDS.md §4.
 FetchContent_Declare(
     glfw
     GIT_REPOSITORY https://github.com/glfw/glfw.git
@@ -91,7 +95,7 @@ set(GLFW_BUILD_DOCS OFF CACHE BOOL "" FORCE)
 set(GLFW_BUILD_TESTS OFF CACHE BOOL "" FORCE)
 set(GLFW_BUILD_EXAMPLES OFF CACHE BOOL "" FORCE)
 set(GLFW_INSTALL OFF CACHE BOOL "" FORCE)
-# GLFW 3.4 builds a Wayland backend by default, which requires wayland-scanner
+# GLFW 3.4 and later build a Wayland backend by default, which requires wayland-scanner
 # at configure time — a build tool the CI/release runners don't reliably have.
 # We ship an X11 backend (universal on Linux via XWayland), matching the
 # pre-3.4 behaviour. Flip this ON (and install wayland-scanner in CI) if native
@@ -104,7 +108,7 @@ FetchContent_MakeAvailable(glfw)
 FetchContent_Declare(
     glm
     GIT_REPOSITORY https://github.com/g-truc/glm.git
-    GIT_TAG        1.0.1
+    GIT_TAG        1.0.3
     GIT_SHALLOW    TRUE
 )
 _vestige_silence_upstream_dep_warnings()
@@ -377,7 +381,7 @@ target_compile_options(implot_lib PRIVATE -w)
 FetchContent_Declare(
     openal-soft
     GIT_REPOSITORY https://github.com/kcat/openal-soft.git
-    GIT_TAG        1.25.1
+    GIT_TAG        1.25.2
     GIT_SHALLOW    TRUE
 )
 set(ALSOFT_UTILS OFF CACHE BOOL "" FORCE)
@@ -436,20 +440,15 @@ set(ebur128_SOURCE_DIR ${ebur128_SOURCE_DIR} PARENT_SCOPE)
 FetchContent_Declare(
     enkiTS
     GIT_REPOSITORY https://github.com/dougbinks/enkiTS.git
-    GIT_TAG        v1.11
+    GIT_TAG        v1.12
     GIT_SHALLOW    TRUE
 )
 set(ENKITS_BUILD_EXAMPLES OFF CACHE BOOL "" FORCE)
 set(ENKITS_BUILD_SHARED OFF CACHE BOOL "" FORCE)
 set(ENKITS_INSTALL OFF CACHE BOOL "" FORCE)
-# Upstream pins an old cmake_minimum_required that CMake 3.27+/4.x rejects —
-# raise the policy floor for this dep only (same fix as ebur128 / Recast), then
-# restore it so it doesn't leak to later projects.
-set(CMAKE_POLICY_VERSION_MINIMUM 3.5 CACHE STRING "" FORCE)
 _vestige_silence_upstream_dep_warnings()
 FetchContent_MakeAvailable(enkiTS)
 _vestige_restore_dep_warnings()
-unset(CMAKE_POLICY_VERSION_MINIMUM CACHE)
 # enkiTS uses a directory-scoped include_directories() internally, so the target
 # exposes no include for consumers. Attach the header dir as a SYSTEM INTERFACE
 # include so anything linking `enkiTS` resolves <TaskScheduler.h> and the
@@ -479,7 +478,7 @@ unset(CMAKE_POLICY_VERSION_MINIMUM CACHE)
 FetchContent_Declare(
     googletest
     GIT_REPOSITORY https://github.com/google/googletest.git
-    GIT_TAG        v1.15.2
+    GIT_TAG        v1.18.0
     GIT_SHALLOW    TRUE
 )
 set(gtest_force_shared_crt ON CACHE BOOL "" FORCE)

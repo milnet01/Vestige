@@ -4137,7 +4137,7 @@ shipped that have no invocation path at all.
 
 #### Technology survey follow-ups (2026-09-02)
 
-- 📋 [3D_E-0673] **Five cheap dependency bumps with no API risk.**
+- ✅ [3D_E-0673] **Five cheap dependency bumps with no API risk.**
   All verified against upstream release data on 2026-09-02. None changes a
   licence.
 
@@ -4158,6 +4158,14 @@ shipped that have no invocation path at all.
     which we use. KEEP the GLFW_BUILD_WAYLAND OFF override across the bump
     and verify it at configure time -- the published news does not say
     whether Wayland-by-default changed, and that is the one risk here.
+  Resolved (2026-09-25): GLM 1.0.3, OpenAL Soft 1.25.2, enkiTS v1.12
+  and GoogleTest v1.18.0 shipped. GLFW 3.5.1 is HELD at 3.4 and recorded in
+  DEPENDENCY_STANDARDS.md §4 with a re-test trigger. 3.5.1 unloads libXext
+  at glfwTerminate, and LeakSanitizer then fails the Debug gate on memory
+  libXext held (bisected: 3.4 clean, 3.5.1 not). Rule 8 review by a fresh
+  subagent passed all checks. Its findings were fixed: the audio spec's
+  OpenAL row, the dead enkiTS policy workaround, and GLM and enkiTS missing
+  from the CVE list.
   **Layman:** Routine updates that should take minutes each.
   Kind: chore.
   Source: tech-survey-2026-09-02.
@@ -4756,6 +4764,13 @@ Retrofit completed across 8 commits — every Phase-10 Settings-store consumer n
   PULSE_SERVER=unix:/nonexistent ./vestige
   When the video is published, send its URL to project "demoreel" with
   session_message: that is demoreel's 1.0 condition (DEMO-0093).
+  Progress (2026-09-25): a first clip is published. A 15 s static
+  walkthrough view of the meadow, with grass moving in the wind, is live at
+  https://antsprojectshub.co.za/p/vestige-engine.html (checked: HTTP 200,
+  serves vestige-meadow.mp4) and in the README (docs/media/). demoreel was
+  sent the URL for its DEMO-0093. NOT yet done against this item's own bar:
+  the clip shows no editor work and no walking. That still waits on
+  3D_E-0696 and 3D_E-0697.
   **Layman:** Make a short video showing Vestige's editor and a walkthrough, and put it on the project website.
   Kind: marketing.
   Source: user-request-2026-09-25.
