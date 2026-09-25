@@ -135,15 +135,6 @@ jobs:
           restore-keys: |
             release-cmake-deps-linux-
 
-      - name: Configure (Release)
-        run: |
-          cmake -S . -B build -G Ninja \
-            -DCMAKE_BUILD_TYPE=Release \
-            -DVESTIGE_FETCH_ASSETS=OFF
-
-      - name: Build
-        run: cmake --build build -j "$(nproc)"
-
       - name: Resolve version string
         id: version
         env:
@@ -167,6 +158,20 @@ jobs:
           [ -z "$TAG" ] && TAG="v$(cat VERSION)"
           echo "tag=$TAG" >> "$GITHUB_OUTPUT"
           echo "version=${TAG#v}" >> "$GITHUB_OUTPUT"
+
+      - name: Configure (Release)
+        env:
+          # 3D_E-0683: the version stamped into saved scenes is the tag
+          # this release is built for, not the project(VERSION) baseline.
+          VERSION_STAMP: ${{ steps.version.outputs.version }}
+        run: |
+          cmake -S . -B build -G Ninja \
+            -DCMAKE_BUILD_TYPE=Release \
+            -DVESTIGE_FETCH_ASSETS=OFF \
+            -DVESTIGE_VERSION_STAMP="$VERSION_STAMP"
+
+      - name: Build
+        run: cmake --build build -j "$(nproc)"
 
       - name: Stage release tree
         # Build a relocatable directory:
@@ -322,18 +327,6 @@ jobs:
           restore-keys: |
             release-cmake-deps-windows-
 
-      - name: Configure (Release)
-        # Default MSVC generator on windows-2022 is VS 2022. No Ninja
-        # here — the VS generator is less fussy about the first-time
-        # FetchContent build on MSVC.
-        run: |
-          cmake -S . -B build -A x64 `
-            -DCMAKE_BUILD_TYPE=Release `
-            -DVESTIGE_FETCH_ASSETS=OFF
-
-      - name: Build
-        run: cmake --build build --config Release -j
-
       - name: Resolve version string
         id: version
         shell: bash
@@ -356,6 +349,23 @@ jobs:
           [ -z "$TAG" ] && TAG="v$(cat VERSION)"
           echo "tag=$TAG" >> "$GITHUB_OUTPUT"
           echo "version=${TAG#v}" >> "$GITHUB_OUTPUT"
+
+      - name: Configure (Release)
+        # Default MSVC generator on windows-2022 is VS 2022. No Ninja
+        # here — the VS generator is less fussy about the first-time
+        # FetchContent build on MSVC.
+        env:
+          # 3D_E-0683: the version stamped into saved scenes is the tag
+          # this release is built for, not the project(VERSION) baseline.
+          VERSION_STAMP: ${{ steps.version.outputs.version }}
+        run: |
+          cmake -S . -B build -A x64 `
+            -DCMAKE_BUILD_TYPE=Release `
+            -DVESTIGE_FETCH_ASSETS=OFF `
+            -DVESTIGE_VERSION_STAMP="$env:VERSION_STAMP"
+
+      - name: Build
+        run: cmake --build build --config Release -j
 
       - name: Stage release tree
         shell: bash

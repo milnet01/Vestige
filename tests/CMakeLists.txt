@@ -316,6 +316,8 @@ target_compile_definitions(vestige_tests
         VESTIGE_TEXTURE_FIXTURES_DIR="${CMAKE_SOURCE_DIR}/tests/fixtures/textures"
         # 3D_E-0683 — the scene engine-version stamp is checked against this file.
         VESTIGE_ROOT_CMAKELISTS="${CMAKE_SOURCE_DIR}/CMakeLists.txt"
+        # Non-empty when a build overrides the stamp (release builds pass the tag).
+        VESTIGE_TEST_STAMP_OVERRIDE="${VESTIGE_VERSION_STAMP}"
         # Phase 10 Localization L1 — bundled fonts dir for the Font ASCII
         # back-compat test (loads arimo.ttf under a real GL context).
         VESTIGE_FONT_DIR="${CMAKE_SOURCE_DIR}/assets/fonts"

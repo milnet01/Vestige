@@ -572,8 +572,19 @@ if(CMAKE_BUILD_TYPE STREQUAL "Debug")
 endif()
 
 # 3D_E-0683 — the version stamped into every saved scene
-# (SceneSerializer::ENGINE_VERSION) is the project version of the build that
-# wrote it, so it follows the top-level project(VERSION) the release recipe
-# bumps. PUBLIC because the constant lives in a header.
+# (SceneSerializer::ENGINE_VERSION). A release build passes the tag it is
+# built for (.github/workflows/release.yml), because the weekly cadence tags
+# without editing project(VERSION); any other build stamps project(VERSION).
+# Validated because it is compiled into a C++ string literal. PUBLIC because
+# the constant lives in a header.
+# Unset or empty means project(VERSION), re-read on every configure so a
+# version bump reaches existing build directories.
+set(_vestige_stamp "${VESTIGE_VERSION_STAMP}")
+if(_vestige_stamp STREQUAL "")
+    set(_vestige_stamp "${CMAKE_PROJECT_VERSION}")
+endif()
+if(NOT _vestige_stamp MATCHES "^[0-9]+\\.[0-9]+\\.[0-9]+([-+][0-9A-Za-z.-]+)?$")
+    message(FATAL_ERROR "VESTIGE_VERSION_STAMP '${_vestige_stamp}' is not a version")
+endif()
 target_compile_definitions(vestige_engine PUBLIC
-    VESTIGE_ENGINE_VERSION="${CMAKE_PROJECT_VERSION}")
+    VESTIGE_ENGINE_VERSION="${_vestige_stamp}")

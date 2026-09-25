@@ -99,7 +99,11 @@ TEST(SceneSerializerEngineVersion, MatchesTheCMakeProjectVersion)
     std::smatch m;
     ASSERT_TRUE(std::regex_search(
         text, m, std::regex(R"(project\s*\(\s*Vestige\s+VERSION\s+([0-9]+\.[0-9]+\.[0-9]+))")));
-    EXPECT_EQ(std::string(SceneSerializer::ENGINE_VERSION), m[1].str());
+    // A build given -DVESTIGE_VERSION_STAMP stamps that instead.
+    const std::string expectedStamp = std::string(VESTIGE_TEST_STAMP_OVERRIDE).empty()
+        ? m[1].str()
+        : std::string(VESTIGE_TEST_STAMP_OVERRIDE);
+    EXPECT_EQ(std::string(SceneSerializer::ENGINE_VERSION), expectedStamp);
 
     // The root VERSION file is the release workflows' floor and must name the
     // same version; it had drifted to 0.1.60 while CMake said 0.1.70.
