@@ -1510,7 +1510,7 @@ Full spatial audio pipeline with dynamic mixing, occlusion, and adaptive music. 
   Source: in-session-2026-08-18 (user surfaced the Windows box while 3D_E-0045 was building).
   Resolved (2026-08-19). Harness is `scripts/wintest.sh` (stage + run + report; it does NOT build — `./scripts/local-ci.sh --windows` first). First real-hardware Windows GL coverage this project has had: 3718 passed, 2 skipped, 1 failed, against `4.5.0 NVIDIA 560.94 on NVIDIA GeForce GTX 1050/PCIe/SSE2`. Both traps the bullet warned about were real, and a third was not anticipated. (1) Windows OpenSSH runs its shell in session 0, which has no interactive desktop: `glfwInit()` succeeds, `glfwCreateWindow()` fails, and a plain `ssh wintest vestige_tests.exe` reports every GL test SKIPPED and exits 0 — a clean-looking run proving nothing. The harness launches through a scheduled task with /IT so the tests run in the logged-on user's session; a user must therefore be logged in at the console. (2) The cmd trailing-space trap is avoided by never using `set VAR=value && app`. (3) UNANTICIPATED, and the larger one: six test data directories are baked into the binary at configure time as absolute paths under ${CMAKE_SOURCE_DIR} — VESTIGE_SHADER_DIR, VESTIGE_FONT_DIR, VESTIGE_LOCALIZATION_DIR, VESTIGE_AUDIO_FIXTURES_DIR, VESTIGE_SCENE_FIXTURES_DIR, VESTIGE_REFERENCE_CASES_DIR — so ~90 tests failed on a missing file rather than on behaviour. Rather than teach every consumer to relocate, the harness MIRRORS the source tree at the matching Windows path (/mnt/Games/... -> C:\mnt\Games\..., which works because Windows reads a leading "/" as relative to the current drive), so a baked path resolves exactly as it does at home. 38 MB staged; models (1.8 GB) and textures (581 MB) are deliberately excluded since no test reads them. Two findings filed rather than fixed here, this bullet being the harness and not any individual test: 3D_E-0614 (fs::create_symlink hard-kills the process on real Windows, taking the rest of the suite with it — the run above excludes that one test) and 3D_E-0615 (volumetric fog dispatch 2163 us against its 2000 us budget on the GTX 1050).
 
-- 📋 [3D_E-0047] **Finish the roadmap-DB migration once the GFM body parser is fixed — blocked, and DELIBERATELY not promoted.**
+- ✅ [3D_E-0047] **Finish the roadmap-DB migration once the GFM body parser is fixed — blocked, and DELIBERATELY not promoted.**
   roadmap_migrate was run 2026-08-18 and reports ok:true. Vestige IS in the
   store (project_id 13, export_slug "vestige", 1025 items, 236 sections, no
   duplicate ids) and today's items agree with the file. But the store is a
@@ -1687,6 +1687,11 @@ Full spatial audio pipeline with dynamic mixing, occlusion, and adaptive music. 
   are promoted to items whose id is the caption text, with the
   id/headline split running through the middle of the bold caption,
   which is a defect and not a pass.
+  Resolved (2026-09-25): migrated. Commit 9905f92 converts ROADMAP.md to
+  ants-v1 and the store is now the source of truth. Route: e8fd401
+  stripped prose bold captions; the stale snapshot was deregistered
+  after a .backup; fresh migrate gave 0 orphans. Leftovers are filed
+  upstream as ANTS-5327 and ANTS-5331.
 
 - ✅ [3D_E-0613] **Move 3D_E-0042's CHANGELOG entry out of the legacy flat region into a dated topic.**
   CHANGELOG.md's `## [Unreleased]` spans lines 23-10970 and has TWO layouts:
