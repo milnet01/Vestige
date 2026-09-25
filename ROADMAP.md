@@ -4231,8 +4231,15 @@ shipped that have no invocation path at all.
   Kind: test.
   Source: rule-14 gate on CLAUDE.md, 2026-09-21.
 
-- 📋 [3D_E-0686] **No test loads an EXR, so the HDRI decode path has no coverage at all.**
+- ✅ [3D_E-0686] **No test loads an EXR, so the HDRI decode path has no coverage at all.**
   Found by the cold review of the tinyexr v1.0.13 bump (3D_E-0669). `Texture::loadFromExr` is the only consumer of tinyexr and nothing exercises it: searching for `.exr` or `loadFromExr` outside the docs finds only `texture.cpp`, `texture.h`, three editor files that extension-match for UI purposes, and two tool configs that exclude `*.exr` from text scans. So a decode difference surfaces as a visually wrong HDRI at runtime and nothing fails. That is the same shape as 3D_E-0685: a real behaviour with no test over it. The review also left tinyexr's `DecodePixelData` internals undetermined — the function grew substantially between v1.0.9 and v1.0.13 and gained two more half-to-float call sites, and the review verified the public contract rather than that region. A load-and-compare test over a small committed EXR would close both: it pins our decode path and it would catch an upstream decode change on the next bump. Secondary, pre-authored and unrelated to the bump: `docs/engine/renderer/spec.md` calls tinyexr vendored at `external/`, which is false — it is fetched and consumed from the build tree.
+  Resolved (2026-09-25): Texture::decodeExr (the CPU half of
+  loadFromExr) is now tested against a committed 2x3 fp32 fixture,
+  tests/fixtures/textures/hdr_2x3.exr. The fixture was written by
+  tinyexr v1.0.13 with exact values above 1.0 and non-unit alpha. The
+  test checks every component and the vertical flip, plus the
+  missing-file and non-EXR failure paths. Proven red by removing the
+  flip. The docs/engine/renderer/spec.md "vendored at external/" claim is corrected in the same commit.
   **Layman:** Nothing in the test suite ever opens an HDR image file, so if the library that reads them started decoding differently, no test would notice.
   Kind: test.
   Source: cold review of 3D_E-0669, 2026-09-21.

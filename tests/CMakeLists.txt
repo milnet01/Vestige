@@ -145,6 +145,7 @@ add_executable(vestige_tests
     test_gpu_cloth_simulator.cpp
     test_grass_shadow_parity.cpp
     test_tree_shadow_parity.cpp
+    test_texture_exr.cpp
     test_cloth_cpu_gpu_parity.cpp
     test_ui_widgets.cpp
     test_ui_system_input.cpp
@@ -311,6 +312,8 @@ target_compile_definitions(vestige_tests
         # Phase 10.9 W8 — committed pre-v2 scene fixture for the scene-format
         # v1→v2 backwards-compatible-load test.
         VESTIGE_SCENE_FIXTURES_DIR="${CMAKE_SOURCE_DIR}/tests/fixtures/scenes"
+        # 3D_E-0686 — committed 2x3 fp32 EXR for the Texture::decodeExr test.
+        VESTIGE_TEXTURE_FIXTURES_DIR="${CMAKE_SOURCE_DIR}/tests/fixtures/textures"
         # Phase 10 Localization L1 — bundled fonts dir for the Font ASCII
         # back-compat test (loads arimo.ttf under a real GL context).
         VESTIGE_FONT_DIR="${CMAKE_SOURCE_DIR}/assets/fonts"

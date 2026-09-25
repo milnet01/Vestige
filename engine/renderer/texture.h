@@ -9,6 +9,7 @@
 
 #include <memory>
 #include <string>
+#include <vector>
 
 namespace Vestige
 {
@@ -104,6 +105,16 @@ public:
     /// @return A new Texture containing the generated normal map, or nullptr on failure.
     static std::shared_ptr<Texture> generateNormalFromHeight(
         const std::string& heightMapPath, float strength = 8.0f);
+
+    /// @brief Decodes an EXR file to RGBA float pixels, rows flipped bottom-to-top
+    ///        for OpenGL. The CPU half of EXR loading; needs no GL context.
+    /// @param filePath Path to the EXR file.
+    /// @param width Receives the image width in pixels.
+    /// @param height Receives the image height in pixels.
+    /// @param rgba Receives width * height * 4 floats.
+    /// @return False if the file fails to decode or is outside 1..16384 on either axis.
+    static bool decodeExr(const std::string& filePath, int& width, int& height,
+                          std::vector<float>& rgba);
 
 private:
     bool loadFromExr(const std::string& filePath);

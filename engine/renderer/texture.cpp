@@ -347,12 +347,12 @@ bool Texture::loadFromMemory(const unsigned char* rawData, int width, int height
     return true;
 }
 
-bool Texture::loadFromExr(const std::string& filePath)
+bool Texture::decodeExr(const std::string& filePath, int& width, int& height,
+                        std::vector<float>& rgba)
 {
-    // Note: releaseGpuTexture() already called by loadFromFile() caller
     float* data = nullptr;
     const char* err = nullptr;
-    int ret = LoadEXR(&data, &m_width, &m_height, filePath.c_str(), &err);
+    int ret = LoadEXR(&data, &width, &height, filePath.c_str(), &err);
 
     if (ret != TINYEXR_SUCCESS)
     {
@@ -363,7 +363,7 @@ bool Texture::loadFromExr(const std::string& filePath)
     }
 
     // Validate dimensions
-    if (m_width <= 0 || m_height <= 0 || m_width > 16384 || m_height > 16384)
+    if (width <= 0 || height <= 0 || width > 16384 || height > 16384)
     {
         Logger::error("EXR texture dimensions invalid or too large: " + filePath);
         free(data);
@@ -372,16 +372,23 @@ bool Texture::loadFromExr(const std::string& filePath)
 
     // LoadEXR returns RGBA float data.
     // EXR images are stored top-to-bottom; flip vertically to match OpenGL convention.
-    int rowSize = m_width * 4;
-    for (int y = 0; y < m_height / 2; y++)
+    const size_t rowSize = static_cast<size_t>(width) * 4;
+    rgba.resize(rowSize * static_cast<size_t>(height));
+    for (int y = 0; y < height; y++)
     {
-        int topRow = y * rowSize;
-        int bottomRow = (m_height - 1 - y) * rowSize;
-        for (int x = 0; x < rowSize; x++)
-        {
-            std::swap(data[topRow + x], data[bottomRow + x]);
-        }
+        std::memcpy(rgba.data() + static_cast<size_t>(height - 1 - y) * rowSize,
+                    data + static_cast<size_t>(y) * rowSize, rowSize * sizeof(float));
     }
+    free(data);
+    return true;
+}
+
+bool Texture::loadFromExr(const std::string& filePath)
+{
+    // Note: releaseGpuTexture() already called by loadFromFile() caller
+    std::vector<float> data;
+    if (!decodeExr(filePath, m_width, m_height, data))
+        return false;
 
     // Create texture with DSA (immutable storage, HDR float)
     glCreateTextures(GL_TEXTURE_2D, 1, &m_textureId);
@@ -395,10 +402,8 @@ bool Texture::loadFromExr(const std::string& filePath)
     glTextureStorage2D(m_textureId, mipLevels, GL_RGBA16F, m_width, m_height);
 
     glTextureSubImage2D(m_textureId, 0, 0, 0, m_width, m_height,
-                        GL_RGBA, GL_FLOAT, data);
+                        GL_RGBA, GL_FLOAT, data.data());
     glGenerateTextureMipmap(m_textureId);
-
-    free(data);
 
     Logger::debug("EXR texture loaded: " + filePath + " ("
         + std::to_string(m_width) + "x" + std::to_string(m_height)

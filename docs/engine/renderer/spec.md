@@ -644,7 +644,7 @@ Renderer-side accessibility surfaces (each is wired through one of `engine/core/
 | `<glm/glm.hpp>`, `<glm/gtc/matrix_inverse.hpp>` | external | Math primitives (vec / mat / quat); reverse-Z infinite-far perspective; per-draw normal matrix. |
 | `<freetype/...>` (via `external/`) | external | Glyph rasterisation for `Font`. |
 | `<stb_image.h>` (vendored at `external/stb/`) | external | Texture file decoding (PNG / JPG / TGA / HDR). |
-| `<tinyexr.h>` (vendored at `external/`) | external | EXR HDRI loading. |
+| `<tinyexr.h>` (fetched by `external/CMakeLists.txt`) | external | EXR HDRI loading. |
 | `<nlohmann/json.hpp>` | external | `SpriteAtlas` JSON-Array parser. |
 | `<memory>`, `<unordered_map>`, `<vector>`, `<array>`, `<string>`, `<functional>` | std | Owning pointers, hash maps, dynamic arrays, fixed arrays for cascade matrices, paths, callbacks for the IBL prefilter loop. |
 
