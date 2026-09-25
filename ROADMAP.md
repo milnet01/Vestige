@@ -4117,6 +4117,14 @@ shipped that have no invocation path at all.
   Whichever way it goes, the fix belongs with a test that pins it, because
   the value lands in a user's saved file and a wrong one is not recoverable
   from the file alone.
+  Progress (2026-09-25): code done and verified, in afae3cd and the
+  release-stamp commit after it. The user chose "stamp the real
+  version". The stamp is the build's project(VERSION); release.yml
+  passes the tag as VESTIGE_VERSION_STAMP. VERSION was synced to 0.1.70
+  and added to .claude/bump.json. The test pins both. STILL OWED before
+  flipping to shipped: review-contract loop 2 on
+  docs/standards/versioning-overrides.md. Loop 4 in its log is this
+  run's loop 1; the cap is 3.
   **Layman:** Saved scene files claim they were made by version 0.5.0, but the project has never been that version.
   Kind: fix.
   Source: rule-14 gate on docs/standards/versioning-overrides.md, 2026-09-21.
@@ -4180,6 +4188,15 @@ shipped that have no invocation path at all.
   imgui-node-editor (2023) are both pinned to the genuine latest release,
   but both upstreams are effectively dormant. That is a supply-chain fact to
   know, not a bump to make.
+  Progress (2026-09-25): ImGuizmo's re-test trigger has fired. Tag 1.10
+  (b796ac3) moved sources to src/. Its src/ImGuizmo.cpp compiles cleanly
+  under GCC 16.2 against our ImGui, and every ImGuizmo:: function engine
+  code uses still exists. The pin comment's GCC 14 failure is therefore
+  stale. To bump: GIT_TAG 1.10, point imguizmo_lib at
+  ${imguizmo_SOURCE_DIR}/src, full build, then rule 8's independent
+  subagent review. ImPlot: upstream tags go to v1.0 (524f9fc); our
+  pinned commit postdates it; the comment's 'v0.16 predates ImGui 1.92'
+  claim is false and still unfixed.
   **Layman:** Two version freezes have written justifications that are no longer true.
   Kind: doc-fix.
   Source: tech-survey-2026-09-02.

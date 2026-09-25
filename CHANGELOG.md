@@ -23,6 +23,15 @@ may change any interface without notice.
 
 ## [Unreleased]
 
+### 2026-09-25 Fixed — Saved scenes record the real engine version (3D_E-0683)
+
+Scene files stamped `engine_version` "0.5.0", a version Vestige has never
+been. They now record the version of the build that saved them. Release
+builds stamp their tag's version via `-DVESTIGE_VERSION_STAMP`, and other
+builds stamp `project(VERSION)`. The root `VERSION` file had drifted to
+0.1.60. It is synced to 0.1.70 and now bumped by the release recipe.
+Scenes still load by `format_version`; the stamp is informational.
+
 ### 2026-09-25 Fixed — Formula Workbench GLSL export can be included more than once (3D_E-0693)
 
 The prelude and each generated function now sit in their own `#ifndef`
