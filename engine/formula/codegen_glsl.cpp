@@ -225,14 +225,23 @@ std::string CodegenGlsl::generateFile(const std::vector<const FormulaDefinition*
     // AUDIT H12 / M11: prelude defines safeDiv/safeSqrt/safeLog/safePow
     // matching engine/formula/safe_math.h so the emitted shader produces
     // identical output to the tree-walking evaluator the LM fitter uses.
-    out << SafeMath::glslPrelude() << "\n";
+    //
+    // The prelude and every function sit in their own #ifndef guard, so a
+    // shader may include the combined file and single-formula files together
+    // (or one file twice) without redefining anything. Per-function rather
+    // than per-file guards, because the single-formula files repeat both.
+    // Function names carry no '_', so a guard can never form a reserved '__'.
+    out << "#ifndef VESTIGE_FORMULA_PRELUDE\n#define VESTIGE_FORMULA_PRELUDE\n";
+    out << SafeMath::glslPrelude() << "#endif\n\n";
 
     for (const auto* formula : formulas)
     {
         if (!formula)
             continue;
+        const std::string guard = "VESTIGE_FORMULA_FN_" + toGlslFunctionName(formula->name);
+        out << "#ifndef " << guard << "\n#define " << guard << "\n";
         out << generateFunction(*formula, tier);
-        out << "\n";
+        out << "#endif\n\n";
     }
 
     return out.str();

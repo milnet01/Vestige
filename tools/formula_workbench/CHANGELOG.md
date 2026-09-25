@@ -4,6 +4,16 @@ All notable changes to the Formula Workbench are documented in this file.
 
 ## [Unreleased]
 
+### Fixed
+
+- **Generated GLSL can be included more than once.** `--export-glsl` output
+  wraps the safe-math prelude and each function in its own `#ifndef` guard
+  (`VESTIGE_FORMULA_PRELUDE`, `VESTIGE_FORMULA_FN_<name>`). A shader can now
+  include `formulas.glsl` from a shared header, include it again, or mix it
+  with single-formula files, without redefinition errors. Requested by the
+  DOOM_Ants path tracer (DOOM-0407), which had to move its include to work
+  around the missing guard.
+
 ## [1.19.0] - 2026-06-17
 
 ### Path-tracer formula coverage (DOOM_Ants Workbench requests, 3D_E-0006..0012)

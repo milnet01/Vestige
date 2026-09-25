@@ -4221,6 +4221,14 @@ shipped that have no invocation path at all.
   Kind: doc-fix.
   Source: diff-scoped rule-14 gate on cee2a71, 2026-09-21.
 
+- ✅ [3D_E-0693] **Guard generated GLSL so formula files can be included more than once.**
+  CodegenGlsl::generateFile wraps the safe-math prelude and each function
+  in #ifndef guards. Test GeneratedFilesCanBeIncludedTogether pins it,
+  and a glslangValidator compile of combined + single + combined passes.
+  **Layman:** Shaders built from the Formula Workbench's exported maths no longer fail to compile when two of them pull in the same formulas.
+  Kind: fix.
+  Source: peer-request-2026-09-25 (DOOM_Ants DOOM-0407).
+
 ## 0.3.0 — An editor a builder can use
 
 Breaks: the scene format. Editor work changes what a scene stores.

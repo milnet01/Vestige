@@ -23,6 +23,13 @@ may change any interface without notice.
 
 ## [Unreleased]
 
+### 2026-09-25 Fixed — Formula Workbench GLSL export can be included more than once (3D_E-0693)
+
+The prelude and each generated function now sit in their own `#ifndef`
+guard, so a shader may include `formulas.glsl` twice or mix it with
+single-formula files without redefinition errors. Requested by the
+DOOM_Ants path tracer (DOOM-0407).
+
 ### 2026-09-21 Security — tinyexr raised to v1.0.13, taking two upstream memory-safety fixes (3D_E-0669)
 
 EXR loading was pinned below two fixes upstream had already published: a double-free in `FreeEXRImage` when chunk decoding fails, and a heap-buffer-overflow in B44/B44A pixel decoding with mixed channel types. EXR parsing is reachable whenever an asset comes from outside the repository, so this was a real exposure rather than hygiene.

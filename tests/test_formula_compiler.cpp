@@ -21,6 +21,8 @@
 #include <cstdio>
 #include <filesystem>
 #include <fstream>
+#include <set>
+#include <sstream>
 
 using namespace Vestige;
 
@@ -292,6 +294,82 @@ TEST(CodegenGlsl, GenerateFile)
     EXPECT_NE(file.find("safeSqrt"), std::string::npos);
     EXPECT_NE(file.find("safeLog"), std::string::npos);
     EXPECT_NE(file.find("safePow"), std::string::npos);
+}
+
+namespace
+{
+// Minimal GLSL-preprocessor stand-in: honours #ifndef / #define / #endif,
+// the only directives generateFile emits, and drops lines inside a skipped
+// block. Enough to see what a shader including two generated files keeps.
+std::string preprocessGuards(const std::string& src)
+{
+    std::istringstream in(src);
+    std::set<std::string> defined;
+    std::vector<bool> active{true};
+    std::string line;
+    std::string out;
+    while (std::getline(in, line))
+    {
+        std::istringstream words(line);
+        std::string directive;
+        std::string name;
+        words >> directive >> name;
+        if (directive == "#ifndef")
+        {
+            active.push_back(active.back() && defined.count(name) == 0);
+        }
+        else if (directive == "#endif")
+        {
+            active.pop_back();
+        }
+        else if (active.back())
+        {
+            if (directive == "#define")
+                defined.insert(name);
+            else
+                out += line + "\n";
+        }
+    }
+    return out;
+}
+
+size_t countOccurrences(const std::string& haystack, const std::string& needle)
+{
+    size_t n = 0;
+    for (size_t pos = haystack.find(needle); pos != std::string::npos;
+         pos = haystack.find(needle, pos + needle.size()))
+        ++n;
+    return n;
+}
+} // namespace
+
+TEST(CodegenGlsl, GeneratedFilesCanBeIncludedTogether)
+{
+    // DOOM_Ants includes the combined formulas.glsl from a header that two
+    // shaders share, and a shader may also include a single-formula file.
+    // Without guards the second include redefines the prelude and every
+    // function it repeats, which is a GLSL compile error.
+    auto templates = PhysicsTemplates::createAll();
+    std::vector<const FormulaDefinition*> ptrs;
+    for (const auto& t : templates) ptrs.push_back(&t);
+    ASSERT_FALSE(ptrs.empty());
+
+    const std::string combined = CodegenGlsl::generateFile(ptrs);
+    const std::string single = CodegenGlsl::generateFile({ptrs.front()});
+    const std::string seen =
+        preprocessGuards(combined + single + combined);
+
+    EXPECT_EQ(countOccurrences(seen, "float safeDiv("), 1u);
+    for (const auto* f : ptrs)
+    {
+        const std::string sig =
+            " " + CodegenGlsl::toGlslFunctionName(f->name) + "(";
+        EXPECT_EQ(countOccurrences(seen, sig),
+                  countOccurrences(preprocessGuards(combined), sig))
+            << f->name;
+    }
+    // Guarding changes nothing for a single include.
+    EXPECT_EQ(countOccurrences(preprocessGuards(combined), "float safeDiv("), 1u);
 }
 
 // ===========================================================================
