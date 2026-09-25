@@ -674,9 +674,6 @@ Shipped via commit `6a40da4`. Three asset-viewer panels in `engine/editor/panels
 - ✅ [3D_E-S0041] **Runtime instances (ScriptInstance with per-graph blackboard, latent action queue, event subscriptions)**
   Kind: implement.
 
-- 📋 [3D_E-S0042] **ScriptComponent (entity attachment) + ScriptingSystem (ISystem with update loop, latent tick, event bridge) — un-ticked 2026-09-21 (3D_E-0627). The classes exist and are unit-tested, but nothing constructs a `ScriptingSystem` at runtime, `ScriptComponent` has zero callers, and `ScriptingSystem::onSceneLoad` is a stub whose own comment lists the four steps nobody wrote. No script can execute in the shipped engine. Switching it on is tracked as its own item.**
-  Kind: implement.
-
 - ✅ [3D_E-S0043] **10 core node types (OnStart, OnUpdate, OnDestroy, Branch, Sequence, Delay, SetVariable, GetVariable, PrintToScreen, LogMessage)**
   Kind: implement.
 
@@ -4095,7 +4092,7 @@ shipped that have no invocation path at all.
   Kind: fix.
   Source: in-session-2026-09-03, found while verifying 3D_E-0629.
 
-- 📋 [3D_E-0683] **Every saved scene records an engine version the project has never been at.**
+- ✅ [3D_E-0683] **Every saved scene records an engine version the project has never been at.**
   engine/editor/scene_serializer.h declares
   `static constexpr const char* ENGINE_VERSION = "0.5.0"`, and the saver
   writes it into every scene envelope beside `format_version`. The project's
@@ -4125,6 +4122,10 @@ shipped that have no invocation path at all.
   flipping to shipped: review-contract loop 2 on
   docs/standards/versioning-overrides.md. Loop 4 in its log is this
   run's loop 1; the cap is 3.
+  Resolved (2026-09-25): review-contract loop 2 of this run (log row 5)
+  found nothing against the ENGINE_VERSION rule; all three lanes
+  confirmed it against the serializer, CMake and release.yml. Two
+  findings elsewhere in the standard were fixed in the same commit.
   **Layman:** Saved scene files claim they were made by version 0.5.0, but the project has never been that version.
   Kind: fix.
   Source: rule-14 gate on docs/standards/versioning-overrides.md, 2026-09-21.
@@ -4295,6 +4296,22 @@ shipped that have no invocation path at all.
   **Layman:** Shaders built from the Formula Workbench's exported maths no longer fail to compile when two of them pull in the same formulas.
   Kind: fix.
   Source: peer-request-2026-09-25 (DOOM_Ants DOOM-0407).
+
+- 📋 [3D_E-0700] **The 0.2.0 heading names a break its own work does not make.**
+  The roadmap line under `## 0.2.0` reads "Breaks: the settings schema.
+  Closing the audit items lands settings fields." Section 1 of
+  docs/standards/versioning-overrides.md classes an added field as a PATCH,
+  with or without a schema bump, so this justifies no MINOR.
+  User decision 2026-09-25: go through the 0.2.0 items for anything that
+  really breaks a saved file, a flag or a key. If one exists, the line names
+  it. If none does, report that to the user, who decides whether 0.2.0 keeps
+  its own number.
+  The same check applies to 0.3.0's "Editor work changes what a scene
+  stores": an added optional scene block is a PATCH under section 1.
+  **Layman:** Version 0.2.0 claims it changes the settings file in a way that breaks old files, but adding settings does not; find out whether anything in it really breaks.
+  Kind: audit-fix.
+  Source: review-contract loop 5 on docs/standards/versioning-overrides.md, 2026-09-25.
+  Lanes: docs, release.
 
 ## 0.3.0 — An editor a builder can use
 
@@ -4720,6 +4737,15 @@ Retrofit completed across 8 commits — every Phase-10 Settings-store consumer n
   First cut, 2026-09-25: a 20 s idle view of the meadow scene, a static
   camera with animated grass, trees and water. It is a test of the
   pipeline, not the published video.
+  Progress (2026-09-25): demoreel delivered the first cut at
+  ~/Videos/demoreel-demos/vestige-demo.mp4 (1920x1080, silent). It had
+  to record at 1920x1080 because Vestige resizes its own window after
+  start-up (demoreel defect DEMO-0099). Re-record command:
+  cd build-release/bin && demoreel record --gpu -s 1920x1080 -d 20
+  --startup-timeout 30 -a 'wait 12' -o OUT.mp4 -- env
+  PULSE_SERVER=unix:/nonexistent ./vestige
+  When the video is published, send its URL to project "demoreel" with
+  session_message: that is demoreel's 1.0 condition (DEMO-0093).
   **Layman:** Make a short video showing Vestige's editor and a walkthrough, and put it on the project website.
   Kind: marketing.
   Source: user-request-2026-09-25.
@@ -4790,6 +4816,20 @@ Retrofit completed across 8 commits — every Phase-10 Settings-store consumer n
   Kind: test.
   Source: user-request-2026-09-25.
   Lanes: testing, renderer, audio, physics, core.
+
+- 📋 [3D_E-0699] **A thin horizontal line crosses the meadow grass at a fixed screen height.**
+  Reported by the demoreel session from its first-cut recording of the
+  meadow scene (3D_E-0695): the line sits at the same height in every
+  frame checked. Unverified here. It may be a render seam or an artefact
+  of the recording. First step: reproduce it in a normal window, then
+  check whether it follows the camera or the screen.
+  The same recording shows the "Welcome to Vestige" first-run panel
+  docked left, so an idle recording shows the editor, not the bare scene.
+  **Layman:** A faint straight line shows across the grass in the demo video; find out whether it is a drawing bug.
+  Kind: investigate.
+  Source: peer-report demoreel 2026-09-25.
+  Lanes: rendering.
+  Evidence: ~/Videos/demoreel-demos/vestige-demo.mp4
 
 ## 0.4.0 — Rendering and geometry at scale
 
@@ -5769,8 +5809,8 @@ Outdoor landscapes surrounding the Temple complex — hills, valleys, and the Ki
 
 ## 0.5.0 — Interactivity
 
-Breaks: visual scripting graphs. 3D_E-0627 lands the first real consumer, so
-the node semantics stop being unreachable and become a surface a user relies on.
+Breaks: visual scripting graphs. 3D_E-S0042 switches scripting on, so the
+node semantics stop being unreachable and become a surface a user relies on.
 
 #### Phase 11A: Gameplay Infrastructure
 **Goal:** The runtime subsystems every Phase 11B gameplay feature consumes — camera shake, screen flash, save-file compression, replay recording, behavior-tree runtime, and AI perception. Split out of the original single Phase 11 so the consumer-before-system dependencies surface at planning time rather than at implementation time.
@@ -6529,6 +6569,10 @@ The rendering research update (Phase 13 "2026-04 Research Update") makes pixels 
   Lanes: audio.
 
 ---
+
+- 📋 [3D_E-S0042] **ScriptComponent (entity attachment) + ScriptingSystem (ISystem with update loop, latent tick, event bridge) — un-ticked 2026-09-21 (3D_E-0627). The classes exist and are unit-tested, but nothing constructs a `ScriptingSystem` at runtime, `ScriptComponent` has zero callers, and `ScriptingSystem::onSceneLoad` is a stub whose own comment lists the four steps nobody wrote. No script can execute in the shipped engine. Switching it on is tracked as its own item.**
+  **Layman:** Turn on the node-based scripting system so scripts built in the editor actually run in a scene.
+  Kind: implement.
 
 ## 0.6.0 — Shipping a walkthrough
 
