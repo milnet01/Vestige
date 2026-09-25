@@ -304,7 +304,7 @@ Ref: [cppreference if constexpr](https://en.cppreference.com/w/cpp/language/if).
 
 ## 17. CPU / GPU Placement
 
-**This section is canonical.** CLAUDE.md Rule 7 states the high-level policy ("decide at design-time, document in spec"); the engineering detail lives here. When CLAUDE.md and this section appear to disagree, the discrepancy is a bug — fix this section first, then update CLAUDE.md's pointer.
+**This section is canonical.** CLAUDE.md Rule 7 states the high-level policy (decide at design time; record it in the spec, or in the roadmap item where no spec is needed); the engineering detail lives here. When CLAUDE.md and this section appear to disagree, the discrepancy is a bug — fix this section first, then update CLAUDE.md's pointer.
 
 Default heuristic:
 
