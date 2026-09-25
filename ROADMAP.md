@@ -5031,7 +5031,6 @@ Vestige is developed with heavy use of AI coding assistance — specifically Ant
 **Launched 2026-04-15.** `v0.1.3-preview` tagged, `milnet01/Vestige` flipped public, GitHub Discussions enabled. Pre-launch checklist (LICENSE / CONTRIBUTING / CODE_OF_CONDUCT / THIRD_PARTY_NOTICES / ASSET_LICENSES / SPDX headers across 703 files / fresh-clone build / asset-licence boundary / VestigeAssets repo split / personal-path scrub / gitleaks + secret-history rewrite / public README / GitHub issue+PR templates / SECURITY.md disclosure section / CI hardening / CMake-matrix CI) all complete. (Current engine version as of this revisit: `0.1.60` — see `VERSION` and `CHANGELOG.md`; the four post-launch bullets below remain the open ones as of 2026-05-18.)
 
 Still pending post-launch (none blocking engine development):
-- [ ] VestigeAssets visibility flip + CI default restore. Blocked on `milnet01/VestigeAssets` going public (~v1.0.0, pending its final redistributability audit of every shipped asset). When VestigeAssets flips public, flip `-DVESTIGE_FETCH_ASSETS=OFF` → `ON` in `.github/workflows/ci.yml` and reset the engine default back to `ON` in `external/CMakeLists.txt` in the same commit so CI exercises the full asset pipeline again.
 - [ ] Third-party clean-clone build validation. The 2026-04-15 dry-run was maintainer-performed; an external "first contact with the README" path is still unexercised. First community PR or Discussions thread that reports a successful build closes this item; no active work required.
 - [ ] Biblical content migration to private `Tabernacle` repo. `assets/textures/tabernacle/` and the tabernacle-loading scene code are currently local-only (gitignored). Cleaner long-term home is a private GitHub repo so the maintainer can sync development across machines. Not blocking engine work.
 - [ ] Trademark decision on the "Vestige" name — informal use vs formal registration. Deferred until there's something worth protecting at scale.
@@ -5063,6 +5062,44 @@ Biblical rendition of the Tabernacle as described in Exodus 25-40.
 - Holy of Holies with the Ark of the Covenant
 - Surrounding tent curtains and pillars
 - Appropriate materials: acacia wood, gold, bronze, blue/purple/scarlet fabrics, linen
+
+#### Release items
+
+- [ ] VestigeAssets visibility flip + CI default restore. Blocked on `milnet01/VestigeAssets` going public (~v1.0.0, pending its final redistributability audit of every shipped asset). When VestigeAssets flips public, flip `-DVESTIGE_FETCH_ASSETS=OFF` → `ON` in `.github/workflows/ci.yml` and reset the engine default back to `ON` in `external/CMakeLists.txt` in the same commit so CI exercises the full asset pipeline again.
+
+- 📋 [3D_E-0690] **Declare the public API stable and follow semver from 1.0.0.**
+  Name which headers are the public API, and state the promise in the
+  README and docs/standards/versioning-overrides.md. The 0.6.0 section
+  lists this as a post-release commitment; this item is the work.
+  **Layman:** From 1.0 on, a game built on Vestige will not break when the engine updates, unless the version number says it will.
+  Kind: release.
+  Source: user-request-2026-09-25 (1.0.0 reshape).
+
+- 📋 [3D_E-0691] **Prove the Tabernacle walkthrough holds 60 FPS with the perf gate.**
+  This is the 1.0 exit condition in docs/standards/versioning-overrides.md
+  section 2. Run tools/perf_gate.py against the standalone walkthrough
+  build on the dev hardware CLAUDE.md names, and record the run.
+  **Layman:** Measure, with the existing speed test, that the finished walkthrough never drops below 60 frames per second on the dev PC.
+  Kind: perf.
+  Source: user-request-2026-09-25 (1.0.0 reshape).
+
+- 📋 [3D_E-0692] **Link the published Tabernacle walkthrough from the README.**
+  The walkthrough lives in a separate commercial repo, so the link goes to
+  its store page or release, not to source. Named in the 0.6.0 milestone
+  statement.
+  **Layman:** Put a link on the project's front page so visitors can see a finished example of what the engine can do.
+  Kind: doc.
+  Source: user-request-2026-09-25 (1.0.0 reshape).
+
+## Unscheduled — no release committed
+
+No release is committed for anything here, and this heading is not a position
+in the sequence. An item leaves when a release claims it.
+
+#### Target projects after 1.0
+
+Moved out of 1.0.0 on 2026-09-25. Each is a separate product built on the
+engine, not engine work, so no engine release claims it.
 
 ##### Project 2: Solomon's Temple
 Biblical rendition of the Temple as described in 1 Kings 6-7 and 2 Chronicles 3-4.
@@ -5155,11 +5192,6 @@ Long-horizon target referenced from the *Dead Space*-archetype work
 woven through Phases 11A / 11B / Horror Action Polish. Not yet
 formally scoped — Project 3 (Doom) is the stepping stone that proves
 the gameplay-infrastructure track before this becomes a focused effort.
-
-## Unscheduled — no release committed
-
-No release is committed for anything here, and this heading is not a position
-in the sequence. An item leaves when a release claims it.
 
 #### Phase 18: 2D Game and Scene Support
 **Goal:** Enable the creation of 2D games and scenes alongside the existing 3D capabilities — sprite-based rendering, 2D physics, tilemaps, and a dedicated 2D editor workflow.
