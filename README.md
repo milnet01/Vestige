@@ -18,6 +18,17 @@ It comes in one piece: an **editor** for arranging a scene, and a
 code to look around — see [Just want to look around?](#just-want-to-look-around)
 below.
 
+### See it running
+
+[![The built-in meadow scene in walkthrough mode: tall grass in the foreground, a pond, and pine trees against a hazy evening sky. Click to play the 15-second video.](docs/media/vestige-meadow-poster.jpg)](docs/media/vestige-meadow.mp4)
+
+*The built-in meadow scene in walkthrough mode, with grass moving in the
+wind. Click the picture for the 15-second video.*
+
+![The Vestige editor: a scene hierarchy on the left, the meadow in the centre viewport with a move gizmo on a selected prop, and its position, rotation and scale on the right.](docs/screenshots/editor-meadow.png)
+
+More pictures: [`docs/screenshots/`](docs/screenshots/).
+
 If you are a developer: it is a solo-maintained, open-source 3D engine
 built around a subsystem + event-bus architecture, prioritising a clear
 codebase, a sustainable single-maintainer cadence, and a hard **60 FPS
