@@ -4705,6 +4705,92 @@ Retrofit completed across 8 commits — every Phase-10 Settings-store consumer n
 
 ---
 
+- 📋 [3D_E-0695] **Publish a Vestige demo video on antsprojectshub.co.za, recorded with demoreel.**
+  demoreel (a peer tool on this machine) records a GUI app on a private
+  virtual display, with a --gpu mode for OpenGL apps. It drives input by
+  keys, typed text and clicks at screen coordinates only, with no held key.
+  That is not enough to tour the editor reproducibly, so the video waits
+  on 3D_E-0696 (scripted demo mode) and 3D_E-0697 (repeatable recording
+  setup).
+  Done when: the video shows the editor (building or editing a scene) and
+  the walk-through view, holds 60 FPS in the recorded build, and is live on
+  antsprojectshub.co.za. The page URL is recorded here, and demoreel's
+  session is told where it landed: its 1.0 release waits on a video used
+  outside its own repository.
+  First cut, 2026-09-25: a 20 s idle view of the meadow scene, a static
+  camera with animated grass, trees and water. It is a test of the
+  pipeline, not the published video.
+  **Layman:** Make a short video showing Vestige's editor and a walkthrough, and put it on the project website.
+  Kind: marketing.
+  Source: user-request-2026-09-25.
+  Lanes: editor, marketing.
+
+- 📋 [3D_E-0696] **Scripted demo mode: play a timeline of camera moves and editor actions from a file.**
+  A `--demo-script <file>` flag loads a JSON timeline of timed steps and
+  plays it without human input. Two kinds of step:
+  - Camera: fly along waypoints at constant speed. Reuse SplinePath and
+    its evaluateByArcLength accessor (3D_E-S0220, shipped), not a new
+    spline.
+  - Editor: select an entity, open or focus a panel, move a gizmo, place
+    an asset, enter and leave play mode. Each step goes through the
+    editor's own command/undo API, never through screen coordinates, so a
+    script survives layout and window-size changes.
+  The script ends by quitting cleanly, so a recorder knows when to stop.
+  Overlaps 3D_E-S0491 (cinematic camera, 0.4.0) and 3D_E-S0754 (camera
+  track editor). Build the smallest piece those can later absorb; do not
+  pull them forward whole.
+  Needs a spec before building: it is a file format other tooling binds
+  to (spec-format.md section 1), and its CPU / GPU placement section is
+  CPU (timeline and decisions).
+  Test: a script's steps drive the editor command API in order, headless.
+  **Layman:** Let Vestige follow a written script that moves the camera and works the editor by itself, so a demo video can be recorded the same way every time.
+  Kind: feature.
+  Source: user-request-2026-09-25.
+  Lanes: editor, scene.
+
+- 📋 [3D_E-0697] **Make a demo run repeatable frame to frame for recording.**
+  Recording the same script twice should give the same video. Pin the
+  things that vary between runs today: window size, the ImGui layout (ship
+  a demo imgui.ini instead of reading the user's), the wind and particle
+  random seeds, and a fixed simulation timestep in demo mode, so frame
+  content does not depend on how fast the frame was rendered.
+  Check: two recordings of one script, compared frame by frame, match
+  within a small tolerance.
+  **Layman:** Remove the randomness in a demo run so every recording of the same script looks the same.
+  Kind: feature.
+  Source: user-request-2026-09-25.
+  Lanes: editor, core.
+
+- 📋 [3D_E-0698] **Automated scene verification: traverse a scene and report whether each system works.**
+  Extend the existing VisualTestRunner (engine/testing/visual_test_runner.h,
+  run by --visual-test), which already flies through viewpoints and saves a
+  screenshot plus a text diagnostic per view, into a verifier.
+  - Route from a file, not hard-coded C++: today's viewpoints are fixed in
+    Engine::setupVisualTestViewpoints. Share the route format with the
+    scripted demo mode (3D_E-0696), so one script can both record a video
+    and verify a scene.
+  - Collect per-system evidence along the route: frame time (min / p50 /
+    p99) against the 60 FPS floor; per-pass GPU and CPU times (the
+    --profile-log data); GL errors; shader programs that failed to compile
+    or link (these fail silently today, see CLAUDE.md's shader rule);
+    assets that failed to load; errors and warnings the logger saw; audio
+    device state and live source count; physics body count and any
+    NaN or out-of-world body; entities per system.
+  - Judge, not just record: a per-scene expectations file (for example
+    "grass pass runs", "no GL errors", "p99 under 16.7 ms on the dev GPU",
+    "the ambient source plays"). Write one JSON report with pass/fail per
+    check, plus the screenshots, and exit non-zero on failure so local-ci
+    and wintest can gate on it.
+  Gives 3D_E-0688 an observable for the 60 FPS rule, and is the tool
+  3D_E-0691 would use on the walkthrough. Needs a spec: the expectations
+  and report formats are contracts other tooling binds to.
+  Test: a scene with a deliberately broken shader and a missing asset
+  yields a failing report naming both.
+  **Layman:** Let Vestige walk itself through a scene, check that graphics, sound, physics and the rest are all doing their jobs, and write a pass/fail report.
+  Kind: test.
+  Source: user-request-2026-09-25.
+  Lanes: testing, renderer, audio, physics, core.
+
 ## 0.4.0 — Rendering and geometry at scale
 
 Breaks: the scene format's material and lighting blocks.
