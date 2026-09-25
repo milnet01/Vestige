@@ -23,6 +23,16 @@ may change any interface without notice.
 
 ## [Unreleased]
 
+### 2026-09-25 Fixed — Selecting an object no longer raises a Dear ImGui error; ImGuizmo updated to 1.10 (3D_E-0674)
+
+The editor's move gizmo came from an ImGuizmo commit that passed a
+hard-coded `true` where Dear ImGui 1.92.8 expects draw flags. ImGui
+rejected the call with "Did you swap 'thickness' and 'flags'?" and the
+gizmo's plane handles did not draw. ImGuizmo is now pinned to its latest
+release tag, 1.10, which uses the new call order. The ImPlot pin is
+unchanged; its written reason was false and now says why it stays past
+v1.0 (a commit adapting it to the same ImGui change).
+
 ### 2026-09-25 Fixed — The editor's ground grid no longer shows through terrain and grass (3D_E-0699)
 
 Debug lines were drawn into the editor's output image, whose depth

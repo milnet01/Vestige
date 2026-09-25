@@ -14,8 +14,8 @@ For asset attributions (textures, models, fonts), see [ASSET_LICENSES.md](ASSET_
 These are pulled in via CMake `FetchContent` and built from source. Each
 `GIT_TAG` / version is pinned in `external/CMakeLists.txt`. Update both
 this file and the audit tool's NVD dependency list when bumping a pin.
-Most rows below pin a release tag; four deps (Dear ImGui, ImGuizmo,
-imgui-filebrowser, ImPlot) pin an exact commit on a branch because upstream
+Most rows below pin a release tag; Dear ImGui, imgui-filebrowser and
+ImPlot pin an exact commit on a branch because upstream
 publishes no suitable release tag — see "Branch-commit pins" below.
 `nlohmann/json` is fetched via URL tarball, not git tag.
 
@@ -24,7 +24,7 @@ publishes no suitable release tag — see "Branch-commit pins" below.
 | GLFW             | 3.4                                             | zlib                                              | <https://github.com/glfw/glfw> |
 | GLM              | 1.0.1                                           | MIT (modified)                                    | <https://github.com/g-truc/glm> |
 | Dear ImGui       | commit `4cb21e4a` (docking branch, see below)   | MIT                                               | <https://github.com/ocornut/imgui> |
-| ImGuizmo         | commit `a15acd87` (master snapshot)             | MIT                                               | <https://github.com/CedricGuillemet/ImGuizmo> |
+| ImGuizmo         | `1.10`                                          | MIT                                               | <https://github.com/CedricGuillemet/ImGuizmo> |
 | imgui-filebrowser| commit `47a18845` (master branch, see below)    | MIT                                               | <https://github.com/AirGuanZ/imgui-filebrowser> |
 | imgui-node-editor| v0.9.3                                          | MIT                                               | <https://github.com/thedmd/imgui-node-editor> |
 | ImPlot           | commit `1351ab2c` (master branch, see below)    | MIT                                               | <https://github.com/epezent/implot> |
@@ -41,7 +41,7 @@ publishes no suitable release tag — see "Branch-commit pins" below.
 
 ### Branch-commit pins
 
-Four deps pin an **exact commit on a branch** rather than a release tag,
+The deps below pin an **exact commit on a branch** rather than a release tag,
 because upstream publishes no suitable tag. These are reproducible pins
 (byte-stable builds), not moving-branch references — the distinction
 SECURITY.md §5 ("Pin versions — no latest") cares about. Per project
@@ -52,17 +52,12 @@ rule 8 (`CLAUDE.md`), each non-tag pin carries a written reason:
   have it yet, and the docking branch carries no release tags. Re-pin to a
   newer docking commit deliberately; move to a tag once docking lands on
   `master`.
-- **ImGuizmo — `a15acd87` (2025-12-27):** pinned below the latest master to
-  avoid a GCC 14 compile break introduced upstream (see
-  `external/CMakeLists.txt` for the full reason). Upstream ships no release
-  tags, so this is a Category-(B) branch-commit pin — tracked here, not the
-  `DEPENDENCY_STANDARDS.md` Breaking-Version Registry — even though the trigger
-  is a build break. Re-evaluate when upstream fixes the `vec_t` constructor.
 - **imgui-filebrowser — `47a18845` (master, 2025-09-24):** upstream publishes
   no tags. Bump deliberately at audit-cycle entry.
-- **ImPlot — `1351ab2c` (master, 2026-05-10):** upstream's last tagged release
-  (v0.16) predates the ImGui 1.92.x API Vestige builds against. Bump
-  deliberately; move to a tag once upstream re-tags above v0.16.
+- **ImPlot — `1351ab2c` (master, 2026-05-10):** four commits past the latest
+  release tag, v1.0. One of them adapts ImPlot to Dear ImGui 1.92.8's
+  `AddRect()` signature, which v1.0 predates and Vestige builds against. Move to
+  the first tag that contains that fix.
 
 ### Notes on the LGPL dependency
 

@@ -46,8 +46,8 @@ reproducible, byte-stable pin — not a moving branch ref). This covers both
 directions: pinning *forward* to a commit for a fix/feature that lives only on a
 branch, and pinning *back* to an older commit because a newer commit breaks.
 Recorded in `THIRD_PARTY_NOTICES.md`'s "Branch-commit pins" section. Examples:
-Dear ImGui's docking branch (`master` lacks it); ImGuizmo held below a newer
-commit that broke GCC 14; ImPlot whose last tag predates the ImGui API it needs.
+Dear ImGui's docking branch (`master` lacks it); ImPlot whose last tag predates
+the ImGui API it needs.
 
 Not valid reasons (each is an instruction to bump, not to pin):
 "we haven't tested it yet", "it's newer so it might break", "it works today",

@@ -4163,7 +4163,7 @@ shipped that have no invocation path at all.
   Source: tech-survey-2026-09-02.
   Lanes: deps.
 
-- 📋 [3D_E-0674] **Two dependency pins carry reasons that are expired or false.**
+- ✅ [3D_E-0674] **Two dependency pins carry reasons that are expired or false.**
   Project rule 8 allows a non-latest pin only with a valid written reason at
   the pin site. Two fail that test today, which makes this a rule-8
   compliance item rather than a version question.
@@ -4198,6 +4198,16 @@ shipped that have no invocation path at all.
   subagent review. ImPlot: upstream tags go to v1.0 (524f9fc); our
   pinned commit postdates it; the comment's 'v0.16 predates ImGui 1.92'
   claim is false and still unfixed.
+  Resolved (2026-09-25): ImGuizmo moved to tag 1.10 (latest release,
+  b796ac3), sources now under src/. It also fixed a live bug: selecting
+  an entity raised ImGui's "Did you swap 'thickness' and 'flags'?" and
+  the gizmo's plane handles did not draw; a demoreel shot confirms both
+  gone. ImPlot stays on 1351ab2c: it is 4 commits past v1.0, one of them
+  adapting ImPlot to ImGui's AddRect change; the justification text now
+  says so. Rule 8 review: a fresh subagent passed all six checks
+  (pin, API signatures, handedness and reversed-depth behaviour, ImPlot
+  claim, docs, upgrade range) and found two stale doc passages
+  (THIRD_PARTY_NOTICES, SECURITY.md), both fixed.
   **Layman:** Two version freezes have written justifications that are no longer true.
   Kind: doc-fix.
   Source: tech-survey-2026-09-02.

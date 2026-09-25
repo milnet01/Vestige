@@ -92,7 +92,7 @@ Malformed shaders can crash drivers or hang the GPU.
 
 ## 5. Dependency Security
 
-- **Pin versions** in CMake — no "latest" or moving-branch references. Every dep pins a release tag or an exact commit SHA. Four deps (ImGui, ImGuizmo, imgui-filebrowser, ImPlot) pin a branch *commit* rather than a release tag because upstream ships no suitable tag — these are still reproducible pins; see THIRD_PARTY_NOTICES.md "Branch-commit pins" for the per-pin reason per CLAUDE.md project rule 8.
+- **Pin versions** in CMake — no "latest" or moving-branch references. Every dep pins a release tag or an exact commit SHA. ImGui, imgui-filebrowser and ImPlot pin a branch *commit* rather than a release tag because upstream ships no suitable tag — these are still reproducible pins; see THIRD_PARTY_NOTICES.md "Branch-commit pins" for the per-pin reason per CLAUDE.md project rule 8.
 - Only well-maintained, reputable, permissively-licensed libs.
 - Review changelogs on update.
 - Fetch via CMake `FetchContent` with specific commits/tags (tarball URL for `nlohmann/json` per THIRD_PARTY_NOTICES.md).
@@ -102,10 +102,10 @@ Malformed shaders can crash drivers or hang the GPU.
 
 | Library | Version strategy | Source |
 |---------|------------------|--------|
-| GLFW, GLM, Google Test, Jolt, Recast, FreeType, imgui-node-editor, tinyexr, tinygltf | Tagged release (FetchContent) | GitHub |
+| GLFW, GLM, Google Test, Jolt, Recast, FreeType, ImGuizmo, imgui-node-editor, tinyexr, tinygltf | Tagged release (FetchContent) | GitHub |
 | nlohmann/json | Versioned release tarball (FetchContent URL) | GitHub |
 | OpenAL-Soft | Tagged release, built from source (FetchContent) | kcat/openal-soft |
-| ImGui, ImGuizmo, imgui-filebrowser, ImPlot | Branch commit pin (FetchContent) — see THIRD_PARTY_NOTICES "Branch-commit pins" | GitHub |
+| ImGui, imgui-filebrowser, ImPlot | Branch commit pin (FetchContent) — see THIRD_PARTY_NOTICES "Branch-commit pins" | GitHub |
 | glad | Generated, committed | glad generator |
 | stb_image, dr_libs | Vendored single-header (committed copy) | `external/stb`, `external/dr_libs` |
 

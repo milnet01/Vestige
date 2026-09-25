@@ -191,24 +191,23 @@ target_link_libraries(imgui_lib PUBLIC glfw)
 target_compile_options(imgui_lib PRIVATE -w)
 set(imgui_SOURCE_DIR ${imgui_SOURCE_DIR} PARENT_SCOPE)
 
-# ImGuizmo — 3D transform gizmos for the editor
-# Pinned to a15acd8 (LightRig Editor, 2025-12-27) — the next upstream commit
-# 1e5371c "Add option to DrawAxes" introduced uses of vec_t(float, float, float)
-# without adding the matching constructor, so master refuses to compile under
-# the GCC 14 toolchain we ship. Re-evaluate the pin when upstream lands a fix
-# (track via the open issues on CedricGuillemet/ImGuizmo).
+# ImGuizmo — 3D transform gizmos for the editor. Latest release tag (1.10).
+# 1.10 moved the sources under src/ and adopted Dear ImGui 1.92.8's
+# AddPolyline(…, thickness, flags) order; older commits passed a hard-coded
+# `true` as flags, which 1.92.8 rejects ("Did you swap 'thickness' and
+# 'flags'?"), so the gizmo's plane handles failed to draw.
 FetchContent_Declare(
     imguizmo
     GIT_REPOSITORY https://github.com/CedricGuillemet/ImGuizmo.git
-    GIT_TAG        a15acd87a3f3241a29ea1363ceafc680dca3a96b
+    GIT_TAG        1.10
     # Engine defines `imguizmo_lib` STATIC target below — SOURCE_SUBDIR skip.
     SOURCE_SUBDIR  __engine_defines_target__
 )
 FetchContent_MakeAvailable(imguizmo)
 add_library(imguizmo_lib STATIC
-    ${imguizmo_SOURCE_DIR}/ImGuizmo.cpp
+    ${imguizmo_SOURCE_DIR}/src/ImGuizmo.cpp
 )
-target_include_directories(imguizmo_lib PUBLIC ${imguizmo_SOURCE_DIR})
+target_include_directories(imguizmo_lib PUBLIC ${imguizmo_SOURCE_DIR}/src)
 target_link_libraries(imguizmo_lib PUBLIC imgui_lib)
 target_compile_options(imguizmo_lib PRIVATE -w)
 set(imguizmo_SOURCE_DIR ${imguizmo_SOURCE_DIR} PARENT_SCOPE)
@@ -356,9 +355,10 @@ set(USE_STATIC_MSVC_RUNTIME_LIBRARY OFF CACHE BOOL "" FORCE)
 FetchContent_MakeAvailable(JoltPhysics)
 
 # ImPlot — 2D plotting extension for ImGui (MIT)
-# Pinned to 1351ab2 (master tip, 2026-05-10) for reproducible builds. The latest
-# tagged release (v0.16) predates the ImGui 1.92.x API we build against, so we
-# track a master commit rather than the tag. Bump deliberately.
+# Pinned to 1351ab2 (master, 2026-05-10), four commits past the latest release
+# tag v1.0. One of them is "fix: ImDrawList::AddRect() signature change in 19276
+# (#703)": v1.0 predates Dear ImGui 1.92.8's AddRect(…, thickness, flags) order
+# that we build against. Move to the first tag that contains that fix.
 FetchContent_Declare(
     implot
     GIT_REPOSITORY https://github.com/epezent/implot.git
