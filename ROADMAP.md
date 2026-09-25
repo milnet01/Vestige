@@ -4817,7 +4817,7 @@ Retrofit completed across 8 commits — every Phase-10 Settings-store consumer n
   Source: user-request-2026-09-25.
   Lanes: testing, renderer, audio, physics, core.
 
-- 📋 [3D_E-0699] **A thin horizontal line crosses the meadow grass at a fixed screen height.**
+- ✅ [3D_E-0699] **A thin horizontal line crosses the meadow grass at a fixed screen height.**
   Reported by the demoreel session from its first-cut recording of the
   meadow scene (3D_E-0695): the line sits at the same height in every
   frame checked. Unverified here. It may be a render seam or an artefact
@@ -4825,11 +4825,60 @@ Retrofit completed across 8 commits — every Phase-10 Settings-store consumer n
   check whether it follows the camera or the screen.
   The same recording shows the "Welcome to Vestige" first-run panel
   docked left, so an idle recording shows the editor, not the bare scene.
+  Located (2026-09-25): a real render defect, not the recording. A frame
+  at 13 s shows the viewport's lower part darker and striped below a hard
+  edge. Where: engine/renderer/renderer.cpp renderShadowPass, the
+  `c == 0 && m_grassShadowCaster` branch. GPU grass casts shadows into
+  cascade 0 ONLY (3D_E-0042). So inside cascade 0 the blades self-shadow:
+  darker, and striped by acne, because assets/shaders/grass.frag.glsl
+  calcGrassShadow uses a constant bias of 0.003 with no normal offset.
+  Past cascade 0's far split the grass casts nothing, so the darkening
+  stops dead. That split is the hard edge. The branch's comment says no
+  second visible boundary is introduced; the frame shows otherwise.
+  Confirm by: render the meadow with the grass caster branch disabled.
+  The band and the stripes should both vanish. Then fade grass
+  self-shadow out before the split, and bias it by the cascade's
+  texel size.
+  CORRECTION (2026-09-25, same day): the grass-shadow location above is
+  WRONG. It was tested and refuted. With --isolate-feature=grass-shadow the
+  band is unchanged, and it survives every other isolate too (bloom,
+  ssao, ibl, sh-grid, motion-overlay). It appears in the editor viewport
+  only, never under --play.
+  Real cause: the editor GROUND GRID (engine.cpp "7c. Queue ground grid",
+  100 m square at y = 0.03, centred on the camera) is drawn over the
+  scene. Sampled pixels show rows of one constant grey whose spacing
+  widens toward the camera, which is a perspective grid; a 4x zoom shows
+  both line directions. Its far edge, 50 m out, is the hard line.
+  Why it shows through: DebugDraw::flush draws into m_outputFbo, whose
+  only depth is the selection-outline renderbuffer, which never holds
+  scene depth. It also never enables the depth test its comment claims.
+  So every debug line ignores terrain and grass.
+  Fix direction: test debug lines against the resolved scene depth
+  (reverse-Z) in the line shader.
+  Resolved (2026-09-25): debug lines are now tested against the
+  resolved scene depth in debug_line.frag.glsl. Measured on the meadow
+  editor view: grid-grey viewport pixels went from 26070 to 0. On the
+  material demo's flat floor the grid still shows and is hidden behind
+  the cubes. tests/test_debug_draw_occlusion.cpp covers it; removing the
+  shader's discard turns LineBehindSceneDepthIsHidden red with 8 of 8
+  pixels lit.
   **Layman:** A faint straight line shows across the grass in the demo video; find out whether it is a drawing bug.
   Kind: investigate.
   Source: peer-report demoreel 2026-09-25.
   Lanes: rendering.
   Evidence: ~/Videos/demoreel-demos/vestige-demo.mp4
+
+- 📋 [3D_E-0701] **The welcome panel's Start empty keeps the meadow's terrain and grass.**
+  The panel describes Start empty as "One camera, one directional light,
+  one ground plane." Clicking it on first launch replaced the entity list
+  with Ground, Sun and Camera, but the viewport still showed the meadow's
+  terrain, GPU grass and trees. Unverified whether terrain and foliage
+  are meant to live outside the scene. Seen in a demoreel shot at
+  1920x1080, Release build.
+  **Layman:** Choosing "Start empty" should give a bare scene, but the meadow's hills and grass stay on screen.
+  Kind: investigate.
+  Source: in-session-2026-09-25 (3D_E-0699 verification).
+  Lanes: editor.
 
 ## 0.4.0 — Rendering and geometry at scale
 

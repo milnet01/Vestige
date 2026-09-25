@@ -23,6 +23,15 @@ may change any interface without notice.
 
 ## [Unreleased]
 
+### 2026-09-25 Fixed — The editor's ground grid no longer shows through terrain and grass (3D_E-0699)
+
+Debug lines were drawn into the editor's output image, whose depth
+buffer never holds the scene's depth, so the grid drew over everything
+as a dark striped band. `DebugDraw::flush` now takes the resolved scene
+depth, and the line shader hides what the scene is in front of. The
+grid still shows on flat floors. Covered by
+`tests/test_debug_draw_occlusion.cpp`.
+
 ### 2026-09-25 Fixed — Saved scenes record the real engine version (3D_E-0683)
 
 Scene files stamped `engine_version` "0.5.0", a version Vestige has never

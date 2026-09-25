@@ -19,6 +19,7 @@ add_executable(vestige_tests
     test_volumetric_fog_gpu.cpp
     test_gi_gpu.cpp
     test_gi_probe_gpu.cpp
+    test_debug_draw_occlusion.cpp
     test_gi_probe_math.cpp
     test_asset_locator.cpp
     test_fog_benchmark.cpp

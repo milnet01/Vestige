@@ -2099,7 +2099,7 @@ void Engine::run()
             m_renderer->bindOutputFbo();
             glm::mat4 vp = m_camera->getProjectionMatrix(aspectRatio)
                          * m_camera->getViewMatrix();
-            m_debugDraw.flush(vp);
+            m_debugDraw.flush(vp, m_renderer->getResolvedDepthTexture());
 
             // 7d. Render brush preview circle (foliage brush)
             {

@@ -70,7 +70,10 @@ public:
 
     /// @brief Renders all queued lines and clears the buffer.
     /// @param viewProjection Combined VP matrix from the camera.
-    void flush(const glm::mat4& viewProjection);
+    /// @param sceneDepthTexture Resolved reverse-Z scene depth covering the
+    ///        current viewport. A line behind the scene is discarded. 0 draws
+    ///        every line unoccluded (a preview with no scene depth).
+    void flush(const glm::mat4& viewProjection, GLuint sceneDepthTexture = 0);
 
     /// @brief Returns the number of queued vertices (for diagnostics).
     static size_t getQueuedVertexCount();

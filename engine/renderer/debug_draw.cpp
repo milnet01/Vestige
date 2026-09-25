@@ -8,6 +8,7 @@
 
 #include <glm/gtc/constants.hpp>
 
+#include <array>
 #include <cmath>
 
 namespace Vestige
@@ -203,7 +204,7 @@ size_t DebugDraw::getQueuedVertexCount()
 // flush — upload queued vertices and render
 // ---------------------------------------------------------------------------
 
-void DebugDraw::flush(const glm::mat4& viewProjection)
+void DebugDraw::flush(const glm::mat4& viewProjection, GLuint sceneDepthTexture)
 {
     if (!m_initialized || s_vertices.empty())
     {
@@ -231,15 +232,28 @@ void DebugDraw::flush(const glm::mat4& viewProjection)
                          s_vertices.data());
 
     // Save state
-    GLboolean prevDepthMask;
+    GLboolean prevDepthMask = GL_TRUE;
     glGetBooleanv(GL_DEPTH_WRITEMASK, &prevDepthMask);
-    // Render setup: depth test on, depth write off
+    // Depth write off. The bound target's depth buffer need not hold scene
+    // depth (the editor output FBO's holds only outline stencil), so
+    // occlusion is tested in the shader against sceneDepthTexture (3D_E-0699).
     // Note: glLineWidth > 1.0 is unsupported on Mesa/AMD (GL_INVALID_VALUE).
     // Lines are always 1px wide; use geometry or screen-space techniques for thicker lines.
     glDepthMask(GL_FALSE);
 
     m_shader.use();
     m_shader.setMat4("u_viewProjection", viewProjection);
+    m_shader.setBool("u_depthOcclude", sceneDepthTexture != 0);
+    if (sceneDepthTexture != 0)
+    {
+        std::array<GLint, 4> viewport = {0, 0, 1, 1};
+        glGetIntegerv(GL_VIEWPORT, viewport.data());
+        glBindTextureUnit(0, sceneDepthTexture);
+        m_shader.setInt("u_sceneDepth", 0);
+        m_shader.setVec4("u_viewportRect",
+                         glm::vec4(std::get<0>(viewport), std::get<1>(viewport),
+                                   std::get<2>(viewport), std::get<3>(viewport)));
+    }
 
     glBindVertexArray(m_vao);
     glDrawArrays(GL_LINES, 0, static_cast<GLsizei>(vertexCount));
