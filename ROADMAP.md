@@ -4220,8 +4220,13 @@ shipped that have no invocation path at all.
   Source: tech-survey-2026-09-02.
   Lanes: research.
 
-- 📋 [3D_E-0685] **The tree dither copy has no parity test, and CLAUDE.md cites it as the example of one.**
+- ✅ [3D_E-0685] **The tree dither copy has no parity test, and CLAUDE.md cites it as the example of one.**
   `tree_mesh.frag.glsl` and `tree_shadow.frag.glsl` both define `interleavedGradientNoise`, and the shadow copy's comment says it matches. Nothing pins them: no file under `tests/` mentions either shader or `dither`, and the nine text-parity tests cover IBL, bloom, colour grading, subsurface, terrain GGX, audio curves, cloth and grass shadow only. CLAUDE.md's shader rule cites this exact pair as its worked example of copy-and-pin, so its own precedent sits in the state the same sentence forbids. A drift would fail the way that rule describes: a warning at load time, trees silently stop casting shadows. Two cold lanes found this independently. The fix is the test, not the sentence: pin the pair the way `test_grass_shadow_parity.cpp` does.
+  Resolved (2026-09-25): tests/test_tree_shadow_parity.cpp pins
+  interleavedGradientNoise and the signed dissolve block between
+  tree_mesh.frag.glsl and tree_shadow.frag.glsl. Comments and whitespace
+  are normalised away. Proven red by mutating each copy in turn.
+  CLAUDE.md's 'known unpinned case' sentence is deleted.
   **Layman:** Two tree shaders share a copied function with nothing checking they stay identical, and the rules file points at that pair as its example of doing it properly.
   Kind: test.
   Source: rule-14 gate on CLAUDE.md, 2026-09-21.
@@ -4244,8 +4249,17 @@ shipped that have no invocation path at all.
   Kind: doc-fix.
   Source: rule-14 gate on CLAUDE.md, 2026-09-21.
 
-- 📋 [3D_E-0689] **The rule 1 move to the global spec convention has eight verified gate findings, unfixed.**
+- ✅ [3D_E-0689] **The rule 1 move to the global spec convention has eight verified gate findings, unfixed.**
   The diff-scoped rule-14 gate on commit cee2a71 DID complete. That commit body says the session ended before the report arrived; it was true when written and is now overtaken — the gate ran, and these are its findings. Nothing here is fixed. Q1, the restatement diverged from its own decider: rule 1 says "a new flag" is the build-it case, but spec-format.md § 1 puts a CLI flag other tooling scripts against in the TRIGGER column and says "the headline governs, not the examples"; § 1's skip list reads "a new flag on an existing command" and rule 1 dropped both qualifications. "A new toggle" appears in no § 1 skip list either, and a user-facing toggle here routinely touches settings, editor UI and the consuming subsystem, which fires the three-subsystem trigger. Q1, misattributed authority: rule 1 says "the gate before anyone builds is rule 9's cold read", but rule 9 as written carries no trigger and no timing — that lives in global rule 14, which rule 1 does not cite. Q2, a gap the edit created: rule 7 binds the CPU/GPU placement record to "every spec" while rule 1 sends most work down a no-spec path, and no passage anywhere requires the record for that work — spec-format.md's required sections contain no CPU/GPU section, and CODING_STANDARDS.md § 17 makes the recording spec-bound too. The same applies to rule 1's "cite the sources in the spec" when there is no spec. Q2: a plan is not in rule 9's subject list, so this file alone under-gates a document this file alone introduced. Q2: rule 1 closes docs/phases/ while rules 4 and 9 still presuppose phases and the design-doc genre, and future phases are already drafted, so that genre now has no home. Q3, the sharpest: write-spec drafts spec-format.md's twelve required sections, none of which is CPU/GPU placement, and this project has no docs/standards/spec-format-overrides.md — so an author can run write-spec, fill every section, pass spec_lint and a converged cold read, and ship a spec in breach of rule 7 with every signal green. Q3: rule 7 admits no exception while spec-format.md says an appended section that does not apply is deleted outright, and the project's own SPEC_TEMPLATE.md already marks the section conditional — so for a save-schema or localization spec the two cannot both be satisfied and nothing says which was breached. The lane also disclosed that its context was pre-loaded with the pre-edit text of both rules.
+  Resolved (2026-09-25): all eight findings fixed in a5ffbae. Rule 1
+  cites spec-format section 1's headline and global rule 14, sources go
+  in the roadmap item without a spec, and unstarted phases go to
+  docs/specs/. Rule 7 is scoped to GPU work and records in the roadmap
+  item without a spec. Rule 9 lists plans. New
+  docs/standards/spec-format-overrides.md makes write-spec draft the
+  placement section. That file's own review converged at loop 3
+  (933ff09, 04dd4bd, 99abe46) and moved rule 7 onto CODING_STANDARDS
+  section 17's table.
   **Layman:** The change to how we decide whether work needs a design document was reviewed and the review found eight problems with it, none fixed yet.
   Kind: doc-fix.
   Source: diff-scoped rule-14 gate on cee2a71, 2026-09-21.
