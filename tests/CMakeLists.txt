@@ -457,6 +457,42 @@ if(Python3_FOUND)
     set_tests_properties(ShaderLintCatchesViolation
                          PROPERTIES WILL_FAIL TRUE)
 
+    # --- Shader compile check (3D_E-0638) -------------------------------------
+    # Compiles every shader with glslangValidator, the Khronos reference front
+    # end: the only semantic check the shaders get before a GPU runs them.
+    # VESTIGE_REQUIRE_GLSLANG=ON (set by CI's Linux jobs and local-ci.sh) makes a
+    # missing validator a configure error, so the check cannot vanish silently.
+    find_program(VESTIGE_GLSLANG_VALIDATOR NAMES glslangValidator)
+    option(VESTIGE_REQUIRE_GLSLANG
+           "Fail configure if glslangValidator is not installed" OFF)
+    if(VESTIGE_GLSLANG_VALIDATOR)
+        add_test(
+            NAME ShaderCompileGlslang
+            COMMAND Python3::Interpreter
+                    ${CMAKE_SOURCE_DIR}/tools/shader_lint.py --strict
+                    --glslang ${VESTIGE_GLSLANG_VALIDATOR}
+        )
+        # The fixture passes the #version line-scan, so only the compile can
+        # fail it: pins that a real type error turns the check red.
+        add_test(
+            NAME ShaderCompileCatchesError
+            COMMAND Python3::Interpreter
+                    ${CMAKE_SOURCE_DIR}/tools/shader_lint.py --strict
+                    --root ${CMAKE_CURRENT_SOURCE_DIR}/fixtures/shader_compile
+                    --glslang ${VESTIGE_GLSLANG_VALIDATOR}
+        )
+        set_tests_properties(ShaderCompileCatchesError
+                             PROPERTIES WILL_FAIL TRUE)
+    elseif(VESTIGE_REQUIRE_GLSLANG)
+        message(FATAL_ERROR
+            "VESTIGE_REQUIRE_GLSLANG is ON but glslangValidator was not found "
+            "(install glslang-tools).")
+    else()
+        message(WARNING
+            "glslangValidator not found — the shader compile check "
+            "(ShaderCompileGlslang) is not registered.")
+    endif()
+
     # --- Performance-regression gate (3D_E-0030) -------------------------------
     # Comparator that reduces a profiler CSV and compares it to a committed
     # baseline (design: docs/phases/phase_10_perf_regression_gate_design.md). The

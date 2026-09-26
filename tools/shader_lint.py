@@ -28,12 +28,19 @@ STRICT by default. Fails the build (exit 1) on:
 Detection is a lightweight regex line-scan (same approach as
 tools/localization_audit.py), not a GLSL parse. `--lint` downgrades the checks
 to warnings (exit 0) for local pre-commit runs.
+
+`--glslang PATH` adds a real compile (3D_E-0638): every shader goes through
+glslangValidator, the Khronos reference front end, with its stage taken from
+the file name (`name.frag.glsl` -> frag). A shader that fails to compile, or
+whose stage cannot be read from its name, is a violation. This is the only
+semantic check the shaders get before a GPU runs them.
 """
 
 from __future__ import annotations
 
 import argparse
 import re
+import subprocess
 import sys
 from pathlib import Path
 
@@ -86,6 +93,46 @@ def scan_shaders(roots: list[Path]) -> tuple[list[str], int]:
     return violations, count
 
 
+_STAGES = ("vert", "frag", "comp", "geom", "tesc", "tese")
+
+
+def _stage_of(path: Path) -> str | None:
+    """`name.frag.glsl` or `name.frag` -> "frag"; None if no stage in the name."""
+    parts = path.name.split(".")
+    for part in reversed(parts[1:]):
+        if part in _STAGES:
+            return part
+    return None
+
+
+def compile_shaders(roots: list[Path], validator: str) -> tuple[list[str], int]:
+    """Compile every shader under `roots` with glslangValidator.
+
+    Returns (violations, compiled_count).
+    """
+    violations: list[str] = []
+    count = 0
+    for root in roots:
+        for path in sorted(root.rglob("*")):
+            if path.suffix not in _SHADER_SUFFIXES or not path.is_file():
+                continue
+            stage = _stage_of(path)
+            if stage is None:
+                violations.append(
+                    f"{path}: cannot tell the shader stage from the file name; "
+                    f"name it <name>.<{'|'.join(_STAGES)}>.glsl")
+                continue
+            result = subprocess.run([validator, "-S", stage, str(path)],
+                                    capture_output=True, text=True)
+            count += 1
+            if result.returncode != 0:
+                detail = "\n    ".join(
+                    line for line in result.stdout.splitlines()
+                    if "ERROR" in line) or result.stdout.strip()
+                violations.append(f"{path}: glslangValidator failed:\n    {detail}")
+    return violations, count
+
+
 def main(argv: list[str] | None = None) -> int:
     repo = Path(__file__).resolve().parent.parent
 
@@ -100,6 +147,8 @@ def main(argv: list[str] | None = None) -> int:
     ap.add_argument("--root", action="append", type=Path, default=None,
                     help="shader root to scan (repeatable; "
                          "default: <repo>/assets/shaders)")
+    ap.add_argument("--glslang", metavar="PATH", default=None,
+                    help="also compile every shader with this glslangValidator")
     args = ap.parse_args(argv)
 
     roots = args.root or [repo / "assets" / "shaders"]
@@ -109,6 +158,10 @@ def main(argv: list[str] | None = None) -> int:
             return 2
 
     violations, count = scan_shaders(roots)
+    compiled = 0
+    if args.glslang:
+        compile_violations, compiled = compile_shaders(roots, args.glslang)
+        violations += compile_violations
 
     if violations:
         label = "ERROR" if args.strict else "warning"
@@ -121,6 +174,9 @@ def main(argv: list[str] | None = None) -> int:
 
     print(f"shader_lint: clean — {count} shader(s) on `#version "
           f"{_ALLOWED_VERSION}`.")
+    if args.glslang:
+        print(f"shader_lint: {compiled} shader(s) compiled clean with "
+              f"{args.glslang}.")
     return 0
 
 

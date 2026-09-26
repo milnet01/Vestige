@@ -188,6 +188,7 @@ preflight() {
     ver_line "cmake"      cmake --version
     ver_line "ninja"      ninja --version
     ver_line "cppcheck"   cppcheck --version
+    command -v glslangValidator >/dev/null 2>&1 && ver_line "glslang" glslangValidator --version || printf '  %-11s %s\n' "glslang" "!! MISSING (configure will FAIL: VESTIGE_REQUIRE_GLSLANG=ON)"
     ver_line "clang-tidy" clang-tidy --version
     command -v gitleaks >/dev/null 2>&1 && ver_line "gitleaks" gitleaks version || printf '  %-11s %s\n' "gitleaks" "!! MISSING (secret-scan stage will SKIP)"
     command -v actionlint >/dev/null 2>&1 && ver_line "actionlint" actionlint --version || printf '  %-11s %s\n' "actionlint" "!! MISSING (workflow-lint stage will SKIP)"
@@ -212,7 +213,8 @@ configure() {  # configure <dir> <build-type>
         -DCMAKE_C_COMPILER_LAUNCHER=ccache \
         -DCMAKE_CXX_COMPILER_LAUNCHER=ccache \
         -DCMAKE_EXPORT_COMPILE_COMMANDS=ON \
-        -DVESTIGE_FETCH_ASSETS=OFF
+        -DVESTIGE_FETCH_ASSETS=OFF \
+        -DVESTIGE_REQUIRE_GLSLANG=ON
 }
 
 # Build + test one configuration. Reuses an existing build dir (warm/incremental);

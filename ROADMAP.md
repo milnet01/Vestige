@@ -3841,7 +3841,7 @@ shipped that have no invocation path at all.
   <build>/audit-clang-tidy/, or configure with
   -DCMAKE_DISABLE_PRECOMPILE_HEADERS=ON.
 
-- 📋 [3D_E-0638] **GLSL has no static analysis at all: 92 shaders, zero tool coverage.**
+- ✅ [3D_E-0638] **GLSL has no static analysis at all: 92 shaders, zero tool coverage.**
   No tool in check-code's set covers GLSL (its detection table has no GLSL row), and tools/shader_lint.py is a data-lint wired into ctest, not a semantic analyser -- it verifies `#version 450 core` and passes.
   The cold read of those 92 files found 2 CRITICAL and 4 HIGH, including two shipped features that are arithmetically inert. Two were fixed this pass; still open from that lane: terrain.frag.glsl:530 diffuse missing the 1/PI and kD factors (terrain is ~PI x brighter than every other surface and not energy-conserving against its own specular); bloom_downsample.frag.glsl:41 extra Reinhard squash making every light above the threshold bloom identically; cloth_integrate.comp.glsl:39 writing prevPositions that no shader reads, so GPU cloth has no PBD velocity feedback; water.frag.glsl:180 perturbing world Z with the tangent-normal Z channel on the SIMPLE (weak-hardware) tier.
   Evaluate glslangValidator or a spirv-based linter for the tool set.
@@ -3895,6 +3895,17 @@ shipped that have no invocation path at all.
   headline and untouched -- `tools/shader_lint.py` remains a data-lint
   (it verifies `#version 450 core` over 92 files) and no semantic
   analyser covers GLSL.
+  Resolved 2026-09-26: the headline is closed. tools/shader_lint.py
+  --glslang compiles every shader with glslangValidator (Khronos
+  reference front end), stage from the file name; a compile failure or an
+  unreadable stage is a violation. ctest ShaderCompileGlslang runs it over
+  assets/shaders (92/92 clean, ~14 s); ShaderCompileCatchesError pins it
+  red on a fixture that passes the #version scan and has a type error.
+  CI's linux-build-test installs glslang-tools and configures with
+  VESTIGE_REQUIRE_GLSLANG=ON, as does local-ci.sh, so a missing validator
+  fails configure instead of skipping. The remaining shader defect,
+  cloth_integrate.comp.glsl's unread prevPositions, stays recorded
+  against Cl9.
 
 - ✅ [3D_E-0639] **The Ruler / Measure tool is on the menu and its clicks reach nothing.**
   Verified by call-site enumeration, not inferred. `editor.cpp:609` ships an `ImGui::MenuItem("Ruler / Measure", nullptr, m_rulerTool.isActive())` that toggles the tool active and cancels it -- so a user can reach it and it reports its own state. `engine/core/engine.cpp` contains ZERO references to `rulerTool` (grep -c = 0), and its click handler dispatches wallTool (:1432), roomTool (:1442), roofTool (:1465), stairTool (:1474) and pathTool (:1488). `RulerTool::processClick` (ruler_tool.cpp:25), `startMeasurement`, `cancel` and `queueDebugDraw` are never called from the runtime.

@@ -71,7 +71,7 @@ jobs:
             libgl1-mesa-dev libglu1-mesa-dev
             libx11-dev libxrandr-dev libxinerama-dev libxcursor-dev libxi-dev libxxf86vm-dev
             libwayland-dev libxkbcommon-dev
-            xvfb cppcheck
+            xvfb cppcheck glslang-tools
             python3 python3-pip python3-xmltodict python3-yaml python3-flask
 
       - name: Set up ccache
@@ -113,7 +113,8 @@ jobs:
             -DCMAKE_C_COMPILER_LAUNCHER=ccache \
             -DCMAKE_CXX_COMPILER_LAUNCHER=ccache \
             -DCMAKE_EXPORT_COMPILE_COMMANDS=ON \
-            -DVESTIGE_FETCH_ASSETS=OFF
+            -DVESTIGE_FETCH_ASSETS=OFF \
+            -DVESTIGE_REQUIRE_GLSLANG=ON
 
       - name: Build
         run: cmake --build build -j "$(nproc)"

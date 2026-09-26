@@ -23,6 +23,18 @@ may change any interface without notice.
 
 ## [Unreleased]
 
+### 2026-09-26 Added — Every shader is compiled by the reference GLSL compiler in CI (3D_E-0638)
+
+Shader code had no automatic checking beyond its version line, and
+several real shader bugs were found only by hand. The test suite now
+compiles all shaders with glslangValidator and fails on any error.
+
+- **tools/shader_lint.py --glslang**
+  Compiles every shader, taking its stage from the file name. A shader that fails to compile, or whose stage cannot be read from its name, fails the check.
+
+- **Required in CI**
+  The Linux CI job installs glslang-tools and configures with VESTIGE_REQUIRE_GLSLANG=ON, as does scripts/local-ci.sh, so the check cannot silently disappear.
+
 ### 2026-09-26 Fixed — SMAA is now the real SMAA (3D_E-0631)
 
 Selecting SMAA anti-aliasing used home-made lookup tables and home-made
