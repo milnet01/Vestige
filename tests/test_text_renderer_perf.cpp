@@ -26,14 +26,15 @@
 
 #include "gl_test_fixture.h"
 #include "lsan_guard.h"
+#include "perf_bench_helpers.h"
 
 #include <glad/gl.h>
 
 #include <algorithm>
 #include <cctype>
 #include <chrono>
+#include <iostream>
 #include <string>
-#include <vector>
 
 using namespace Vestige;
 
@@ -74,8 +75,8 @@ class TextRendererPerfTest : public ::Vestige::Test::GLTestFixture
 };
 
 // Test 23 — the batched HUD pass for 20 labels (~40 chars each, ~800 glyphs)
-// stays within the per-frame budget. Median of 8 frames dodges a cold-cache
-// outlier (design § 8 test 23).
+// stays within the per-frame budget (design § 8 test 23). Timed with the
+// shared harness in perf_bench_helpers.h (3D_E-0656).
 TEST_F(TextRendererPerfTest, HudPassUnderBudget)
 {
     TextRenderer tr;
@@ -115,28 +116,25 @@ TEST_F(TextRendererPerfTest, HudPassUnderBudget)
     // as MruCacheSkipsStackWalk; see tests/lsan_guard.h).
     Vestige::Test::ScopedLeakCheckDisable noLeakTracking;
 
-    // Warm the glyph cache + GL pipeline so the timed frames measure the warm
-    // steady-state path, not first-frame compilation.
-    for (int i = 0; i < 3; ++i) timeFrame();
-
-    constexpr int kFrames = 8;
-    std::vector<double> micros;
-    micros.reserve(kFrames);
-    for (int f = 0; f < kFrames; ++f)
-    {
-        micros.push_back(timeFrame());
-    }
-
-    std::sort(micros.begin(), micros.end());
-    const double medianMicros = micros[micros.size() / 2];
+    // Warm-up, sample size and statistic come from the shared harness
+    // (3D_E-0656): the median of eight frames after three warm-ups is the
+    // scheme 3D_E-0626 measured at a 76% run-to-run spread. The gated figure
+    // is the minimum of many runs; preemption only ever adds time to a run.
+#if !defined(NDEBUG)
+    const bool gating = false;
+#else
+    const bool gating = !isSoftwareRenderer();
+#endif
+    const Vestige::Test::BenchResult bench = Vestige::Test::runBench(timeFrame, gating);
+    const double gatedMicros = bench.gated;
 
 #if !defined(NDEBUG)
     // Debug (-O0) builds run this path 5-10× slower than the optimised build
     // the § 9 budget targets, so the wall-clock is not comparable. Exercise the
     // path (proving it does not crash + warming the shaping work) but skip the
     // gate; the standard Debug test suite reports the number without failing.
-    GTEST_SKIP() << "non-optimised (Debug) build — HUD-pass median "
-                 << medianMicros << " µs not gated against the "
+    GTEST_SKIP() << "non-optimised (Debug) build — HUD pass "
+                 << Vestige::Test::benchSummary(bench) << " not gated against the "
                  << kHudPassBudgetMicros
                  << " µs budget (enforced in optimised builds).";
 #endif
@@ -145,13 +143,14 @@ TEST_F(TextRendererPerfTest, HudPassUnderBudget)
     {
         GTEST_SKIP() << "software renderer ("
                      << reinterpret_cast<const char*>(glGetString(GL_RENDERER))
-                     << ") — HUD-pass median " << medianMicros
-                     << " µs not gated against the " << kHudPassBudgetMicros
+                     << ") — HUD pass " << Vestige::Test::benchSummary(bench)
+                     << " not gated against the " << kHudPassBudgetMicros
                      << " µs GPU budget.";
     }
 
-    EXPECT_LE(medianMicros, kHudPassBudgetMicros)
+    std::cout << "[   PERF   ] HUD pass " << Vestige::Test::benchSummary(bench) << "\n";
+    EXPECT_LE(gatedMicros, kHudPassBudgetMicros)
         << "HUD pass (20 labels / " << (kLabels * kGlyphsPerLabel)
-        << " glyphs) median " << medianMicros << " µs exceeds the "
+        << " glyphs) minimum " << gatedMicros << " µs exceeds the "
         << kHudPassBudgetMicros << " µs / frame budget.";
 }

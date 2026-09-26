@@ -12,9 +12,10 @@
 #include <gtest/gtest.h>
 
 #include "audio/audio_reverb.h"
+#include "perf_bench_helpers.h"
 
-#include <algorithm>
 #include <chrono>
+#include <iostream>
 #include <vector>
 
 using namespace Vestige;
@@ -185,14 +186,15 @@ TEST(ReverbZoneSelect, SelectionUnderPerFrameBudget)
         return std::chrono::duration<double, std::micro>(t1 - t0).count();
     };
 
-    for (int i = 0; i < 4; ++i) timeOnce();  // warm the cache / branch predictor
-
-    constexpr int kRuns = 16;
-    std::vector<double> micros;
-    micros.reserve(kRuns);
-    for (int i = 0; i < kRuns; ++i) micros.push_back(timeOnce());
-    std::sort(micros.begin(), micros.end());
-    const double medianMicros = micros[micros.size() / 2];
+    // Warm-up, sample size and statistic come from the shared harness
+    // (3D_E-0656), replacing four warm-ups and the median of sixteen. The gated
+    // figure is the minimum of many runs; preemption only ever adds time.
+#if !defined(NDEBUG)
+    const bool gating = false;
+#else
+    const bool gating = true;
+#endif
+    const Vestige::Test::BenchResult bench = Vestige::Test::runBench(timeOnce, gating);
 
     // design § 7: ≤ 0.05 ms = 50 µs main-thread per frame.
     constexpr double kBudgetMicros = 50.0;
@@ -201,12 +203,13 @@ TEST(ReverbZoneSelect, SelectionUnderPerFrameBudget)
     // Debug (-O0) runs this several× slower than the optimised build the budget
     // targets, so the wall-clock is not comparable — exercise the path (proving
     // it does not crash) but skip the gate. Enforced in Release.
-    GTEST_SKIP() << "non-optimised (Debug) build — reverb-zone selection median "
-                 << medianMicros << " µs not gated against the " << kBudgetMicros
+    GTEST_SKIP() << "non-optimised (Debug) build — reverb-zone selection "
+                 << Vestige::Test::benchSummary(bench) << " not gated against the " << kBudgetMicros
                  << " µs budget (enforced in optimised builds).";
 #else
-    EXPECT_LE(medianMicros, kBudgetMicros)
-        << "reverb-zone selection over 32 zones median " << medianMicros
+    std::cout << "[   PERF   ] reverb-zone selection " << Vestige::Test::benchSummary(bench) << "\n";
+    EXPECT_LE(bench.gated, kBudgetMicros)
+        << "reverb-zone selection over 32 zones minimum " << bench.gated
         << " µs exceeds the " << kBudgetMicros << " µs / frame budget.";
 #endif
 }

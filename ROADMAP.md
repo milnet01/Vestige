@@ -2360,7 +2360,7 @@ Full spatial audio pipeline with dynamic mixing, occlusion, and adaptive music. 
   still use the old scheme) and 3D_E-0657 (the section 8 figures this run
   did not re-take).
 
-- 📋 [3D_E-0656] **Two more perf gates still time the way 3D_E-0626 proved unreliable.**
+- ✅ [3D_E-0656] **Two more perf gates still time the way 3D_E-0626 proved unreliable.**
   `tests/test_text_renderer_perf.cpp` (HUD pass, GPU) and
   `tests/test_reverb_zone_select.cpp` (zone selection, CPU) both still run
   three warm-up iterations and assert the median of eight -- the scheme
@@ -2376,6 +2376,17 @@ Full spatial audio pipeline with dynamic mixing, occlusion, and adaptive music. 
   The reverb gate is CPU-side, so the GPU clock ramp does not apply to it;
   what does apply is the sample count, and whether a minimum is the right
   statistic there has not been measured.
+  Resolved 2026-09-26: the 3D_E-0626 harness moved into
+  tests/perf_bench_helpers.h (runBench, BenchResult, benchSummary); the
+  caller now passes whether the run gates. Both gates use it and print
+  min/median/max. Correction: the HUD gate times CPU text shaping (the GL
+  draw is outside its timed span), so it is not a GPU gate. Measured in
+  Release, 5 runs each, under CPU load average ~20 (not a quiet machine):
+  HUD minimum 25.8-27.1 us (5% spread), median 29.2-31.5 us (8%), single
+  frames up to 3234 us from preemption, budget 300 us. Reverb selection
+  0.09-0.11 us, at the clock's resolution, budget 50 us, so the choice of
+  statistic does not matter there. HUD budget mutation (10 us) went red
+  naming the minimum. Fog gates unchanged after the move (god-ray 541 us).
   **Layman:** Two other speed checks use the old, untrustworthy stopwatch.
   Kind: fix.
   Source: in-session-2026-09-02 (3D_E-0626).

@@ -52,6 +52,7 @@
 
 #include "gl_test_fixture.h"
 #include "lsan_guard.h"
+#include "perf_bench_helpers.h"
 
 #include <glad/gl.h>
 #include <glm/glm.hpp>
@@ -68,6 +69,9 @@
 #include <vector>
 
 using namespace Vestige;
+using Vestige::Test::BenchResult;
+using Vestige::Test::benchSummary;
+using Vestige::Test::runBench;
 
 namespace
 {
@@ -131,51 +135,6 @@ bool isSoftwareRenderer()
         || s.find("software") != std::string::npos;
 }
 
-// One timing scheme for every GPU gate in this file (3D_E-0626).
-//
-// What it replaces: three warm-up frames, then the median of eight. That
-// sampled inside the start-up transient. Five runs of the god-ray pass on the
-// RX 6600, same binary and same preset, returned 549.8 to 1199.9 µs -- a 76%
-// spread, against budgets policed to a few per cent.
-//
-// The transient has a different shape on each machine in the estate, so the
-// warm-up is bounded by TIME rather than by frames. The RX 6600 settles within
-// about fifteen frames; the GTX 1050 ramps its clocks for roughly half a second
-// (measured 2026-09-02: uncontended cost 1684 µs in the first 100 ms, 1481 µs at
-// 400-500 ms, flat at ~1460 µs thereafter). A frame count that covers the
-// second is wasteful on the first, and one that suits the first does not reach
-// steady clocks on the second.
-//
-// The gated statistic is the MINIMUM, not a median and not a high percentile.
-// Even in steady state a fraction of frames on a desktop run several times the
-// median because the compositor preempts the GPU; that is interference, not
-// pass cost. Across those same five runs the spread is 1.9% on the minimum,
-// 4.7% on a median and 67.7% on a p90 -- so a high percentile, which is what
-// 3D_E-0626 first guessed at, would gate on the interference rather than on the
-// pass. Design § 8's rows are uncontended per-pass cost, so that is the figure
-// they mean. The tier row is the exception: it is derived from a frame share
-// rather than measured, and § 8 owns why a ceiling of that kind is policed by
-// a minimum.
-//
-// Each gate reports min, median and max, so the spread is visible in the log
-// rather than inferred from one number.
-struct GpuBenchResult
-{
-    double gated  = 0.0;  // the minimum — what the budgets are asserted against
-    double median = 0.0;
-    double max    = 0.0;
-    int    frames = 0;
-};
-
-// Sustained load before the first timed frame. Covers the slowest clock ramp in
-// the estate (the GTX 1050's, above) with margin.
-constexpr double kBenchWarmupMillis = 600.0;
-// Floor for a pass slow enough that the millisecond budget buys too few frames.
-constexpr int kBenchWarmupFramesMin = 16;
-// Timed frames. Fewer than this widens the run-to-run spread on the minimum;
-// more does not narrow it.
-constexpr int kBenchTimedFrames = 128;
-
 // True when a budget can be asserted at all: an optimised build on real
 // hardware. Under llvmpipe or in Debug every gate below SKIPs after recording
 // its figure, so the long warm-up would buy nothing but CI time — those runs
@@ -187,53 +146,6 @@ bool benchIsGating()
 #else
     return !isSoftwareRenderer();
 #endif
-}
-
-/// Warm the pipeline past its clock ramp, then time `timeOnce` repeatedly.
-/// `timeOnce` must return the wall-clock microseconds of one glFinish-bracketed
-/// dispatch.
-template <typename TimeOnce>
-GpuBenchResult runGpuBench(TimeOnce timeOnce)
-{
-    const bool gating = benchIsGating();
-
-    if (!gating)
-    {
-        for (int i = 0; i < 3; ++i) timeOnce();
-    }
-    else
-    {
-        const auto warmStart = std::chrono::steady_clock::now();
-        for (int i = 0;; ++i)
-        {
-            timeOnce();
-            const double elapsed = std::chrono::duration<double, std::milli>(
-                                       std::chrono::steady_clock::now() - warmStart).count();
-            if (i + 1 >= kBenchWarmupFramesMin && elapsed >= kBenchWarmupMillis) break;
-        }
-    }
-
-    const int frames = gating ? kBenchTimedFrames : 8;
-    std::vector<double> micros;
-    micros.reserve(static_cast<std::size_t>(frames));
-    for (int f = 0; f < frames; ++f) micros.push_back(timeOnce());
-    std::sort(micros.begin(), micros.end());
-
-    GpuBenchResult r;
-    r.gated  = micros.front();
-    r.median = micros[micros.size() / 2];
-    r.max    = micros.back();
-    r.frames = frames;
-    return r;
-}
-
-// "1454.0 µs (min of 128 timed frames; median 1535.2, max 5470.8)"
-std::string benchSummary(const GpuBenchResult& r)
-{
-    std::ostringstream os;
-    os << r.gated << " µs (min of " << r.frames << " timed frames; median "
-       << r.median << ", max " << r.max << ")";
-    return os.str();
 }
 
 // The quality preset these budgets are being gated for. Defaults to High, the
@@ -429,7 +341,7 @@ TEST_F(FogBenchmarkTest, VolumetricDispatchUnderBudget)
         return std::chrono::duration<double, std::micro>(t1 - t0).count();
     };
 
-    const GpuBenchResult bench = runGpuBench(timeDispatch);
+    const BenchResult bench = runBench(timeDispatch, benchIsGating());
     const double gatedMicros = bench.gated;
 
     glDeleteTextures(1, &litMap);
@@ -504,7 +416,7 @@ TEST_F(FogBenchmarkTest, GiInjectDispatchUnderBudget)
         return std::chrono::duration<double, std::micro>(t1 - t0).count();
     };
 
-    const GpuBenchResult bench = runGpuBench(timeGi);
+    const BenchResult bench = runBench(timeGi, benchIsGating());
     const double gatedMicros = bench.gated;
 
     glDeleteTextures(1, &att3);
@@ -661,7 +573,7 @@ TEST_F(FogBenchmarkTest, GodRayPassUnderBudget)
         return std::chrono::duration<double, std::micro>(t1 - t0).count();
     };
 
-    const GpuBenchResult bench = runGpuBench(timeGodRays);
+    const BenchResult bench = runBench(timeGodRays, benchIsGating());
     const double gatedMicros = bench.gated;
 
     Framebuffer::unbind();
