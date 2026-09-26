@@ -1022,6 +1022,8 @@ void Renderer::endFrame(float deltaTime)
         m_smaaBlendShader.setInt("u_edgeTexture", 0);
         glBindTextureUnit(1, m_smaa->getAreaTexture());
         m_smaaBlendShader.setInt("u_areaTexture", 1);
+        glBindTextureUnit(2, m_smaa->getSearchTexture());
+        m_smaaBlendShader.setInt("u_searchTexture", 2);
         m_smaaBlendShader.setVec4("u_rtMetrics", rtMetrics);
         m_screenQuad->draw();
 

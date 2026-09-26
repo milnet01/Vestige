@@ -81,9 +81,19 @@ small-payload libraries that don't warrant a `FetchContent` pull).
 | dr_libs (dr_wav, dr_flac, dr_mp3) | `external/dr_libs/` | MIT-0 or Public Domain (dual) | <https://github.com/mackron/dr_libs> |
 | tl::expected (v1.3.1) | `external/tl_expected/tl/expected.hpp` | CC0 1.0 (public domain) | <https://github.com/TartanLlama/expected> |
 | tinyfiledialogs (v3.21.3) | `external/tinyfiledialogs/` | Zlib | <https://sourceforge.net/projects/tinyfiledialogs/> |
+| SMAA (commit `71c806a8`, master) | `external/smaa/` | MIT | <https://github.com/iryoku/smaa> |
 
 Each vendored source carries its own license header in the file. See
 the individual files for the canonical license text.
+
+**Why SMAA is vendored, and at a commit:** the SMAA anti-aliasing mode needs
+the reference lookup tables (`AreaTex.h`, `SearchTex.h`), and its shaders copy
+functions from the reference `SMAA.hlsl`. The four files are byte-identical to
+upstream; `tests/test_smaa.cpp` compares the shader copies with `SMAA.hlsl`.
+Upstream publishes no release tags, so the pin is the latest `master` commit,
+`71c806a8` (2013-11-06). Project rule 8 case (B): re-evaluate if upstream
+publishes a release or a newer commit changes `SMAA.hlsl` or the tables.
+`LICENSE.txt` is the upstream licence; it waives the notice in binaries.
 
 **Why `tl::expected` is vendored:** the engine compiles at the C++17
 baseline (`CMAKE_CXX_STANDARD 17`), but `std::expected` is a C++23 *library*

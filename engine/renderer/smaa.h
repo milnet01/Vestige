@@ -17,11 +17,14 @@ namespace Vestige
 
 /// @brief Manages SMAA state: lookup textures, FBOs, and shader passes.
 ///
-/// Implements SMAA 1x at HIGH quality preset:
-/// - Luma-based edge detection with local contrast adaptation
-/// - Orthogonal pattern search (16 steps max)
-/// - Area texture lookup for accurate blend weights
-/// - Neighborhood blending for final output
+/// Implements SMAA 1x at the HIGH quality preset. The three passes
+/// (smaa_edge, smaa_blend, smaa_neighborhood .glsl) carry the reference
+/// SMAA code unchanged, and the lookup tables are the reference AreaTex and
+/// SearchTex bytes (external/smaa, MIT). tests/test_smaa.cpp pins both.
+/// - Luma edge detection with local contrast adaptation
+/// - Orthogonal search (16 steps), diagonal search (8 steps), corner rounding
+/// - Area and search table lookups for the blend weights
+/// - Neighborhood blending for the final output
 class Smaa
 {
 public:
@@ -49,25 +52,17 @@ public:
     GLuint getSearchTexture() const;
 
 private:
-    void generateAreaTexture();
-    void generateSearchTexture();
+    void createAreaTexture();
+    void createSearchTexture();
 
     std::unique_ptr<Framebuffer> m_edgeFbo;   // RG8 edge detection output
     std::unique_ptr<Framebuffer> m_blendFbo;  // RGBA8 blend weight output
 
-    GLuint m_areaTexture = 0;    // 160x560 RG8 lookup
-    GLuint m_searchTexture = 0;  // 64x16 R8 lookup
+    GLuint m_areaTexture = 0;    // 160x560 RG8 lookup (AreaTex)
+    GLuint m_searchTexture = 0;  // 64x16 R8 lookup (SearchTex)
 
     int m_width;
     int m_height;
-
-    // SMAA constants
-    static constexpr int AREATEX_WIDTH = 160;
-    static constexpr int AREATEX_HEIGHT = 560;
-    static constexpr int SEARCHTEX_WIDTH = 64;
-    static constexpr int SEARCHTEX_HEIGHT = 16;
-    static constexpr int AREATEX_MAX_DISTANCE = 16;
-    static constexpr int AREATEX_SUBTEX_COUNT = 7;
 };
 
 } // namespace Vestige

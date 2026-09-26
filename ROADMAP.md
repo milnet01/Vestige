@@ -3672,10 +3672,18 @@ shipped that have no invocation path at all.
 
   STILL OPEN from that lane, each wanting its own commit: GPU reset() clears pins where CPU reset() does not, and m_compliancesDirty is written by three setters and read nowhere behind an immutable SSBO (left undiagnosed deliberately — a naive fix there fails silently).
 
-- 📋 [3D_E-0631] **SMAA ships invented lookup tables, and one of them has no consumer.**
+- ✅ [3D_E-0631] **SMAA ships invented lookup tables, and one of them has no consumer.**
   smaa.cpp:65-66/121/152 generate the area and search textures from placeholder formulas whose own comments say "simplified -- same data for now" and "For simplicity, we fill it with a uniform continue-searching pattern". smaa_blend.frag.glsl:100 addresses them with the genuine reference expression, so a correct consumer reads a table that does not encode the SMAA area function, and the diagonal half is a byte copy of the orthogonal half.
   Separately Smaa::getSearchTexture() has zero callers: the 64x16 table is generated and uploaded every startup and consumed by nothing, while the shader hand-rolls its search as a linear scan.
   smaa.h:20-23 and ARCHITECTURE.md:102 both advertise "SMAA 1x at HIGH quality preset". Fix: ship the reference AreaTex.h bytes (fixed constant, MIT with SMAA), or amend both documents.
+  Resolved 2026-09-26: chose the reference over amending the docs. The
+  whole mode was home-made, not only the tables, so all three passes now
+  carry the reference SMAA 1x HIGH code unchanged, and AreaTex/SearchTex
+  are the upstream bytes (external/smaa, MIT, commit 71c806a8). The blend
+  pass now reads the search table. tests/test_smaa.cpp pins the copies
+  against external/smaa/SMAA.hlsl, the uploaded table bytes, and a
+  three-pass softening run; each part was mutation-checked red. Not done:
+  an in-engine before/after frame capture.
   **Layman:** Selecting SMAA anti-aliasing gives you something that is not SMAA, and nothing says so.
   Kind: fix.
   Source: review-code 2026-08-31 lane renderer-effects-vegetation.
@@ -5820,6 +5828,14 @@ Outdoor landscapes surrounding the Temple complex — hills, valleys, and the Ki
   counted. For Vestige the sun's cascades follow the camera, so this rule
   fits the far, static cascade (this item's plan) and any future local
   lights, not the near cascade. They have no per-light cost figure.
+  Input (2026-09-26, UT_Ants; take patterns, not code). They use a
+  shadow-tile atlas, not cascades, and have no cascade numbers. Patterns
+  that may transfer, by UT_Ants roadmap id: UTA-0169 cull lights that
+  cannot contribute before they compete for shadow budget; UTA-0166
+  anything keyed to "has a shadow" (their fog shafts) inherits the
+  budget's churn; UTA-0211 (not built) decide per froxel cell which
+  lights reach it, instead of one shadow read per froxel per light.
+  Unverified for Vestige until measured here.
   **Layman:** Shadows cost more than a third of each frame; most of that work is redrawn every frame even when nothing moved.
   Kind: perf.
   Source: tech-survey-2026-09-02.
@@ -8329,3 +8345,18 @@ record, and a real clearance before commercial release needs counsel.
   Kind: fix.
   Source: in-session-2026-09-26.
   Lanes: scene, assets.
+
+- 📋 [3D_E-0705] **Run a linker dead-code scan and act on what it finds.**
+  Technique from DOOM_Ants (take the method, not code). Build once into a
+  scratch dir with -O0 -ffunction-sections -fdata-sections and link with
+  -Wl,--gc-sections,--print-gc-sections. The linker lists every function
+  and global nothing reaches, statics included. Repeat per build flavour
+  (Debug, Release) and intersect. Grep each name across tests/ and tools/
+  before deleting. DOOM_Ants found dead data that hid a live bug, so read
+  each hit before removing it. Their companion check (enumerator used as a
+  bare condition) does not apply here: engine/ and tools/ use enum class
+  throughout, bar one GL binding-point enum.
+  **Layman:** Ask the linker which functions nothing ever calls, then remove the dead ones or fix the bug that made them dead.
+  Kind: chore.
+  Source: peer-doom-ants-2026-09-26 message 41.
+  Lanes: tooling.

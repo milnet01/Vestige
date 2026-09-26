@@ -23,6 +23,21 @@ may change any interface without notice.
 
 ## [Unreleased]
 
+### 2026-09-26 Fixed — SMAA is now the real SMAA (3D_E-0631)
+
+Selecting SMAA anti-aliasing used home-made lookup tables and home-made
+passes, so it was not SMAA. The mode now uses the reference SMAA 1x
+code at the HIGH preset, including diagonal search and corner rounding.
+
+- **Reference lookup tables**
+  AreaTex and SearchTex are the upstream bytes, vendored in external/smaa (MIT). The search table was generated before but never read; the blend pass now reads it.
+
+- **Reference shader code**
+  The three SMAA passes copy the upstream functions unchanged. tests/test_smaa.cpp fails if a copy drifts from external/smaa/SMAA.hlsl.
+
+- **HDR input**
+  Edge detection compresses the linear HDR scene to [0,1] and gamma-encodes it first, as the reference requires gamma-space input. The blend itself stays in linear HDR.
+
 ### 2026-09-26 Added — Stutter-free demo videos: `--demo-capture` writes every frame at a fixed 1/30 s step (3D_E-0696)
 
 The first website video was choppy: about 3.5 new images per second.

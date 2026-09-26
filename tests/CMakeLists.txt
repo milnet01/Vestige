@@ -34,6 +34,7 @@ add_executable(vestige_tests
     test_ui_focus_navigation.cpp
     test_framebuffer.cpp
     test_fxaa.cpp
+    test_smaa.cpp
     test_motion_vectors_mrt.cpp
     test_shadow_map.cpp
     test_tangent_calc.cpp
@@ -298,6 +299,10 @@ target_include_directories(vestige_tests
     PRIVATE
         ${CMAKE_SOURCE_DIR}/tools/formula_workbench
 )
+# 3D_E-0631 — test_smaa.cpp reads the vendored reference lookup tables.
+target_include_directories(vestige_tests SYSTEM PRIVATE
+    ${CMAKE_SOURCE_DIR}/external/smaa
+)
 
 # §3.4 reference-case harness needs to know where the JSON specs live.
 # Pass the absolute source path so tests run from any cwd.
@@ -308,6 +313,9 @@ target_compile_definitions(vestige_tests
         # files to pin CPU/GPU intent (no GL context in the test binary, so
         # the shaders themselves are the spec for the parity contract).
         VESTIGE_SHADER_DIR="${CMAKE_SOURCE_DIR}/assets/shaders"
+        # 3D_E-0631 — test_smaa.cpp compares the SMAA shaders with the
+        # vendored reference source.
+        VESTIGE_SMAA_REFERENCE_DIR="${CMAKE_SOURCE_DIR}/external/smaa"
         # Phase 10.9 W8 — streaming-music player tests read a committed
         # 0.5 s OGG fixture (decode/loop coverage runs headless, no device).
         VESTIGE_AUDIO_FIXTURES_DIR="${CMAKE_SOURCE_DIR}/tests/fixtures/audio"

@@ -408,6 +408,12 @@ target_include_directories(vestige_engine SYSTEM PUBLIC
     ${CMAKE_SOURCE_DIR}/external/tl_expected
 )
 
+# SMAA reference lookup tables (vendored AreaTex.h / SearchTex.h, MIT), read
+# only by renderer/smaa.cpp. SYSTEM for the same -Werror reason.
+target_include_directories(vestige_engine SYSTEM PRIVATE
+    ${CMAKE_SOURCE_DIR}/external/smaa
+)
+
 # Mark third-party headers as SYSTEM to suppress their warnings
 get_target_property(JOLT_INCLUDE_DIRS Jolt INTERFACE_INCLUDE_DIRECTORIES)
 if(JOLT_INCLUDE_DIRS)
