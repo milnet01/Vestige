@@ -44,6 +44,9 @@ void printUsage(const char* argv0)
         << "                          --visual-test. For asset pipelines.\n"
         << "  --visual-test           Run the automated visual-test\n"
         << "                          harness and exit. Used by CI.\n"
+        << "  --demo-flythrough       Fly the camera along a built-in path\n"
+        << "                          over the meadow with no input, then\n"
+        << "                          exit. For recording demo videos.\n"
         << "  --isolate-feature=NAME  Disable one feature for visual-test\n"
         << "                          bisection. NAME ∈ {motion-overlay,\n"
         << "                          bloom, ssao, ibl, ibl-diffuse,\n"
@@ -135,6 +138,11 @@ bool parseArgs(int argc, char* argv[], EngineConfig& config, int& exitCode)
         {
             config.visualTestMode = true;
             Logger::info("Visual test mode enabled via CLI");
+        }
+        else if (std::strcmp(arg, "--demo-flythrough") == 0)
+        {
+            config.demoFlythroughMode = true;
+            Logger::info("Demo fly-through enabled via CLI");
         }
         else if (std::strncmp(arg, "--isolate-feature=", 18) == 0)
         {

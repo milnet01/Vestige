@@ -279,6 +279,7 @@ set(ENGINE_SOURCES
     utils/entity_serializer.cpp
     utils/component_serializer_registry.cpp
     utils/material_library.cpp
+    testing/demo_flythrough.cpp
     testing/visual_test_runner.cpp
     renderer/radiosity_baker.cpp
     # Audio system

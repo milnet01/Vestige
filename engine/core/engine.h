@@ -27,6 +27,7 @@
 #include "profiler/profile_log.h"
 #include "physics/physics_world.h"
 #include "physics/physics_debug.h"
+#include "testing/demo_flythrough.h"
 #include "testing/visual_test_runner.h"
 #include "core/system_registry.h"
 #include "core/job_system.h"
@@ -61,6 +62,7 @@ struct EngineConfig
     WindowConfig window;
     std::string assetPath = "assets";
     bool visualTestMode = false;  ///< Run automated visual test and exit
+    bool demoFlythroughMode = false;  ///< Fly a built-in camera path, then exit
 
     /// @brief Diagnostic feature isolation (CLI: --isolate-feature=NAME).
     /// Disables one feature so visual-test runs can mechanically bisect
@@ -215,6 +217,8 @@ private:
     std::vector<std::filesystem::path> m_sandboxRoots;
     VisualTestRunner m_visualTestRunner;
     bool m_visualTestMode = false;
+    DemoFlythrough m_demoFlythrough;     ///< Path is built by the scene setup.
+    bool m_demoFlythroughMode = false;
     std::string m_assetPath;
 
     /// @brief Persistent user settings loaded from

@@ -343,9 +343,21 @@ namespace
     }
 }
 
-glm::vec3 SplinePath::catmullRom(const glm::vec3& p0, const glm::vec3& p1,
-                                  const glm::vec3& p2, const glm::vec3& p3, float t)
+glm::vec3 SplinePath::catmullRom(const glm::vec3& in0, const glm::vec3& p1,
+                                  const glm::vec3& p2, const glm::vec3& in3, float t)
 {
+    // The end segments pass their own end point as the outer neighbour, which
+    // makes a knot interval zero. The pyramid below then divides by
+    // kMinKnotDelta and its weights cancel only on paper — in float, a curve
+    // tens of metres from the origin was thrown tens of metres off (pinned by
+    // SplinePathTest.EndSegmentsStayOnAStraightLineFarFromOrigin). Mirror the
+    // inner neighbour instead: the usual phantom end point, never coincident.
+    const auto coincident = [](const glm::vec3& a, const glm::vec3& b) {
+        return glm::distance(a, b) < 1e-4f;
+    };
+    const glm::vec3 p0 = coincident(in0, p1) ? (2.0f * p1) - p2 : in0;
+    const glm::vec3 p3 = coincident(in3, p2) ? (2.0f * p2) - p1 : in3;
+
     // Knot times t0 < t1 < t2 < t3 spaced by chord^alpha.
     const float t0 = 0.0f;
     const float t1 = t0 + knotDelta(p0, p1);

@@ -98,13 +98,14 @@ public:
 
 private:
     /// @brief Evaluates a single Catmull-Rom segment.
-    /// @param p0 Point before the segment start.
+    /// @param in0 Point before the segment start (may equal p1 at the path's
+    ///            first segment; a mirrored phantom point is used then).
     /// @param p1 Segment start.
     /// @param p2 Segment end.
-    /// @param p3 Point after the segment end.
+    /// @param in3 Point after the segment end (may equal p2 at the last).
     /// @param t Local parameter (0..1) within the segment.
-    static glm::vec3 catmullRom(const glm::vec3& p0, const glm::vec3& p1,
-                                 const glm::vec3& p2, const glm::vec3& p3, float t);
+    static glm::vec3 catmullRom(const glm::vec3& in0, const glm::vec3& p1,
+                                 const glm::vec3& p2, const glm::vec3& in3, float t);
 
     /// @brief Evaluates the Catmull-Rom derivative for a single segment.
     static glm::vec3 catmullRomDerivative(const glm::vec3& p0, const glm::vec3& p1,

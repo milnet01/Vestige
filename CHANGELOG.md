@@ -23,6 +23,22 @@ may change any interface without notice.
 
 ## [Unreleased]
 
+### 2026-09-26 Added — Hands-free camera fly-through for demo videos (3D_E-0696, first piece)
+
+`--demo-flythrough` flies the meadow camera along a built-in smooth path
+with no input, then quits, so a demo video can be recorded on a virtual
+display. There is no script file yet: the path is built in code next to
+the meadow's visual-test viewpoints. Building it exposed a SplinePath bug,
+fixed below.
+
+- **Added: `--demo-flythrough` CLI flag and `DemoFlythrough` (eye and look-at splines, eased start and stop, ground clearance).** (3D_E-0696)
+
+- **Fixed: SplinePath's first and last segments swung tens of metres off the curve**
+  The end segments reuse the end point as their outer neighbour, so the
+  centripetal formula divided by a near-zero guard and the float weights
+  stopped cancelling: a straight 60 m path measured 281 m. A mirrored
+  phantom end point is used instead. Affects every SplinePath user.
+
 ### 2026-09-25 Changed — Dependency updates: GLM 1.0.3, OpenAL Soft 1.25.2, enkiTS v1.12, GoogleTest v1.18.0; GLFW held at 3.4 (3D_E-0673)
 
 Four of the five surveyed bumps land. OpenAL Soft 1.25.2 fixes an

@@ -1152,6 +1152,7 @@ bool Engine::initialize(const EngineConfig& config)
     });
 
     m_visualTestMode = config.visualTestMode;
+    m_demoFlythroughMode = config.demoFlythroughMode && !m_visualTestMode;
     if (m_visualTestMode)
     {
         setupVisualTestViewpoints();
@@ -1290,6 +1291,28 @@ void Engine::run()
         }
         m_controller->setEnabled(false);
         m_visualTestRunner.start("Testing/visual_tests");
+    }
+
+    // Demo fly-through: same full-screen play view, camera driven by the path.
+    if (m_demoFlythroughMode)
+    {
+        if (m_demoFlythrough.keyCount() < 2)
+        {
+            Logger::warning("--demo-flythrough: this scene has no fly-through path; ignoring");
+            m_demoFlythroughMode = false;
+        }
+        else
+        {
+            if (m_editor)
+            {
+                m_editor->setMode(EditorMode::PLAY);
+                m_isCursorCaptured = true;
+                m_window->setCursorEnabled(false);
+            }
+            m_controller->setEnabled(false);
+            Logger::info("Demo fly-through: "
+                + std::to_string(m_demoFlythrough.totalSeconds()) + " s");
+        }
     }
 
     while (m_isRunning)
@@ -1650,6 +1673,15 @@ void Engine::run()
                 m_colliders.clear();
             }
             m_controller->update(deltaTime, m_colliders);
+        }
+
+        // 5b. Demo fly-through overrides the camera last, after every other
+        //     camera writer this frame. The frame still renders; the loop
+        //     exits at the top of the next one.
+        if (m_demoFlythroughMode && m_demoFlythrough.update(*m_camera, deltaTime))
+        {
+            Logger::info("Demo fly-through finished");
+            m_isRunning = false;
         }
 
         // 6. Renderer — draw the frame
@@ -3127,6 +3159,39 @@ void Engine::finalizeMeadowTerrain()
             eyeOnSurface(px + 25.0f, pz + 60.0f), -120.0f, -45.0f, 1, 0.0f});
         Logger::info("Meadow visual-test viewpoints registered: "
             + std::to_string(m_visualTestRunner.viewpointCount()));
+    }
+
+    // --- Demo fly-through path (--demo-flythrough) --------------------------
+    // Starts behind the interactive vantage, drifts down toward the pond,
+    // circles its west and north shores with the water in view, then climbs
+    // over the far shore (only to ~8 m: higher, the distance haze greys
+    // the frame) and turns to look back across the pond and meadow. The whole
+    // route stays inside the tree-free ring the scatter keeps around the pond
+    // (field trees are excluded within pondClear + 6 m), so the camera never
+    // flies through a canopy. Eyes sit ~3.5 m up: the GPU grass is ~1 m tall
+    // and the pond is a ~4.5 m hollow, so eye height hides the water.
+    // Heights are relative to the ground; the runtime clearance keeps the
+    // spline out of hills between keys.
+    if (m_demoFlythroughMode)
+    {
+        const float px = pondCenterXZ.x;
+        const float pz = pondCenterXZ.y;
+        const auto above = [&](float x, float z, float h) {
+            return glm::vec3(x, terrain.getHeight(x, z) + h, z);
+        };
+        const glm::vec3 water(px, waterLevelY, pz);
+        m_demoFlythrough.addKey(above(px, pz + 38.0f, 3.0f), water + glm::vec3(0.0f, 0.0f, -4.0f));
+        m_demoFlythrough.addKey(above(px - 6.0f, pz + 22.0f, 3.5f), water + glm::vec3(-2.0f, 0.0f, -6.0f));
+        m_demoFlythrough.addKey(above(px - 18.0f, pz + 10.0f, 3.5f), water + glm::vec3(2.0f, 0.0f, -2.0f));
+        m_demoFlythrough.addKey(above(px - 24.0f, pz - 10.0f, 3.0f), water + glm::vec3(4.0f, 0.0f, -6.0f));
+        m_demoFlythrough.addKey(above(px - 14.0f, pz - 28.0f, 4.0f), water + glm::vec3(6.0f, 0.0f, -2.0f));
+        m_demoFlythrough.addKey(above(px + 8.0f, pz - 32.0f, 6.0f), water);
+        m_demoFlythrough.addKey(above(px + 18.0f, pz - 24.0f, 8.0f), above(px - 20.0f, pz + 50.0f, 1.0f));
+        m_demoFlythrough.setGroundClearance(
+            [&terrain](float x, float z) { return terrain.getHeight(x, z); }, 1.6f);
+        m_demoFlythrough.setStartHold(3.0f);
+        m_demoFlythrough.setEndHold(2.0f);
+        m_demoFlythrough.setSpeed(5.0f);
     }
 
     scene->update(0.0f);

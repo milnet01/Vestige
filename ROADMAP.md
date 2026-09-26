@@ -4771,6 +4771,11 @@ Retrofit completed across 8 commits — every Phase-10 Settings-store consumer n
   sent the URL for its DEMO-0093. NOT yet done against this item's own bar:
   the clip shows no editor work and no walking. That still waits on
   3D_E-0696 and 3D_E-0697.
+  Progress (2026-09-26): the website clip was re-recorded with a moving
+  camera using --demo-flythrough (3D_E-0696's camera-only piece): 25.6 s,
+  1280x720, 1.89 MB, handed to the website session at
+  /tmp/aph-handoff/vestige/. Still no editor footage, so this item's own bar
+  is not met.
   **Layman:** Make a short video showing Vestige's editor and a walkthrough, and put it on the project website.
   Kind: marketing.
   Source: user-request-2026-09-25.
@@ -4794,6 +4799,11 @@ Retrofit completed across 8 commits — every Phase-10 Settings-store consumer n
   to (spec-format.md section 1), and its CPU / GPU placement section is
   CPU (timeline and decisions).
   Test: a script's steps drive the editor command API in order, headless.
+  Progress (2026-09-26): camera-only first piece shipped as
+  --demo-flythrough (engine/testing/demo_flythrough.h): two SplinePaths, eye
+  and look-at, eased, with ground clearance; the path is hard-coded in
+  finalizeMeadowTerrain. Still open: the script file format (needs its
+  spec), editor steps, and clean quit on a scripted end.
   **Layman:** Let Vestige follow a written script that moves the camera and works the editor by itself, so a demo video can be recorded the same way every time.
   Kind: feature.
   Source: user-request-2026-09-25.
@@ -8167,3 +8177,15 @@ record, and a real clearance before commercial release needs counsel.
   Kind: doc.
   Source: tech-survey-2026-09-02.
   Lanes: legal, docs.
+
+- 📋 [3D_E-0702] **Meadow shore plants render cartoon teal next to the realistic grass.**
+  The pond-shore reed scatter uses Kenney plant_flatTall.glb, grass.glb and
+  plant_bush.glb. Their only material is an untextured base colour of about
+  (0.16, 0.79, 0.67), Kenney's stylised teal. Beside the GPU grass and the
+  photo-textured lotus they read as blue shards, visible in the 2026-09-26
+  website fly-through video. Replace them with realistic reed or sedge
+  props, or retint them, and check the shore in --visual-test pond_shore.
+  **Layman:** Some small plants around the pond look bright blue-green and cartoonish next to the realistic grass; swap or recolour them.
+  Kind: fix.
+  Source: in-session-2026-09-26.
+  Lanes: scene, assets.

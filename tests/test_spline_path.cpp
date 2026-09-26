@@ -319,3 +319,27 @@ TEST(SplinePathTest, FourPointCurve)
         prev = curr;
     }
 }
+
+// The end segments clamp their outer neighbour onto the end point, so one
+// knot interval is zero. Barry-Goldman then divides by the 1e-6 guard and
+// the weights cancel only on paper: in float, points tens of metres from
+// the origin were thrown tens of metres off the curve (a straight 60 m line
+// measured 281 m). Found by the --demo-flythrough camera path.
+TEST(SplinePathTest, EndSegmentsStayOnAStraightLineFarFromOrigin)
+{
+    SplinePath path;
+    path.addWaypoint(glm::vec3(0.0f, 2.0f, 0.0f));
+    path.addWaypoint(glm::vec3(30.0f, 2.0f, 0.0f));
+    path.addWaypoint(glm::vec3(60.0f, 2.0f, 0.0f));
+
+    EXPECT_NEAR(path.getLength(512), 60.0f, 0.05f);
+    float prevX = -1.0f;
+    for (int i = 0; i <= 100; ++i)
+    {
+        const glm::vec3 p = path.evaluate(static_cast<float>(i) / 100.0f);
+        EXPECT_NEAR(p.y, 2.0f, 1e-3f) << "i=" << i;
+        EXPECT_NEAR(p.z, 0.0f, 1e-3f) << "i=" << i;
+        EXPECT_GE(p.x, prevX - 1e-3f) << "went backwards at i=" << i;
+        prevX = p.x;
+    }
+}
