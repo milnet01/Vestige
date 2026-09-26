@@ -2416,6 +2416,14 @@ Full spatial audio pipeline with dynamic mixing, occlusion, and adaptive music. 
 
   Raised by all three lanes of the 2026-09-02 rule-14 gate on the fog
   design doc.
+  Measured 2026-09-26 (RX 6600, Release, High, renderScale 1, current
+  harness, 3 runs each, GPU busy 4%, CPU load ~15): shipped 64 taps
+  min 524-530 us (median 541-552); NUM_SAMPLES mutated to 128 min
+  952-966 us (median 981-998) -- and the gate PASSED all three mutant
+  runs. Confirmed: the 1.2 ms reference budget no longer catches a doubled
+  tap count. Per this item the budget needs re-deriving, not refitting to
+  the measurement. That edits fog design section 8 (a contract document),
+  so it needs the rule-14 gate before the new figure is used.
   **Layman:** Some published speed numbers in the design doc were each measured once, before the stopwatch was fixed.
   Kind: investigate.
   Source: in-session-2026-09-02 (3D_E-0626).
