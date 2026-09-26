@@ -6,7 +6,7 @@
 |-------|-------|
 | Subsystem | `engine/physics` |
 | Status | `shipped` |
-| Spec version | `1.0.1` |
+| Spec version | `1.0.2` |
 | Last reviewed | `2026-06-01` (cold-eyes reviewed) |
 | Owners | `milnet01` |
 | Engine version range | `v0.1.0+` (Jolt foundation since Phase 8A; XPBD cloth since Phase 8D; GPU cloth backend since Phase 9B) |
@@ -27,7 +27,7 @@
 | `RigidBody` component — entity-attached static / dynamic / kinematic bodies, sync-to-transform, force / impulse helpers, mesh + convex-hull collider build | Mesh / vertex data sources for the colliders — `engine/renderer/mesh.h` (we copy positions out) |
 | `PhysicsCharacterController` — Jolt `CharacterVirtual` capsule, slope / step / floor-stick logic, fly-mode toggle | Camera shake, FOV, mouse-look — `engine/core/first_person_controller.h` (FPC drives input + camera; this controller drives translation) |
 | Constraint API — hinge / fixed / distance / point / slider; per-handle breakable threshold; deterministic `std::map` storage with per-slot generation counter | High-level interactables (doors, levers, ragdolls) — those compose constraints from gameplay code or `engine/experimental/physics/` |
-| Object + broadphase layer system — `STATIC` / `DYNAMIC` / `CHARACTER` / `TRIGGER` object layers, three-broadphase grouping, `BroadPhaseLayerMapping`, `ObjectLayerPairFilter` | Physics-2D — `engine/physics2d/` (separate subsystem; box2d-style top-down) |
+| Object + broadphase layer system — `STATIC` / `DYNAMIC` / `PLAYER_CHARACTER` / `NPC_CHARACTER` / `TRIGGER` object layers, three-broadphase grouping, `BroadPhaseLayerMapping`, `ObjectLayerPairFilter` | Physics-2D — `engine/physics2d/` (separate subsystem; box2d-style top-down) |
 | `ClothSimulator` (CPU XPBD) + `GpuClothSimulator` (GPU compute) sharing `IClothSolverBackend`; `ClothBackendFactory` auto-selection at the 1024-particle threshold | Render-side mesh / shader / material — `engine/renderer/dynamic_mesh.h`, `material.h` (cloth only writes positions + normals into the buffer) |
 | `ClothComponent` — entity wrapper that owns a backend + dynamic mesh + cloth preset | Cloth UI panel — `engine/editor/panels/inspector_panel.cpp` |
 | `ClothMeshCollider` + `BVH` — Surface-Area-Heuristic (SAH) Bounding Volume Hierarchy for triangle-mesh proximity queries against cloth | General-purpose mesh BVH for rendering / GI culling — owned by the renderer |
@@ -111,8 +111,8 @@ Key abstractions:
 | `ConstraintHandle` | struct (POD) | `(index, generation)` pair into `PhysicsWorld::m_constraints`. `physics_constraint.h:25` |
 | `ConstraintType` | enum | `HINGE` / `FIXED` / `DISTANCE` / `POINT` / `SLIDER`. `physics_constraint.h:44` |
 | `PhysicsConstraint` | class | Wraps a `JPH::TwoBodyConstraint` with break-force threshold + last-step force + body-pair tracking. `physics_constraint.h:58` |
-| `ObjectLayers` / `BroadPhaseLayers` | constants | 4 object layers (`STATIC` / `DYNAMIC` / `CHARACTER` / `TRIGGER`) ↦ 3 broadphase layers (`STATIC` / `DYNAMIC` / `CHARACTER`). `physics_layers.h:18,30` |
-| `BroadPhaseLayerMapping` / `ObjectLayerPairFilter` / `ObjectVsBroadPhaseFilter` | classes | The three filter interfaces Jolt requires. `physics_layers.h:39, 78, 114` |
+| `ObjectLayers` / `BroadPhaseLayers` | constants | 5 object layers (`STATIC` / `DYNAMIC` / `PLAYER_CHARACTER` / `NPC_CHARACTER` / `TRIGGER`; `CHARACTER` is an alias for `PLAYER_CHARACTER`) ↦ 3 broadphase layers (`STATIC` / `DYNAMIC` / `CHARACTER`). `physics_layers.h:18,46` |
+| `BroadPhaseLayerMapping` / `ObjectLayerPairFilter` / `ObjectVsBroadPhaseFilter` | classes | The three filter interfaces Jolt requires. `physics_layers.h:55, 95, 139` |
 | `IClothSolverBackend` | interface | Polymorphic surface shared by CPU XPBD and GPU compute backends. `cloth_solver_backend.h:56` |
 | `ClothConfig` | struct | Grid (`width × height`), `spacing`, `particleMass`, `substeps` (≤ `MAX_SUBSTEPS = 64`), stretch / shear / bend compliance, damping, sleep threshold, gravity. `cloth_simulator.h:23` |
 | `ClothSimulator` | class | Pure-CPU XPBD reference. Stretch / shear / bend distance constraints + dihedral bending + Long-Range Attachment (LRA) tethers + sphere / plane / cylinder / box / mesh colliders + spatial-hash self-collision + wind. `cloth_simulator.h:80` |
@@ -271,8 +271,8 @@ class PhysicsConstraint {
 **`physics_layers.h`** — collision filtering. Layer constants only; classes are construction details.
 
 ```cpp
-namespace ObjectLayers      { /* STATIC=0, DYNAMIC=1, CHARACTER=2, TRIGGER=3 */ }
-namespace BroadPhaseLayers  { /* STATIC, DYNAMIC, CHARACTER (CHARACTER + TRIGGER share DYNAMIC bp) */ }
+namespace ObjectLayers      { /* STATIC=0, DYNAMIC=1, PLAYER_CHARACTER=2, NPC_CHARACTER=3, TRIGGER=4; CHARACTER aliases PLAYER_CHARACTER */ }
+namespace BroadPhaseLayers  { /* STATIC, DYNAMIC, CHARACTER (both character layers map to CHARACTER bp; TRIGGER maps to DYNAMIC bp) */ }
 class BroadPhaseLayerMapping  : public JPH::BroadPhaseLayerInterface { /* … */ };
 class ObjectLayerPairFilter   : public JPH::ObjectLayerPairFilter   { /* … */ };
 class ObjectVsBroadPhaseFilter: public JPH::ObjectVsBroadPhaseLayerFilter { /* … */ };
@@ -534,7 +534,7 @@ Per CODING_STANDARDS §11 — no exceptions on the steady-state path.
 | Programmer error (null shape ptr, OOB body ID) | `JPH_ASSERT` (debug) / UB (release), routed through `joltAssertFailed` → `Logger::error` | Fix the caller. |
 | Out of memory (`std::bad_alloc` from any allocator) | Propagates | App aborts (matches CODING_STANDARDS §11). |
 
-`Result<T, E>` / `std::expected` not yet used in this subsystem — the codebase predates the policy. Migration is on the engine-wide list (Open Q4).
+`Result<T, E>` / `std::expected` not yet used in this subsystem — the codebase predates the policy. Migration is on the engine-wide list (Open Q10).
 
 ## 11. Testing
 
@@ -625,7 +625,7 @@ Internal cross-references:
 | 1 | **Ph1.** Move `checkBreakableConstraints` (and the character-controller update) inside the fixed-step loop. The breakable lambda should divide by `m_fixedTimestep`, not the variable frame `dt` — currently breaks feel inconsistent at variable frame rates. Tracked in ROADMAP §10.9 Slice 7. | milnet01 | Phase 10.9 Slice 7 close |
 | 2 | **Ph3.** Add `PhysicsWorld::sphereCast(origin, direction, radius, maxDistance, ...)`. Originally Phase 10.8 CM3 (third-person camera wall-probe); pulled into Phase 10.9 so 10.8 consumes it instead of authoring it. | milnet01 | Phase 10.9 Slice 7 close |
 | 3 | **Ph4.** Breakable-constraint force sums currently include linear lambdas only — extend to rotation lambdas (hinge limit) and slider position-limit lambdas; without them, hinge / slider limit breaks under-trigger. | milnet01 | Phase 10.9 Slice 7 close |
-| 4 | **Ph5.** Character-vs-character pair filter: `CHARACTER` layer currently disallows internal collisions (so two characters pass through each other), which means a future ragdoll in the `CHARACTER` layer phases through the player. Split `PLAYER_CHARACTER` / `NPC_CHARACTER` or use Jolt collision groups. | milnet01 | Phase 10.9 Slice 7 close |
+| 4 | **Ph5 — resolved.** The split landed: `PLAYER_CHARACTER` and `NPC_CHARACTER` are separate object layers, so a player and an NPC collide while two of the same kind do not (`ObjectLayerPairFilter`, `physics_layers.h`). Kept at this number because other sections cite §15 by number. | milnet01 | done |
 | 5 | **Ph8.** Constraint creation must take `BodyLockMultiWrite` on `{bodyA, bodyB}`. Today a raw `JPH::Body*` escapes a single-body `BodyLockWrite` scope (`physics_world.cpp:322-344`) and is used at multiple call sites outside the lock. UB under concurrent broadphase update. | milnet01 | Phase 10.9 Slice 7 close |
 | 6 | **Cl1.** CPU↔GPU cloth parity harness: headless test that drives identical `ClothConfig` on both backends for 2 s and asserts per-particle position delta < ε. Depends on shader infrastructure (`Sh1–Sh4`). The §6 dual-implementation rule names this test as the parity gate. | milnet01 | Phase 10.9 Slice 17 close |
 | 7 | **Cl4.** GPU `buildAndUploadDihedrals` hard-codes `dihedralCompliance = 0.01f` — expose a setter (per-constraint uniform override or re-upload) OR document the GPU-backend limitation on `IClothSolverBackend`. | milnet01 | Phase 10.9 Slice 17 close |
@@ -644,3 +644,4 @@ Internal cross-references:
 |------|--------------|--------|--------|
 | 2026-04-28 | 1.0 | milnet01 | Initial spec — `engine/physics` formalised post-Phase 10.9 Wave 4 (Ph2 / Ph6 / Ph7 / Ph9 / Cl2 / Cl3 / Cl7 / Cl8 landed). Cloth dual-implementation, constraint determinism story, and Jolt threading model captured for the first time in one document. |
 | 2026-06-01 | 1.0.1 | milnet01 | Closed the former §15 open question on "CODING_STANDARDS §30 drift" (then numbered Q16): verified §30 already names `physics_layers.h` + `jolt_helpers.h` correctly (the rename landed in the 2026-05-18 cold-eyes pass), so the drift no longer exists. Its §15 row was removed on close per the SPEC_TEMPLATE open-only convention — §15 now tops out at Q15 (CE15). |
+| 2026-09-26 | 1.0.2 | milnet01 | CE18: brought § 2, § 3 and § 4 into line with the shipped five-layer model (`PLAYER_CHARACTER` / `NPC_CHARACTER` split, `TRIGGER`=4, `CHARACTER` an alias), corrected the `physics_layers.h` line citations, marked § 15 Q4 (Ph5) resolved in place, and fixed § 10's pointer to the `Result<T, E>` question (Q10, not Q4). No behaviour change. |

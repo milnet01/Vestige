@@ -3558,7 +3558,7 @@ Every Phase 10.7 design-doc promise is verified by a test authored **from the de
 
 ---
 
-- 📋 [CE18] **Physics spec layer-model drift — §2/§3/§4 + §15 Q4 describe 4 object layers; code ships 5.**
+- ✅ [CE18] **Physics spec layer-model drift — §2/§3/§4 + §15 Q4 describe 4 object layers; code ships 5.**
   Surfaced by the 2026-06-01 cold-eyes pass (loop 4), pre-existing
   and unrelated to the CE1-CE17 edits. `engine/physics/physics_layers.h`
   ships 5 object layers (STATIC=0, DYNAMIC=1, PLAYER_CHARACTER=2,
@@ -3574,6 +3574,13 @@ Every Phase 10.7 design-doc promise is verified by a test authored **from the de
   is ~:46 not :30; filter classes ~:55/:95/:139 not :39/:78/:114) — or
   de-line-number them per CE13. Best done as one focused pass with the
   code owner confirming the intended model, not piecemeal.
+  Resolved 2026-09-26 (spec 1.0.2): §2/§3/§4 now describe the five
+  shipped object layers and the CHARACTER alias, the broadphase comment
+  says both character layers map to CHARACTER bp and TRIGGER to DYNAMIC,
+  and the physics_layers.h citations are :18,46 and :55, :95, :139. §15
+  Q4 (Ph5) is marked resolved in place rather than renumbered, because
+  other sections cite §15 by number. Also fixed §10's "Open Q4" pointer,
+  which meant Q10.
   Kind: doc-fix.
   Source: cold-eyes-2026-06-01 (CE-bundle review loop 4).
 
