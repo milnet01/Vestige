@@ -274,7 +274,7 @@ Budgets (research §7), enforced by a benchmark harness:
 
 **Why the god-ray row is double research § 7's figure (3D_E-0616).** Research § 7 estimates 0.3–0.6 ms for "64–128 samples × **one tap each**" — the classic Mitchell shape, where a separate pre-pass builds the occlusion buffer and each gather tap then costs one texture sample. Vestige does not ship that shape: § 5.2 deliberately folds the light buffer *into* the gather ("one pass, not a separate masking pass"), so every tap costs **two** samples (depth `texelFetch` + scene fetch), as § 5.8 also states. The imported figure therefore described a different shader than the one that shipped, and doubling it is what makes the row describe this one. The trade is intentional — double the per-tap cost buys the removal of a full-res pre-pass — and it is not a regression to fix.
 
-**The ×2 is one of three shape differences, and the band's real warrant is the measurement.** Research § 7's figure is a *full-resolution* per-frame cost; the shipped pass gathers at **half** res (¼ the pixels, § 5.4 / § 5.8) and adds a full-res combine draw that the research figure does not cost at all. Those two push in the opposite direction to the ×2, so the arithmetic does not in fact reconcile 0.3–0.6 to 0.6–1.2 — what anchors the band is empirical: 0.69 ms measured on the shipped pass, and 1.21 ms when `NUM_SAMPLES` is mutated to its 128-tap ceiling. **Both are retired-harness medians (3D_E-0626) and neither is a basis a new budget may be scaled from** — scaling them against a gate that now asserts a minimum yields a budget roughly a third too loose, which is the vacuity this section forbids below. 3D_E-0657 re-took the uncontended figures on 2026-09-26: **0.52–0.53 ms** at 64 taps and **0.95–0.97 ms** at 128 taps (minimum of 128 frames, three runs each). A resolution change scales from those, or re-takes them as part of the change. **Read the Technique cells as the cost model: resolution is an input, not just tap count.** A change to `godRaysConfig`'s ½ — including the quarter-res gather this section names as a remedy below — moves the cost without moving a tap count, and must move the **reference** budget with it. **It does not move the tier row**: that row is derived from a frame share and no step in its chain mentions resolution or tap count, so a cheaper Low/Med configuration changes the Technique cell and the measured figure and leaves 1.75 ms standing.
+**The ×2 is one of three shape differences, and the band's real warrant is the measurement.** Research § 7's figure is a *full-resolution* per-frame cost; the shipped pass gathers at **half** res (¼ the pixels, § 5.4 / § 5.8) and adds a full-res combine draw that the research figure does not cost at all. Those two push in the opposite direction to the ×2, so the arithmetic does not in fact reconcile 0.3–0.6 to 0.6–1.2 — what anchors the band is empirical: 0.69 ms measured on the shipped pass, and 1.21 ms when `NUM_SAMPLES` is mutated to its 128-tap ceiling. **Both are retired-harness medians (3D_E-0626) and neither is a basis a new budget may be scaled from** — scaling them against a gate that now asserts a minimum yields a budget roughly a third too loose, which is the vacuity this section forbids below. 3D_E-0657 re-took the uncontended figures on 2026-09-26: **0.52–0.53 ms** at 64 taps and **0.95–0.97 ms** at 128 taps (minimum of 128 frames, three runs each). A resolution change moves the reference budget by scaling the band's ends; these minimums are the check that the shipped pass still sits inside it, not the basis for it. **Read the Technique cells as the cost model: resolution is an input, not just tap count.** A change to `godRaysConfig`'s ½ — including the quarter-res gather this section names as a remedy below — moves the cost without moving a tap count, and must move the **reference** budget with it. **It does not move the tier row**: that row is derived from a frame share and no step in its chain mentions resolution or tap count, so a cheaper Low/Med configuration changes the Technique cell and the measured figure and leaves 1.75 ms standing.
 
 Measured on the RX 6600 at 1080p, the shipped 64-tap variant medians **0.69 ms** with the whole frame sky (every tap pays both samples — the most expensive frame the shader can be handed, and a real one, since the pass only runs with the sun on screen) and **0.48–0.55 ms** with no sky in view (the depth sample alone). Harness sync overhead is 10.6 µs, so these are GPU cost and not measurement noise.
 
@@ -784,3 +784,25 @@ neither is wrong. (3) § 8 recommends `VESTIGE_WINTEST_QUALITY_PRESET=high` to
 hold the GTX 1050 to the reference row, and § 8's own 3.1 ms figure for that box
 at `renderScale` 1.0 makes that override guaranteed-red; whether it is intended
 as a diagnostic is not stated anywhere.
+
+### Amendment 2026-09-26 (3D_E-0657 — reference god-ray gate moves to the band's 64-tap end) — cold-eyes loops
+
+§ 8 now gates the reference row at 0.6 ms, the band's 64-tap end, instead of
+1.2 ms: a 128-tap mutation re-taken under the 3D_E-0626 harness measured
+0.95–0.97 ms (uncontended minimum, three runs) and passed the 1.2 ms gate.
+Gated under CLAUDE.md rule 14 on the span of commit 86e85d6 (§ 8 lines 277,
+281, 316, 320, 337, 348). Genre `adr` (cap 3), as the 2026-09-02 amendment
+settled. Deterministic layer: `doc_integrity`, clean before and after.
+
+- **Loop 1** (two cold `review-lane` lanes, every lane holding every
+  question): Q1 1 · Q2 2 · Q3 0 — verified 3, fixed 1, filed 2, dismissed 0.
+  Packet build (1b) found the Q1 itself: line 302 names
+  `tests/test_fog_benchmark.cpp` as the harness's home, which 30953ce moved to
+  `tests/perf_bench_helpers.h`; both lanes also reported it. Fixed: line 277
+  told a resolution change to scale from the measured minimums, contradicting
+  line 281's rule that the budget is not fitted to measurement (inside the
+  gated span). Filed as 3D_E-0706, outside the gated span: line 302's owner,
+  and line 308's contradiction with 277/294 over whether a cheaper Low/Med
+  configuration moves the 1.75 ms row. Four open questions settled clean.
+  Contamination: both lanes' git snapshots named the baseline commit
+  86e85d6 by subject, and both disclosed it.

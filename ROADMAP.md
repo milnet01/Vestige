@@ -4384,6 +4384,26 @@ shipped that have no invocation path at all.
   Source: review-contract loop 5 on docs/standards/versioning-overrides.md, 2026-09-25.
   Lanes: docs, release.
 
+- 📋 [3D_E-0706] **Fog design section 8 has two defects outside 3D_E-0657's change, found by its gate.**
+  Both verified verbatim; both lie outside the gated change, so the gate
+  filed them instead of fixing them.
+  1. [Q2] line 308: "Either would still have to move the 1.75 ms row with
+  it, per the cost-model note above." Contradicts line 277 ("leaves 1.75
+  ms standing") and line 294 ("leaves the frame-derived 1.75 ms
+  unchanged"). A builder of a cheaper Low/Med god-ray configuration would
+  change kGodRayTierBudgetMicros from 308, and leave it from 277/294.
+  Lane fix: 308 should say "the Technique cell and the measured figure".
+  Changes what a conformer does, so rule 14 applies to the fix.
+  2. [Q1, wrong owner] line 302: "with the reasoning recorded beside the
+  helper in `tests/test_fog_benchmark.cpp`". The helper and its reasoning
+  moved to tests/perf_bench_helpers.h in 30953ce (3D_E-0656); the fog
+  test keeps benchIsGating only. Found by both lanes. A code-alignment
+  edit (rule 14 exempts it).
+  **Layman:** Two sentences in the fog design notes point to the wrong file or contradict each other about which speed budget moves.
+  Kind: doc-fix.
+  Source: review-contract 2026-09-26 on docs/phases/phase_10_fog_design.md (3D_E-0657 gate, loop 1).
+  Lanes: docs, perf.
+
 ## 0.3.0 — An editor a builder can use
 
 Breaks: the scene format. Editor work changes what a scene stores.
