@@ -2424,6 +2424,16 @@ Full spatial audio pipeline with dynamic mixing, occlusion, and adaptive music. 
   tap count. Per this item the budget needs re-deriving, not refitting to
   the measurement. That edits fog design section 8 (a contract document),
   so it needs the rule-14 gate before the new figure is used.
+  Progress (2026-09-26): the load-bearing part is done. Design § 8 now
+  gates the reference row at the band's 64-tap end, 0.6 ms (rule-14
+  review-contract gate converged at loop 2; out-of-span findings filed as
+  3D_E-0706), and kGodRayBudgetMicros is 600. Verified in Release on the
+  RX 6600: 64 taps pass (min 546-561 us, CPU load ~22), 128 taps go red
+  (min 965-980 us) on all three runs each. Caution: under that load the
+  shipped minimum sat 6.5% under budget, so a heavily loaded dev rig can
+  flake this hand-run gate. Still open here: the no-sky 0.48-0.55 ms
+  figure, the 10.6 us harness sync overhead, and section 11.10's 0.1 ms
+  noise figure, all single samples from the retired harness.
   **Layman:** Some published speed numbers in the design doc were each measured once, before the stopwatch was fixed.
   Kind: investigate.
   Source: in-session-2026-09-02 (3D_E-0626).

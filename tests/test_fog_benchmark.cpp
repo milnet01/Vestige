@@ -94,20 +94,14 @@ constexpr double kGiInjectBudgetMicros = 400.0;
 // budget polices the shader on the dev rig rather than the tiers that ship it.
 // The tiers get kGodRayTierBudgetMicros below.
 //
-// Gate the band's UPPER bound, the same choice the volumetric gate above makes
-// in taking the 2.0 ms stack total rather than the ~1.2 ms pass figure. The
-// shipped shader is at the band's low tap count (64) but its high per-tap
-// content cost (2 samples), and § 8 records why the 64-tap end alone is too
-// tight: research § 7's extrapolation is itself optimistic by ~1.7x on this
-// texture-bandwidth-bound pass.
-//
-// Whether 1.2 ms is still tight enough to catch a doubled tap count is
-// UNVERIFIED (3D_E-0657). The 1.21 ms 128-tap red that established it was a
-// median under the pre-3D_E-0626 harness; the same all-sky pass now reads
-// ~0.52 ms as an uncontended minimum where it read 0.69 ms as a median, which
-// maps the 128-tap case to ~0.9 ms and under this budget. Do not rely on this
-// row to catch a tap-count regression until the mutation is re-run.
-constexpr double kGodRayBudgetMicros = 1200.0;
+// Gate the band's 64-TAP end, the end that describes what ships (3D_E-0657,
+// design § 8). It used to gate the 1.2 ms upper bound, but re-taken under the
+// 3D_E-0626 harness a 128-tap mutation measures 0.95-0.97 ms and passed that,
+// so the row could not see a doubled tap count. 0.6 ms is the band's published
+// end, not fitted to a measurement: the shipped 64-tap pass reads 0.52-0.53 ms
+// against it and the 128-tap mutation goes red. Raising NUM_SAMPLES on purpose
+// moves this constant to the band's matching point.
+constexpr double kGodRayBudgetMicros = 600.0;
 
 // design § 8 row "God rays, screen-space -- Low/Med tier budget | 1.75 ms"
 // (3D_E-0624). NOT an RX 6600 figure and NOT fitted to any measurement -- it is
