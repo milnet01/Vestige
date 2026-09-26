@@ -287,7 +287,8 @@ build_and_test_msvc() {
         # natively in the Linux stages and don't exercise MSVC-compiled code, so
         # excluding them loses no signal. ANY new host-Python ctest test must be added
         # here (PerfGate joined LocalizationAudit/ShaderLint when 3D_E-0030 landed;
-        # InputPollAudit joined when 3D_E-0628 landed).
+        # InputPollAudit joined when 3D_E-0628 landed; ShaderCompile when 3D_E-0638
+        # landed).
         #
         # The failure is inverted and therefore easy to misread: a host-Python test
         # that PASSES (exit 0) is reported ***Failed under Wine, while a WILL_FAIL
@@ -295,7 +296,7 @@ build_and_test_msvc() {
         # inverted expectation. So a new audit's negative fixtures go green and only
         # its positive cases go red — measured on InputPollAudit, 3 green / 2 red.
         "${GL_WRAP[@]}" ctest --test-dir build-msvc --output-on-failure -j "$JOBS" \
-            -E 'LocalizationAudit|ShaderLint|PerfGate|InputPollAudit' || exit 1
+            -E 'LocalizationAudit|ShaderLint|ShaderCompile|PerfGate|InputPollAudit' || exit 1
     )
     local rc=$?
     if [[ $rc -eq 0 ]]; then record "$label" ok $((SECONDS - start)); else record "$label" fail $((SECONDS - start)); fi
