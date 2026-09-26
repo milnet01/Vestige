@@ -4399,6 +4399,14 @@ shipped that have no invocation path at all.
   moved to tests/perf_bench_helpers.h in 30953ce (3D_E-0656); the fog
   test keeps benchIsGating only. Found by both lanes. A code-alignment
   edit (rule 14 exempts it).
+  Loop 2 of the same gate added a third, also outside the gated change:
+  3. [Q1, wrong owner] line 348: "exports it to the test as
+  `VESTIGE_QUALITY_PRESET`, and builds Release, so neither guard
+  swallows it on the GTX 1050". scripts/wintest.sh says "It does NOT
+  build. Build first with: ./scripts/local-ci.sh --windows"; the Release
+  build is local-ci.sh's (build-msvc, -DCMAKE_BUILD_TYPE=Release). Lane
+  fix: "runs the Release binary that scripts/local-ci.sh --windows builds
+  (wintest.sh does not build)". A code-alignment edit.
   **Layman:** Two sentences in the fog design notes point to the wrong file or contradict each other about which speed budget moves.
   Kind: doc-fix.
   Source: review-contract 2026-09-26 on docs/phases/phase_10_fog_design.md (3D_E-0657 gate, loop 1).

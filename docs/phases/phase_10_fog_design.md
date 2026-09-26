@@ -806,3 +806,14 @@ settled. Deterministic layer: `doc_integrity`, clean before and after.
   configuration moves the 1.75 ms row. Four open questions settled clean.
   Contamination: both lanes' git snapshots named the baseline commit
   86e85d6 by subject, and both disclosed it.
+- **Loop 2** (two cold `review-lane` lanes, every lane holding every
+  question): no verified finding inside the gated span — **converged**. Both
+  lanes re-reported line 302, already filed as 3D_E-0706; the orchestrator had
+  left it out of the loop-2 brief's already-surfaced list, which is why it
+  came back. One lane found a new defect outside the span, line 348's claim
+  that `scripts/wintest.sh` builds Release (it runs the Release binary that
+  `scripts/local-ci.sh --windows` builds); added to 3D_E-0706. Open questions
+  settled clean, including whether the 0.6 ms reference row now fires beyond
+  the RX 6600: it asserts on any box declaring High, and today only the dev rig
+  does. Contamination: both lanes' git snapshots named 86e85d6 and 3cae032 by
+  subject, and both disclosed it.
