@@ -185,7 +185,10 @@ PBR-style FabricMaterial (areal density GSM, tensile / shear / bending stiffness
 
 ## 0.2.0 — Finish what's started
 
-Breaks: the settings schema. Closing the audit items lands settings fields.
+Breaks: nothing yet. Checked 2026-09-26 (3D_E-0700): no open or landed item
+changes a saved file, key binding or flag, so this work ships as 0.1.x
+patches. The 0.2.0 tag waits for a real break (versioning-overrides.md
+section 1), by user decision.
 
 #### Formula Pipeline (Cross-Cutting Infrastructure) — COMPLETE
 
@@ -3988,6 +3991,11 @@ shipped that have no invocation path at all.
   - `docs/engine/physics/spec.md` section 6 -- records that the CPU/GPU cloth parity harness does not exist, while CLAUDE.md rule 7 REQUIRES a parity test for a dual implementation. The document is honest and the project is in breach of its own rule. See 3D_E-0630.
   - `engine/editor/editor.h:383` and `engine/scripting/scripting_system.cpp:183` -- comments describing the runtime in the future tense ("In the future, this will: 1. Find all entities with ScriptComponent") for code that shipped.
   Do NOT batch-fix by deleting the claims. Each needs the same decision 3D_E-0627 states: deliver the feature, or withdraw the claim and say so.
+  Progress (2026-09-26): the SMAA clause is resolved by 3D_E-0631 -- the
+  code now IS reference SMAA 1x HIGH, and smaa.h says so truthfully.
+  ARCHITECTURE.md's SMAA line no longer makes the claim. Four clauses
+  remain, each waiting on its code item's deliver-or-withdraw decision
+  (3D_E-0627, 3D_E-0632, 3D_E-0630) plus the future-tense comments.
   **Layman:** Five places in the documentation describe features that do not work, so anyone reading them is misled.
   Kind: doc-fix.
   Source: review-code + verify-delivery 2026-08-31/09-01.
@@ -4323,7 +4331,7 @@ shipped that have no invocation path at all.
   Kind: fix.
   Source: peer-request-2026-09-25 (DOOM_Ants DOOM-0407).
 
-- 📋 [3D_E-0700] **The 0.2.0 heading names a break its own work does not make.**
+- ✅ [3D_E-0700] **The 0.2.0 heading names a break its own work does not make.**
   The roadmap line under `## 0.2.0` reads "Breaks: the settings schema.
   Closing the audit items lands settings fields." Section 1 of
   docs/standards/versioning-overrides.md classes an added field as a PATCH,
@@ -4334,6 +4342,13 @@ shipped that have no invocation path at all.
   its own number.
   The same check applies to 0.3.0's "Editor work changes what a scene
   stores": an added optional scene block is a PATCH under section 1.
+  Resolved 2026-09-26 for 0.2.0: since v0.1.74 no change to the settings
+  schema version, a key-binding id, the scene format version or a CLI
+  flag (git diff of settings.h, settings_migration, engine/input,
+  scene_serializer.h); only the informational ENGINE_VERSION stamp moved.
+  No open 0.2.0 item renames or removes one. User chose to follow the
+  rules: the "Breaks:" line now says nothing breaks yet and the 0.2.0 tag
+  waits for a real break. Not checked here: 0.3.0's "scene format" line.
   **Layman:** Version 0.2.0 claims it changes the settings file in a way that breaks old files, but adding settings does not; find out whether anything in it really breaks.
   Kind: audit-fix.
   Source: review-contract loop 5 on docs/standards/versioning-overrides.md, 2026-09-25.
