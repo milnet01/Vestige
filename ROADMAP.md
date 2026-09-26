@@ -5983,6 +5983,12 @@ Outdoor landscapes surrounding the Temple complex — hills, valleys, and the Ki
   unbuilt levers 2-3 (reduced-detail reflection, throttling) are the
   candidates. Compare against a baseline taken at the same 1920x1080 size,
   not against older meadow FPS figures of unknown size.
+  Caveat (2026-09-26): the 52-56 fps figure was NOT taken on a quiet GPU.
+  Other sessions on this machine (DOOM_Ants among them) were running GPU
+  tests the same day, and no GPU-busy check was made before the run, the
+  mistake 3D_E-0028's correction records. Re-measure on an idle GPU
+  (check that no other engine is running and the card reads idle) before
+  acting on this item; it may not reproduce.
   **Layman:** At full-HD resolution the meadow runs slightly slower than the required 60 frames a second whenever the pond is on screen.
   Kind: perf.
   Source: in-session-2026-09-26 (video stutter investigation).
