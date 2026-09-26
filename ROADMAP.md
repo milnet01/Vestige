@@ -3929,6 +3929,19 @@ shipped that have no invocation path at all.
 - 📋 [3D_E-0640] **PhysicsDebugDraw is compiled and never invoked.**
   `PhysicsDebugDraw::draw` (physics_debug.cpp:46) and `drawConstraints` (:97) are the ONLY .cpp occurrences of the type in the tree -- i.e. its own two definitions and no invocation. There is no menu item, no hotkey and no settings flag reaching it, so unlike the ruler tool this one is not even nominally reachable.
   Decide between wiring it to the editor's debug-draw surface (where DebugDraw already has a live consumer) and deleting it. Either is fine; leaving a debug facility that cannot be switched on is what is not.
+  Plan (2026-09-26, investigated, not started): WIRE it, do not delete.
+  Engine already owns PhysicsDebugDraw m_physicsDebugDraw (engine.h).
+  (1) PhysicsDebugDraw::draw must stop calling debugDraw.flush(vp) itself
+  -- that would draw every queued editor line (grid, gizmos) a second way,
+  without the scene depth texture. Make it queue lines only: draw(const
+  PhysicsWorld&). (2) Editor View menu: add "Physics Colliders" beside
+  "All Light Gizmos" (editor.cpp ~531, m_showAllLightGizmos pattern,
+  getter in editor.h). (3) engine.cpp editor overlay block (~2140, next
+  to the navmesh overlay, before m_debugDraw.flush): setEnabled(flag),
+  draw(m_physicsWorld). (4) Test: enabled draw over a world with one
+  static box queues 24 vertices more (DebugDraw::getQueuedVertexCount),
+  disabled queues none. Note: draw() skips sleeping dynamic bodies and
+  draws local AABBs without rotation -- existing behaviour.
   **Layman:** The physics debug overlay cannot be turned on from anywhere.
   Kind: fix.
   Source: verify-delivery 2026-09-01.
@@ -8467,3 +8480,62 @@ record, and a real clearance before commercial release needs counsel.
   Kind: chore.
   Source: peer-doom-ants-2026-09-26 message 41.
   Lanes: tooling.
+
+- 📋 [3D_E-0707] **Shard the gtest suite into a few parallel ctest entries.**
+  vestige_tests runs as ONE ctest entry, so ctest -j cannot spread it: it
+  took 134 s (Debug), 45-67 s (other stages) in 2026-09-26 local-ci runs.
+  Per-case registration was tried and was slower (every case re-created a
+  GL context; tests/CMakeLists.txt explains). Middle path: N entries
+  using GTEST_TOTAL_SHARDS / GTEST_SHARD_INDEX, one GL context per
+  shard. Expected gain unmeasured. Measure N=4..6 against RAM, since the
+  Debug stage runs under ASan and the machine is short on memory.
+  **Layman:** Split the one big test run into several that run side by side, so tests finish sooner locally and on GitHub.
+  Kind: perf.
+  Source: user-request-2026-09-26 (CI speed).
+  Lanes: tests, ci.
+
+- 📋 [3D_E-0708] **Skip the local CMake 3.21 compat stage when no build file changed.**
+  scripts/local-ci.sh stage 7 took 124-550 s per push on 2026-09-26. It
+  only tests the declared CMake minimum, so it can only fail on a change
+  to CMakeLists.txt, *.cmake or external/ pins. Skip it in the pre-push
+  hook when the pushed range touches none of those, the same way
+  documentation-only pushes already skip the gate. GitHub's cmake-compat
+  job keeps running it, so coverage is kept.
+  **Layman:** Stop rebuilding everything with an old CMake when nothing CMake reads has changed.
+  Kind: perf.
+  Source: user-request-2026-09-26 (CI speed).
+  Lanes: ci.
+
+- 📋 [3D_E-0709] **Add paths-ignore to GitHub CI for documentation-only pushes.**
+  .github/workflows/ci.yml runs every job on every push to main. The local
+  pre-push hook already decides a push is documentation-only and skips the
+  gate (several such pushes on 2026-09-26). Mirror that rule in ci.yml's
+  on.push.paths-ignore so GitHub does not build and test for a ROADMAP or
+  CHANGELOG commit. Keep the rule in one place if possible, so the two
+  cannot drift.
+  **Layman:** Stop GitHub rebuilding the engine when only notes and documents changed.
+  Kind: perf.
+  Source: user-request-2026-09-26 (CI speed).
+  Lanes: ci.
+
+- 📋 [3D_E-0710] **Investigate running independent local-ci stages at the same time.**
+  local-ci.sh runs seven stages one after another; on 2026-09-26 a warm
+  push took about 13-20 min in total and a cold one about 40 min (Windows
+  MSVC 163-803 s, Release 108-427 s, Debug 212-338 s). The Debug, Release
+  and Windows builds use separate build directories. Running two at once
+  would cut wall time, but RAM is short (/tmp is RAM) and builds already
+  use -j. Measure peak memory first; unmeasured.
+  **Layman:** Check whether the local checks can run in parallel without running the machine out of memory.
+  Kind: investigate.
+  Source: user-request-2026-09-26 (CI speed).
+  Lanes: ci.
+
+- 📋 [3D_E-0711] **Compile shaders in parallel in the glslang check.**
+  ShaderCompileGlslang (3D_E-0638) compiles 92 shaders serially: 9-14 s
+  per stage on 2026-09-26. tools/shader_lint.py could run the
+  glslangValidator calls in a small process pool and keep the output
+  order. Small win, easy.
+  **Layman:** Check the 92 shaders several at a time instead of one after another.
+  Kind: perf.
+  Source: user-request-2026-09-26 (CI speed).
+  Lanes: tests, ci.
