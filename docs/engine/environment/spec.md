@@ -413,7 +413,7 @@ public:
 
 **Scene save / load:**
 
-1. Save: `terrain.serializeSettings()`, `foliageManager.serialize()`, density-map / spline arrays serialised through `nlohmann::json` — written via `engine/utils/atomic_write.h` so a partial write never corrupts a scene.
+1. Save: `terrain.serializeSettings()` and `foliageManager.serialize()`, which carries the painted density map under `"densityMap"` (3D_E-0632), serialised through `nlohmann::json` — written via `engine/utils/atomic_write.h` so a partial write never corrupts a scene. Spline paths are **not** saved: `SplinePath::serialize()` exists, but no scene object owns a spline, so nothing calls it.
 2. Load: deserialise inverse; on schema mismatch, defaults populate and a `Logger::warning` is emitted.
 
 **Cold start:**

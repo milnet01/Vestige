@@ -3994,7 +3994,7 @@ shipped that have no invocation path at all.
   Kind: security.
   Source: review-code 2026-08-31, commit 68a0eb8.
 
-- 📋 [3D_E-0650] **Five documents state as fact features that this audit proved absent.**
+- ✅ [3D_E-0650] **Five documents state as fact features that this audit proved absent.**
   Each was VERIFIED false against source during the sweep, and each is currently recorded only as a sub-clause of the code bullet that found it. They are collected here so the DOCUMENT half has an owner of its own -- fixing the code and leaving the claim, or fixing the claim and leaving the code, both leave the project inconsistent.
   - `ROADMAP.md:519` -- `- [x] ScriptComponent (entity attachment) + ScriptingSystem (ISystem with update loop, latent tick, event bridge)`. `ScriptingSystem` is never constructed at runtime; `ScriptComponent` has zero references anywhere including tests. See 3D_E-0627.
   - `ARCHITECTURE.md:102` and `engine/renderer/smaa.h:20-23` -- both advertise "SMAA 1x at HIGH quality preset" with "Area texture lookup for accurate blend weights". The area table's diagonal half is a byte copy of the orthogonal half and the search table is a uniform placeholder, by the code's own comments. See 3D_E-0631.
@@ -4007,6 +4007,17 @@ shipped that have no invocation path at all.
   ARCHITECTURE.md's SMAA line no longer makes the claim. Four clauses
   remain, each waiting on its code item's deliver-or-withdraw decision
   (3D_E-0627, 3D_E-0632, 3D_E-0630) plus the future-tense comments.
+  Resolved 2026-09-26, each clause checked against the tree:
+  (1) scripting tick: un-ticked by 3D_E-0627 (S0042 is open, its text
+  says scripting cannot run). (2) SMAA: now true, 3D_E-0631. (3)
+  environment spec save line: the density map IS saved now, inside
+  FoliageManager::serialize() (3D_E-0632); the same line also claimed
+  spline paths are saved, which is false (SplinePath::serialize has no
+  caller, no scene owns a spline), so the line was rewritten to say so.
+  (4) physics spec section 6: the document is honest; the rule-7 breach it
+  records is code work owned by the Cl1 parity harness (spec section 15
+  Q6), not a document fix. (5) editor.h and scripting_system.cpp comments:
+  accurate again, because 3D_E-0627 withdrew the claim that scripting runs.
   **Layman:** Five places in the documentation describe features that do not work, so anyone reading them is misled.
   Kind: doc-fix.
   Source: review-code + verify-delivery 2026-08-31/09-01.
