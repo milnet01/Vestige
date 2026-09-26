@@ -23,6 +23,14 @@ may change any interface without notice.
 
 ## [Unreleased]
 
+### 2026-09-26 Added — Formula Workbench: quadratic soft-knee bloom template for DOOM_Ants
+
+New `bloom_knee_quadratic` template, the bloom extract weight DOOM_Ants
+carries in two shaders, so they can be one Workbench export. Threshold and
+knee are inputs, so the exported GLSL takes them as parameters and a
+caller can switch presets at runtime. Checked: the export compiles for
+Vulkan with glslangValidator, included twice.
+
 ### 2026-09-26 Added — Hands-free camera fly-through for demo videos (3D_E-0696, first piece)
 
 `--demo-flythrough` flies the meadow camera along a built-in smooth path

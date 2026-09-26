@@ -70,6 +70,7 @@ std::vector<FormulaDefinition> PhysicsTemplates::createAll()
     all.push_back(createFastNegExp());
     // Post-Processing
     all.push_back(createBloomThreshold());
+    all.push_back(createBloomKneeQuadratic());
     all.push_back(createVignette());
     // Camera
     all.push_back(createExposureEV());
@@ -911,6 +912,58 @@ FormulaDefinition PhysicsTemplates::createBloomThreshold()
             binOp("-", var("luminance"), var("threshold")));
 
     def.source = "Soft bloom knee from Karis 2014 (UE4 bloom); common in post-processing";
+    return def;
+}
+
+FormulaDefinition PhysicsTemplates::createBloomKneeQuadratic()
+{
+    // Quadratic soft-knee bloom extract WEIGHT (multiplied into the colour):
+    //   soft = clamp(peak - threshold + knee, 0, 2*knee)^2 / (4*knee + 1e-4)
+    //   w    = max(soft, peak - threshold) / max(peak, 1e-4)
+    // peak is max(r, g, b) of scene radiance. Below threshold - knee nothing
+    // blooms; across the knee the curve rises quadratically, meeting the
+    // linear (peak - threshold) branch at threshold + knee. The 1e-4 terms
+    // guard knee = 0 and black pixels. Added for DOOM_Ants, whose
+    // bloom_extract_raster.comp and bloom_extract_rt.comp carry it, so the
+    // two copies can be one Workbench export.
+    FormulaDefinition def;
+    def.name = "bloom_knee_quadratic";
+    def.category = "post_processing";
+    def.description = "Quadratic soft-knee bloom extract weight: a colour "
+                      "multiplier, 0 below the knee, (peak-threshold)/peak above it.";
+    // threshold and knee are INPUTS, not coefficients: the export inlines
+    // coefficients as constants, and a caller picking them at runtime from
+    // presets (DOOM_Ants' kBloomPresets) needs them as function parameters.
+    def.inputs = {
+        {"peak",      VT::FLOAT, "", 1.0f},
+        {"threshold", VT::FLOAT, "", 1.0f},
+        {"knee",      VT::FLOAT, "", 0.5f}
+    };
+    def.output = {VT::FLOAT, ""};
+
+    const auto over = [] { return binOp("-", var("peak"), var("threshold")); };
+    const auto safePeak = [] { return binOp("max", var("peak"), lit(1e-4f)); };
+
+    // clamp(x, 0, 2k) has no node of its own: min(max(x, 0), 2k).
+    auto knee = binOp("min",
+        binOp("max", binOp("+", over(), var("knee")), lit(0.0f)),
+        binOp("*", lit(2.0f), var("knee")));
+    // Copy before the move: argument evaluation order is unspecified, so
+    // clone() and std::move(knee) in one call could run move-first.
+    auto kneeCopy = knee->clone();
+    auto kneeSq = binOp("*", std::move(kneeCopy), std::move(knee));
+    auto soft = binOp("/", std::move(kneeSq),
+        binOp("+", binOp("*", lit(4.0f), var("knee")), lit(1e-4f)));
+
+    def.expressions[QT::FULL] =
+        binOp("/", binOp("max", std::move(soft), over()), safePeak());
+
+    // APPROXIMATE: hard threshold, no knee.
+    def.expressions[QT::APPROXIMATE] =
+        binOp("/", binOp("max", lit(0.0f), over()), safePeak());
+
+    def.source = "Quadratic soft knee (Unity/UE post-processing bloom prefilter); "
+                 "form as shipped in DOOM_Ants bloom_extract_*.comp";
     return def;
 }
 

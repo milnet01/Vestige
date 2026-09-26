@@ -62,6 +62,7 @@ public:
 
     // Post-Processing
     static FormulaDefinition createBloomThreshold();
+    static FormulaDefinition createBloomKneeQuadratic();
     static FormulaDefinition createVignette();
 
     // Camera

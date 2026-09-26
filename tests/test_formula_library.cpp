@@ -951,8 +951,9 @@ TEST(FormulaLibrary, LoadSingleObjectJson)
 TEST(PhysicsTemplates, CreateAllReturnsExpectedCount)
 {
     auto all = PhysicsTemplates::createAll();
-    // 27 original + 11 path-tracer templates (3D_E-0006..0010).
-    EXPECT_EQ(all.size(), 38u);
+    // 27 original + 11 path-tracer templates (3D_E-0006..0010)
+    // + bloom_knee_quadratic (DOOM_Ants' extract weight).
+    EXPECT_EQ(all.size(), 39u);
 
     // Each has a name, category, and FULL expression
     for (const auto& def : all)
@@ -968,9 +969,9 @@ TEST(PhysicsTemplates, RegisterBuiltinTemplates)
 {
     FormulaLibrary lib;
     lib.registerBuiltinTemplates();
-    // 38 physics/render/path-tracer templates + 3 audio templates (AX4 S1,
+    // 39 physics/render/path-tracer templates + 3 audio templates (AX4 S1,
     // 3D_E-0022): impact_loudness_gain, impact_pitch_scale, aggregate_event_rate.
-    EXPECT_EQ(lib.count(), 41u);
+    EXPECT_EQ(lib.count(), 42u);
 
     // Spot-check original formulas
     EXPECT_NE(lib.findByName("aerodynamic_drag"), nullptr);
@@ -1479,6 +1480,43 @@ TEST(PhysicsTemplates, BloomThresholdExists)
     EXPECT_EQ(bloom->category, "post_processing");
     EXPECT_TRUE(bloom->hasTier(QualityTier::FULL));
     EXPECT_TRUE(bloom->hasTier(QualityTier::APPROXIMATE));
+}
+
+// bloom_knee_quadratic is DOOM_Ants' bloom extract weight (its
+// bloom_extract_raster.comp / bloom_extract_rt.comp), added so it can be
+// Workbench-exported. Expected values worked by hand at t=1.0, k=0.5:
+//   soft = clamp(peak - t + k, 0, 2k)^2 / (4k + 1e-4)
+//   w    = max(soft, peak - t) / max(peak, 1e-4)
+TEST(PhysicsTemplates, BloomKneeQuadraticEvaluates)
+{
+    auto def = PhysicsTemplates::createBloomKneeQuadratic();
+    EXPECT_EQ(def.category, "post_processing");
+    // threshold and knee are runtime inputs so the GLSL export takes them
+    // as parameters; there is nothing to fit.
+    EXPECT_TRUE(def.coefficients.empty());
+    ExpressionEvaluator eval;
+    const std::unordered_map<std::string, float> noCoeffs;
+
+    const auto eval1 = [&](QualityTier tier, float peak, float t = 1.0f, float k = 0.5f) {
+        ExpressionEvaluator::VariableMap vars = {
+            {"peak", peak}, {"threshold", t}, {"knee", k}};
+        return eval.evaluate(*def.getExpression(tier), vars, noCoeffs);
+    };
+    const QualityTier FULL = QualityTier::FULL;
+    EXPECT_NEAR(eval1(FULL, 0.4f), 0.0f, 1e-5f);           // below the knee: nothing blooms
+    EXPECT_NEAR(eval1(FULL, 1.0f), 0.25f / 2.0001f, 1e-5f); // at t: halfway up the knee
+    EXPECT_NEAR(eval1(FULL, 1.2f), (0.49f / 2.0001f) / 1.2f, 1e-5f); // inside the knee
+    EXPECT_NEAR(eval1(FULL, 3.0f), 2.0f / 3.0f, 1e-5f);    // past the knee: (peak-t)/peak
+    EXPECT_NEAR(eval1(FULL, 0.0f), 0.0f, 1e-5f);           // black: guarded divide, no NaN
+    // Other presets: t=0.8, k=0.2 at peak 0.9 -> clamp(0.3,0,0.4)^2/(0.8001)
+    // = 0.112486; max(that, 0.1) / 0.9 = 0.124984.
+    EXPECT_NEAR(eval1(FULL, 0.9f, 0.8f, 0.2f), (0.09f / 0.8001f) / 0.9f, 1e-5f);
+    // knee = 0 must not divide by zero: soft = 0 / 1e-4 = 0 -> hard threshold.
+    EXPECT_NEAR(eval1(FULL, 2.0f, 1.0f, 0.0f), 0.5f, 1e-5f);
+
+    // APPROXIMATE: hard threshold, max(0, peak - t) / max(peak, 1e-4).
+    EXPECT_NEAR(eval1(QualityTier::APPROXIMATE, 3.0f), 2.0f / 3.0f, 1e-5f);
+    EXPECT_NEAR(eval1(QualityTier::APPROXIMATE, 1.2f), 0.2f / 1.2f, 1e-5f);
 }
 
 TEST(PhysicsTemplates, BloomThresholdEvaluates)

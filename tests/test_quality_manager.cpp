@@ -333,10 +333,11 @@ TEST(FormulaQualityManager, PostProcessingInLibrary)
     lib.registerBuiltinTemplates();
 
     auto ppFormulas = lib.findByCategory("post_processing");
-    EXPECT_EQ(ppFormulas.size(), 2);
+    EXPECT_EQ(ppFormulas.size(), 3);
 
-    // Verify both templates exist
+    // Verify all three templates exist
     EXPECT_NE(lib.findByName("bloom_threshold"), nullptr);
+    EXPECT_NE(lib.findByName("bloom_knee_quadratic"), nullptr);
     EXPECT_NE(lib.findByName("vignette"), nullptr);
 }
 

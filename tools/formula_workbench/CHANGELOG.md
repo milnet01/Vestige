@@ -4,6 +4,16 @@ All notable changes to the Formula Workbench are documented in this file.
 
 ## [Unreleased]
 
+### Added
+
+- **`bloom_knee_quadratic` template.** The quadratic soft-knee bloom extract
+  weight, `max(clamp(peak - t + k, 0, 2k)^2 / (4k + 1e-4), peak - t) /
+  max(peak, 1e-4)`, as the DOOM_Ants bloom extract passes compute it.
+  `threshold` and `knee` are inputs rather than coefficients, so the export
+  is `bloomKneeQuadratic(peak, threshold, knee)` for callers that pick them
+  at runtime from presets; coefficients are always inlined as constants.
+  Requested by DOOM_Ants (DOOM-0440).
+
 ### Fixed
 
 - **Generated GLSL can be included more than once.** `--export-glsl` output
