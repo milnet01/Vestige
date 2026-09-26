@@ -5786,6 +5786,16 @@ Outdoor landscapes surrounding the Temple complex — hills, valleys, and the Ki
   roofed interiors without their interval trick. Their second lesson applies
   to any Vestige shader: a code path gated off by a uniform still cost them
   2.40 ms from register pressure; delete it or specialise, do not branch.
+  Input (2026-09-26, from UT_Ants, src/urender/Shadows.h, UTA-0014 § 4.8;
+  technique only): their shadows are cheap from caching, not per-tile speed.
+  One depth atlas for all shadowing lights; a tile is redrawn only when it
+  is placed, when its light changes, or when a mover inside the light's
+  radius moved, so a still scene draws zero shadow tiles a frame. Tile size
+  follows the light's projected screen size in powers of two; on overflow,
+  lights are admitted by descending size and the rest go unshadowed and are
+  counted. For Vestige the sun's cascades follow the camera, so this rule
+  fits the far, static cascade (this item's plan) and any future local
+  lights, not the near cascade. They have no per-light cost figure.
   **Layman:** Shadows cost more than a third of each frame; most of that work is redrawn every frame even when nothing moved.
   Kind: perf.
   Source: tech-survey-2026-09-02.
