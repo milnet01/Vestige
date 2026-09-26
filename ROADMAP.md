@@ -4817,6 +4817,16 @@ Retrofit completed across 8 commits — every Phase-10 Settings-store consumer n
   content does not depend on how fast the frame was rendered.
   Check: two recordings of one script, compared frame by frame, match
   within a small tolerance.
+  Input (2026-09-26, from DOOM_Ants DOOM-0048): fixed sim step plus render
+  interpolation of the camera only (lerp position, shortest-arc angle, frac
+  = time since last tick / tick length), snap on large moves, and
+  interpolation DISABLED while recording, so output is deterministic. Their
+  freeze lesson: freezing actors alone left per-pixel noise up to 102.7
+  because lights and animation kept their own clocks. Drive everything from
+  one pinnable clock. Vestige checked: it has several independent clocks
+  today (Timer::getElapsedTime for grass and water, EnvironmentForces' own
+  time for wind, ClothWindModel's own time), so this item needs to route
+  them through one demo clock, not just seed the RNGs.
   **Layman:** Remove the randomness in a demo run so every recording of the same script looks the same.
   Kind: feature.
   Source: user-request-2026-09-25.
@@ -4847,6 +4857,17 @@ Retrofit completed across 8 commits — every Phase-10 Settings-store consumer n
   and report formats are contracts other tooling binds to.
   Test: a scene with a deliberately broken shader and a missing asset
   yields a failing report naming both.
+  Input (2026-09-26, from DOOM_Ants -shotverify, DOOM-0202 and 0208):
+  goldens downscaled to 640 longest edge with a box filter and kept in git;
+  a missing golden is written as new (exit 0), a fail exits 3; mean abs
+  error bar 3.0 on 0-255 (same scene 0.000, wrong map 11.2, same-build noise
+  0.003). Pin everything with a clock, plus a fixed warm-up. Capture on a
+  fixed frame INDEX, not after a delay: they did not, and temporal history
+  depth still varies (their open DOOM-0315). Set the bar from measured
+  same-build noise times a margin, and record the derivation, which they
+  did not. Also: make the engine print that it applied each test flag and
+  refuse to run otherwise, since a build that ignores the flags silently
+  produces a passing run of the wrong thing.
   **Layman:** Let Vestige walk itself through a scene, check that graphics, sound, physics and the rest are all doing their jobs, and write a pass/fail report.
   Kind: test.
   Source: user-request-2026-09-25.
@@ -5743,6 +5764,18 @@ Outdoor landscapes surrounding the Temple complex — hills, valleys, and the Ki
   continuously moving sun destroys the caching that makes it pay. The one
   OpenGL reference (ktstephano/StratusGFX) publishes no timings and warns
   against hardware sparse textures. Watch, do not build.
+  Input (2026-09-26, from DOOM_Ants, GPL, technique only): for a static sun
+  over static geometry, they baked sun visibility at load into a 2-D grid
+  (RGBA16F; zLo/zHi interval per cell, open-sky mask) read with ONE bilinear
+  tap, refreshed height-only (0.12 ms) when a mover moves. It removed a
+  per-sample sun ray from their fog: +11.05 ms to +0.71 ms (DOOM-0289).
+  Vestige checked: its volumetric fog samples the shadow map once per froxel
+  in volumetric_scatter.comp.glsl, not per march step, and god rays are
+  screen-space, so the saving here is smaller and needs measuring first. A
+  2-D grid fits the meadow's height-field terrain but not the Tabernacle's
+  roofed interiors without their interval trick. Their second lesson applies
+  to any Vestige shader: a code path gated off by a uniform still cost them
+  2.40 ms from register pressure; delete it or specialise, do not branch.
   **Layman:** Shadows cost more than a third of each frame; most of that work is redrawn every frame even when nothing moved.
   Kind: perf.
   Source: tech-survey-2026-09-02.
@@ -5794,6 +5827,17 @@ Outdoor landscapes surrounding the Temple complex — hills, valleys, and the Ki
   source publication was confirmed by AMD as a mistake -- not a licence to
   ship from. XeSS 2/3: binary-only Windows DLLs, licence forbids reverse
   engineering, no OpenGL, no Linux. DLSS: vendor-locked to the wrong GPU.
+  Input (2026-09-26, from DOOM_Ants, which ships a TAAU; GPL, so take the
+  technique, not the code): one compute pass, Halton(2,3) 16-frame jitter
+  in [-0.5, 0.5) render pixels, bilinear current sample, reprojection by
+  motion vectors, 3x3 min/max RGB clamp, fixed blend 0.1, off-screen or NaN
+  falls back to current. Accumulates in tonemapped LDR, no sharpen.
+  Measured ~0.11-0.12 ms at 50% of 1708x800 on an RX 6600. Their advice
+  for a second build: clip in YCoCg with a variance box (the plain clamp
+  flickers and ghosts), per-object motion vectors (camera-only ghosts
+  moving things), and a light sharpen after upscaling, which is the softness
+  this item is about. Their files: linuxdoom-1.10/shaders/taau.comp,
+  commits 5874aca and b85d640.
   **Layman:** Rendering smaller and upscaling well is what gets the weak graphics card to 60 FPS without looking blurry.
   Kind: perf.
   Source: tech-survey-2026-09-02.
@@ -5890,6 +5934,28 @@ Outdoor landscapes surrounding the Temple complex — hills, valleys, and the Ki
   Lanes: tools, physics.
 
 ---
+
+- 📋 [3D_E-0703] **Measure whether building frame N+1 while frame N draws would pay in Vestige.**
+  Vestige gathers each frame's draw list on the main thread
+  (Engine::run calls Scene::collectRenderData) and then draws, with no
+  fence and no double-buffered per-frame data. The GL driver queues some
+  work ahead, but the scene build itself is never overlapped.
+
+  DOOM_Ants did this in Vulkan (DOOM-0074, DOOM-0197): only the CPU-written
+  buffers are double-buffered per frame slot; the CPU builds N+1 before
+  waiting on N's fence. E1M1 went from 70 to 161 fps, fence wait 7.61 to
+  0.03 ms. In GL the shape is a persistent-mapped buffer with two slots and
+  a glFenceSync per slot. Their rule that matters most: never READ those
+  mapped buffers on the CPU; keep a RAM twin (a read-back cost them 3x).
+
+  First step is measurement, not building: the --profile-log CSV must show
+  how much of a meadow and a Tabernacle frame is CPU build time the GPU
+  waits on. If the frame is GPU-bound, this buys nothing. GPL code, so
+  technique only.
+  **Layman:** Find out whether Vestige would run faster by preparing the next picture while the graphics card is still drawing the current one.
+  Kind: investigate.
+  Source: peer-input-2026-09-26 (DOOM_Ants build-ahead).
+  Lanes: renderer, core, perf.
 
 ## 0.5.0 — Interactivity
 
