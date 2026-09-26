@@ -12,6 +12,7 @@
 /// the timing path entirely — Timer is now a pure utility.
 #include "core/timer.h"
 
+#include <algorithm>
 #include <chrono>
 #include <thread>
 
@@ -45,11 +46,20 @@ float Timer::update()
     double rawDelta = currentTime - m_lastFrameTime;
     m_lastFrameTime = currentTime;
 
-    // Clamp delta time to prevent huge jumps (e.g., after a breakpoint)
-    m_deltaTime = static_cast<float>(rawDelta);
-    if (m_deltaTime > 0.25f)
+    if (m_fixedStep > 0.0)
     {
-        m_deltaTime = 0.25f;
+        // Offline capture: one frame is one fixed step, whatever it cost.
+        m_simulatedTime += m_fixedStep;
+        m_deltaTime = static_cast<float>(m_fixedStep);
+    }
+    else
+    {
+        // Clamp delta time to prevent huge jumps (e.g., after a breakpoint)
+        m_deltaTime = static_cast<float>(rawDelta);
+        if (m_deltaTime > 0.25f)
+        {
+            m_deltaTime = 0.25f;
+        }
     }
 
     // FPS counter — use raw (unclamped) elapsed time for accurate measurement
@@ -77,7 +87,22 @@ int Timer::getFps() const
 
 double Timer::getElapsedTime() const
 {
+    if (m_fixedStep > 0.0)
+    {
+        return m_simulatedTime;
+    }
     return elapsedSecondsSince(m_origin);
+}
+
+void Timer::setFixedStep(double seconds)
+{
+    if (seconds > 0.0 && m_fixedStep <= 0.0)
+    {
+        // Continue from the current real time, so animation does not jump
+        // back to zero when capture starts after loading.
+        m_simulatedTime = elapsedSecondsSince(m_origin);
+    }
+    m_fixedStep = std::max(0.0, seconds);
 }
 
 void Timer::setFrameRateCap(int fps)

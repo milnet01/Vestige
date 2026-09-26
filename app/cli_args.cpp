@@ -47,6 +47,10 @@ void printUsage(const char* argv0)
         << "  --demo-flythrough       Fly the camera along a built-in path\n"
         << "                          over the meadow with no input, then\n"
         << "                          exit. For recording demo videos.\n"
+        << "  --demo-capture DIR      Like --demo-flythrough, but step time\n"
+        << "                          by exactly 1/30 s per frame and save\n"
+        << "                          every frame to DIR as a numbered PNG,\n"
+        << "                          so the video is smooth at any speed.\n"
         << "  --isolate-feature=NAME  Disable one feature for visual-test\n"
         << "                          bisection. NAME ∈ {motion-overlay,\n"
         << "                          bloom, ssao, ibl, ibl-diffuse,\n"
@@ -143,6 +147,18 @@ bool parseArgs(int argc, char* argv[], EngineConfig& config, int& exitCode)
         {
             config.demoFlythroughMode = true;
             Logger::info("Demo fly-through enabled via CLI");
+        }
+        else if (std::strcmp(arg, "--demo-capture") == 0)
+        {
+            if (i + 1 >= argc)
+            {
+                std::cerr << "--demo-capture requires a directory argument\n";
+                exitCode = 2;
+                return false;
+            }
+            config.demoFlythroughMode = true;
+            config.demoCaptureDir = argv[++i];
+            Logger::info("Demo capture enabled: " + config.demoCaptureDir);
         }
         else if (std::strncmp(arg, "--isolate-feature=", 18) == 0)
         {

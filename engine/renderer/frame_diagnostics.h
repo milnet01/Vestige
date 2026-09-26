@@ -47,6 +47,13 @@ public:
                                      int fps, float deltaTime,
                                      const std::string& outputDir,
                                      const std::string& basename);
+
+    /// @brief Writes the current default framebuffer to a PNG, nothing else.
+    ///
+    /// No text report and no pixel statistics: this is the per-frame path
+    /// for --demo-capture, which writes hundreds of frames in a row.
+    /// @return True if the PNG was written.
+    static bool savePng(const std::string& pngPath, int width, int height);
 };
 
 } // namespace Vestige

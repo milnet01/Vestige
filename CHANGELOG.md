@@ -23,6 +23,18 @@ may change any interface without notice.
 
 ## [Unreleased]
 
+### 2026-09-26 Added — Stutter-free demo videos: `--demo-capture` writes every frame at a fixed 1/30 s step (3D_E-0696)
+
+The first website video was choppy: about 3.5 new images per second.
+Vestige drew 52-62 fps, but demoreel's screen capture of a GPU-heavy
+OpenGL app on its private display kept only a few frames a second
+(reported to demoreel). `--demo-capture DIR` flies the same path, steps
+time by exactly 1/30 s per frame, and saves each frame as a PNG, so the
+video is smooth however fast the machine renders. `Timer` gained a
+fixed-step mode for this, and `FrameDiagnostics::savePng` writes one
+frame without the diagnostic report. The re-cut website video has 30 of
+30 unique frames in every second of camera movement.
+
 ### 2026-09-26 Added — Formula Workbench: quadratic soft-knee bloom template for DOOM_Ants
 
 New `bloom_knee_quadratic` template, the bloom extract weight DOOM_Ants

@@ -63,6 +63,7 @@ struct EngineConfig
     std::string assetPath = "assets";
     bool visualTestMode = false;  ///< Run automated visual test and exit
     bool demoFlythroughMode = false;  ///< Fly a built-in camera path, then exit
+    std::string demoCaptureDir;       ///< --demo-capture: write each fly-through frame here
 
     /// @brief Diagnostic feature isolation (CLI: --isolate-feature=NAME).
     /// Disables one feature so visual-test runs can mechanically bisect
@@ -219,6 +220,9 @@ private:
     bool m_visualTestMode = false;
     DemoFlythrough m_demoFlythrough;     ///< Path is built by the scene setup.
     bool m_demoFlythroughMode = false;
+    static constexpr double DEMO_CAPTURE_FPS = 30.0;  ///< --demo-capture frame rate
+    std::string m_demoCaptureDir;        ///< Empty = no frame capture.
+    int m_demoCaptureFrame = 0;
     std::string m_assetPath;
 
     /// @brief Persistent user settings loaded from

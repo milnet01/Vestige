@@ -4804,6 +4804,12 @@ Retrofit completed across 8 commits — every Phase-10 Settings-store consumer n
   and look-at, eased, with ground clearance; the path is hard-coded in
   finalizeMeadowTerrain. Still open: the script file format (needs its
   spec), editor steps, and clean quit on a scripted end.
+  Progress (2026-09-26): --demo-capture DIR added. Same camera path,
+  time stepped by exactly 1/30 s per frame (Timer::setFixedStep), every
+  frame saved as a PNG before present. Built because demoreel's --gpu
+  capture kept only ~3.5 of Vestige's 52-62 fps (reported to demoreel).
+  A 27.6 s path took ~5 min and 2.7 GB of 1080p PNGs, mostly PNG
+  compression.
   **Layman:** Let Vestige follow a written script that moves the camera and works the editor by itself, so a demo video can be recorded the same way every time.
   Kind: feature.
   Source: user-request-2026-09-25.
@@ -4827,6 +4833,10 @@ Retrofit completed across 8 commits — every Phase-10 Settings-store consumer n
   today (Timer::getElapsedTime for grass and water, EnvironmentForces' own
   time for wind, ClothWindModel's own time), so this item needs to route
   them through one demo clock, not just seed the RNGs.
+  Progress (2026-09-26): part of this landed with --demo-capture. The
+  Timer's fixed-step mode makes simulated time, not wall time, drive
+  grass, water and wind while capturing. The randomness, ImGui layout and
+  window-size pins are still open.
   **Layman:** Remove the randomness in a demo run so every recording of the same script looks the same.
   Kind: feature.
   Source: user-request-2026-09-25.
@@ -5956,6 +5966,27 @@ Outdoor landscapes surrounding the Temple complex — hills, valleys, and the Ki
   Kind: investigate.
   Source: peer-input-2026-09-26 (DOOM_Ants build-ahead).
   Lanes: renderer, core, perf.
+
+- 📋 [3D_E-0704] **The meadow drops to 52-56 FPS at 1920x1080 while the pond is in view.**
+  Measured 2026-09-26 on the dev RX 6600, Release build, default quality,
+  --demo-flythrough on a headless cage display with nothing recording
+  (--profile-log frame,total fps): 52-56 fps for the first ~6 s of the
+  path, which faces the pond, then 62 (the display's cap) for the rest.
+  That is under the project's 60 FPS hard floor at 1080p. With a screen
+  recorder running it fell to 35-48.
+
+  Not yet profiled per pass. First suspects, from earlier work: the water
+  reflection and refraction passes each re-render the scene while the pond
+  is in the frustum (3D_E-0028 culls them only when it is not), and the
+  shadow pass (4.49 ms, 3D_E-0044). Measure with the per-pass CSV before
+  choosing a lever; 3D_E-0658 (static cascade cache) and 3D_E-0028's
+  unbuilt levers 2-3 (reduced-detail reflection, throttling) are the
+  candidates. Compare against a baseline taken at the same 1920x1080 size,
+  not against older meadow FPS figures of unknown size.
+  **Layman:** At full-HD resolution the meadow runs slightly slower than the required 60 frames a second whenever the pond is on screen.
+  Kind: perf.
+  Source: in-session-2026-09-26 (video stutter investigation).
+  Lanes: renderer, perf.
 
 ## 0.5.0 — Interactivity
 

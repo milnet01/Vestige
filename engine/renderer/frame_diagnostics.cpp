@@ -129,19 +129,9 @@ static const char* tonemapModeStr(int mode)
     return "Unknown";
 }
 
-/// @brief Shared implementation — captures framebuffer and writes PNG + report.
-static std::string captureImpl(const Renderer& renderer,
-                                const Camera& camera,
-                                int windowWidth, int windowHeight,
-                                int fps, float deltaTime,
-                                const std::string& basePath)
+/// @brief Reads the default framebuffer as top-down RGB8 rows.
+static std::vector<unsigned char> readFramebufferRgb(int w, int h)
 {
-    std::string pngPath = basePath + ".png";
-    std::string txtPath = basePath + ".txt";
-
-    // --- Read back the framebuffer ---
-    int w = windowWidth;
-    int h = windowHeight;
     std::vector<unsigned char> pixels(static_cast<size_t>(w * h * 3));
 
     glPixelStorei(GL_PACK_ALIGNMENT, 1);
@@ -158,6 +148,39 @@ static std::string captureImpl(const Renderer& renderer,
         std::memcpy(top, bot, static_cast<size_t>(rowBytes));
         std::memcpy(bot, rowBuf.data(), static_cast<size_t>(rowBytes));
     }
+    return pixels;
+}
+
+bool FrameDiagnostics::savePng(const std::string& pngPath, int width, int height)
+{
+    if (width <= 0 || height <= 0)
+    {
+        return false;
+    }
+    const std::vector<unsigned char> pixels = readFramebufferRgb(width, height);
+    if (!stbi_write_png(pngPath.c_str(), width, height, 3, pixels.data(), width * 3))
+    {
+        Logger::error("FrameDiagnostics: failed to write PNG: " + pngPath);
+        return false;
+    }
+    return true;
+}
+
+/// @brief Shared implementation — captures framebuffer and writes PNG + report.
+static std::string captureImpl(const Renderer& renderer,
+                                const Camera& camera,
+                                int windowWidth, int windowHeight,
+                                int fps, float deltaTime,
+                                const std::string& basePath)
+{
+    std::string pngPath = basePath + ".png";
+    std::string txtPath = basePath + ".txt";
+
+    // --- Read back the framebuffer ---
+    int w = windowWidth;
+    int h = windowHeight;
+    std::vector<unsigned char> pixels = readFramebufferRgb(w, h);
+    int rowBytes = w * 3;
 
     // Save PNG
     if (!stbi_write_png(pngPath.c_str(), w, h, 3, pixels.data(), rowBytes))

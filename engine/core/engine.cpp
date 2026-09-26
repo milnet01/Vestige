@@ -67,6 +67,7 @@
 #include <array>
 #include <cmath>
 #include <ctime>
+#include <cstdio>
 #include <filesystem>
 
 namespace Vestige
@@ -1153,6 +1154,10 @@ bool Engine::initialize(const EngineConfig& config)
 
     m_visualTestMode = config.visualTestMode;
     m_demoFlythroughMode = config.demoFlythroughMode && !m_visualTestMode;
+    if (m_demoFlythroughMode)
+    {
+        m_demoCaptureDir = config.demoCaptureDir;
+    }
     if (m_visualTestMode)
     {
         setupVisualTestViewpoints();
@@ -1312,6 +1317,27 @@ void Engine::run()
             m_controller->setEnabled(false);
             Logger::info("Demo fly-through: "
                 + std::to_string(m_demoFlythrough.totalSeconds()) + " s");
+
+            // Offline capture: one frame = 1/30 s of simulated time, so the
+            // written video is smooth however slowly each frame renders.
+            if (!m_demoCaptureDir.empty())
+            {
+                std::error_code ec;
+                std::filesystem::create_directories(m_demoCaptureDir, ec);
+                if (ec)
+                {
+                    Logger::error("--demo-capture: cannot create " + m_demoCaptureDir
+                                  + ": " + ec.message());
+                    m_demoCaptureDir.clear();
+                }
+                else
+                {
+                    m_timer->setFixedStep(1.0 / DEMO_CAPTURE_FPS);
+                    Logger::info("Demo capture: "
+                        + std::to_string(DEMO_CAPTURE_FPS) + " fps fixed step, frames to "
+                        + m_demoCaptureDir);
+                }
+            }
         }
     }
 
@@ -2223,6 +2249,16 @@ void Engine::run()
                 m_isRunning = false;
                 break;
             }
+        }
+
+        // 8.6. Demo capture — save the finished frame before it is presented.
+        if (!m_demoCaptureDir.empty())
+        {
+            char name[32];
+            std::snprintf(name, sizeof(name), "frame_%05d.png", m_demoCaptureFrame++);
+            FrameDiagnostics::savePng(
+                (std::filesystem::path(m_demoCaptureDir) / name).string(),
+                m_window->getWidth(), m_window->getHeight());
         }
 
         // 9. Window — swap buffers (flushes GPU work, making query results available)

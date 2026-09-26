@@ -76,3 +76,35 @@ TEST(TimerTest, FrameRateCapRoundTrip)
     timer.setFrameRateCap(0);
     EXPECT_EQ(timer.getFrameRateCap(), 0);
 }
+
+// Fixed-step mode (--demo-capture): every update() is exactly one step and
+// the elapsed clock is simulated, however long a frame really takes.
+TEST(TimerTest, FixedStepAdvancesExactlyOneStepPerUpdate)
+{
+    Vestige::Timer timer;
+    EXPECT_FALSE(timer.isFixedStep());
+    timer.setFixedStep(1.0 / 30.0);
+    EXPECT_TRUE(timer.isFixedStep());
+
+    const double start = timer.getElapsedTime();
+    for (int i = 0; i < 30; ++i)
+    {
+        // A slow frame must not stretch the step.
+        std::this_thread::sleep_for(std::chrono::milliseconds(i == 5 ? 60 : 0));
+        EXPECT_FLOAT_EQ(timer.update(), 1.0f / 30.0f);
+        EXPECT_FLOAT_EQ(timer.getDeltaTime(), 1.0f / 30.0f);
+    }
+    EXPECT_NEAR(timer.getElapsedTime() - start, 1.0, 1e-9);
+}
+
+TEST(TimerTest, FixedStepOffReturnsToRealTime)
+{
+    Vestige::Timer timer;
+    timer.setFixedStep(0.5);
+    timer.update();
+    timer.setFixedStep(0.0);
+    EXPECT_FALSE(timer.isFixedStep());
+    const double before = timer.getElapsedTime();
+    std::this_thread::sleep_for(std::chrono::milliseconds(10));
+    EXPECT_GT(timer.getElapsedTime() - before, 0.001);
+}
