@@ -5047,6 +5047,10 @@ Cinematic and atmospheric post-processing for horror, drama, and stylized render
   Kind: implement.
 
 - 📋 [3D_E-S0507] **Sharpen filter (contrast-adaptive sharpening for post-upscale clarity)**
+  Layman: A sharpening filter that wins back detail after the picture is stretched.
+  Checked 2026-09-26: appears BUILT by 3D_E-0032 (assets/shaders/cas.frag.glsl).
+  Limit: CAS runs only in the FXAA anti-alias mode, not with TAA. Offered to
+  the user to flip to shipped; awaiting their OK.
   Kind: implement.
 
 ##### Milestone
@@ -5265,9 +5269,17 @@ Every Phase 11B gameplay hook that depends on rendering (hit decals, bullet-hole
 ##### Upscaling
 
 - 📋 [3D_E-S0560] **Render scale slider (render at 50%–100% internal resolution, upscale to display resolution)**
+  Layman: A slider that draws the 3D world smaller and stretches it to the screen, for speed.
+  Checked 2026-09-26: appears BUILT by 3D_E-0032 (settings_editor_panel.cpp
+  has a "Render scale" SliderFloat, 0.25-2.0). Offered to the user to flip to
+  shipped; not flipped yet, awaiting their OK.
   Kind: implement.
 
 - 📋 [3D_E-S0561] **AMD FSR 1.0 spatial upscaler (open-source, GPU-agnostic, single post-process pass)**
+  Layman: AMD's older, simple one-frame upscaler for sharper stretched pictures.
+  Checked 2026-09-26: NOT built. Largely superseded by 3D_E-0659 (temporal
+  upscaler, SGSR 2 first). Offered to the user to fold it into 3D_E-0659;
+  awaiting their OK.
   Kind: implement.
 
 - 📋 [3D_E-S0562] **AMD FSR 2.x temporal upscaler (motion-vector-based, requires engine motion vectors and depth; higher quality than spatial; works on all GPUs including RDNA 2 / RX 6600)**
@@ -5288,6 +5300,10 @@ Every Phase 11B gameplay hook that depends on rendering (hit decals, bullet-hole
   Kind: implement.
 
 - 📋 [3D_E-S0567] **FXAA (fast approximate anti-aliasing — single-pass luminance-edge post-process; the cheapest AA option, added as a fifth `AntiAliasMode` alongside None / MSAA 4x / TAA / SMAA for low-end GPUs and performance mode where MSAA's cost or TAA's motion smear are unwanted)**
+  Layman: The cheapest way to smooth jagged edges, for weaker graphics cards.
+  Checked 2026-09-26: appears BUILT by 3D_E-0032 (assets/shaders/fxaa.frag.glsl,
+  AntiAliasMode FXAA). Offered to the user to flip to shipped; awaiting
+  their OK.
   Kind: implement.
 
 ##### GPU-Driven Rendering
