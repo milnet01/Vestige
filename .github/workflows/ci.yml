@@ -18,9 +18,12 @@ on:
     branches: [main]
   workflow_dispatch: {}
 
+# The event is in the key so a push and a manual dispatch never cancel each
+# other. Superseded runs are cancelled on PR branches only: on main a cancelled
+# run would hide which commit broke the build (local-gate.md § 9).
 concurrency:
-  group: ${{ github.workflow }}-${{ github.ref }}
-  cancel-in-progress: true
+  group: ${{ github.workflow }}-${{ github.event_name }}-${{ github.ref }}
+  cancel-in-progress: ${{ github.ref != 'refs/heads/main' }}
 
 # Precompiled headers are only ccache-cacheable with these relaxations: a PCH
 # bakes the active preprocessor defines into the .gch and can capture
