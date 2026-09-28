@@ -380,7 +380,26 @@ target_precompile_headers(vestige_tests PRIVATE
 # gate, which is the safe direction.
 set(VESTIGE_PERF_TESTS
     "FogBenchmarkTest.*:TextRendererPerfTest.*:ReverbZoneSelect.SelectionUnderPerFrameBudget")
-add_test(NAME vestige_tests COMMAND vestige_tests "--gtest_filter=-${VESTIGE_PERF_TESTS}")
+#
+# The push-gate entry is split into VESTIGE_TEST_SHARDS processes by gtest's own
+# sharding (GTEST_TOTAL_SHARDS / GTEST_SHARD_INDEX), so `ctest -j` runs them side
+# by side: one GL context per shard, not per case (3D_E-0707). Every case still
+# runs exactly once. Measured 2026-09-28, Debug + ASan under llvmpipe: 59 s in
+# one process, 31.5-32.6 s at 4 shards (2.8 GB summed peak RSS), 39.7 s at 3,
+# 32.0 s at 6 (3.9 GB). Lower it with -DVESTIGE_TEST_SHARDS=N where memory is
+# short; 1 restores a single process. Tests running in different shards at the
+# same moment must not share a scratch path: name one with vestigeTestStamp().
+set(VESTIGE_TEST_SHARDS "4" CACHE STRING "Parallel gtest shards for the push-gate ctest entries")
+if(NOT VESTIGE_TEST_SHARDS MATCHES "^[1-9][0-9]*$")
+    message(FATAL_ERROR "VESTIGE_TEST_SHARDS must be a positive integer, got '${VESTIGE_TEST_SHARDS}'")
+endif()
+math(EXPR _vestige_last_shard "${VESTIGE_TEST_SHARDS} - 1")
+foreach(_shard RANGE ${_vestige_last_shard})
+    add_test(NAME vestige_tests_shard_${_shard}
+             COMMAND vestige_tests "--gtest_filter=-${VESTIGE_PERF_TESTS}")
+    set_tests_properties(vestige_tests_shard_${_shard} PROPERTIES
+        ENVIRONMENT "GTEST_TOTAL_SHARDS=${VESTIGE_TEST_SHARDS};GTEST_SHARD_INDEX=${_shard}")
+endforeach()
 add_test(NAME vestige_perf_budgets COMMAND vestige_tests "--gtest_filter=${VESTIGE_PERF_TESTS}")
 set_tests_properties(vestige_perf_budgets PROPERTIES LABELS perf)
 
