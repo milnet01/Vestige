@@ -89,7 +89,7 @@ jobs:
         uses: ./.github/actions/apt-install
         with:
           packages: |
-            build-essential cmake ninja-build pkg-config mold
+            build-essential cmake ninja-build pkg-config
             libgl1-mesa-dev libglu1-mesa-dev
             libx11-dev libxrandr-dev libxinerama-dev libxcursor-dev libxi-dev libxxf86vm-dev
             libwayland-dev libxkbcommon-dev
@@ -238,7 +238,7 @@ jobs:
         uses: ./.github/actions/apt-install
         with:
           packages: |
-            build-essential cmake ninja-build mold
+            build-essential cmake ninja-build
             libgl1-mesa-dev libglu1-mesa-dev
             libx11-dev libxrandr-dev libxinerama-dev libxcursor-dev libxi-dev libxxf86vm-dev
             libwayland-dev libxkbcommon-dev
@@ -362,7 +362,7 @@ jobs:
         uses: ./.github/actions/apt-install
         with:
           packages: |
-            build-essential ninja-build pkg-config mold
+            build-essential ninja-build pkg-config
             libgl1-mesa-dev libglu1-mesa-dev
             libx11-dev libxrandr-dev libxinerama-dev libxcursor-dev libxi-dev libxxf86vm-dev
             libwayland-dev libxkbcommon-dev
