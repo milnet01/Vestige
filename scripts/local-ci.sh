@@ -70,6 +70,11 @@
 #                                   # actionlint and cmake-compat read none of them.
 #                                   # .githooks/pre-push selects it (.ants/gate.conf).
 #   scripts/local-ci.sh -j 8        # cap parallel build/test jobs (default: nproc)
+#
+# Every ctest call here passes -LE perf: the wall-clock budget tests are timed
+# against the machine and flake on a loaded box, so they run in ci.yml's nightly
+# schedule instead (3D_E-0714). Run them by hand with
+#   ctest --test-dir build-release -L perf --output-on-failure
 #   scripts/local-ci.sh -h          # this help
 #
 # Exit codes: 0 = FULL mirror passed (safe to push), 1 = a stage FAILED,
@@ -251,7 +256,7 @@ build_and_test() {  # build_and_test <stage-label> <dir> <build-type>
         record "$label" fail $((SECONDS - start)); return 1
     fi
     # --output-on-failure -j matches ci.yml's Run tests step.
-    if ! "${GL_WRAP[@]}" ctest --test-dir "$dir" --output-on-failure -j "$JOBS"; then
+    if ! "${GL_WRAP[@]}" ctest --test-dir "$dir" --output-on-failure -j "$JOBS" -LE perf; then
         record "$label" fail $((SECONDS - start)); return 1
     fi
     record "$label" ok $((SECONDS - start)); return 0
@@ -317,7 +322,7 @@ build_and_test_msvc() {
         # one is reported Passed, because the mangled code happens to match its
         # inverted expectation. So a new audit's negative fixtures go green and only
         # its positive cases go red — measured on InputPollAudit, 3 green / 2 red.
-        "${GL_WRAP[@]}" ctest --test-dir build-msvc --output-on-failure -j "$JOBS" \
+        "${GL_WRAP[@]}" ctest --test-dir build-msvc --output-on-failure -j "$JOBS" -LE perf \
             -E 'LocalizationAudit|ShaderLint|ShaderCompile|PerfGate|InputPollAudit' || exit 1
     )
     local rc=$?
@@ -487,7 +492,7 @@ elif [[ $CMAKE_COMPAT -eq 1 ]]; then
             record "$compat_label" fail $((SECONDS - start))
         # 3.21's own ctest, not the host's — actions-setup-cmake puts the
         # matrix version's whole bin/ on PATH in CI, so ctest matches too.
-        elif ! "${GL_WRAP[@]}" "${compat_cmake%/cmake}/ctest" --test-dir build-cmake-compat --output-on-failure -j "$JOBS"; then
+        elif ! "${GL_WRAP[@]}" "${compat_cmake%/cmake}/ctest" --test-dir build-cmake-compat --output-on-failure -j "$JOBS" -LE perf; then
             record "$compat_label" fail $((SECONDS - start))
         else
             record "$compat_label" ok $((SECONDS - start))

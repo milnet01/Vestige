@@ -368,7 +368,21 @@ target_precompile_headers(vestige_tests PRIVATE
 # init/teardown, llvmpipe JIT shader state) are excluded at their exact call
 # sites via ScopedLeakCheckDisable (tests/lsan_guard.h), so the suite is
 # leak-clean under default options with no environment setup.
-add_test(NAME vestige_tests COMMAND vestige_tests)
+#
+# The wall-clock budget tests are the one exception, split into their own entry
+# labelled `perf` (3D_E-0714). They time the machine, so on a loaded box they
+# fail for reasons unrelated to the push, and a flaky push gate teaches
+# --no-verify. Push gates run `ctest -LE perf`; ci.yml's nightly schedule and
+# scripts/final_launch_sweep.sh run everything; scripts/wintest.sh invokes the
+# binary directly and is unaffected. The list is by exact name, not a pattern:
+# `*UnderBudget` also matched AudioOcclusionSystem's budget-PLAN logic test,
+# which is not timed. A new timing test left off this list stays in the push
+# gate, which is the safe direction.
+set(VESTIGE_PERF_TESTS
+    "FogBenchmarkTest.*:TextRendererPerfTest.*:ReverbZoneSelect.SelectionUnderPerFrameBudget")
+add_test(NAME vestige_tests COMMAND vestige_tests "--gtest_filter=-${VESTIGE_PERF_TESTS}")
+add_test(NAME vestige_perf_budgets COMMAND vestige_tests "--gtest_filter=${VESTIGE_PERF_TESTS}")
+set_tests_properties(vestige_perf_budgets PROPERTIES LABELS perf)
 
 # --- Phase 10 Localization L6 — string-coverage lint (design § 5.7) ----------
 # The audit is a standalone Python regex line-scan, so it runs as its own ctest

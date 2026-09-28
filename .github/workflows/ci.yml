@@ -17,6 +17,11 @@ on:
   pull_request:
     branches: [main]
   workflow_dispatch: {}
+  # Nightly: the only CI run that includes the wall-clock budget tests (ctest
+  # label `perf`), which every push run excludes because they flake on a loaded
+  # machine (3D_E-0714). It also catches runner-image drift on quiet days.
+  schedule:
+    - cron: "30 4 * * *"
 
 # The event is in the key so a push and a manual dispatch never cancel each
 # other. Superseded runs are cancelled on PR branches only: on main a cancelled
@@ -126,7 +131,7 @@ jobs:
         run: |
           # xvfb-run provides a virtual X display so tests that incidentally
           # touch GLFW/GL don't fail in the headless runner.
-          xvfb-run --auto-servernum ctest --test-dir build --output-on-failure -j "$(nproc)"
+          xvfb-run --auto-servernum ctest --test-dir build --output-on-failure -j "$(nproc)" ${{ github.event_name != 'schedule' && '-LE perf' || '' }}
 
       - name: Upload test logs on failure
         if: failure()
@@ -178,7 +183,7 @@ jobs:
         # No xvfb on Windows; GL tests self-skip when no 4.5 context is available
         # on the runner (GLTestFixture). The job's primary value is catching MSVC
         # compile breakage; non-GL tests still run and assert.
-        run: ctest --test-dir build -C Release --output-on-failure
+        run: ctest --test-dir build -C Release --output-on-failure ${{ github.event_name != 'schedule' && '-LE perf' || '' }}
 
   audit-tool-tier1:
     name: Audit tool Tier 1 (static)
@@ -391,7 +396,7 @@ jobs:
 
       - name: Run tests
         run: |
-          xvfb-run --auto-servernum ctest --test-dir build --output-on-failure -j "$(nproc)"
+          xvfb-run --auto-servernum ctest --test-dir build --output-on-failure -j "$(nproc)" ${{ github.event_name != 'schedule' && '-LE perf' || '' }}
 
   # Secret-scanning job — runs gitleaks against the repo and the full
   # git history every push and PR. Catches accidentally-committed
