@@ -23,6 +23,14 @@ may change any interface without notice.
 
 ## [Unreleased]
 
+### 2026-09-28 Fixed — Readable engine error messages on Windows (3D_E-0717)
+
+On Windows builds, some engine error messages came out as garbage
+characters. Jolt Physics exported a setting that makes the Microsoft
+C++ library keep a pointer to an error message instead of a copy, and
+that pointer outlived the text. Jolt is now built with exceptions on,
+so the setting is gone, and a configure-time check stops it coming back.
+
 ### 2026-09-28 Security — Secret scan no longer ignores a whole test file (3D_E-0712)
 
 `.gitleaks.toml` excused all of `tools/audit/tests/test_findings.py`,

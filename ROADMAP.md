@@ -4479,6 +4479,25 @@ shipped that have no invocation path at all.
   Source: peer-relay-2026-09-28 (claude-cd, security.md § 2 field pass).
   Lanes: security, ci.
 
+- ✅ [3D_E-0717] **Engine exception messages were garbage on Windows (Jolt leaked _HAS_EXCEPTIONS=0).**
+  Jolt's CMake defaults CPP_EXCEPTIONS_ENABLED OFF, which on MSVC adds
+  _HAS_EXCEPTIONS=0 as a PUBLIC compile definition, so it reached the
+  engine. In that mode MSVC's std::exception stores the message pointer
+  without copying, so throw std::runtime_error("..." + name) kept a
+  pointer into a freed temporary. Found when sharding the suite made
+  ExpressionEvalVectorOps.DotThrowsWithDescriptiveMessage_Sc3 run without
+  the earlier tests that had left the freed bytes intact: it failed alone
+  under Wine and on the real Windows box (wintest), every time.
+  Fix: external/CMakeLists.txt sets CPP_EXCEPTIONS_ENABLED ON, plus a
+  configure-time guard that fails if Jolt exports _HAS_EXCEPTIONS=0 again
+  (proved red with the option OFF). Verified: flag gone from the engine's
+  compile command; the test passes alone 3/3 under Wine and on wintest;
+  all four MSVC shards pass.
+  **Layman:** On Windows, some error messages from the engine came out as random characters instead of text; they now read correctly.
+  Kind: fix.
+  Source: in-session-2026-09-28 (found by 3D_E-0707 sharding).
+  Lanes: build, formula.
+
 ## 0.3.0 — An editor a builder can use
 
 Breaks: the scene format. Editor work changes what a scene stores.

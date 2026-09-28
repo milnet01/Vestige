@@ -356,7 +356,24 @@ set(ENABLE_ALL_WARNINGS OFF CACHE BOOL "" FORCE)
 # fails with LNK2038 (RuntimeLibrary mismatch). Force Jolt onto the dynamic
 # runtime to match. No-op on non-MSVC toolchains.
 set(USE_STATIC_MSVC_RUNTIME_LIBRARY OFF CACHE BOOL "" FORCE)
+# Jolt defaults to exceptions OFF, and on MSVC that adds _HAS_EXCEPTIONS=0 as a
+# PUBLIC definition, so it reached every target linking Jolt, the engine
+# included. In that mode MSVC's std::exception keeps the message pointer instead
+# of copying it, so an engine `throw std::runtime_error("..." + name)` carried a
+# pointer into a freed temporary and what() read garbage on Windows only
+# (found 2026-09-28 by ExpressionEvalVectorOps.DotThrowsWithDescriptiveMessage_Sc3,
+# which passed only when earlier tests left the freed bytes intact). The engine
+# uses exceptions, so Jolt is built with them too; the guard below keeps the
+# definition from coming back.
+set(CPP_EXCEPTIONS_ENABLED ON CACHE BOOL "" FORCE)
 FetchContent_MakeAvailable(JoltPhysics)
+get_target_property(_jolt_iface_defs Jolt INTERFACE_COMPILE_DEFINITIONS)
+if(_jolt_iface_defs MATCHES "_HAS_EXCEPTIONS=0")
+    message(FATAL_ERROR
+        "Jolt exports _HAS_EXCEPTIONS=0 to its dependents; the engine throws "
+        "exceptions, so their messages would dangle on MSVC. Keep "
+        "CPP_EXCEPTIONS_ENABLED ON (see the comment above).")
+endif()
 
 # ImPlot — 2D plotting extension for ImGui (MIT)
 # Pinned to 1351ab2 (master, 2026-05-10), four commits past the latest release
