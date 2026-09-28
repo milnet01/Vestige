@@ -4,6 +4,7 @@
 /// @file test_obj_loader.cpp
 /// @brief Unit tests for the ObjLoader (Wavefront OBJ parsing).
 #include "utils/obj_loader.h"
+#include "test_helpers.h"
 
 #include <gtest/gtest.h>
 
@@ -29,12 +30,15 @@ public:
     explicit TempObjFile(const std::string& content)
     {
         // Portable unique temp file (no POSIX mkstemp/fdopen): the system temp
-        // dir + a per-process-unique name. A monotonic counter is unique within
-        // this single-process test binary.
+        // dir + pid + test name + a counter. The counter alone is unique only
+        // within one process, and the suite runs as parallel shards (3D_E-0707),
+        // where two processes both wrote vestige_test_1.obj and one removed it
+        // under the other.
         namespace fs = std::filesystem;
         static std::atomic<unsigned> counter{0};
         m_path = (fs::temp_directory_path() /
-                  ("vestige_test_" + std::to_string(counter.fetch_add(1)) + ".obj"))
+                  ("vestige_test_" + Vestige::Testing::vestigeTestStamp() + "_"
+                   + std::to_string(counter.fetch_add(1)) + ".obj"))
                      .string();
         std::ofstream f(m_path, std::ios::binary);
         EXPECT_TRUE(f.good()) << "Failed to create temp OBJ file";

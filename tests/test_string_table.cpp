@@ -8,6 +8,7 @@
 #include <gtest/gtest.h>
 
 #include "localization/string_table.h"
+#include "test_helpers.h"
 
 #include <filesystem>
 #include <fstream>
@@ -24,8 +25,11 @@ namespace
 fs::path writeTempJson(const std::string& tag, const std::string& content)
 {
     static int counter = 0;
+    // pid + test name: the suite runs as parallel shards (3D_E-0707), and a
+    // counter alone repeats in every process.
     fs::path p = fs::temp_directory_path()
-                 / ("vestige_strtab_" + tag + "_" + std::to_string(counter++) + ".json");
+                 / ("vestige_strtab_" + tag + "_" + Vestige::Testing::vestigeTestStamp()
+                    + "_" + std::to_string(counter++) + ".json");
     std::ofstream f(p);
     f << content;
     f.close();
