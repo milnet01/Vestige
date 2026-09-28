@@ -241,7 +241,8 @@ configure() {  # configure <dir> <build-type>
         -DCMAKE_CXX_COMPILER_LAUNCHER=ccache \
         -DCMAKE_EXPORT_COMPILE_COMMANDS=ON \
         -DVESTIGE_FETCH_ASSETS=OFF \
-        -DVESTIGE_REQUIRE_GLSLANG=ON
+        -DVESTIGE_REQUIRE_GLSLANG=ON \
+        -DVESTIGE_USE_MOLD=OFF   # link as ci.yml does (CMakeLists.txt says why)
 }
 
 # Build + test one configuration. Reuses an existing build dir (warm/incremental);
@@ -486,7 +487,8 @@ elif [[ $CMAKE_COMPAT -eq 1 ]]; then
                 -DCMAKE_C_COMPILER_LAUNCHER=ccache \
                 -DCMAKE_CXX_COMPILER_LAUNCHER=ccache \
                 -DCMAKE_EXPORT_COMPILE_COMMANDS=ON \
-                -DVESTIGE_FETCH_ASSETS=OFF; then
+                -DVESTIGE_FETCH_ASSETS=OFF \
+                -DVESTIGE_USE_MOLD=OFF; then
             record "$compat_label" fail $((SECONDS - start))
         elif ! "$compat_cmake" --build build-cmake-compat -j "$JOBS"; then
             record "$compat_label" fail $((SECONDS - start))

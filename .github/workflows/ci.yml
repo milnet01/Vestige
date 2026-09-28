@@ -135,6 +135,7 @@ jobs:
             -DCMAKE_C_COMPILER_LAUNCHER=ccache \
             -DCMAKE_CXX_COMPILER_LAUNCHER=ccache \
             -DCMAKE_EXPORT_COMPILE_COMMANDS=ON \
+            -DVESTIGE_USE_MOLD=OFF \
             -DVESTIGE_FETCH_ASSETS=OFF \
             -DVESTIGE_REQUIRE_GLSLANG=ON
 
@@ -276,6 +277,7 @@ jobs:
             -DCMAKE_C_COMPILER_LAUNCHER=ccache \
             -DCMAKE_CXX_COMPILER_LAUNCHER=ccache \
             -DCMAKE_EXPORT_COMPILE_COMMANDS=ON \
+            -DVESTIGE_USE_MOLD=OFF \
             -DVESTIGE_FETCH_ASSETS=OFF
 
       - name: Build
@@ -403,6 +405,7 @@ jobs:
             -DCMAKE_C_COMPILER_LAUNCHER=ccache \
             -DCMAKE_CXX_COMPILER_LAUNCHER=ccache \
             -DCMAKE_EXPORT_COMPILE_COMMANDS=ON \
+            -DVESTIGE_USE_MOLD=OFF \
             -DVESTIGE_FETCH_ASSETS=OFF
 
       - name: Build

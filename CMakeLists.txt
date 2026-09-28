@@ -61,8 +61,16 @@ if(VESTIGE_FAST_BUILD)
 
     if(CMAKE_CXX_COMPILER_ID MATCHES "GNU|Clang")
         # mold — far faster linking of the ~0.5 GB Debug test binary.
-        find_program(MOLD_PROGRAM mold)
-        if(MOLD_PROGRAM)
+        # VESTIGE_USE_MOLD=OFF links with the toolchain's default linker. CI
+        # and scripts/local-ci.sh both pass it, so the push gate links exactly
+        # as GitHub does: Ubuntu 24.04's mold 2.30 fails GCC LTO (Release)
+        # links while a newer host mold passes them, which let a red CI
+        # through a green local run on 2026-09-28.
+        option(VESTIGE_USE_MOLD "Link with mold when it is installed" ON)
+        if(VESTIGE_USE_MOLD)
+            find_program(MOLD_PROGRAM mold)
+        endif()
+        if(VESTIGE_USE_MOLD AND MOLD_PROGRAM)
             add_link_options(-fuse-ld=mold)
             message(STATUS "Build speed: mold linker enabled (${MOLD_PROGRAM})")
         endif()
