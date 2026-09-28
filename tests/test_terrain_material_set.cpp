@@ -11,6 +11,7 @@
 #include "environment/terrain_material_set.h"
 
 #include "gl_test_fixture.h"
+#include "test_helpers.h"
 
 #include <stb_image_write.h>
 
@@ -328,7 +329,11 @@ protected:
     void SetUp() override
     {
         Vestige::Test::GLTestFixture::SetUp();  // GTEST_SKIP() if no GL context
-        m_dir = fs::temp_directory_path() / "vestige_terrain_matset_test";
+        // Per process and per test: the four tests here share this fixture, and
+        // with the suite sharded (3D_E-0707) two of them can run at once in
+        // different processes, where one TearDown would delete the other's maps.
+        m_dir = fs::temp_directory_path()
+              / ("vestige_terrain_matset_" + Vestige::Testing::vestigeTestStamp());
         std::error_code ec;
         fs::create_directories(m_dir, ec);
     }
