@@ -1,0 +1,48 @@
+# Daily: delete superseded Actions cache entries, keeping the newest per family.
+#
+# ccache-action saves a new timestamped key every run and nothing removed the
+# old ones, so the repository sat over GitHub's 10 GB cache limit and GitHub
+# evicted by age (3D_E-0713). tools/prune_actions_cache.py holds the rule and
+# keeps anything it cannot classify.
+#
+# Its own workflow so that deleting caches (actions: write) is the only thing
+# this token can do; the build jobs keep their read-only permissions. Runs an
+# hour after ci.yml's nightly, so that run's saves are the ones kept.
+name: cache-prune
+
+on:
+  schedule:
+    - cron: "30 5 * * *"
+  workflow_dispatch:
+    inputs:
+      dry_run:
+        description: "List what would be deleted; delete nothing"
+        type: boolean
+        default: true
+
+# One fixed group, no cancel: two prunes queue rather than race.
+concurrency:
+  group: cache-prune
+  cancel-in-progress: false
+
+permissions: {}
+
+jobs:
+  prune:
+    runs-on: ubuntu-24.04
+    timeout-minutes: 10
+    permissions:
+      actions: write
+      contents: read
+    steps:
+      - name: Checkout
+        uses: actions/checkout@9c091bb21b7c1c1d1991bb908d89e4e9dddfe3e0  # v6
+        with:
+          persist-credentials: false
+
+      - name: Prune superseded caches
+        env:
+          GH_TOKEN: ${{ github.token }}
+          GH_REPO: ${{ github.repository }}
+          DRY_RUN: ${{ inputs.dry_run && '--dry-run' || '' }}
+        run: python3 tools/prune_actions_cache.py ${DRY_RUN:+"$DRY_RUN"}
