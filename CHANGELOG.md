@@ -23,6 +23,16 @@ may change any interface without notice.
 
 ## [Unreleased]
 
+### 2026-09-28 Changed — Local CI builds on GitHub's own system (3D_E-0719)
+
+The pre-push check now runs its Linux builds, tests and code audit
+inside an Ubuntu 24.04 container with the same compiler and tool
+versions as GitHub's runner, from exactly the files git would push.
+Before, it used this machine's newer tools, and on 2026-09-28 two changes
+passed locally but failed on GitHub. The container reproduces that
+failure. The check also got faster (about 400 s warm, from about 580 s)
+and now covers GitHub's newest-CMake build too.
+
 ### 2026-09-28 Fixed — Readable engine error messages on Windows (3D_E-0717)
 
 On Windows builds, some engine error messages came out as garbage

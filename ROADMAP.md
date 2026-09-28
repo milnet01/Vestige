@@ -8676,7 +8676,7 @@ record, and a real clearance before commercial release needs counsel.
   Source: 3D_E-0710 investigation, 2026-09-28.
   Lanes: ci.
 
-- 🚧 [3D_E-0719] **Run local-ci's Linux stages in an Ubuntu 24.04 container matching GitHub's runner.**
+- ✅ [3D_E-0719] **Run local-ci's Linux stages in an Ubuntu 24.04 container matching GitHub's runner.**
   Runs 36421673850 and 36429395907 went red on GitHub while local CI was
   green: the host's GCC 16 and mold passed Release LTO links that
   Ubuntu 24.04's mold 2.30 failed. User decision 2026-09-28: REPLACE the
@@ -8691,6 +8691,15 @@ record, and a real clearance before commercial release needs counsel.
   ../.vestige-ci (VESTIGE_CI_DIR). Remaining: finish the cold run (cc-job
   ci-cold), prove red by re-adding mold to the image and seeing the LTO
   link fail, commit, push, flip.
+  Shipped 2026-09-28 (e1baf2a; prerequisite fixes 8a3853d linker
+  declared OFF on both sides, ad8235d per-process temp files). Red: the
+  container with Ubuntu's mold 2.30.0 fails the Release link exactly as
+  GitHub run 36421673850. Green: warm push 8/8 PASS in ~400 s (Debug 85,
+  Release 44, audit 82, compat 60 + 44, Windows 83), vs ~583 s on the
+  host stages; GitHub run 36471117665 on e1baf2a all 7 jobs + secret-scan
+  green. Also fixed on the way: podman --init (xvfb-run as PID 1 hung the
+  audit 3 h), a per-stage timeout, and a git-carried source copy so
+  gitignored local files cannot leak into the container.
   **Layman:** The local checks now run on the same system GitHub uses, so a problem GitHub would catch is caught before pushing.
   Kind: fix.
   Source: user-request-2026-09-28 (two red CI runs).
