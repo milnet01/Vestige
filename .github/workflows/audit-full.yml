@@ -76,8 +76,8 @@ jobs:
       # zizmor: cache-poisoning (low confidence) — REVIEWED AND KEPT, 3D_E-0635.
       # Decision 2026-09-21. The trade is real: dropping the cache makes these
       # builds hermetic and costs several minutes per audit run. Kept because
-      # the key is namespaced away from ci.yml's
-      # (cmake-deps-Debug-*) and this workflow only runs on
+      # the key (cmake-deps-audit-full-*) shares no prefix with any ci.yml
+      # job's, and this workflow only runs on
       # a schedule or a manual dispatch,
       # so poisoning the entry needs the same write access as
       # poisoning anything else in the repo.
@@ -88,9 +88,9 @@ jobs:
         with:
           path: |
             build/_deps
-          key: cmake-deps-Debug-${{ hashFiles('**/CMakeLists.txt') }}
+          key: cmake-deps-audit-full-${{ hashFiles('**/CMakeLists.txt') }}
           restore-keys: |
-            cmake-deps-Debug-
+            cmake-deps-audit-full-
 
       - name: Configure (for compile_commands.json)
         run: |

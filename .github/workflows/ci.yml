@@ -262,9 +262,9 @@ jobs:
         with:
           path: |
             build/_deps
-          key: cmake-deps-Debug-${{ hashFiles('**/CMakeLists.txt') }}
+          key: cmake-deps-audit-tier1-${{ hashFiles('**/CMakeLists.txt') }}
           restore-keys: |
-            cmake-deps-Debug-
+            cmake-deps-audit-tier1-
 
       - name: Configure (for compile_commands.json)
         # -DVESTIGE_FETCH_ASSETS=OFF: see the comment on the Configure
