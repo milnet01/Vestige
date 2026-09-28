@@ -14,6 +14,20 @@ name: CI
 on:
   push:
     branches: [main]
+    # Paths no job here builds, tests or lints: a push touching only these
+    # skips ci.yml (3D_E-0709). Push only; a pull request runs everything.
+    # This list is also the local push hook's docs-only test, read by
+    # tools/ci_docs_only.py, so there is one list. secret-scan.yml has no
+    # filter and still scans these pushes. Add a path only if nothing ci.yml
+    # runs reads it (local-gate.md § 6.1).
+    paths-ignore:
+      - '**.md'
+      - '**.markdown'
+      - '**.rst'
+      - 'docs/**'
+      - 'LICENSE*'
+      - '.gitignore'
+      - '**/CODEOWNERS'
   pull_request:
     branches: [main]
   workflow_dispatch: {}
