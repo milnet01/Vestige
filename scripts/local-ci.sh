@@ -64,6 +64,11 @@
 #                                   # PARTIAL — not push-verified)
 #   scripts/local-ci.sh --quick     # Debug build+test + gitleaks only (fast smoke,
 #                                   # NOT push-safe: skips the Tier-1 audit + Windows)
+#   scripts/local-ci.sh --docs      # documentation-only push: the gitleaks stage
+#                                   # alone. secret-scan is the one ci.yml job that
+#                                   # reads doc paths; builds, tests, the audit,
+#                                   # actionlint and cmake-compat read none of them.
+#                                   # .githooks/pre-push selects it (.ants/gate.conf).
 #   scripts/local-ci.sh -j 8        # cap parallel build/test jobs (default: nproc)
 #   scripts/local-ci.sh -h          # this help
 #
@@ -94,9 +99,11 @@ WINDOWS=1
 # default. It SKIPs cleanly (→ PARTIAL) when the pinned toolchain can't be fetched.
 CMAKE_COMPAT=1
 JOBS="$(nproc)"
+DOCS=0
 while [[ $# -gt 0 ]]; do
     case "$1" in
         --quick)      QUICK=1; WINDOWS=0; CMAKE_COMPAT=0; shift ;;
+        --docs)       DOCS=1; shift ;;
         --windows)    WINDOWS=1; shift ;;   # explicit-on (default); kept for muscle memory
         --no-windows) WINDOWS=0; shift ;;
         --no-cmake-compat) CMAKE_COMPAT=0; shift ;;
@@ -105,6 +112,21 @@ while [[ $# -gt 0 ]]; do
         *) echo "unknown argument: $1 (try -h)" >&2; exit 2 ;;
     esac
 done
+
+# --- documentation mode -----------------------------------------------------
+# Runs ci.yml's secret-scan job and nothing else, because it is the only job that
+# reads documentation paths. Fails closed: with no gitleaks nothing was checked,
+# so exit 2 (PARTIAL), which the push hook treats as a refusal.
+if [[ $DOCS -eq 1 ]]; then
+    if ! command -v gitleaks >/dev/null 2>&1; then
+        echo "local-ci --docs: gitleaks not found — nothing was checked (PARTIAL)." >&2
+        exit 2
+    fi
+    echo ">>> local-ci --docs: gitleaks secret scan (full git history)"
+    gitleaks detect --source . --config .gitleaks.toml --redact --exit-code 1 || exit 1
+    echo "local-ci --docs: documentation checks passed."
+    exit 0
+fi
 
 # --- CI parity knobs --------------------------------------------------------
 # Match ci.yml's env: lets ccache cache PCH-using translation units (a PCH bakes
