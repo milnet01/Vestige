@@ -5,14 +5,19 @@
 # turning the manual "build + ctest before pushing" discipline into one command.
 #
 # Stages (each maps to a CI job in ci.yml):
-#   1. Debug   build + ctest   ← linux-build-test (Debug)
-#   2. Release build + ctest   ← linux-build-test (Release)  [runs the Release-only
-#                                  perf benchmarks that are skipped in Debug]
-#   3. Windows MSVC build+test  ← windows-build-test  [OPT-IN via --windows]
-#   4. Tier-1 static audit      ← audit-tool-tier1  (cppcheck + clang-tidy + warnings)
+#   1. Debug   build + ctest   ← linux-build-test (Debug)          [container]
+#   2. Release build + ctest   ← linux-build-test (Release)        [container]
+#   3. Windows MSVC build+test  ← windows-build-test  (msvc-wine, host)
+#   4. Tier-1 static audit      ← audit-tool-tier1  (cppcheck + clang-tidy + warnings) [container]
 #   5. gitleaks secret scan     ← secret-scan.yml   (full git history)
 #   6. actionlint workflow lint ← workflow-lint     (schema + shellcheck over run: blocks)
-#   7. CMake 3.21.0 compat      ← cmake-compat      (declared-minimum CMake, Release)
+#   7. CMake compat, 3.21.0 and latest ← cmake-compat's two matrix legs     [container]
+#
+# [container] = run in the Ubuntu 24.04 image scripts/ci-container/Containerfile
+# builds: GitHub's runner OS and its compiler, CMake, cppcheck and clang-tidy
+# versions, with ci.yml's own apt packages. This machine's newer toolchain (GCC
+# 16, mold) passed a change GitHub's failed on 2026-09-28; the container is how a
+# local pass now means the same tools passed. "The container" section below.
 #
 # Stage 3 (Windows/MSVC) is OPT-IN via --windows: it cross-compiles the engine with
 # the REAL MSVC toolchain (cl.exe + Windows SDK) under Wine via msvc-wine, then runs
@@ -27,30 +32,13 @@
 # cross-compile emulator can't run host Python and mangles their exit codes; those
 # already run natively in stages 1-2 and don't exercise MSVC-compiled code.
 #
-# Stage 7 mirrors the cmake-compat job's `3.21.0` matrix leg — the engine's declared
-# `cmake_minimum_required`, and the leg that actually catches regressions (FetchContent
-# and policy semantics have tightened before; see CMP0169). It downloads the pinned
-# Kitware 3.21.0 binary into .ci-tools/ on first use, checksum-verified, then runs that
-# job's Configure+Build+Test verbatim. SKIPs (→ "not push-verified") when the download
-# is unavailable offline. The job's other leg, `latest`, is covered by stage 2: that
-# builds the same Release config with the host cmake, which on a current dev box IS
-# the latest release — preflight prints both versions so drift is visible rather than
-# assumed. Nothing in ci.yml is unmirrored now except the runner image itself.
-#
-# clang-tidy IS part of the Tier-1 audit and its `error`-level findings GATE CI
-# (Severity.HIGH). The audit silently DISABLES clang-tidy when no `clang-tidy` is
-# on PATH — so a missing binary makes the local audit a false-green (it passes
-# while CI's clang-tidy reddens the push). The preflight below self-heals a
-# versioned `clang-tidy-NN` into a repo-local shim and, failing that, WARNS
-# loudly. Install it if missing (openSUSE: `zypper in clang-tools`).
-#
-# VERSION-DRIFT CAVEAT: local static-analysis tools are usually newer than CI's
-# ubuntu-24.04 apt versions (CI: cppcheck ~2.13, clang-tidy ~18; a dev box often
-# runs 2.21 / 22). Findings are version-sensitive, so a clean local audit is a
-# strong signal but not a guarantee for every version-specific finding. CI gates
-# on HIGH/CRITICAL only, which is stable in practice. The preflight prints both
-# so drift is visible. (A Rule-5a follow-up could pin CI to the latest tools to
-# close the drift entirely — tracked separately.)
+# Stage 7 mirrors both cmake-compat matrix legs. `3.21.0` is the engine's declared
+# `cmake_minimum_required`, the leg that actually catches regressions (FetchContent
+# and policy semantics have tightened before; see CMP0169); `latest` is the newest
+# CMake release, resolved as actions-setup-cmake does. Each binary is fetched into
+# .ci-tools/ on first use, checksum-verified, and runs that job's Configure+Build+
+# Test verbatim in the container. A leg SKIPs (→ "not push-verified") offline, and
+# both are N/A on a push that changes no build file (3D_E-0708).
 #
 # Usage:
 #   scripts/local-ci.sh             # FULL mirror (Linux + Windows/MSVC + audit +
@@ -176,29 +164,76 @@ record() {  # record <name> <ok|fail|skip> <seconds>
 hr()    { printf '%s\n' "------------------------------------------------------------"; }
 banner(){ hr; printf '>>> %s\n' "$1"; hr; }
 
-# --- preflight: tool presence + version parity report -----------------------
-# Guards against the false-green failure mode: a static-analysis tool missing
-# locally → the audit silently skips it → local passes while CI fails.
-CLANG_TIDY_OK=1
+# --- the Ubuntu 24.04 CI container -----------------------------------------
+# Every Linux stage (1 Debug, 2 Release, 4 Tier-1 audit, 7 CMake compat) runs in
+# the image scripts/ci-container/Containerfile builds: GitHub's runner OS with its
+# compiler (GCC 13.3), CMake (3.31.6), cppcheck (2.13), clang-tidy (18) and
+# ci.yml's own apt packages. On 2026-09-28 this machine's GCC 16 and mold passed
+# a change Ubuntu's toolchain failed, so the local run now builds where CI builds.
+# Each stage's tree is bind-mounted at build/, so the commands are ci.yml's,
+# verbatim. The trees and the compiler cache live OUTSIDE the repository
+# ($VESTIGE_CI_DIR), so they never dirty it and the audit never scans them.
+# Stage 3 (Windows) stays on the host: msvc-wine is the real MSVC compiler.
+CI_DIR="${VESTIGE_CI_DIR:-$(dirname "$REPO_ROOT")/.vestige-ci}"
+CI_IMAGE=""
+CI_IMAGE_OK=0
 
-# Self-heal a missing plain `clang-tidy` from the highest-versioned
-# `clang-tidy-NN` on the system (openSUSE ships only versioned binaries). The
-# shim lives in a gitignored repo-local dir prepended to PATH for this run only.
-ensure_clang_tidy() {
-    command -v clang-tidy >/dev/null 2>&1 && return 0
-    local best="" cand n newest=-1 resolved
-    for cand in /usr/bin/clang-tidy-* $(compgen -c clang-tidy- 2>/dev/null); do
-        n="${cand##*clang-tidy-}"; [[ "$n" =~ ^[0-9]+$ ]] || continue
-        resolved="$(command -v "$cand" 2>/dev/null || { [[ -x "$cand" ]] && echo "$cand"; })"
-        [[ -n "$resolved" ]] || continue
-        if (( n > newest )); then newest="$n"; best="$resolved"; fi
-    done
-    [[ -n "$best" ]] || return 1
-    mkdir -p "$REPO_ROOT/.ci-tools/bin"
-    ln -sf "$best" "$REPO_ROOT/.ci-tools/bin/clang-tidy"
-    export PATH="$REPO_ROOT/.ci-tools/bin:$PATH"
-    command -v clang-tidy >/dev/null 2>&1
+# Build the image when its recipe or ci.yml's package list changed (the tag is a
+# hash of both). An image build is a few minutes of apt, not a cold compile.
+ensure_ci_image() {
+    command -v podman >/dev/null 2>&1 || { echo "  podman not found — the Linux stages cannot run." >&2; return 1; }
+    local pkgs tag
+    pkgs="$(python3 tools/ci_apt_packages.py)" || return 1
+    tag="$( { cat scripts/ci-container/Containerfile; printf '%s\n' "$pkgs"; } | sha256sum | cut -c1-12)"
+    CI_IMAGE="localhost/vestige-ci-ubuntu24:$tag"
+    podman image exists "$CI_IMAGE" && return 0
+    echo "  building $CI_IMAGE (ci.yml's packages or the Containerfile changed) ..." >&2
+    podman build --pull=missing --build-arg "APT_PACKAGES=$pkgs" -t "$CI_IMAGE" \
+        -f scripts/ci-container/Containerfile scripts/ci-container >&2
 }
+
+# --init: without an init process, a single-command stage makes xvfb-run the
+# container's PID 1, where it waits forever for Xvfb's ready signal (measured
+# 2026-09-28: the audit stage sat idle 3 h). The timeout turns any other hang into
+# a FAILED stage rather than a push that never ends; it is sized for a cold build.
+CI_STAGE_TIMEOUT="${VESTIGE_CI_STAGE_TIMEOUT:-5400}"
+
+# The container builds a COPY holding exactly the files git would carry: tracked
+# files plus new ones git does not ignore, as they are in the working tree (so a
+# hand run tests uncommitted edits too). Ignored local files stay out, as they
+# are absent from GitHub's checkout: on 2026-09-28 the gitignored symlinks in
+# assets/models/nature_local/ pointed outside the repo and broke copy_assets in
+# the container. rsync keeps mtimes, so unchanged files do not rebuild; files
+# gone from the tree are removed from the copy. It is mounted at the repo's own
+# path, so paths baked in at configure time match a host build's.
+sync_ci_src() {
+    local src="$CI_DIR/src" tmp
+    tmp="$(mktemp -d)" || return 1
+    mkdir -p "$src"
+    git -C "$REPO_ROOT" ls-files -z -co --exclude-standard | sort -z > "$tmp/want"
+    rsync -a --from0 --ignore-missing-args --files-from="$tmp/want" "$REPO_ROOT/" "$src/" || { rm -rf "$tmp"; return 1; }
+    ( cd "$src" && find . \( -type f -o -type l \) -print0 | sed -z 's|^\./||' | sort -z ) > "$tmp/have"
+    comm -z -23 "$tmp/have" "$tmp/want" | ( cd "$src" && xargs -0 -r rm -f -- )
+    rm -rf "$tmp"
+}
+
+in_ci() {  # in_ci <tree-name> <bash command> — run in the container, tree at build/
+    mkdir -p "$CI_DIR/$1" "$CI_DIR/ccache"
+    timeout -k 30 "$CI_STAGE_TIMEOUT" \
+    podman run --rm --init --userns=keep-id --security-opt label=disable \
+        -e HOME=/tmp -e CCACHE_DIR=/ccache -e CCACHE_MAXSIZE=10G \
+        -e CCACHE_SLOPPINESS="$CCACHE_SLOPPINESS" \
+        -v "$CI_DIR/src:$REPO_ROOT" -v "$CI_DIR/$1:$REPO_ROOT/build" \
+        -v "$REPO_ROOT/.ci-tools:$REPO_ROOT/.ci-tools:ro" \
+        -v "$CI_DIR/ccache:/ccache" -w "$REPO_ROOT" \
+        "$CI_IMAGE" bash -euo pipefail -c "$2"
+}
+
+# --- preflight: tool presence + version report ------------------------------
+# Guards against the false-green failure mode: a tool missing → its stage
+# silently does less → local passes while CI fails. The Linux stages' tools are
+# the container's; the host still supplies msvc-wine, gitleaks and actionlint.
+CLANG_TIDY_OK=1
 
 ver_line() {  # ver_line <label> <cmd...> -- prints "  label  <first version-ish line>"
     local label="$1"; shift
@@ -210,13 +245,22 @@ ver_line() {  # ver_line <label> <cmd...> -- prints "  label  <first version-ish
 }
 
 preflight() {
-    banner "preflight — local tool versions (CI = ubuntu-24.04 apt: cppcheck ~2.13, clang-tidy ~18)"
-    ensure_clang_tidy || CLANG_TIDY_OK=0
-    ver_line "cmake"      cmake --version
-    ver_line "ninja"      ninja --version
-    ver_line "cppcheck"   cppcheck --version
-    command -v glslangValidator >/dev/null 2>&1 && ver_line "glslang" glslangValidator --version || printf '  %-11s %s\n' "glslang" "!! MISSING (configure will FAIL: VESTIGE_REQUIRE_GLSLANG=ON)"
-    ver_line "clang-tidy" clang-tidy --version
+    banner "preflight — tool versions (Linux stages: the Ubuntu 24.04 CI container)"
+    mkdir -p "$REPO_ROOT/.ci-tools"
+    if ensure_ci_image && sync_ci_src; then
+        CI_IMAGE_OK=1
+        printf '  %-11s %s\n' "source" "$CI_DIR/src ($(git -C "$REPO_ROOT" ls-files -co --exclude-standard | wc -l) files git would carry)"
+        printf '  %-11s %s\n' "image" "$CI_IMAGE"
+        podman run --rm "$CI_IMAGE" sh -c '
+            printf "  %-11s %s\n" c++ "$(c++ --version | head -1)"
+            printf "  %-11s %s\n" cmake "$(cmake --version | head -1)"
+            printf "  %-11s %s\n" cppcheck "$(cppcheck --version)"
+            printf "  %-11s %s\n" clang-tidy "$(clang-tidy --version | grep -i version | head -1 | sed "s/^ *//")"
+            printf "  %-11s %s\n" glslang "$(glslangValidator --version | head -1)"'
+        podman run --rm "$CI_IMAGE" sh -c 'command -v clang-tidy' >/dev/null || CLANG_TIDY_OK=0
+    else
+        echo "  !! CI image or source copy unavailable — every Linux stage will SKIP (NOT push-verified)."
+    fi
     command -v gitleaks >/dev/null 2>&1 && ver_line "gitleaks" gitleaks version || printf '  %-11s %s\n' "gitleaks" "!! MISSING (secret-scan stage will SKIP)"
     command -v actionlint >/dev/null 2>&1 && ver_line "actionlint" actionlint --version || printf '  %-11s %s\n' "actionlint" "!! MISSING (workflow-lint stage will SKIP)"
     # actionlint lints each `run:` block by shelling out to the shell linter;
@@ -225,42 +269,35 @@ preflight() {
     # NB: never begin a comment line with that linter's name + a space — it is
     # parsed as a directive and errors out with SC1072/SC1073.
     command -v shellcheck >/dev/null 2>&1 && ver_line "shellcheck" shellcheck --version || printf '  %-11s %s\n' "shellcheck" "!! MISSING (actionlint would skip all run: blocks)"
-    if [[ $CLANG_TIDY_OK -eq 0 ]]; then
-        echo
-        echo "  !! clang-tidy NOT found — the Tier-1 audit will SKIP it. clang-tidy"
-        echo "  !! 'error' findings GATE CI, so this local run is NOT a full mirror."
-        echo "  !! Install it (openSUSE: zypper in clang-tools) before trusting a green."
-    fi
 }
 
-# Configure a build dir with the exact flags from ci.yml's Configure step.
-configure() {  # configure <dir> <build-type>
-    cmake -S . -B "$1" -G Ninja \
-        -DCMAKE_BUILD_TYPE="$2" \
+# ci.yml's Configure step, verbatim.
+ci_configure() {  # ci_configure <build-type> — prints the command
+    printf '%s' "cmake -S . -B build -G Ninja \
+        -DCMAKE_BUILD_TYPE=$1 \
         -DCMAKE_C_COMPILER_LAUNCHER=ccache \
         -DCMAKE_CXX_COMPILER_LAUNCHER=ccache \
         -DCMAKE_EXPORT_COMPILE_COMMANDS=ON \
+        -DVESTIGE_USE_MOLD=OFF \
         -DVESTIGE_FETCH_ASSETS=OFF \
-        -DVESTIGE_REQUIRE_GLSLANG=ON \
-        -DVESTIGE_USE_MOLD=OFF   # link as ci.yml does (CMakeLists.txt says why)
+        -DVESTIGE_REQUIRE_GLSLANG=ON"
 }
 
-# Build + test one configuration. Reuses an existing build dir (warm/incremental);
-# ccache makes a fresh dir nearly as fast at the object level.
-build_and_test() {  # build_and_test <stage-label> <dir> <build-type>
-    local label="$1" dir="$2" cfg="$3" start=$SECONDS
-    banner "$label — configure + build + test"
-    if ! configure "$dir" "$cfg"; then
-        record "$label" fail $((SECONDS - start)); return 1
+# Build + test one configuration in the container: ci.yml's Configure, Build and
+# Run tests steps. The tree persists in $CI_DIR, so a push rebuilds only what
+# changed, and ccache covers a fresh tree.
+build_and_test() {  # build_and_test <stage-label> <tree-name> <build-type>
+    local label="$1" tree="$2" cfg="$3" start=$SECONDS
+    banner "$label — configure + build + test (Ubuntu 24.04 container)"
+    if [[ $CI_IMAGE_OK -eq 0 ]]; then
+        record "$label" skip 0; return 0
     fi
-    if ! cmake --build "$dir" -j "$JOBS"; then
-        record "$label" fail $((SECONDS - start)); return 1
+    if in_ci "$tree" "$(ci_configure "$cfg")
+cmake --build build -j $JOBS
+xvfb-run --auto-servernum ctest --test-dir build --output-on-failure -j $JOBS -LE perf"; then
+        record "$label" ok $((SECONDS - start)); return 0
     fi
-    # --output-on-failure -j matches ci.yml's Run tests step.
-    if ! "${GL_WRAP[@]}" ctest --test-dir "$dir" --output-on-failure -j "$JOBS" -LE perf; then
-        record "$label" fail $((SECONDS - start)); return 1
-    fi
-    record "$label" ok $((SECONDS - start)); return 0
+    record "$label" fail $((SECONDS - start)); return 1
 }
 
 # --- Windows/MSVC stage (opt-in) --------------------------------------------
@@ -331,15 +368,15 @@ build_and_test_msvc() {
     return $rc
 }
 
-# --- preflight: report versions + self-heal clang-tidy ----------------------
+# --- preflight: build/find the CI image, report versions --------------------
 preflight
 
-# --- stage 1: Debug build + test (reuses the dev build/ dir) ----------------
-build_and_test "Debug build+test" build Debug || true
+# --- stage 1: Debug build + test (container tree $CI_DIR/debug) -------------
+build_and_test "Debug build+test" debug Debug || true
 
-# --- stage 2: Release build + test (own dir; runs Release-only perf gates) --
+# --- stage 2: Release build + test (container tree $CI_DIR/release) ---------
 if [[ $QUICK -eq 0 ]]; then
-    build_and_test "Release build+test" build-release Release || true
+    build_and_test "Release build+test" release Release || true
 else
     record "Release build+test" skip 0
 fi
@@ -355,17 +392,20 @@ else
 fi
 
 # --- stage 4: Tier-1 static audit -------------------------------------------
-# Reuses the Debug build/ dir (audit's internal `cmake --build build` is a warm
-# no-op when build/ is already built). Flags match ci.yml: --ci sets the exit
+# In the container, on stage 1's Debug tree (audit's internal `cmake --build
+# build` is a warm no-op there), with CI's cppcheck and clang-tidy versions.
+# Flags match ci.yml: --ci sets the exit
 # code by severity, --no-color keeps logs clean, --no-tests skips the redundant
 # ctest pass (stage 1 already ran it against the same build).
 if [[ $QUICK -eq 0 ]]; then
     start=$SECONDS
-    banner "Tier-1 audit — cppcheck + clang-tidy + build warnings"
+    banner "Tier-1 audit — cppcheck + clang-tidy + build warnings (Ubuntu 24.04 container)"
     # Flag a partial mirror in the stage name so a green summary can't be
     # mistaken for full parity when clang-tidy was unavailable.
     audit_label="Tier-1 audit"; [[ $CLANG_TIDY_OK -eq 0 ]] && audit_label="Tier-1 audit(no-tidy)"
-    if "${GL_WRAP[@]}" python3 tools/audit/audit.py -t 1 --ci --no-color --no-tests; then
+    if [[ $CI_IMAGE_OK -eq 0 ]]; then
+        record "$audit_label" skip 0
+    elif in_ci debug "xvfb-run --auto-servernum python3 tools/audit/audit.py -t 1 --ci --no-color --no-tests"; then
         record "$audit_label" ok $((SECONDS - start))
     else
         record "$audit_label" fail $((SECONDS - start))
@@ -424,15 +464,17 @@ fi
 CMAKE_COMPAT_VERSION="3.21.0"
 CMAKE_COMPAT_SHA256="d54ef6909f519740bc85cec07ff54574cd1e061f9f17357d9ace69f61c6291ce"
 
-# Print the path to the pinned cmake, fetching it on first use. Empty output +
-# non-zero return means "unavailable" — the caller SKIPs.
-ensure_cmake_compat() {
-    local root="$REPO_ROOT/.ci-tools/cmake-$CMAKE_COMPAT_VERSION"
+# Print the path to CMake <version>'s cmake, fetching it into .ci-tools/ on first
+# use, checksum-verified. Empty output + non-zero return means "unavailable" —
+# the caller SKIPs. The binaries are static, so the container runs them too.
+ensure_cmake() {  # ensure_cmake <version> <sha256>
+    local version="$1" sha="$2"
+    local root="$REPO_ROOT/.ci-tools/cmake-$version"
     local bin="$root/bin/cmake"
     if [[ -x "$bin" ]]; then printf '%s\n' "$bin"; return 0; fi
 
-    local asset="cmake-$CMAKE_COMPAT_VERSION-linux-x86_64.tar.gz"
-    local url="https://github.com/Kitware/CMake/releases/download/v$CMAKE_COMPAT_VERSION/$asset"
+    local asset="cmake-$version-linux-x86_64.tar.gz"
+    local url="https://github.com/Kitware/CMake/releases/download/v$version/$asset"
     local tmp; tmp="$(mktemp -d)" || return 1
     # A failed mktemp would leave tmp empty and send the download to /, so treat
     # it as unavailable rather than writing outside the scratch dir.
@@ -440,19 +482,33 @@ ensure_cmake_compat() {
     # shellcheck disable=SC2064  # expand tmp NOW: it is a local, and is already
     # out of scope by the time the RETURN trap fires.
     trap "rm -rf '$tmp'" RETURN
-    echo "  fetching pinned CMake $CMAKE_COMPAT_VERSION (once) ..." >&2
+    echo "  fetching CMake $version (once) ..." >&2
     if ! curl -fsSL --retry 3 -o "$tmp/cmake.tar.gz" "$url"; then
         echo "  download failed (offline?)" >&2; return 1
     fi
     # Checksum before extract: an unverified toolchain is a supply-chain hole, and
     # this follows the pinned-version+sha256 pattern ci.yml uses for actionlint.
-    if ! echo "$CMAKE_COMPAT_SHA256  $tmp/cmake.tar.gz" | sha256sum -c - >/dev/null 2>&1; then
+    if ! echo "$sha  $tmp/cmake.tar.gz" | sha256sum -c - >/dev/null 2>&1; then
         echo "  !! sha256 mismatch on $asset — refusing to use it" >&2; return 1
     fi
     mkdir -p "$root"
     tar -xzf "$tmp/cmake.tar.gz" -C "$root" --strip-components=1 || return 1
     [[ -x "$bin" ]] || return 1
     printf '%s\n' "$bin"
+}
+
+# ci.yml's cmake-compat `latest` leg takes the newest CMake release. Resolve it
+# the same way and verify it against the release's own SHA-256 list (the trust
+# actions-setup-cmake relies on). Prints "<version> <sha256>"; fails offline.
+resolve_latest_cmake() {
+    local version sha
+    version="$(curl -fsSL --retry 3 https://api.github.com/repos/Kitware/CMake/releases/latest \
+        | python3 -c 'import json,sys; print(json.load(sys.stdin)["tag_name"].lstrip("v"))')" || return 1
+    [[ "$version" =~ ^[0-9]+\.[0-9]+\.[0-9]+$ ]] || return 1
+    sha="$(curl -fsSL --retry 3 "https://github.com/Kitware/CMake/releases/download/v$version/cmake-$version-SHA-256.txt" \
+        | awk -v a="cmake-$version-linux-x86_64.tar.gz" '$2 == a {print $1}')" || return 1
+    [[ "$sha" =~ ^[0-9a-f]{64}$ ]] || return 1
+    printf '%s %s\n' "$version" "$sha"
 }
 
 # Stage 7 can only disagree with stage 2 about what CMake itself reads: the same
@@ -468,40 +524,49 @@ if [[ $CMAKE_COMPAT -eq 1 && -n "${ANTS_PUSH_CHANGED:-}" ]] \
     compat_moot=1
 fi
 
-if [[ $compat_moot -eq 1 ]]; then
-    banner "CMake $CMAKE_COMPAT_VERSION compat — not run: no build file in this push"
-    record "CMake $CMAKE_COMPAT_VERSION compat" moot 0
-elif [[ $CMAKE_COMPAT -eq 1 ]]; then
-    start=$SECONDS
-    banner "CMake $CMAKE_COMPAT_VERSION compat — configure + build + test (Release)"
-    compat_label="CMake $CMAKE_COMPAT_VERSION compat"
-    if ! compat_cmake="$(ensure_cmake_compat)"; then
-        echo "  pinned CMake $CMAKE_COMPAT_VERSION unavailable — stage SKIPped." >&2
-        record "$compat_label" skip 0
+# One leg: ci.yml's cmake-compat Configure, Build and Run tests steps with that
+# CMake, in the container, in its own tree so its cache never meets another's.
+compat_leg() {  # compat_leg <label> <tree-name> <cmake path>
+    local label="$1" tree="$2" cm="$3" start=$SECONDS
+    if in_ci "$tree" "$cm --version | head -1
+$cm -S . -B build -G Ninja \
+    -DCMAKE_BUILD_TYPE=Release \
+    -DCMAKE_C_COMPILER_LAUNCHER=ccache \
+    -DCMAKE_CXX_COMPILER_LAUNCHER=ccache \
+    -DCMAKE_EXPORT_COMPILE_COMMANDS=ON \
+    -DVESTIGE_USE_MOLD=OFF \
+    -DVESTIGE_FETCH_ASSETS=OFF
+$cm --build build -j $JOBS
+xvfb-run --auto-servernum ${cm%/cmake}/ctest --test-dir build --output-on-failure -j $JOBS -LE perf"; then
+        record "$label" ok $((SECONDS - start))
     else
-        "$compat_cmake" --version | head -1
-        # Same flags as ci.yml's cmake-compat Configure step. Its own build dir so
-        # the 3.21 cache can't collide with the host-cmake stages' build trees.
-        if ! "$compat_cmake" -S . -B build-cmake-compat -G Ninja \
-                -DCMAKE_BUILD_TYPE=Release \
-                -DCMAKE_C_COMPILER_LAUNCHER=ccache \
-                -DCMAKE_CXX_COMPILER_LAUNCHER=ccache \
-                -DCMAKE_EXPORT_COMPILE_COMMANDS=ON \
-                -DVESTIGE_FETCH_ASSETS=OFF \
-                -DVESTIGE_USE_MOLD=OFF; then
-            record "$compat_label" fail $((SECONDS - start))
-        elif ! "$compat_cmake" --build build-cmake-compat -j "$JOBS"; then
-            record "$compat_label" fail $((SECONDS - start))
-        # 3.21's own ctest, not the host's — actions-setup-cmake puts the
-        # matrix version's whole bin/ on PATH in CI, so ctest matches too.
-        elif ! "${GL_WRAP[@]}" "${compat_cmake%/cmake}/ctest" --test-dir build-cmake-compat --output-on-failure -j "$JOBS" -LE perf; then
-            record "$compat_label" fail $((SECONDS - start))
-        else
-            record "$compat_label" ok $((SECONDS - start))
-        fi
+        record "$label" fail $((SECONDS - start))
+    fi
+}
+
+if [[ $compat_moot -eq 1 ]]; then
+    banner "CMake compat (3.21.0 + latest) — not run: no build file in this push"
+    record "CMake $CMAKE_COMPAT_VERSION compat" moot 0
+    record "CMake latest compat" moot 0
+elif [[ $CMAKE_COMPAT -eq 1 && $CI_IMAGE_OK -eq 1 ]]; then
+    banner "CMake $CMAKE_COMPAT_VERSION compat — configure + build + test (Release, Ubuntu 24.04 container)"
+    if compat_cmake="$(ensure_cmake "$CMAKE_COMPAT_VERSION" "$CMAKE_COMPAT_SHA256")"; then
+        compat_leg "CMake $CMAKE_COMPAT_VERSION compat" compat-min "$compat_cmake"
+    else
+        echo "  CMake $CMAKE_COMPAT_VERSION unavailable — leg SKIPped." >&2
+        record "CMake $CMAKE_COMPAT_VERSION compat" skip 0
+    fi
+    banner "CMake latest compat — configure + build + test (Release, Ubuntu 24.04 container)"
+    if latest="$(resolve_latest_cmake)" \
+            && latest_cmake="$(ensure_cmake "${latest% *}" "${latest#* }")"; then
+        compat_leg "CMake latest compat" compat-latest "$latest_cmake"
+    else
+        echo "  newest CMake release unavailable (offline?) — leg SKIPped." >&2
+        record "CMake latest compat" skip 0
     fi
 else
     record "CMake $CMAKE_COMPAT_VERSION compat" skip 0
+    record "CMake latest compat" skip 0
 fi
 
 # --- summary ----------------------------------------------------------------
@@ -544,6 +609,6 @@ if [[ ${#moot_stages[@]} -gt 0 ]]; then
     echo "the push can change them: ${moot_stages[*]} (GitHub still runs them)."
     exit 0
 fi
-echo "Full CI mirror passed (Linux Debug+Release, Windows/MSVC, Tier-1 audit, gitleaks,"
-echo "actionlint, CMake $CMAKE_COMPAT_VERSION compat) — safe to push."
+echo "Full CI mirror passed (Linux Debug+Release, Tier-1 audit and CMake $CMAKE_COMPAT_VERSION +"
+echo "latest in the Ubuntu 24.04 container; Windows/MSVC, gitleaks, actionlint) — safe to push."
 exit 0

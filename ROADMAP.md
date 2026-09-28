@@ -8675,3 +8675,23 @@ record, and a real clearance before commercial release needs counsel.
   Kind: perf.
   Source: 3D_E-0710 investigation, 2026-09-28.
   Lanes: ci.
+
+- 🚧 [3D_E-0719] **Run local-ci's Linux stages in an Ubuntu 24.04 container matching GitHub's runner.**
+  Runs 36421673850 and 36429395907 went red on GitHub while local CI was
+  green: the host's GCC 16 and mold passed Release LTO links that
+  Ubuntu 24.04's mold 2.30 failed. User decision 2026-09-28: REPLACE the
+  Linux stages (Debug, Release, Tier-1 audit, CMake compat) with container
+  runs, not add one on top; Windows (msvc-wine) stays on the host.
+  Written, uncommitted as of 17:45: scripts/ci-container/Containerfile
+  (ubuntu:24.04 + ci.yml's apt list via tools/ci_apt_packages.py, with
+  recommends, + CMake 3.31.6 sha-verified), local-ci.sh in_ci()/
+  ensure_ci_image(), both cmake-compat legs (3.21.0 and latest). Image
+  localhost/vestige-ci-ubuntu24:<hash> verified: GCC 13.3.0, CMake 3.31.6,
+  cppcheck 2.13.0, clang-tidy 18.1.3, ccache 4.9.1. Trees + ccache live in
+  ../.vestige-ci (VESTIGE_CI_DIR). Remaining: finish the cold run (cc-job
+  ci-cold), prove red by re-adding mold to the image and seeing the LTO
+  link fail, commit, push, flip.
+  **Layman:** The local checks now run on the same system GitHub uses, so a problem GitHub would catch is caught before pushing.
+  Kind: fix.
+  Source: user-request-2026-09-28 (two red CI runs).
+  Lanes: ci.

@@ -1,0 +1,33 @@
+# Local stand-in for GitHub's ubuntu-24.04 runner, used by scripts/local-ci.sh
+# for every Linux stage, so a local pass means the same compiler, CMake,
+# cppcheck and clang-tidy that CI uses passed (2026-09-28: a newer host mold
+# and GCC let a red CI through a green local run).
+#
+# What GitHub's runner uses, from run 36430690624's log and the runner image's
+# software list (ubuntu24/20260920.314):
+#   c++ = GNU 13.3.0 (apt default), CMake 3.31.6 (preinstalled, first on PATH;
+#   apt's 3.28.3 is also installed), cppcheck 2.13.0, clang-tidy 18, ccache 4.9.
+# The apt packages are ci.yml's own lists (tools/ci_apt_packages.py passes them
+# in as APT_PACKAGES), so there is one list, installed WITH recommends as the
+# apt-install action does (that is what brings Mesa's llvmpipe). Not matched: the runner's
+# preinstalled Ninja 1.13 (apt's is used here).
+FROM docker.io/library/ubuntu:24.04
+
+ARG APT_PACKAGES
+RUN test -n "$APT_PACKAGES" \
+ && apt-get update \
+ && DEBIAN_FRONTEND=noninteractive apt-get install -y \
+        $APT_PACKAGES ccache git ca-certificates curl xauth \
+ && rm -rf /var/lib/apt/lists/*
+
+# The runner's preinstalled CMake, checksum-verified.
+ARG CMAKE_VERSION=3.31.6
+ARG CMAKE_SHA256=5a1133ff103c71eb5120e2cc3de922733e7d8a26a98ae716397e8676adb367bf
+RUN curl -fsSL -o /tmp/cmake.tgz \
+        "https://github.com/Kitware/CMake/releases/download/v${CMAKE_VERSION}/cmake-${CMAKE_VERSION}-linux-x86_64.tar.gz" \
+ && echo "${CMAKE_SHA256}  /tmp/cmake.tgz" | sha256sum -c - \
+ && tar -xzf /tmp/cmake.tgz -C /usr/local --strip-components=1 \
+ && rm /tmp/cmake.tgz
+
+# The repository is bind-mounted and owned by the host user.
+RUN git config --system --add safe.directory '*'
