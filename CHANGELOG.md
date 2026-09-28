@@ -23,6 +23,13 @@ may change any interface without notice.
 
 ## [Unreleased]
 
+### 2026-09-28 Security — Secret scan no longer ignores a whole test file (3D_E-0712)
+
+`.gitleaks.toml` excused all of `tools/audit/tests/test_findings.py`,
+so a real secret added there later would have passed. It now excuses
+only the exact strings `tier4_complexity`, `tier4_cognitive_complexity`
+and `tier4_duplication`, anchored so they cannot match a key.
+
 ### 2026-09-26 Added — Every shader is compiled by the reference GLSL compiler in CI (3D_E-0638)
 
 Shader code had no automatic checking beyond its version line, and

@@ -19,17 +19,18 @@ useDefault = true
 
 [[allowlists]]
 description = "source_key test constants in the audit tool are not secrets"
-paths = [
-    '''tools/audit/tests/test_findings\.py$''',
-]
-# Fingerprint = Commit:File:RuleID:StartLine, but Gitleaks also accepts
-# raw regex matches. These strings are test assertions on the value of
-# Finding.source_key, which the generic-api-key rule flags because the
-# strings look hex-ish. They are literal constants, not secrets.
+# tools/audit/tests/test_findings.py asserts Finding.source_key against
+# these names, and generic-api-key flags the `source_key == "..."` lines.
+# Excused by exact content, not by path: a path allowlist would also
+# admit a real secret added to that file later (security.md § 2), and
+# gitleaks ORs `paths` with `regexes`. Each regex is anchored to one
+# exact public identifier, so it cannot match a secret's shape.
+# Not an inline `gitleaks:allow`: the history scan also walks the old
+# commits that added these lines, which an inline comment cannot reach.
 regexes = [
-    '''tier4_complexity''',
-    '''tier4_cognitive_complexity''',
-    '''tier4_duplication''',
+    '''^tier4_complexity$''',
+    '''^tier4_cognitive_complexity$''',
+    '''^tier4_duplication$''',
 ]
 
 [[allowlists]]
@@ -41,6 +42,9 @@ description = "Audit tool JSON sidecars — rule IDs / short hashes are not secr
 # Scoping the allowlist to the report filename pattern keeps the rule
 # live everywhere else (including tools/audit/*.py itself, where a
 # real key literal would still be caught).
+# Scan scope, not an excuse (security.md § 2): these files are
+# git-ignored runtime output (.gitignore `docs/AUTOMATED_AUDIT_REPORT*.json`),
+# never project source, so only a `gitleaks dir` scan can reach them.
 paths = [
     '''docs/AUTOMATED_AUDIT_REPORT_[0-9_\-]+_results\.json$''',
 ]

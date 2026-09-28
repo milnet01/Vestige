@@ -4459,6 +4459,26 @@ shipped that have no invocation path at all.
   Source: review-contract 2026-09-26 on docs/phases/phase_10_fog_design.md (3D_E-0657 gate, loop 1).
   Lanes: docs, perf.
 
+- ✅ [3D_E-0712] **`.gitleaks.toml` excuses the whole of `tools/audit/tests/test_findings.py`, so a real secret added there would pass the scan.**
+  `~/.claude/standards/security.md` § 2 forbids a whole-path allowlist.
+  The allowlist pairs a `paths` entry with three `tier4_*` regexes, and
+  gitleaks ORs the two. Measured: dropping the path while keeping the
+  regexes leaves both the history scan and a `gitleaks dir` scan clean;
+  dropping both yields 3 generic-api-key hits in the tree and 6 in
+  history (commits d1b9b7ed, 5ffe4735). Fix: remove the path, anchor
+  each regex (`^...$`) so it matches only that exact identifier. An
+  inline `gitleaks:allow` cannot excuse the historical commits the
+  history scan (`gitleaks detect`) walks, so it is not used.
+  Resolved (2026-09-28): path entry removed, regexes anchored.
+  `gitleaks detect` (history) and `gitleaks dir tools/audit` both clean;
+  without the regexes both fail, so they are load-bearing. The audit
+  report JSON path entry kept: those files are git-ignored output,
+  a scan-scope exclusion, now commented as such.
+  **Layman:** The secret scanner is told to ignore one whole test file, so a real password pasted into it later would slip through; narrow the excuse to the three harmless words it was meant for.
+  Kind: security.
+  Source: peer-relay-2026-09-28 (claude-cd, security.md § 2 field pass).
+  Lanes: security, ci.
+
 ## 0.3.0 — An editor a builder can use
 
 Breaks: the scene format. Editor work changes what a scene stores.
