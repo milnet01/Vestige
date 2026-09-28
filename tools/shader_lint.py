@@ -39,9 +39,11 @@ semantic check the shaders get before a GPU runs them.
 from __future__ import annotations
 
 import argparse
+import os
 import re
 import subprocess
 import sys
+from concurrent.futures import ThreadPoolExecutor
 from pathlib import Path
 
 # The one allowed version directive. Engine targets GL 4.5 → GLSL 4.50 core.
@@ -110,27 +112,44 @@ def compile_shaders(roots: list[Path], validator: str) -> tuple[list[str], int]:
 
     Returns (violations, compiled_count).
     """
-    violations: list[str] = []
-    count = 0
+    # Each entry is a finished violation string, or a (path, stage) to compile.
+    # The compiles run in a thread pool (each is its own process, so threads are
+    # enough) and results are put back in scan order, so the output does not
+    # depend on which compile finished first (3D_E-0711).
+    entries: list[str | tuple[Path, str]] = []
     for root in roots:
         for path in sorted(root.rglob("*")):
             if path.suffix not in _SHADER_SUFFIXES or not path.is_file():
                 continue
             stage = _stage_of(path)
             if stage is None:
-                violations.append(
+                entries.append(
                     f"{path}: cannot tell the shader stage from the file name; "
                     f"name it <name>.<{'|'.join(_STAGES)}>.glsl")
                 continue
-            result = subprocess.run([validator, "-S", stage, str(path)],
-                                    capture_output=True, text=True)
-            count += 1
-            if result.returncode != 0:
-                detail = "\n    ".join(
-                    line for line in result.stdout.splitlines()
-                    if "ERROR" in line) or result.stdout.strip()
-                violations.append(f"{path}: glslangValidator failed:\n    {detail}")
-    return violations, count
+            entries.append((path, stage))
+
+    def compile_one(job: tuple[Path, str]) -> str | None:
+        path, stage = job
+        result = subprocess.run([validator, "-S", stage, str(path)],
+                                capture_output=True, text=True)
+        if result.returncode == 0:
+            return None
+        detail = "\n    ".join(
+            line for line in result.stdout.splitlines()
+            if "ERROR" in line) or result.stdout.strip()
+        return f"{path}: glslangValidator failed:\n    {detail}"
+
+    jobs = [e for e in entries if isinstance(e, tuple)]
+    with ThreadPoolExecutor(max_workers=min(8, os.cpu_count() or 1)) as pool:
+        compiled = iter(list(pool.map(compile_one, jobs)))
+
+    violations: list[str] = []
+    for entry in entries:
+        outcome = entry if isinstance(entry, str) else next(compiled)
+        if outcome is not None:
+            violations.append(outcome)
+    return violations, len(jobs)
 
 
 def main(argv: list[str] | None = None) -> int:
