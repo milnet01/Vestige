@@ -8589,13 +8589,17 @@ record, and a real clearance before commercial release needs counsel.
   Source: claude-config message 163, 2026-09-28 (local-gate.md § 9).
   Lanes: ci, tests.
 
-- 📋 [3D_E-0715] **Decide whether the ASan Debug leg moves to nightly.**
+- 🚫 [3D_E-0715] **Decide whether the ASan Debug leg moves to nightly.**
   The Debug stage builds and tests under ASan on every push: 212-338 s
   locally (2026-09-26), 227 s Build on GitHub (run 35637174083).
   local-gate.md § 9 puts sanitizer legs nightly and on demand. Moving it
   trades per-push memory-error coverage for time, so it is the user's
   call. Option: keep a plain Debug build per push and run ASan nightly,
   with a timeout sized for a cold cache.
+  Decided 2026-09-28 by the user: keep ASan on every push. On GitHub
+  the Windows job (Build 1004 s, run 35637174083) is the long pole, so
+  moving the ASan leg nightly saves no wall time there; locally it would
+  save 3-5 min at the cost of memory bugs landing before they are caught.
   **Layman:** Decide whether the slow memory-safety test build should run nightly instead of on every push.
   Kind: investigate.
   Source: claude-config message 163, 2026-09-28 (local-gate.md § 9).

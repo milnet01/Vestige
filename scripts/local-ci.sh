@@ -449,7 +449,23 @@ ensure_cmake_compat() {
     printf '%s\n' "$bin"
 }
 
-if [[ $CMAKE_COMPAT -eq 1 ]]; then
+# Stage 7 can only disagree with stage 2 about what CMake itself reads: the same
+# compiler builds the same sources, and no CMakeLists globs, so a new source file
+# arrives with a CMakeLists change. So a push touching none of those skips it,
+# which GitHub's cmake-compat job still runs (3D_E-0708). ANTS_PUSH_CHANGED comes
+# from the push hook; unset or empty means the push is unknown (a hand run), and
+# the stage runs.
+COMPAT_BUILD_PATHS='(^|/)CMakeLists\.txt$|\.cmake(\.in)?$|^cmake/|^external/|^CMakePresets\.json$|^\.github/workflows/ci\.yml$|^scripts/local-ci\.sh$'
+compat_moot=0
+if [[ $CMAKE_COMPAT -eq 1 && -n "${ANTS_PUSH_CHANGED:-}" ]] \
+        && ! grep -qE "$COMPAT_BUILD_PATHS" <<<"$ANTS_PUSH_CHANGED"; then
+    compat_moot=1
+fi
+
+if [[ $compat_moot -eq 1 ]]; then
+    banner "CMake $CMAKE_COMPAT_VERSION compat — not run: no build file in this push"
+    record "CMake $CMAKE_COMPAT_VERSION compat" moot 0
+elif [[ $CMAKE_COMPAT -eq 1 ]]; then
     start=$SECONDS
     banner "CMake $CMAKE_COMPAT_VERSION compat — configure + build + test (Release)"
     compat_label="CMake $CMAKE_COMPAT_VERSION compat"
@@ -486,11 +502,13 @@ echo
 banner "local-ci summary"
 fails=0
 skipped_stages=()
+moot_stages=()   # not run because the push cannot affect them; never shown as PASS
 for i in "${!STAGE_NAMES[@]}"; do
     case "${STAGE_RESULTS[$i]}" in
         ok)   mark="PASS" ;;
         fail) mark="FAIL"; fails=$((fails + 1)) ;;
         skip) mark="SKIP"; skipped_stages+=("${STAGE_NAMES[$i]}") ;;
+        moot) mark="N/A"; moot_stages+=("${STAGE_NAMES[$i]}") ;;
     esac
     printf '  %-24s %-4s  %3ds\n' "${STAGE_NAMES[$i]}" "$mark" "${STAGE_TIMES[$i]}"
 done
@@ -514,6 +532,11 @@ if [[ ${#skipped_stages[@]} -gt 0 || $CLANG_TIDY_OK -eq 0 ]]; then
 fi
 # Reaching here means no stage FAILED and none were SKIPped — so Windows/MSVC
 # actually ran and passed (a skip would have taken the PARTIAL branch above).
+if [[ ${#moot_stages[@]} -gt 0 ]]; then
+    echo "CI mirror passed for this push — safe to push. Not run, because nothing in"
+    echo "the push can change them: ${moot_stages[*]} (GitHub still runs them)."
+    exit 0
+fi
 echo "Full CI mirror passed (Linux Debug+Release, Windows/MSVC, Tier-1 audit, gitleaks,"
 echo "actionlint, CMake $CMAKE_COMPAT_VERSION compat) — safe to push."
 exit 0
