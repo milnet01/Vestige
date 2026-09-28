@@ -8559,3 +8559,55 @@ record, and a real clearance before commercial release needs counsel.
   Kind: perf.
   Source: user-request-2026-09-26 (CI speed).
   Lanes: tests, ci.
+
+- 📋 [3D_E-0713] **Prune old GitHub ccache entries after each save.**
+  gh cache list on 2026-09-28: 10.4 GB stored against GitHub's 10 GB
+  per-repository limit. hendrikmuhs/ccache-action writes a new
+  timestamped key per run (ccache-<job>-<config>-<time>, ~450 MB each)
+  and nothing deletes the older ones, so GitHub evicts by age and may
+  drop the entry a job is about to restore. Add a step after the save
+  that deletes this job's older ccache-<job>-* keys. That needs
+  actions: write on the job, which ci.yml's least-privilege block does
+  not grant today; weigh that before landing. Measure cache total and
+  restore hit rate before and after.
+  **Layman:** GitHub's build cache is over its size limit, so useful cached work gets thrown away at random.
+  Kind: perf.
+  Source: claude-config message 163, 2026-09-28 (local-gate.md § 9).
+  Lanes: ci.
+
+- 📋 [3D_E-0714] **Move the Release-only perf benchmarks out of the push gate.**
+  local-ci.sh stage 2 and ci.yml's Release job run the Release-only perf
+  benchmarks on every push. local-gate.md § 9 keeps timing tests out of
+  push gates because they are the main flake source on a loaded machine;
+  this box shares its GPU and CPU with other sessions. Give them a ctest
+  label, exclude it from the push stages, and run it in a scheduled job
+  (audit-full.yml's nightly, or a new one), so they still run somewhere.
+  Check first which tests are timing-sensitive, and that the perf gate
+  (tools/perf_gate.py) is not itself part of the push contract.
+  **Layman:** Speed tests are unreliable on a busy machine, so run them on a schedule instead of blocking every push.
+  Kind: perf.
+  Source: claude-config message 163, 2026-09-28 (local-gate.md § 9).
+  Lanes: ci, tests.
+
+- 📋 [3D_E-0715] **Decide whether the ASan Debug leg moves to nightly.**
+  The Debug stage builds and tests under ASan on every push: 212-338 s
+  locally (2026-09-26), 227 s Build on GitHub (run 35637174083).
+  local-gate.md § 9 puts sanitizer legs nightly and on demand. Moving it
+  trades per-push memory-error coverage for time, so it is the user's
+  call. Option: keep a plain Debug build per push and run ASan nightly,
+  with a timeout sized for a cold cache.
+  **Layman:** Decide whether the slow memory-safety test build should run nightly instead of on every push.
+  Kind: investigate.
+  Source: claude-config message 163, 2026-09-28 (local-gate.md § 9).
+  Lanes: ci.
+
+- 📋 [3D_E-0716] **Give the audit job its own FetchContent cache prefix.**
+  ci.yml's linux-build-test (Debug) and audit-tool-tier1 both use the
+  FetchContent cache key prefix cmake-deps-Debug-. local-gate.md § 9 asks
+  for one prefix per job. Rename the audit job's key to a prefix of its
+  own. Low value: the key is a CMakeLists hash, not per commit, and both
+  jobs cache the same content.
+  **Layman:** Two CI jobs share one cache name, so they can overwrite each other's saved files.
+  Kind: chore.
+  Source: claude-config message 163, 2026-09-28 (local-gate.md § 9).
+  Lanes: ci.
