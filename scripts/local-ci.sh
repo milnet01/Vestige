@@ -10,7 +10,7 @@
 #                                  perf benchmarks that are skipped in Debug]
 #   3. Windows MSVC build+test  ← windows-build-test  [OPT-IN via --windows]
 #   4. Tier-1 static audit      ← audit-tool-tier1  (cppcheck + clang-tidy + warnings)
-#   5. gitleaks secret scan     ← secret-scan       (full git history)
+#   5. gitleaks secret scan     ← secret-scan.yml   (full git history)
 #   6. actionlint workflow lint ← workflow-lint     (schema + shellcheck over run: blocks)
 #   7. CMake 3.21.0 compat      ← cmake-compat      (declared-minimum CMake, Release)
 #
@@ -65,7 +65,7 @@
 #   scripts/local-ci.sh --quick     # Debug build+test + gitleaks only (fast smoke,
 #                                   # NOT push-safe: skips the Tier-1 audit + Windows)
 #   scripts/local-ci.sh --docs      # documentation-only push: the gitleaks stage
-#                                   # alone. secret-scan is the one ci.yml job that
+#                                   # alone: secret-scan.yml, the one workflow that
 #                                   # reads doc paths; builds, tests, the audit,
 #                                   # actionlint and cmake-compat read none of them.
 #                                   # .githooks/pre-push selects it (.ants/gate.conf).
@@ -119,7 +119,7 @@ while [[ $# -gt 0 ]]; do
 done
 
 # --- documentation mode -----------------------------------------------------
-# Runs ci.yml's secret-scan job and nothing else, because it is the only job that
+# Runs secret-scan.yml's job and nothing else, because it is the only job that
 # reads documentation paths. Fails closed: with no gitleaks nothing was checked,
 # so exit 2 (PARTIAL), which the push hook treats as a refusal.
 if [[ $DOCS -eq 1 ]]; then
