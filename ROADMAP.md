@@ -8520,7 +8520,7 @@ record, and a real clearance before commercial release needs counsel.
   Source: peer-doom-ants-2026-09-26 message 41.
   Lanes: tooling.
 
-- 📋 [3D_E-0707] **Shard the gtest suite into a few parallel ctest entries.**
+- ✅ [3D_E-0707] **Shard the gtest suite into a few parallel ctest entries.**
   vestige_tests runs as ONE ctest entry, so ctest -j cannot spread it: it
   took 134 s (Debug), 45-67 s (other stages) in 2026-09-26 local-ci runs.
   Per-case registration was tried and was slower (every case re-created a
@@ -8528,58 +8528,77 @@ record, and a real clearance before commercial release needs counsel.
   using GTEST_TOTAL_SHARDS / GTEST_SHARD_INDEX, one GL context per
   shard. Expected gain unmeasured. Measure N=4..6 against RAM, since the
   Debug stage runs under ASan and the machine is short on memory.
+  Shipped 2026-09-28 (048b59f): 4 gtest shards via GTEST_TOTAL_SHARDS,
+  VESTIGE_TEST_SHARDS knob. Debug+ASan ctest 59 s -> 31 s; 2.8 GB summed
+  peak RSS; 3952 cases each run once. Prerequisite 176791a isolated
+  TerrainMaterialSetTest's scratch dir. Sharding also exposed 3D_E-0717.
   **Layman:** Split the one big test run into several that run side by side, so tests finish sooner locally and on GitHub.
   Kind: perf.
   Source: user-request-2026-09-26 (CI speed).
   Lanes: tests, ci.
 
-- 📋 [3D_E-0708] **Skip the local CMake 3.21 compat stage when no build file changed.**
+- ✅ [3D_E-0708] **Skip the local CMake 3.21 compat stage when no build file changed.**
   scripts/local-ci.sh stage 7 took 124-550 s per push on 2026-09-26. It
   only tests the declared CMake minimum, so it can only fail on a change
   to CMakeLists.txt, *.cmake or external/ pins. Skip it in the pre-push
   hook when the pushed range touches none of those, the same way
   documentation-only pushes already skip the gate. GitHub's cmake-compat
   job keeps running it, so coverage is kept.
+  Shipped 2026-09-28 (6d2f304): stage 7 prints N/A when the push's
+  ANTS_PUSH_CHANGED lists no build file; unset runs it. 236 s -> 0 s on
+  such pushes; last 40 commits: 14 run it, 5 source-only skip.
   **Layman:** Stop rebuilding everything with an old CMake when nothing CMake reads has changed.
   Kind: perf.
   Source: user-request-2026-09-26 (CI speed).
   Lanes: ci.
 
-- 📋 [3D_E-0709] **Add paths-ignore to GitHub CI for documentation-only pushes.**
+- ✅ [3D_E-0709] **Add paths-ignore to GitHub CI for documentation-only pushes.**
   .github/workflows/ci.yml runs every job on every push to main. The local
   pre-push hook already decides a push is documentation-only and skips the
   gate (several such pushes on 2026-09-26). Mirror that rule in ci.yml's
   on.push.paths-ignore so GitHub does not build and test for a ROADMAP or
   CHANGELOG commit. Keep the rule in one place if possible, so the two
   cannot drift.
+  Shipped 2026-09-28 (c450775, prerequisite 76e9ffb moved gitleaks to
+  secret-scan.yml): ci.yml push paths-ignore, read by
+  tools/ci_docs_only.py as the hook's docsCommand, so one list. 299/299
+  verdicts equal the old docsGlob; 160 of 300 commits are docs-only.
   **Layman:** Stop GitHub rebuilding the engine when only notes and documents changed.
   Kind: perf.
   Source: user-request-2026-09-26 (CI speed).
   Lanes: ci.
 
-- 📋 [3D_E-0710] **Investigate running independent local-ci stages at the same time.**
+- ✅ [3D_E-0710] **Investigate running independent local-ci stages at the same time.**
   local-ci.sh runs seven stages one after another; on 2026-09-26 a warm
   push took about 13-20 min in total and a cold one about 40 min (Windows
   MSVC 163-803 s, Release 108-427 s, Debug 212-338 s). The Debug, Release
   and Windows builds use separate build directories. Running two at once
   would cut wall time, but RAM is short (/tmp is RAM) and builds already
   use -j. Measure peak memory first; unmeasured.
+  Investigated 2026-09-28. Warm push, serial: Debug 148 s / 2.4 GB peak,
+  Release 94 s / 1.5 GB, MSVC 101 s / 1.6 GB (compiling), audit 75 s /
+  1.4 GB, compat 151 s / 0.7 GB; MemAvailable never below 8.4 GB. Two
+  lanes would take ~360 s of 583 s and stay under ~4 GB warm; cold, the
+  Debug ASan pool alone nears 9 GB, so parallel only behind a warm-tree
+  cost check. Implementation filed as 3D_E-0718.
   **Layman:** Check whether the local checks can run in parallel without running the machine out of memory.
   Kind: investigate.
   Source: user-request-2026-09-26 (CI speed).
   Lanes: ci.
 
-- 📋 [3D_E-0711] **Compile shaders in parallel in the glslang check.**
+- ✅ [3D_E-0711] **Compile shaders in parallel in the glslang check.**
   ShaderCompileGlslang (3D_E-0638) compiles 92 shaders serially: 9-14 s
   per stage on 2026-09-26. tools/shader_lint.py could run the
   glslangValidator calls in a small process pool and keep the output
   order. Small win, easy.
+  Shipped 2026-09-28 (8683ddf): thread pool, scan-order output.
+  ShaderCompileGlslang 8.8-9.0 s -> 1.7-1.8 s; output byte-identical.
   **Layman:** Check the 92 shaders several at a time instead of one after another.
   Kind: perf.
   Source: user-request-2026-09-26 (CI speed).
   Lanes: tests, ci.
 
-- 📋 [3D_E-0713] **Prune old GitHub ccache entries after each save.**
+- ✅ [3D_E-0713] **Prune old GitHub ccache entries after each save.**
   gh cache list on 2026-09-28: 10.4 GB stored against GitHub's 10 GB
   per-repository limit. hendrikmuhs/ccache-action writes a new
   timestamped key per run (ccache-<job>-<config>-<time>, ~450 MB each)
@@ -8589,12 +8608,15 @@ record, and a real clearance before commercial release needs counsel.
   actions: write on the job, which ci.yml's least-privilege block does
   not grant today; weigh that before landing. Measure cache total and
   restore hit rate before and after.
+  Shipped 2026-09-28 (cc73f63): tools/prune_actions_cache.py +
+  cache-prune.yml, daily, the only workflow with actions: write (user's
+  choice). Dry run: 13 of 24 entries superseded, 5836 of 10535 MB.
   **Layman:** GitHub's build cache is over its size limit, so useful cached work gets thrown away at random.
   Kind: perf.
   Source: claude-config message 163, 2026-09-28 (local-gate.md § 9).
   Lanes: ci.
 
-- 📋 [3D_E-0714] **Move the Release-only perf benchmarks out of the push gate.**
+- ✅ [3D_E-0714] **Move the Release-only perf benchmarks out of the push gate.**
   local-ci.sh stage 2 and ci.yml's Release job run the Release-only perf
   benchmarks on every push. local-gate.md § 9 keeps timing tests out of
   push gates because they are the main flake source on a loaded machine;
@@ -8603,6 +8625,9 @@ record, and a real clearance before commercial release needs counsel.
   (audit-full.yml's nightly, or a new one), so they still run somewhere.
   Check first which tests are timing-sensitive, and that the perf gate
   (tools/perf_gate.py) is not itself part of the push contract.
+  Shipped 2026-09-28 (5352125): vestige_perf_budgets entry labelled perf,
+  excluded from push gates, run by ci.yml's nightly schedule; exact-name
+  list (a pattern caught a logic test). Saves ~1 s; it is for reliability.
   **Layman:** Speed tests are unreliable on a busy machine, so run them on a schedule instead of blocking every push.
   Kind: perf.
   Source: claude-config message 163, 2026-09-28 (local-gate.md § 9).
@@ -8624,13 +8649,29 @@ record, and a real clearance before commercial release needs counsel.
   Source: claude-config message 163, 2026-09-28 (local-gate.md § 9).
   Lanes: ci.
 
-- 📋 [3D_E-0716] **Give the audit job its own FetchContent cache prefix.**
+- ✅ [3D_E-0716] **Give the audit job its own FetchContent cache prefix.**
   ci.yml's linux-build-test (Debug) and audit-tool-tier1 both use the
   FetchContent cache key prefix cmake-deps-Debug-. local-gate.md § 9 asks
   for one prefix per job. Rename the audit job's key to a prefix of its
   own. Low value: the key is a CMakeLists hash, not per commit, and both
   jobs cache the same content.
+  Shipped 2026-09-28 (9955634): cmake-deps-audit-tier1- and
+  cmake-deps-audit-full-. Restores the premise audit-full.yml's 3D_E-0635
+  cache-poisoning note relied on, which had been false.
   **Layman:** Two CI jobs share one cache name, so they can overwrite each other's saved files.
   Kind: chore.
   Source: claude-config message 163, 2026-09-28 (local-gate.md § 9).
+  Lanes: ci.
+
+- 📋 [3D_E-0718] **Run local-ci's Debug and Release lanes in parallel when both trees are warm.**
+  From 3D_E-0710's measurements. Lane A: Debug build+test, then the Tier-1
+  audit (it reuses build/). Lane B: Release, Windows MSVC, CMake compat.
+  Warm push 2026-09-28: serial 583 s; lanes ~max(223, 346) + gitleaks,
+  about 360 s. Fail closed on memory: run the lanes together only when a
+  `ninja -n` cost check shows both trees need few compile steps, else
+  serial (local-gate.md § 9's cost-check lever). Keep per-lane logs so
+  output does not interleave, and keep the summary and exit codes as now.
+  **Layman:** Run the two halves of the local checks side by side when little needs rebuilding, cutting a typical push check by about a third.
+  Kind: perf.
+  Source: 3D_E-0710 investigation, 2026-09-28.
   Lanes: ci.
