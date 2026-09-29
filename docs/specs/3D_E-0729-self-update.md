@@ -178,9 +178,11 @@ Caps: 256 KB for the API call, 4 MB for each CHANGELOG (681 439 bytes today,
 `ls -l CHANGELOG.md`), 200 MB for an asset (the largest today is the
 36 MB tarball, `gh release view v0.1.75-rc.1 --json assets`).
 
-The check and the download run on the job system (`JobSystem::submit`, main
-thread only) and hand results back with `JobSystem::runOnMainThread`, drained
-once a frame. The dialog reads progress from an atomic.
+The check and the download run on a dedicated `std::thread` owned by
+`UpdateDialog`, and hand results back with `JobSystem::runOnMainThread`,
+drained once a frame. Not a job-system worker: a download blocks for seconds,
+and the workers are shared with the renderer and audio. The dialog reads
+progress from an atomic.
 
 ### 4.6 Installing
 
@@ -272,7 +274,7 @@ relaunches or shows the error.
 ## 5. Invariants
 
 - **INV-1** — `isNewer` orders versions as §4.2 states.
-  *Test:* `tests/test_update_version.cpp` — table of pairs including
+  *Test:* `tests/test_update_core.cpp` — table of pairs including
   `0.1.75` vs `0.1.76-rc.1` (not newer), `0.1.76` vs `0.1.76-rc.1` (newer),
   `0.1.10` vs `0.1.9` (newer), and unparseable inputs (`1.2`, `v`, `1.2.3.4`).
   *Breaks when:* versions are compared as strings (`0.1.10` < `0.1.9`), or a
@@ -281,7 +283,7 @@ relaunches or shows the error.
 - **INV-2** — Nothing is installed unless the signature over §4.4's message,
   rebuilt from the offered tag, the chosen asset name and the downloaded bytes,
   verifies against `kUpdatePublicKey`.
-  *Test:* `tests/test_update_signature.cpp` — a throwaway key signs a fixture;
+  *Test:* `tests/test_update_core.cpp` — a throwaway key signs a fixture;
   the check passes, and fails for one flipped byte, for the same bytes under a
   different version, and for a signature from another key.
   *Breaks when:* the signature covers the bytes alone (a re-tagged old build
@@ -313,7 +315,7 @@ relaunches or shows the error.
 
 - **INV-6** — The notes shown are every CHANGELOG line added between the
   installed tag and the offered one, each once, in the offered file's order.
-  *Test:* `tests/test_update_release.cpp` — `notesSince` on fixture texts where
+  *Test:* `tests/test_update_core.cpp` — `notesSince` on fixture texts where
   the offered file adds entries under two version headings, repeats one bullet
   already present once, and reorders nothing.
   *Breaks when:* notes are assembled from per-release bodies (overlapping drafts
@@ -332,8 +334,9 @@ relaunches or shows the error.
 - **INV-8** — A settings file at schema 5 loads as schema 6 with
   `updates.mode = Ask`, and a user who chose *No* is never checked
   automatically.
-  *Test:* `tests/test_settings.cpp` — migration of a v5 fixture; a decision
-  function `shouldAutoCheck(mode, wizardDone)` is false for `Off`.
+  *Test:* `tests/test_settings.cpp` — migration of a v5 fixture;
+  `shouldAutoCheckForUpdates` is true only for `On`, and
+  `shouldAskAboutUpdateChecks` only for `Ask` once the wizard is done.
   *Breaks when:* the migration is skipped or defaults the mode to `On`.
 
 ## 6. Failure modes
@@ -352,9 +355,10 @@ relaunches or shows the error.
 
 ## 7. Tests
 
-`tests/test_update_version.cpp` (INV-1), `test_update_signature.cpp` (INV-2),
-`test_update_service.cpp` (INV-4), `test_update_installer.cpp` (INV-5, INV-7),
-`test_update_release.cpp` (INV-6), additions to `test_settings.cpp` (INV-8),
+`tests/test_update_core.cpp` (INV-1, INV-2, INV-6, asset choice, install
+detection), `test_update_service.cpp` (INV-2, INV-4, INV-6 through the service),
+`test_update_installer.cpp` (INV-5, INV-7), additions to `test_settings.cpp`
+(INV-8),
 all listed in `tests/CMakeLists.txt`'s `vestige_tests` sources. No test touches
 the network: the service takes an `IHttpTransport&`, and the tests pass a fake.
 The `release.yml` verification step is INV-3's test. Each test is run red first
@@ -394,12 +398,12 @@ against a stub before its code lands.
 
 | Rule | What catches a breach |
 |------|----------------------|
-| INV-1 | `tests/test_update_version.cpp` |
-| INV-2 | `tests/test_update_signature.cpp` |
+| INV-1 | `tests/test_update_core.cpp` |
+| INV-2 | `tests/test_update_core.cpp` |
 | INV-3 | `release.yml` signature-verification step |
 | INV-4 | `tests/test_update_service.cpp` |
 | INV-5 | Partial: `tests/test_update_installer.cpp` covers the AppImage path; the Windows helper is a manual recipe on `wintest` |
-| INV-6 | `tests/test_update_release.cpp` |
+| INV-6 | `tests/test_update_core.cpp` |
 | INV-7 | `tests/test_update_installer.cpp` |
 | INV-8 | `tests/test_settings.cpp` |
 | The private key never enters the repo | **nothing** — gitleaks in CI catches common key shapes, not a raw base64 seed |

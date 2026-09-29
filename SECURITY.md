@@ -108,6 +108,8 @@ Malformed shaders can crash drivers or hang the GPU.
 | ImGui, imgui-filebrowser, ImPlot | Branch commit pin (FetchContent) — see THIRD_PARTY_NOTICES "Branch-commit pins" | GitHub |
 | glad | Generated, committed | glad generator |
 | stb_image, dr_libs | Vendored single-header (committed copy) | `external/stb`, `external/dr_libs` |
+| Monocypher | Vendored release files (committed copy) | `external/monocypher` |
+| libcurl | System package on Linux; tagged release built from source on Windows (FetchContent) | distro / curl/curl |
 
 ### Known CVEs and Mitigations (Reviewed 2026-05-18; next review by 2026-08-18)
 
@@ -131,6 +133,18 @@ Malformed shaders can crash drivers or hang the GPU.
 - Tested on: openSUSE Tumbleweed (dev), Ubuntu 24.04 LTS (target).
 
 ---
+
+### Self-update signing (3D_E-0729)
+
+The editor installs an update only if its Ed25519 signature verifies against
+the public key in `engine/update/update_key.h`. The private key is the GitHub
+Actions secret `VESTIGE_UPDATE_SIGNING_KEY`, used only by `release.yml`'s
+signing steps; the maintainer keeps the one other copy offline. The signature
+binds the version and asset name as well as the bytes, so an old build
+republished under a newer tag does not verify. Rotating the key means shipping
+a new `update_key.h`: builds holding the old key cannot update past that
+release and need one manual download. Spec:
+`docs/specs/3D_E-0729-self-update.md`.
 
 ## 6. Build Security
 

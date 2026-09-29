@@ -4758,6 +4758,18 @@ shipped that have no invocation path at all.
   and Windows zip update in place, the tarball shows notes and a
   download link. The larger 3D_E-S0461 design (project backup,
   migrations, crash rollback) stays planned as a follow-on.
+  Progress (2026-09-29): spec docs/specs/3D_E-0729-self-update.md
+  accepted at review cap (2 loops, 12 findings fixed). Built in five
+  slices: core (versions, CHANGELOG-diff notes, Ed25519+BLAKE2b via
+  vendored Monocypher 4.0.3), libcurl transport + service, installers
+  (AppImage rename+execv; Windows zip staged + PowerShell swap helper),
+  settings v6 + prompt + Help menu + dialog, release.yml signing with the
+  VESTIGE_UPDATE_SIGNING_KEY secret (stored) and verify-before-upload.
+  Tests red-proven by mutation; a live check against GitHub offers a
+  0.1.70 build 0.1.75 with 326 CHANGELOG lines; the dialog was seen in the
+  running editor. Still open before shipped: an in-place update between
+  two signed stable releases (the first signed release is the next cut),
+  and the Windows helper's manual recipe on wintest.
   **Layman:** The editor can tell you a newer version exists, show you everything that changed since yours, and update itself with one click.
   Kind: feature.
   Source: user-request-2026-09-29.

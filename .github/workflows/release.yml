@@ -5,7 +5,9 @@
 #   - Linux:   vestige-<version>-linux-x86_64.tar.gz
 #   - Linux:   Vestige-<version>-x86_64.AppImage (+ .zsync update file)
 #   - Windows: vestige-<version>-windows-x86_64.zip
-# and attaches all four to a GitHub Release for the triggering tag. Testers
+#   - a <asset>.sig beside the tarball, AppImage and zip: the self-updater's
+#     Ed25519 signature (3D_E-0729, tools/sign_release.py)
+# and attaches them all to a GitHub Release for the triggering tag. Testers
 # (see TESTING.md) get a "download, extract, run" path without a build
 # environment.
 #
@@ -168,7 +170,8 @@ jobs:
           cmake -S . -B build -G Ninja \
             -DCMAKE_BUILD_TYPE=Release \
             -DVESTIGE_FETCH_ASSETS=OFF \
-            -DVESTIGE_VERSION_STAMP="$VERSION_STAMP"
+            -DVESTIGE_VERSION_STAMP="$VERSION_STAMP" \
+            -DVESTIGE_PACKAGE=linux
 
       - name: Build
         run: cmake --build build -j "$(nproc)"
@@ -263,13 +266,30 @@ jobs:
             "$APPDIR" "$OUT"
           ls -lh "$OUT" "${OUT}.zsync"
 
+      # 3D_E-0729: sign every asset the self-updater may download, then verify
+      # each signature against the public key compiled into the engine
+      # (engine/update/update_key.h) so a mismatched secret fails here.
+      - name: Sign release assets
+        env:
+          VESTIGE_UPDATE_SIGNING_KEY: ${{ secrets.VESTIGE_UPDATE_SIGNING_KEY }}
+        run: |
+          set -euo pipefail
+          VER="${{ steps.version.outputs.version }}"
+          python3 -m venv /tmp/signenv
+          /tmp/signenv/bin/pip install --quiet cryptography==50.0.1
+          FILES=(vestige-*-linux-x86_64.tar.gz Vestige-*-x86_64.AppImage)
+          /tmp/signenv/bin/python tools/sign_release.py --version "$VER" "${FILES[@]}"
+          /tmp/signenv/bin/python tools/sign_release.py --verify --version "$VER" "${FILES[@]}"
+
       - name: Upload as workflow artifact
         uses: actions/upload-artifact@043fb46d1a93c77aae656e7c1c64a875d1fc6a0a  # v7
         with:
           name: vestige-linux-x86_64
           path: |
             vestige-*-linux-x86_64.tar.gz
+            vestige-*-linux-x86_64.tar.gz.sig
             Vestige-*-x86_64.AppImage
+            Vestige-*-x86_64.AppImage.sig
             Vestige-*-x86_64.AppImage.zsync
           if-no-files-found: error
 
@@ -280,7 +300,9 @@ jobs:
           tag_name: ${{ steps.version.outputs.tag }}
           files: |
             vestige-*-linux-x86_64.tar.gz
+            vestige-*-linux-x86_64.tar.gz.sig
             Vestige-*-x86_64.AppImage
+            Vestige-*-x86_64.AppImage.sig
             Vestige-*-x86_64.AppImage.zsync
           # RC tags (…-rc.N) publish immediately as pre-releases (testers);
           # final tags (vX.Y.Z) are created as DRAFTS to gate the public
@@ -362,7 +384,8 @@ jobs:
           cmake -S . -B build -A x64 `
             -DCMAKE_BUILD_TYPE=Release `
             -DVESTIGE_FETCH_ASSETS=OFF `
-            -DVESTIGE_VERSION_STAMP="$env:VERSION_STAMP"
+            -DVESTIGE_VERSION_STAMP="$env:VERSION_STAMP" `
+            -DVESTIGE_PACKAGE=windows-zip
 
       - name: Build
         run: cmake --build build --config Release -j
@@ -403,11 +426,25 @@ jobs:
           powershell -NoProfile -Command "Compress-Archive -Path '$STAGE' -DestinationPath '${STAGE}.zip' -Force"
           ls -lh "${STAGE}.zip"
 
+      # 3D_E-0729: see the Linux job's signing step.
+      - name: Sign release assets
+        shell: bash
+        env:
+          VESTIGE_UPDATE_SIGNING_KEY: ${{ secrets.VESTIGE_UPDATE_SIGNING_KEY }}
+        run: |
+          set -euo pipefail
+          VER="${{ steps.version.outputs.version }}"
+          python -m pip install --quiet cryptography==50.0.1
+          python tools/sign_release.py --version "$VER" vestige-*-windows-x86_64.zip
+          python tools/sign_release.py --verify --version "$VER" vestige-*-windows-x86_64.zip
+
       - name: Upload as workflow artifact
         uses: actions/upload-artifact@043fb46d1a93c77aae656e7c1c64a875d1fc6a0a  # v7
         with:
           name: vestige-windows-x86_64
-          path: vestige-*-windows-x86_64.zip
+          path: |
+            vestige-*-windows-x86_64.zip
+            vestige-*-windows-x86_64.zip.sig
           if-no-files-found: error
 
       - name: Attach to GitHub Release
@@ -415,7 +452,9 @@ jobs:
         uses: softprops/action-gh-release@718ea10b132b3b2eba29c1007bb80653f286566b  # v3.0.1
         with:
           tag_name: ${{ steps.version.outputs.tag }}
-          files: vestige-*-windows-x86_64.zip
+          files: |
+            vestige-*-windows-x86_64.zip
+            vestige-*-windows-x86_64.zip.sig
           # RC tags publish as pre-releases; final tags are gated drafts.
           # See the linux-release attach step + release-cadence.yml.
           draft: ${{ !contains(steps.version.outputs.tag, '-rc') }}

@@ -79,6 +79,14 @@ without the rest of `main`'s new features):
   than double-publish.
 - **Hotfixes never lose their fix** — promotion tags the release-branch HEAD
   (RC + hotfixes), and hotfixes are back-merged to `main`.
+- **Every download is signed** — `release.yml` signs the tarball, AppImage and
+  zip with the `VESTIGE_UPDATE_SIGNING_KEY` secret (`tools/sign_release.py`)
+  and verifies each signature against `engine/update/update_key.h` before
+  upload, so a release whose secret and engine key disagree fails instead of
+  publishing updates the editor would refuse (3D_E-0729).
+- **Update notes are the CHANGELOG** — the editor shows users the CHANGELOG
+  lines added between their version's tag and the new one, so what is written
+  there is what they read.
 
 ## Versioning note
 

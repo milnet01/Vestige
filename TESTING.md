@@ -161,7 +161,11 @@ describe it back for verification.
 
 ## Privacy and data collection
 
-Vestige **does not phone home**. The editor writes:
+Vestige sends nothing about you anywhere. The only network access is the
+update check (3D_E-0729): the editor asks once, after the first-run wizard,
+whether to check GitHub for a newer version when it starts, and
+*Help → Check for Updates* checks on demand. A check downloads the release
+list and the CHANGELOG from GitHub and uploads nothing. The editor writes:
 
 - **Settings** to the OS's per-user config directory (Linux:
   `$XDG_CONFIG_HOME/vestige/`, Windows: `%LOCALAPPDATA%\Vestige\`).

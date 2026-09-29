@@ -23,6 +23,10 @@ may change any interface without notice.
 
 ## [Unreleased]
 
+### 2026-09-29 Added — The editor can update itself and tells you what changed (3D_E-0729)
+
+After the first-run wizard, the editor asks once whether to check for new versions when it starts. *Help → Check for Updates* works either way, and Settings has an Updates tab. When a newer stable release exists, a window lists every CHANGELOG entry added since your version. Choose *Later*, *Skip this version* or *Update now*. The Linux AppImage and the Windows zip update in place and restart; the Linux tarball opens the download page. Every download is signed in the release pipeline and checked before anything is installed, and unsaved scene changes are offered for saving first. Updates work from the first release built with this change; earlier builds need one manual download.
+
 ### 2026-09-29 Fixed — Project rules can now be checked (3D_E-0688)
 
 The 60 FPS rule names its measurement and a checker, `tools/fps_floor.py`. Audits file a report under `docs/audits/`. Workarounds carry a searchable `Workaround:` marker. A new test lists every shader function copied between files and fails when a copy drifts. The material preview now uses the scene's minimum roughness, so a perfectly smooth material keeps its highlight in the preview.
