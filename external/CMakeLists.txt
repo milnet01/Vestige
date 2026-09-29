@@ -553,3 +553,16 @@ add_library(tinyfiledialogs STATIC
     ${CMAKE_CURRENT_SOURCE_DIR}/tinyfiledialogs/tinyfiledialogs.c)
 target_include_directories(tinyfiledialogs PUBLIC
     ${CMAKE_CURRENT_SOURCE_DIR}/tinyfiledialogs)
+
+# ---------------------------------------------------------------------------
+# Monocypher 4.0.3 — Ed25519 signature check + BLAKE2b for the self-updater
+# (3D_E-0729, docs/specs/3D_E-0729-self-update.md §4.4). Vendored from the
+# release tarball; the four files match tag 4.0.3 apart from the version-stamp
+# comment. BSD-2-Clause or CC0. Own static lib so the C source never receives
+# the engine's C++ PCH; SYSTEM include so -Werror does not police it.
+# ---------------------------------------------------------------------------
+add_library(monocypher STATIC
+    ${CMAKE_CURRENT_SOURCE_DIR}/monocypher/monocypher.c
+    ${CMAKE_CURRENT_SOURCE_DIR}/monocypher/monocypher-ed25519.c)
+target_include_directories(monocypher SYSTEM PUBLIC
+    ${CMAKE_CURRENT_SOURCE_DIR}/monocypher)

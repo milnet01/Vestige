@@ -179,6 +179,7 @@ add_executable(vestige_tests
     test_blocks_movement.cpp
     test_edit_tracker_drag_undo.cpp
     test_shader_copies_registry.cpp
+    test_update_core.cpp
     test_post_process_accessibility.cpp
     test_audio_attenuation.cpp
     test_audio_doppler.cpp

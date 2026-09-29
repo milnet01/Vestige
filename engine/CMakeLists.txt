@@ -114,6 +114,12 @@ set(ENGINE_SOURCES
     utils/config_path.cpp
     utils/atomic_write.cpp
     utils/path_sandbox.cpp
+    # Self-updater (3D_E-0729)
+    update/update_version.cpp
+    update/update_release.cpp
+    update/update_signature.cpp
+    update/update_installer.cpp
+    update/notes_markup.cpp
     core/settings.cpp
     core/settings_migration.cpp
     core/settings_apply.cpp
@@ -466,6 +472,7 @@ target_link_libraries(vestige_engine
         RecastNavigation::Recast
         RecastNavigation::Detour
         tinyfiledialogs
+        monocypher          # 3D_E-0729 — update signature check
 )
 # enkiTS (MT2) carries its header dir as a SYSTEM INTERFACE include (set in
 # external/CMakeLists.txt), so linking it above propagates <TaskScheduler.h>
