@@ -4530,6 +4530,92 @@ shipped that have no invocation path at all.
   Kind: doc.
   Source: user-request-2026-09-29.
 
+- 🚧 [3D_E-0721] **No domain system has ever updated in the real app: every ISystem starts inactive and nothing activates it.**
+  ISystem::m_isActive defaults to false. The only activator is
+  SystemRegistry::activateSystemsForScene, called only from
+  onSceneLoadAll, which has had no caller since dfbb96b (2026-04-03).
+  updateAll skips inactive systems, so it runs every frame and
+  dispatches nothing. Proven at runtime 2026-09-29: gdb on a Debug
+  build, 121 frames, updateAll hit 121 times, AtmosphereSystem /
+  WaterSystem / AudioSystem / UISystem ::update hit 0 times.
+  Consequences found so far: Physics2DSystem creates bodies only in
+  onSceneLoad, so 2D objects never get physics bodies; onSceneUnload
+  cleanup never runs. Tests call systems directly, which hid it.
+  User decision 2026-09-29: investigate first in a scratch build
+  (switch all on; measure FPS, read logs, list work duplicated by
+  Engine) and report before changing real code. activateSystemsForScene
+  has no re-activation path when the editor adds a component later.
+  **Layman:** The engine's building blocks (weather, water, audio, UI and more) were never switched on, so their per-frame work has never run outside the tests.
+  Kind: fix.
+  Source: in-session-2026-09-29 (3D_E-0705 linker scan).
+  Lanes: core.
+
+- 📋 [3D_E-0722] **Editor undo never merges commands: CommandHistory never calls canMergeWith / mergeWith.**
+  ParticlePropertyCommand implements canMergeWith/mergeWith, but no
+  code calls either (linker gc + source search, 2026-09-29). Confirm
+  in the running editor before fixing.
+  **Layman:** Dragging a slider in the editor may create one undo step per tiny change instead of one for the whole drag.
+  Kind: fix.
+  Source: in-session-2026-09-29 (3D_E-0705 linker scan).
+  Lanes: editor.
+
+- 📋 [3D_E-0723] **ISystem::reportMetrics is never called, so systems never submit profiling data.**
+  Declared in engine/core/i_system.h with a default no-op; no caller
+  anywhere (linker gc + source search, 2026-09-29). Decide: wire it
+  into the profiler frame, or delete the hook.
+  **Layman:** Each engine part has a hook for reporting its own performance numbers, but nothing ever asks it to.
+  Kind: fix.
+  Source: in-session-2026-09-29 (3D_E-0705 linker scan).
+  Lanes: core, profiling.
+
+- 📋 [3D_E-0702] **Meadow shore plants render cartoon teal next to the realistic grass.**
+  The pond-shore reed scatter uses Kenney plant_flatTall.glb, grass.glb and
+  plant_bush.glb. Their only material is an untextured base colour of about
+  (0.16, 0.79, 0.67), Kenney's stylised teal. Beside the GPU grass and the
+  photo-textured lotus they read as blue shards, visible in the 2026-09-26
+  website fly-through video. Replace them with realistic reed or sedge
+  props, or retint them, and check the shore in --visual-test pond_shore.
+  Scope widened 2026-09-29 (user screenshot of the open field): the
+  field "mushrooms + bushes" scatter also uses plant_bush.glb, and the
+  small rocks carry the same teal "grass" material. User decisions
+  2026-09-29: replace bushes and ground cover with Poly Haven CC0 scans
+  (shrub_02/03/04, fern_02, nettle_plant, weed_plant_02, dandelion_01,
+  shrub_sorrel_01), decimated like the lotus props to hold 60 FPS; replace
+  the shore reeds with a taller reed-like band of the GPU grass field up
+  to the waterline. Moved into 0.2.0 at the user's request.
+  **Layman:** Some small plants around the pond look bright blue-green and cartoonish next to the realistic grass; swap or recolour them.
+  Kind: fix.
+  Source: in-session-2026-09-26.
+  Lanes: scene, assets.
+
+- 🚧 [3D_E-0724] **Underwater view is crystal clear while the same pond is murky from above.**
+  Only the water SURFACE shader applied the Beer's-law murk, so once
+  the camera was below it nothing tinted the view. Fix: the final
+  composite (screen_quad.frag.glsl) tints each pixel through the water
+  column when isPointUnderwater(camera) holds, using waterColumnTint,
+  a verbatim copy of the surface shader's function, pinned by
+  tests/test_underwater_parity.cpp (red against the old shader).
+  Not yet done: the surface seen from below still shows the planar
+  reflection (Fresnel reads 1 from underneath); the murk hides it at
+  the meadow's turbidity. Awaiting the user's in-app check.
+  **Layman:** Diving into the pond showed the bottom sharp and clear; now everything under the water fades into the same green-brown murk you see from the bank.
+  Kind: fix.
+  Source: user-report-2026-09-29 (screenshots).
+  Lanes: renderer, water.
+
+- 🚧 [3D_E-0725] **Fly-mode camera passes through the terrain: its floor was world Y 0, not the ground.**
+  FirstPersonController fly mode (the default) clamped the eye to
+  playerHeight above world Y = 0; the meadow ground sits 3-7 m up.
+  Fix: FirstPersonController::flyModeFloorY keeps the eye playerHeight
+  above the terrain under it. tests/test_fly_mode_ground_clamp.cpp,
+  red first (floor 1.7 m over 10 m ground). The editor's orbit camera
+  is deliberately unclamped (editing tool). The Jolt controller's fly
+  mode (off by default) is not covered. Awaiting the user's check.
+  **Layman:** Flying the camera down went straight through the ground and showed the world from underneath; now it stops just above the ground.
+  Kind: fix.
+  Source: user-report-2026-09-29 (screenshots).
+  Lanes: core.
+
 ## 0.3.0 — An editor a builder can use
 
 Breaks: the scene format. Editor work changes what a scene stores.
@@ -6237,18 +6323,6 @@ Outdoor landscapes surrounding the Temple complex — hills, valleys, and the Ki
   Kind: perf.
   Source: in-session-2026-09-26 (video stutter investigation).
   Lanes: renderer, perf.
-
-- 📋 [3D_E-0702] **Meadow shore plants render cartoon teal next to the realistic grass.**
-  The pond-shore reed scatter uses Kenney plant_flatTall.glb, grass.glb and
-  plant_bush.glb. Their only material is an untextured base colour of about
-  (0.16, 0.79, 0.67), Kenney's stylised teal. Beside the GPU grass and the
-  photo-textured lotus they read as blue shards, visible in the 2026-09-26
-  website fly-through video. Replace them with realistic reed or sedge
-  props, or retint them, and check the shore in --visual-test pond_shore.
-  **Layman:** Some small plants around the pond look bright blue-green and cartoonish next to the realistic grass; swap or recolour them.
-  Kind: fix.
-  Source: in-session-2026-09-26.
-  Lanes: scene, assets.
 
 ## 0.5.0 — Interactivity
 
