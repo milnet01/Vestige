@@ -15,7 +15,6 @@ namespace Vestige
 class Engine;
 class Scene;
 struct SceneRenderData;
-class PerformanceProfiler;
 
 /// @brief Coarse update-phase tag controlling per-frame dispatch order.
 ///
@@ -74,7 +73,6 @@ enum class UpdatePhase : int
 /// - onSceneLoad()       -- React to scene changes
 /// - onSceneUnload()     -- Cleanup scene-specific state
 /// - drawDebug()         -- Debug visualization
-/// - reportMetrics()     -- Submit profiling data
 class ISystem
 {
 public:
@@ -132,10 +130,6 @@ public:
 
     /// @brief Draw debug visualization (lines, shapes, overlays).
     virtual void drawDebug() {}
-
-    /// @brief Submit per-system metrics to the profiler.
-    /// @param profiler The performance profiler to report to.
-    virtual void reportMetrics(PerformanceProfiler& profiler) { (void)profiler; }
 
     // -----------------------------------------------------------------------
     // Component ownership -- used by SystemRegistry for auto-activation

@@ -23,6 +23,10 @@ may change any interface without notice.
 
 ## [Unreleased]
 
+### 2026-09-29 Removed — Unused ISystem::reportMetrics hook (3D_E-0723)
+
+Nothing called it and no system overrode it; the system registry already times each system's update. A game system that declared it with `override` must drop that method.
+
 ### 2026-09-29 Fixed — Linked asset folders load again; --no-vsync works (3D_E-0726, 3D_E-0727)
 
 - **The meadow's trees and props load again when their model folders are linked in from an asset library outside the project.** (3D_E-0726)

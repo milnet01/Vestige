@@ -351,7 +351,7 @@ Constraint summary for downstream UIs that consume `engine/core`:
 | `engine/renderer/color_vision_filter.h`, `camera.h` | engine subsystem | Apply-sink target enum + camera the FPC drives. (FPC ↔ Camera is the one bidirectional dependency: `engine/renderer/camera.h` does **not** include core, `engine/core/first_person_controller.h` does include camera.) |
 | `engine/ui/ui_theme.h`, `subtitle.h`, `caption_map.h` | engine subsystem | Apply-sink targets. |
 | `engine/scene/scene.h`, `entity.h` | engine subsystem | `SystemRegistry::activateSystemsForScene` walks scene component types. |
-| `engine/profiler/performance_profiler.h` | engine subsystem | `ISystem::reportMetrics` + per-frame timing. |
+| `engine/profiler/performance_profiler.h` | engine subsystem | Per-frame timing. `SystemRegistry` times each system's update itself. |
 | `engine/core/system_events.h` | this subsystem (re-export) | Public event-type vocabulary; downstream code includes this rather than re-declaring event structs. (Same subsystem; listed here because it's a load-bearing public include target.) |
 | `<glm/glm.hpp>` | external | Math primitives (`vec2`, `vec3`). |
 | `<GLFW/glfw3.h>` | external | Window + input + GL context. |

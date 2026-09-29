@@ -4592,10 +4592,14 @@ shipped that have no invocation path at all.
   Source: in-session-2026-09-29 (3D_E-0705 linker scan).
   Lanes: editor.
 
-- 📋 [3D_E-0723] **ISystem::reportMetrics is never called, so systems never submit profiling data.**
+- ✅ [3D_E-0723] **ISystem::reportMetrics is never called, so systems never submit profiling data.**
   Declared in engine/core/i_system.h with a default no-op; no caller
   anywhere (linker gc + source search, 2026-09-29). Decide: wire it
   into the profiler frame, or delete the hook.
+  Resolved (2026-09-29): deleted, not wired. No system overrode it, and
+  SystemRegistry::updateAll already times every system's update
+  (getSystemMetrics), so wiring it would add 22 no-op calls a frame.
+  docs/engine/core/spec.md's dependency row updated.
   **Layman:** Each engine part has a hook for reporting its own performance numbers, but nothing ever asks it to.
   Kind: fix.
   Source: in-session-2026-09-29 (3D_E-0705 linker scan).
