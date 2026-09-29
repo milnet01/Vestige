@@ -483,6 +483,8 @@ if(NOT WIN32)
     find_package(CURL 8 REQUIRED)
 endif()
 target_link_libraries(vestige_engine PRIVATE CURL::libcurl)
+# miniz (built by tinyexr) unpacks the Windows update zip (3D_E-0729).
+target_link_libraries(vestige_engine PRIVATE miniz)
 # enkiTS (MT2) carries its header dir as a SYSTEM INTERFACE include (set in
 # external/CMakeLists.txt), so linking it above propagates <TaskScheduler.h>
 # -Werror-safe — no extra include wiring needed here.

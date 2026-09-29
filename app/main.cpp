@@ -13,6 +13,7 @@
 #include "core/engine.h"
 #include "core/logger.h"
 #include "platform/folder_dialog.h"
+#include "update/update_installer.h"
 #include "utils/asset_locator.h"
 
 #include <exception>
@@ -29,6 +30,8 @@ static int runEngine(int argc, char* argv[]);
 
 int main(int argc, char* argv[])
 {
+    // Kept so a self-update can relaunch with the user's arguments (3D_E-0729).
+    Vestige::Update::setLaunchArguments(argc, argv);
     try
     {
         return runEngine(argc, argv);

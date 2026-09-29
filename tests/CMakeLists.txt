@@ -181,6 +181,7 @@ add_executable(vestige_tests
     test_shader_copies_registry.cpp
     test_update_core.cpp
     test_update_service.cpp
+    test_update_installer.cpp
     test_post_process_accessibility.cpp
     test_audio_attenuation.cpp
     test_audio_doppler.cpp
