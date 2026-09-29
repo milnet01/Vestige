@@ -91,7 +91,7 @@ jobs:
           packages: |
             build-essential cmake ninja-build pkg-config
             libgl1-mesa-dev libglu1-mesa-dev
-            libx11-dev libxrandr-dev libxinerama-dev libxcursor-dev libxi-dev libxxf86vm-dev
+            libx11-dev libxrandr-dev libxinerama-dev libxcursor-dev libxi-dev libxxf86vm-dev libcurl4-openssl-dev
             libwayland-dev libxkbcommon-dev
             xvfb cppcheck glslang-tools
             python3 python3-pip python3-xmltodict python3-yaml python3-flask
@@ -241,7 +241,7 @@ jobs:
           packages: |
             build-essential cmake ninja-build
             libgl1-mesa-dev libglu1-mesa-dev
-            libx11-dev libxrandr-dev libxinerama-dev libxcursor-dev libxi-dev libxxf86vm-dev
+            libx11-dev libxrandr-dev libxinerama-dev libxcursor-dev libxi-dev libxxf86vm-dev libcurl4-openssl-dev
             libwayland-dev libxkbcommon-dev
             xvfb cppcheck clang-tidy
             python3 python3-pip python3-xmltodict python3-yaml python3-flask
@@ -366,7 +366,7 @@ jobs:
           packages: |
             build-essential ninja-build pkg-config
             libgl1-mesa-dev libglu1-mesa-dev
-            libx11-dev libxrandr-dev libxinerama-dev libxcursor-dev libxi-dev libxxf86vm-dev
+            libx11-dev libxrandr-dev libxinerama-dev libxcursor-dev libxi-dev libxxf86vm-dev libcurl4-openssl-dev
             libwayland-dev libxkbcommon-dev
             xvfb
 

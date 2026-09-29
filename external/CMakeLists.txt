@@ -566,3 +566,40 @@ add_library(monocypher STATIC
     ${CMAKE_CURRENT_SOURCE_DIR}/monocypher/monocypher-ed25519.c)
 target_include_directories(monocypher SYSTEM PUBLIC
     ${CMAKE_CURRENT_SOURCE_DIR}/monocypher)
+
+# ---------------------------------------------------------------------------
+# libcurl — HTTPS for the self-updater (3D_E-0729, spec §4.5). MIT-style curl
+# licence. Linux links the system libcurl (engine/CMakeLists.txt,
+# find_package), which linuxdeploy bundles into the AppImage. Windows has no
+# system libcurl, so it is built here, static, HTTP-only, over Schannel (the
+# OS TLS and certificate store), with every optional codec and protocol off.
+# ---------------------------------------------------------------------------
+if(WIN32)
+    FetchContent_Declare(
+        curl
+        GIT_REPOSITORY https://github.com/curl/curl.git
+        GIT_TAG        curl-8_22_0
+        GIT_SHALLOW    TRUE
+    )
+    set(_vestige_shared_save "${BUILD_SHARED_LIBS}")
+    set(BUILD_SHARED_LIBS OFF CACHE BOOL "" FORCE)
+    set(BUILD_CURL_EXE OFF CACHE BOOL "" FORCE)
+    set(BUILD_STATIC_LIBS ON CACHE BOOL "" FORCE)
+    set(BUILD_LIBCURL_DOCS OFF CACHE BOOL "" FORCE)
+    set(BUILD_MISC_DOCS OFF CACHE BOOL "" FORCE)
+    set(ENABLE_CURL_MANUAL OFF CACHE BOOL "" FORCE)
+    set(BUILD_EXAMPLES OFF CACHE BOOL "" FORCE)
+    set(CURL_USE_SCHANNEL ON CACHE BOOL "" FORCE)
+    set(CURL_USE_OPENSSL OFF CACHE BOOL "" FORCE)
+    set(CURL_USE_LIBPSL OFF CACHE BOOL "" FORCE)
+    set(CURL_USE_LIBSSH2 OFF CACHE BOOL "" FORCE)
+    set(CURL_ZLIB OFF CACHE STRING "" FORCE)
+    set(CURL_BROTLI OFF CACHE STRING "" FORCE)
+    set(CURL_ZSTD OFF CACHE STRING "" FORCE)
+    set(USE_NGHTTP2 OFF CACHE BOOL "" FORCE)
+    set(USE_LIBIDN2 OFF CACHE BOOL "" FORCE)
+    set(HTTP_ONLY ON CACHE BOOL "" FORCE)
+    set(CURL_DISABLE_INSTALL ON CACHE BOOL "" FORCE)
+    FetchContent_MakeAvailable(curl)
+    set(BUILD_SHARED_LIBS "${_vestige_shared_save}" CACHE BOOL "" FORCE)
+endif()

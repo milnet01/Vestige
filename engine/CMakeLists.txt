@@ -120,6 +120,8 @@ set(ENGINE_SOURCES
     update/update_signature.cpp
     update/update_installer.cpp
     update/notes_markup.cpp
+    update/http_transport.cpp
+    update/update_service.cpp
     core/settings.cpp
     core/settings_migration.cpp
     core/settings_apply.cpp
@@ -474,6 +476,13 @@ target_link_libraries(vestige_engine
         tinyfiledialogs
         monocypher          # 3D_E-0729 — update signature check
 )
+
+# libcurl for the self-updater (3D_E-0729). Only engine/update/http_transport.cpp
+# includes it (INV-4). Windows builds it in external/CMakeLists.txt.
+if(NOT WIN32)
+    find_package(CURL 8 REQUIRED)
+endif()
+target_link_libraries(vestige_engine PRIVATE CURL::libcurl)
 # enkiTS (MT2) carries its header dir as a SYSTEM INTERFACE include (set in
 # external/CMakeLists.txt), so linking it above propagates <TaskScheduler.h>
 # -Werror-safe — no extra include wiring needed here.
