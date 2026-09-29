@@ -691,6 +691,7 @@ bool Engine::initialize(const EngineConfig& config)
             hooks.runOnMainThread = [this](std::function<void()> work) {
                 m_jobSystem.runOnMainThread(std::move(work));
             };
+            hooks.loadPreferences = [this]() { return m_settingsEditor->applied().updates; };
             hooks.savePreferences = [this](const UpdateSettings& updates) {
                 if (m_settingsEditor->commitUpdatePreferences(updates, Settings::defaultPath())
                     != SaveStatus::Ok)
@@ -706,7 +707,7 @@ bool Engine::initialize(const EngineConfig& config)
             m_editor->getUpdateDialog().initialize(
                 std::move(hooks),
                 Update::parseVersion(VESTIGE_ENGINE_VERSION).value_or(Update::Version{}),
-                Update::detectInstall(), m_settingsEditor->applied().updates);
+                Update::detectInstall());
         }
 
         if (m_editor)

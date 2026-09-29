@@ -25,6 +25,7 @@
 #include <windows.h>
 #include <shellapi.h>
 #else
+#include <sys/wait.h>
 #include <unistd.h>
 #endif
 
@@ -292,29 +293,46 @@ private:
 /// The swap helper. Paths arrive as parameters, never pasted into the text.
 constexpr const char* kSwapScript = R"PS(
 param([string]$Install, [string]$Staged, [string]$StagingRoot)
+# Literal paths throughout: an install folder may contain [ or ], which
+# -Path would read as a wildcard pattern.
 $exe = Join-Path $Install 'vestige.exe'
 $old = "$Install.old"
+$parent = Split-Path -LiteralPath $Install -Parent
+$leaf = Split-Path -LiteralPath $Install -Leaf
+function Drop-Staging { Remove-Item -LiteralPath $StagingRoot -Recurse -Force -ErrorAction SilentlyContinue }
+function Start-Vestige { $p = Start-Process -FilePath $exe -WorkingDirectory $Install -PassThru; $null = $p.Handle; $p }
+
 $deadline = (Get-Date).AddSeconds(60)
 while (Get-Process | Where-Object { $_.Path -eq $exe }) {
-    if ((Get-Date) -gt $deadline) { Remove-Item -Recurse -Force $StagingRoot -ErrorAction SilentlyContinue; exit 1 }
+    if ((Get-Date) -gt $deadline) { Drop-Staging; exit 1 }
     Start-Sleep -Milliseconds 250
 }
-function Restore {
-    if (Test-Path $old) {
-        if (Test-Path $Install) { Remove-Item -Recurse -Force $Install -ErrorAction SilentlyContinue }
-        Rename-Item $old (Split-Path $Install -Leaf)
-    }
-    Remove-Item -Recurse -Force $StagingRoot -ErrorAction SilentlyContinue
-    Start-Process -FilePath $exe
-}
+
+# A leftover .old from an earlier update must go first; if it cannot, stop
+# here with the working install untouched.
 try {
-    if (Test-Path $old) { Remove-Item -Recurse -Force $old }
-    Rename-Item $Install (Split-Path $old -Leaf) -ErrorAction Stop
-    Move-Item $Staged $Install -ErrorAction Stop
-    Remove-Item -Recurse -Force $StagingRoot -ErrorAction SilentlyContinue
-    $p = Start-Process -FilePath $exe -PassThru -ErrorAction Stop
-    if ($p.WaitForExit(20000) -and $p.ExitCode -ne 0) { Restore }
-} catch { Restore }
+    if (Test-Path -LiteralPath $old) { Remove-Item -LiteralPath $old -Recurse -Force -ErrorAction Stop }
+} catch { Drop-Staging; Start-Vestige | Out-Null; exit 1 }
+
+$renamed = $false
+try {
+    Rename-Item -LiteralPath $Install -NewName (Split-Path -LiteralPath $old -Leaf) -ErrorAction Stop
+    $renamed = $true
+    Move-Item -LiteralPath $Staged -Destination $Install -ErrorAction Stop
+    Drop-Staging
+    $p = Start-Vestige
+    # ExitCode is only trusted once the handle was read (Start-Vestige does);
+    # a null code is not a failure.
+    if ($p.WaitForExit(20000) -and $null -ne $p.ExitCode -and $p.ExitCode -ne 0) { throw 'new build exited with an error' }
+} catch {
+    # Touch the install only if this run moved it aside.
+    if ($renamed) {
+        if (Test-Path -LiteralPath $Install) { Remove-Item -LiteralPath $Install -Recurse -Force -ErrorAction SilentlyContinue }
+        Rename-Item -LiteralPath $old -NewName $leaf
+    }
+    Drop-Staging
+    Start-Vestige | Out-Null
+}
 )PS";
 
 class WindowsZipInstaller final : public IInstaller
@@ -397,8 +415,12 @@ public:
         STARTUPINFOW si{};
         si.cb = sizeof(si);
         PROCESS_INFORMATION pi{};
+        // Start the helper outside the install folder: Windows will not rename
+        // a folder that is a running process's working directory.
+        const std::wstring workDir = m_ctx.installDir.parent_path().wstring();
         if (!CreateProcessW(nullptr, cmd.data(), nullptr, nullptr, FALSE,
-                            DETACHED_PROCESS | CREATE_NO_WINDOW, nullptr, nullptr, &si, &pi))
+                            DETACHED_PROCESS | CREATE_NO_WINDOW, nullptr, workDir.c_str(), &si,
+                            &pi))
         {
             return "could not start the update helper";
         }
@@ -446,14 +468,26 @@ bool openInBrowser(const std::string& url)
         ShellExecuteW(nullptr, L"open", wide.c_str(), nullptr, nullptr, SW_SHOWNORMAL));
     return result > 32;
 #else
-    // Spawned with an argument vector, never through a shell.
+    // Spawned with an argument vector, never through a shell. Double fork: the
+    // intermediate child exits at once and is reaped here, so the browser
+    // launcher is re-parented to init and never left as a zombie.
     const pid_t pid = fork();
     if (pid == 0)
     {
-        execlp("xdg-open", "xdg-open", url.c_str(), static_cast<char*>(nullptr));
-        _exit(127);
+        if (fork() == 0)
+        {
+            execlp("xdg-open", "xdg-open", url.c_str(), static_cast<char*>(nullptr));
+            _exit(127);
+        }
+        _exit(0);
     }
-    return pid > 0;
+    if (pid < 0)
+    {
+        return false;
+    }
+    int status = 0;
+    waitpid(pid, &status, 0);
+    return true;
 #endif
 }
 

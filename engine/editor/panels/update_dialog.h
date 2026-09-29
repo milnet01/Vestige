@@ -30,6 +30,9 @@ public:
     {
         /// Marshal work back to the main thread (JobSystem::runOnMainThread).
         std::function<void(std::function<void()>)> runOnMainThread;
+        /// The preferences as saved now (SettingsEditor::applied().updates).
+        /// Read before every change, so the Settings window's edits are kept.
+        std::function<UpdateSettings()> loadPreferences;
         /// Persist the preferences (SettingsEditor::commitUpdatePreferences).
         std::function<void(const UpdateSettings&)> savePreferences;
         /// Run an action once unsaved scene changes are dealt with.
@@ -45,9 +48,7 @@ public:
     UpdateDialog(const UpdateDialog&) = delete;
     UpdateDialog& operator=(const UpdateDialog&) = delete;
 
-    /// @param preferences Read and written through @a hooks.savePreferences.
-    void initialize(Hooks hooks, Update::Version installed, Update::InstallKind kind,
-                    UpdateSettings preferences);
+    void initialize(Hooks hooks, Update::Version installed, Update::InstallKind kind);
 
     /// @brief Start a check. @a manual (Help menu) reports every outcome and
     ///        offers a skipped version; an automatic check is silent unless
@@ -71,6 +72,7 @@ private:
         Checking,     ///< Background check running.
         Result,       ///< Manual check: "up to date" / "could not check".
         Offer,        ///< A newer release, with notes.
+        Confirming,   ///< Waiting on the Unsaved Changes modal before updating.
         Downloading,  ///< Download + verify + apply running.
         Failed,       ///< Download or install failed.
     };
@@ -84,11 +86,12 @@ private:
     void drawProgress();
     void drawFailed();
     void joinWorker();
+    UpdateSettings currentPreferences() const;
+    void changePreferences(const std::function<void(UpdateSettings&)>& change);
 
     Hooks m_hooks;
     Update::Version m_installed;
     Update::InstallKind m_kind = Update::InstallKind::None;
-    UpdateSettings m_preferences;
 
     Stage m_stage = Stage::Idle;
     bool m_manual = false;

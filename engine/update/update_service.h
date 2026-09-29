@@ -72,7 +72,14 @@ public:
     /// @param manual True for Help > Check for Updates: a skipped version is
     ///        still offered (with `skipped` set); an automatic check reports
     ///        it as UpToDate.
-    CheckResult check(const std::string& skippedVersion, bool manual);
+    /// @param progress Returning false cancels (used to stop a check when the
+    ///        editor exits).
+    ///
+    /// An AppImage or Windows-zip install is offered nothing when the release
+    /// lacks exactly one https asset and its .sig for that kind (spec §4.6):
+    /// the result is UpToDate.
+    CheckResult check(const std::string& skippedVersion, bool manual,
+                      const ProgressFn& progress = {});
 
     /// @brief Downloads the offered asset and its signature and verifies them.
     ///        Returns the bytes only if the signature holds for the offered

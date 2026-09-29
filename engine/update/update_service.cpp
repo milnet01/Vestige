@@ -32,10 +32,11 @@ UpdateService::UpdateService(IHttpTransport& transport, Version installed, Insta
 {
 }
 
-CheckResult UpdateService::check(const std::string& skippedVersion, bool manual)
+CheckResult UpdateService::check(const std::string& skippedVersion, bool manual,
+                                 const ProgressFn& progress)
 {
     CheckResult result;
-    const HttpResult latest = m_transport.get(kReleasesLatestUrl, kMaxApiBytes, kNoProgress);
+    const HttpResult latest = m_transport.get(kReleasesLatestUrl, kMaxApiBytes, progress);
     if (!latest.ok())
     {
         result.error = latest.error.empty()
@@ -62,16 +63,21 @@ CheckResult UpdateService::check(const std::string& skippedVersion, bool manual)
         return result;
     }
 
-    result.status = CheckResult::Status::Available;
     if (m_kind == InstallKind::AppImage || m_kind == InstallKind::WindowsZip)
     {
         result.asset = selectAsset(*release, m_kind);
+        if (!result.asset)
+        {
+            result.status = CheckResult::Status::UpToDate;  // nothing installable
+            return result;
+        }
     }
+    result.status = CheckResult::Status::Available;
 
     const HttpResult oldLog = m_transport.get(changelogUrl("v" + toString(m_installed)),
-                                              kMaxChangelogBytes, kNoProgress);
+                                              kMaxChangelogBytes, progress);
     const HttpResult newLog = m_transport.get(changelogUrl(release->tag), kMaxChangelogBytes,
-                                              kNoProgress);
+                                              progress);
     if (oldLog.ok() && newLog.ok())
     {
         result.notes = notesSince(oldLog.body, newLog.body);

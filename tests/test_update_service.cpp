@@ -155,6 +155,21 @@ TEST(UpdateService, TarballGetsNotesButNoDownload)
     EXPECT_FALSE(service.download(r, {}).error.empty());
 }
 
+// Spec §4.6: an in-place install is offered nothing it could not install.
+TEST(UpdateService, UnsignedReleaseIsNotOfferedToAnInPlaceInstall)
+{
+    TestKey key;
+    auto t = offering(key, "payload");
+    t.routes[kReleasesLatestUrl].body =
+        R"({"tag_name":"v0.1.76","assets":[{"name":")" + kAsset +
+        R"(","browser_download_url":")" + kAssetUrl + R"("}]})";
+    UpdateService appimage(t, installed(), InstallKind::AppImage, key.pub);
+    EXPECT_EQ(appimage.check("", true).status, CheckResult::Status::UpToDate);
+    // A tarball install still hears about it (notes and the download page).
+    UpdateService tarball(t, installed(), InstallKind::Tarball, key.pub);
+    EXPECT_EQ(tarball.check("", true).status, CheckResult::Status::Available);
+}
+
 // INV-2: bytes come back only when the signature holds for this version.
 TEST(UpdateService, DownloadReturnsOnlyVerifiedBytes)
 {

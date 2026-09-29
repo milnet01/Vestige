@@ -45,13 +45,26 @@ void UpdateDialog::joinWorker()
     }
 }
 
-void UpdateDialog::initialize(Hooks hooks, Update::Version installed, Update::InstallKind kind,
-                              UpdateSettings preferences)
+void UpdateDialog::initialize(Hooks hooks, Update::Version installed, Update::InstallKind kind)
 {
     m_hooks = std::move(hooks);
     m_installed = std::move(installed);
     m_kind = kind;
-    m_preferences = std::move(preferences);
+}
+
+UpdateSettings UpdateDialog::currentPreferences() const
+{
+    return m_hooks.loadPreferences ? m_hooks.loadPreferences() : UpdateSettings{};
+}
+
+void UpdateDialog::changePreferences(const std::function<void(UpdateSettings&)>& change)
+{
+    UpdateSettings prefs = currentPreferences();
+    change(prefs);
+    if (m_hooks.savePreferences)
+    {
+        m_hooks.savePreferences(prefs);
+    }
 }
 
 bool UpdateDialog::isBusy() const
@@ -75,20 +88,28 @@ void UpdateDialog::startCheck(bool manual)
     {
         return;
     }
+    if (m_stage == Stage::Confirming && ImGui::GetCurrentContext()
+        && ImGui::IsPopupOpen("", ImGuiPopupFlags_AnyPopupId))
+    {
+        return;  // the Unsaved Changes modal is still deciding
+    }
     joinWorker();
+    m_cancel->store(false);
     m_manual = manual;
     m_stage = Stage::Checking;
     m_openPopup = manual;  // an automatic check shows nothing until it finds something
 
     const auto installed = m_installed;
     const auto kind = m_kind;
-    const std::string skipped = m_preferences.skippedVersion;
+    const std::string skipped = currentPreferences().skippedVersion;
     const auto alive = m_alive;
+    const auto cancel = m_cancel;
     const auto post = m_hooks.runOnMainThread;
-    m_worker = std::thread([this, installed, kind, skipped, manual, alive, post]() {
+    m_worker = std::thread([this, installed, kind, skipped, manual, alive, cancel, post]() {
         Update::CurlTransport transport("Vestige/" + Update::toString(installed));
         Update::UpdateService service(transport, installed, kind, Update::kUpdatePublicKey);
-        Update::CheckResult result = service.check(skipped, manual);
+        Update::CheckResult result = service.check(
+            skipped, manual, [cancel](std::size_t, std::size_t) { return !cancel->load(); });
         if (post)
         {
             post([this, alive, result]() {
@@ -230,6 +251,7 @@ void UpdateDialog::draw()
             }
             break;
         case Stage::Downloading: drawProgress(); break;
+        case Stage::Confirming:  break;
         case Stage::Failed:      drawFailed(); break;
         case Stage::Idle:        break;
     }
@@ -250,11 +272,7 @@ void UpdateDialog::drawAsk()
                            "Settings, and Help > Check for Updates always works.");
         ImGui::Spacing();
         auto answer = [this](UpdateCheckMode mode) {
-            m_preferences.mode = mode;
-            if (m_hooks.savePreferences)
-            {
-                m_hooks.savePreferences(m_preferences);
-            }
+            changePreferences([mode](UpdateSettings& p) { p.mode = mode; });
             m_stage = Stage::Idle;
             ImGui::CloseCurrentPopup();
         };
@@ -296,6 +314,11 @@ void UpdateDialog::drawOffer()
 {
     if (m_openPopup)
     {
+        // An automatic offer waits until no other modal is open (spec §4.7).
+        if (!m_manual && ImGui::IsPopupOpen("", ImGuiPopupFlags_AnyPopupId))
+        {
+            return;
+        }
         ImGui::OpenPopup(kOfferTitle);
         m_openPopup = false;
     }
@@ -363,11 +386,7 @@ void UpdateDialog::drawOffer()
     ImGui::SameLine();
     if (ImGui::Button("Skip this version"))
     {
-        m_preferences.skippedVersion = offered;
-        if (m_hooks.savePreferences)
-        {
-            m_hooks.savePreferences(m_preferences);
-        }
+        changePreferences([offered](UpdateSettings& p) { p.skippedVersion = offered; });
         m_stage = Stage::Idle;
         ImGui::CloseCurrentPopup();
     }
@@ -377,7 +396,10 @@ void UpdateDialog::drawOffer()
         if (ImGui::Button("Update now"))
         {
             ImGui::CloseCurrentPopup();
-            m_stage = Stage::Idle;
+            // Not Idle: a Help-menu check must not start while the Unsaved
+            // Changes modal is deciding. Cancel there leaves us here, so the
+            // next check resets it.
+            m_stage = Stage::Confirming;
             auto go = [this]() { beginUpdate(); };
             if (m_hooks.afterUnsavedCheck)
             {
