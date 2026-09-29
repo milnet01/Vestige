@@ -23,6 +23,14 @@ may change any interface without notice.
 
 ## [Unreleased]
 
+### 2026-09-29 Fixed — Linked asset folders load again; --no-vsync works (3D_E-0726, 3D_E-0727)
+
+- **The meadow's trees and props load again when their model folders are linked in from an asset library outside the project.** (3D_E-0726)
+  The asset-path safety check now treats a folder linked from inside the
+  asset folder as part of it; `..` still cannot climb out.
+
+- **`--no-vsync` now actually uncaps the frame rate; the saved settings no longer switch vsync back on at startup.** (3D_E-0727)
+
 ### 2026-09-29 Fixed — Camera, collision and underwater fixes (3D_E-0724, 3D_E-0725)
 
 - **The fly-mode camera no longer passes through the ground** (3D_E-0725)

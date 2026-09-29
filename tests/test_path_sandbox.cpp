@@ -10,6 +10,7 @@
 #include <filesystem>
 #include <fstream>
 #include <string>
+#include <vector>
 
 #include "test_helpers.h"
 
@@ -112,6 +113,58 @@ TEST_F(PathSandboxTest, ValidateInsideRootsRejectsSiblingPrefixCollision_D1)
     auto abs = m_root / "assets_evil" / "x.png";
     auto out = validateInsideRoots(abs, {m_root / "assets"});
     EXPECT_EQ(out, "");
+}
+
+// A folder the user links into the asset tree (assets/models/nature_local/*
+// -> "/mnt/Games/3D Engine Assets/...") must load. The engine installs
+// linkedTargets(assetRoot) as extra roots; before that, every tree and prop
+// in the meadow was refused as "escapes sandbox".
+class PathSandboxLinkTest : public PathSandboxTest
+{
+protected:
+    void SetUp() override
+    {
+        PathSandboxTest::SetUp();
+        fs::create_directories(m_root / "library" / "trees");
+        std::ofstream{m_root / "library" / "trees" / "tree.gltf"} << "t";
+        std::error_code ec;
+        fs::create_directory_symlink(m_root / "library" / "trees",
+                                     m_root / "assets" / "ok" / "linked", ec);
+        if (ec)
+            GTEST_SKIP() << "cannot create a symlink here: " << ec.message();
+    }
+
+    std::vector<fs::path> rootsWithLinks() const
+    {
+        std::vector<fs::path> roots{m_root / "assets"};
+        for (const auto& t : linkedTargets(m_root / "assets"))
+            roots.push_back(t);
+        return roots;
+    }
+};
+
+TEST_F(PathSandboxLinkTest, FileThroughLinkInsideRootIsAccepted)
+{
+    auto p = m_root / "assets" / "ok" / "linked" / "tree.gltf";
+    EXPECT_EQ(validateInsideRoots(p, {m_root / "assets"}), "");  // the old refusal
+    EXPECT_NE(validateInsideRoots(p, rootsWithLinks()), "");
+}
+
+TEST_F(PathSandboxLinkTest, ParentTraversalOutOfLinkTargetIsStillRejected)
+{
+    // library/trees/.. is library/, and ../../sibling leaves it entirely.
+    auto p = m_root / "assets" / "ok" / "linked" / ".." / ".." / "sibling" / "out.png";
+    EXPECT_EQ(validateInsideRoots(p, rootsWithLinks()), "");
+}
+
+TEST_F(PathSandboxLinkTest, LinksOutsideTheRootAreNotTrusted)
+{
+    std::error_code ec;
+    fs::create_directory_symlink(m_root / "library", m_root / "sibling" / "lib", ec);
+    ASSERT_FALSE(ec) << ec.message();
+    auto targets = linkedTargets(m_root / "assets");
+    ASSERT_EQ(targets.size(), 1u);
+    EXPECT_EQ(targets[0], fs::weakly_canonical(m_root / "library" / "trees"));
 }
 
 }  // namespace Vestige::PathSandbox::Test

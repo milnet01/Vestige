@@ -105,4 +105,22 @@ std::string validateInsideRoots(const fs::path& absPath,
     return {};
 }
 
+std::vector<fs::path> linkedTargets(const fs::path& root)
+{
+    std::vector<fs::path> targets;
+    std::error_code ec;
+    fs::recursive_directory_iterator it(
+        root, fs::directory_options::skip_permission_denied, ec);
+    for (const fs::recursive_directory_iterator end; !ec && it != end; it.increment(ec))
+    {
+        std::error_code linkEc;
+        if (!it->is_symlink(linkEc) || linkEc)
+            continue;
+        auto target = fs::canonical(it->path(), linkEc);  // fails on a dangling link
+        if (!linkEc)
+            targets.push_back(target);
+    }
+    return targets;
+}
+
 }  // namespace Vestige::PathSandbox

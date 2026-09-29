@@ -4,6 +4,7 @@
 /// @file engine.cpp
 /// @brief Engine implementation — main loop and subsystem orchestration.
 #include "core/engine.h"
+#include "utils/path_sandbox.h"
 #include "core/engine_paths.h"
 #include "core/logger.h"
 #include "physics/cloth_component.h"
@@ -166,6 +167,18 @@ bool Engine::initialize(const EngineConfig& config)
         addRoot(config.assetPath);
         addRoot(std::filesystem::current_path(rootEc));
         rootEc.clear();
+        // A folder linked into the asset tree (assets/models/nature_local/*)
+        // is part of it; without this every linked tree and prop is refused.
+        // The demo scenes load "assets/..." relative to the working directory,
+        // not the asset root, so that folder's links count too.
+        for (const auto& dir : {std::filesystem::path(config.assetPath),
+                                std::filesystem::path("assets")})
+        {
+            for (const auto& target : PathSandbox::linkedTargets(dir))
+            {
+                addRoot(target);
+            }
+        }
 
         if (assetRoots.empty())
         {
@@ -658,6 +671,14 @@ bool Engine::initialize(const EngineConfig& config)
         // and relaunched — without this, UI would ignore the setting
         // until the first manual toggle).
         m_settingsEditor->forceLiveApply();
+
+        // --no-vsync is a per-run benchmarking switch; the live-apply above
+        // just re-enabled vsync from the saved display settings. Override the
+        // window only, so the saved preference is left as it was.
+        if (!config.window.isVsyncEnabled)
+        {
+            m_window->setVsync(false);
+        }
 
         if (m_editor)
         {

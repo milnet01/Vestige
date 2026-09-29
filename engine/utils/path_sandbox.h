@@ -65,4 +65,14 @@ std::string resolveUriIntoBase(const std::filesystem::path& base,
 std::string validateInsideRoots(const std::filesystem::path& absPath,
                                 const std::vector<std::filesystem::path>& roots);
 
+/// @brief Returns the canonical target of every symlink inside @a root.
+///
+/// A link placed inside the asset tree is a deliberate choice by whoever can
+/// write that tree, so its target counts as part of the tree: pass these as
+/// extra roots to `validateInsideRoots`. Containment is still tested on
+/// canonical paths, so `..` cannot climb out of a target. The walk does not
+/// follow links, so a link found inside a target is not trusted. Dangling
+/// links and unreadable directories are skipped.
+std::vector<std::filesystem::path> linkedTargets(const std::filesystem::path& root);
+
 }  // namespace Vestige::PathSandbox

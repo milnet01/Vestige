@@ -4677,6 +4677,28 @@ shipped that have no invocation path at all.
   Source: user-report-2026-09-29 (screenshots).
   Lanes: core.
 
+- ✅ [3D_E-0726] **Meadow loaded no trees or props when launched from the project folder: the path sandbox refused every linked model.**
+  assets/models/nature_local/* are symlinks into "/mnt/Games/3D Engine Assets". 68a0eb8 (2026-08-31) installed the sandbox, which canonicalises paths, so every
+  linked model resolved outside the roots: 9 tree species and 656 prop instances were dropped with only a
+  log warning. Fix: PathSandbox::linkedTargets(root) returns the canonical target of each symlink inside a
+  root; the engine adds those as roots for the asset root and the working-directory assets folder (the demo
+  scenes load cwd-relative "assets/..."). Containment is still tested on canonical paths, so ".." cannot
+  climb out of a target, and links found inside a target are not followed. Tests: PathSandboxLinkTest (3).
+  **Layman:** Since 31 August the demo meadow had no trees, rocks, plants or logs on this machine, because a safety check refused the model folders that are linked in from the asset library. Linked folders now count as part of the asset folder.
+  Kind: fix.
+  Source: in-session-2026-09-29.
+  Lanes: resource, core.
+
+- ✅ [3D_E-0727] **--no-vsync did nothing: the saved display settings re-enabled vsync at startup.**
+  Engine::initialize runs SettingsEditor::forceLiveApply after the window is created with the CLI config, and
+  the display sink applied settings.json's vsync=true. The engine now re-applies the CLI override to the
+  window only after the live apply; the saved preference is unchanged. Verified: the meadow flythrough went
+  from a flat 60.0 FPS to 70-100 FPS uncapped.
+  **Layman:** The benchmarking switch that lets the frame rate run uncapped was silently undone by the saved settings, so every measurement read exactly 60 FPS whatever the real cost was.
+  Kind: fix.
+  Source: in-session-2026-09-29.
+  Lanes: core.
+
 ## 0.3.0 — An editor a builder can use
 
 Breaks: the scene format. Editor work changes what a scene stores.
