@@ -3928,7 +3928,7 @@ shipped that have no invocation path at all.
 
   The display half already existed (editor.cpp shows "Distance: %.3f m" plus an on-screen overlay), so this single edge completed the path.
 
-- 📋 [3D_E-0640] **PhysicsDebugDraw is compiled and never invoked.**
+- ✅ [3D_E-0640] **PhysicsDebugDraw is compiled and never invoked.**
   `PhysicsDebugDraw::draw` (physics_debug.cpp:46) and `drawConstraints` (:97) are the ONLY .cpp occurrences of the type in the tree -- i.e. its own two definitions and no invocation. There is no menu item, no hotkey and no settings flag reaching it, so unlike the ruler tool this one is not even nominally reachable.
   Decide between wiring it to the editor's debug-draw surface (where DebugDraw already has a live consumer) and deleting it. Either is fine; leaving a debug facility that cannot be switched on is what is not.
   Plan (2026-09-26, investigated, not started): WIRE it, do not delete.
@@ -3944,6 +3944,11 @@ shipped that have no invocation path at all.
   static box queues 24 vertices more (DebugDraw::getQueuedVertexCount),
   disabled queues none. Note: draw() skips sleeping dynamic bodies and
   draws local AABBs without rotation -- existing behaviour.
+  Resolved (2026-09-29): wired, not deleted. View > Physics Colliders
+  toggles it; draw(world) now only queues lines, and the editor overlay
+  pass flushes them against scene depth. tests/test_physics_debug.cpp
+  locks it (enabled: 24 vertices for the floor box; disabled: none); each
+  half was broken once and went red for the right reason.
   **Layman:** The physics debug overlay cannot be turned on from anywhere.
   Kind: fix.
   Source: verify-delivery 2026-09-01.

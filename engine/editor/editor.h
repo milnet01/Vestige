@@ -342,6 +342,7 @@ private:
     bool m_showConsole = true;    ///< Console/log panel visibility.
     bool m_showStatistics = false; ///< Scene statistics panel visibility.
     bool m_showAllLightGizmos = false; ///< Draw gizmos for all lights, not just selected.
+    bool m_showPhysicsColliders = false; ///< Wireframe overlay of physics bodies and constraints.
     bool m_captureScreenshotRequested = false; ///< Menu-triggered screenshot request.
     bool m_fullscreenViewport = false; ///< Hide all panels for clean viewport.
 
@@ -465,6 +466,9 @@ public:
 
     /// @brief Toggles drawing gizmos for all lights vs. selected only.
     void toggleShowAllLightGizmos() { m_showAllLightGizmos = !m_showAllLightGizmos; }
+
+    /// @brief Returns true if the physics collider wireframe overlay is on.
+    bool isShowPhysicsColliders() const { return m_showPhysicsColliders; }
 
     /// @brief Returns true if the ground grid overlay should be rendered.
     bool isGridVisible() const { return m_showGrid; }

@@ -5,6 +5,7 @@
 /// @brief Debug wireframe visualization for physics collision shapes.
 #include "physics/physics_debug.h"
 #include "physics/jolt_helpers.h"
+#include "renderer/debug_draw.h"
 
 #include <Jolt/Physics/Body/BodyManager.h>
 
@@ -43,8 +44,7 @@ void drawWireBox(const glm::vec3& pos, const glm::vec3& halfExtents,
 
 } // anonymous namespace
 
-void PhysicsDebugDraw::draw(const PhysicsWorld& world, DebugDraw& debugDraw,
-                             const Camera& camera, float aspectRatio)
+void PhysicsDebugDraw::draw(const PhysicsWorld& world)
 {
     if (!m_enabled || !world.isInitialized())
     {
@@ -88,10 +88,6 @@ void PhysicsDebugDraw::draw(const PhysicsWorld& world, DebugDraw& debugDraw,
 
     // Draw constraints
     drawConstraints(world, bodyInterface);
-
-    // Flush all debug lines
-    glm::mat4 vp = camera.getProjectionMatrix(aspectRatio) * camera.getViewMatrix();
-    debugDraw.flush(vp);
 }
 
 void PhysicsDebugDraw::drawConstraints(const PhysicsWorld& world,

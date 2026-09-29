@@ -2154,6 +2154,10 @@ void Engine::run()
                 }
             }
 
+            // Physics collider wireframes (View > Physics Colliders).
+            m_physicsDebugDraw.setEnabled(m_editor->isShowPhysicsColliders());
+            m_physicsDebugDraw.draw(m_physicsWorld);
+
             m_renderer->bindOutputFbo();
             glm::mat4 vp = m_camera->getProjectionMatrix(aspectRatio)
                          * m_camera->getViewMatrix();

@@ -93,6 +93,7 @@ add_executable(vestige_tests
     test_ik_solver.cpp
     test_morph_target.cpp
     test_physics_world.cpp
+    test_physics_debug.cpp
     test_rigid_body.cpp
     test_surface_material.cpp
     test_contact_event.cpp

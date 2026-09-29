@@ -23,6 +23,15 @@ may change any interface without notice.
 
 ## [Unreleased]
 
+### 2026-09-29 Fixed — The physics collider overlay can be switched on (3D_E-0640)
+
+The editor's View menu has a new Physics Colliders item. It draws a
+wireframe box around every physics body and a line for each joint,
+hidden behind scene geometry like the other editor overlays. The
+overlay code existed but nothing could turn it on, and it drew its lines
+a second time without scene depth; it now only queues them for the
+editor's own overlay pass.
+
 ### 2026-09-28 Changed — Local CI builds on GitHub's own system (3D_E-0719)
 
 The pre-push check now runs its Linux builds, tests and code audit

@@ -6,8 +6,6 @@
 #pragma once
 
 #include "physics/physics_world.h"
-#include "renderer/debug_draw.h"
-#include "renderer/camera.h"
 
 namespace Vestige
 {
@@ -21,9 +19,10 @@ namespace Vestige
 class PhysicsDebugDraw
 {
 public:
-    /// @brief Renders wireframe collision shapes for all bodies.
-    void draw(const PhysicsWorld& world, DebugDraw& debugDraw,
-              const Camera& camera, float aspectRatio);
+    /// @brief Queues wireframe collision shapes for all bodies into
+    ///        DebugDraw. The caller's DebugDraw::flush draws them, with the
+    ///        editor's other overlays and against scene depth.
+    void draw(const PhysicsWorld& world);
 
     /// @brief Toggles debug visualization on/off.
     void setEnabled(bool enabled) { m_enabled = enabled; }

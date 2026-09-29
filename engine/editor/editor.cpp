@@ -532,6 +532,10 @@ void Editor::drawPanels(Renderer* renderer, Scene* scene, Camera* camera,
                 {
                     m_showAllLightGizmos = !m_showAllLightGizmos;
                 }
+                if (ImGui::MenuItem("Physics Colliders", nullptr, m_showPhysicsColliders))
+                {
+                    m_showPhysicsColliders = !m_showPhysicsColliders;
+                }
 
                 ImGui::Separator();
 
