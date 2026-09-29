@@ -1,6 +1,6 @@
 # 3D_E-0729 — Self-update from GitHub Releases, with what changed
 
-**Status:** spec draft (2026-09-29).
+**Status:** accepted (2026-09-29).
 **Kind:** feature.
 **Source:** ROADMAP 3D_E-0729 (user request 2026-09-29, modelled on finbreak's updater).
 **Pairs with:** 3D_E-S0461 (the larger updater: backups, migrations, crash rollback), which stays planned and builds on this.
@@ -28,7 +28,8 @@ public key compiled into the running build.
 3. The GitHub release body is GitHub's generated commit list:
    `release.yml` sets `generate_release_notes: true` on both
    `softprops/action-gh-release` steps and passes no `body`. The CHANGELOG, which
-   is written for users, never reaches the release page.
+   is written for users, reaches them only if they browse the repository, so
+   the release page cannot tell a user what changed.
 4. Releases carry no signature or checksum, so nothing lets the app tell a
    genuine download from a tampered one.
 
@@ -57,8 +58,8 @@ shipped games never check.
 
 ```
 engine/update/update_version.h/.cpp   parseVersion, isNewer            (pure)
-engine/update/update_release.h/.cpp   ReleaseInfo, parseLatest, parseList,
-                                      selectAsset, accumulateNotes     (pure)
+engine/update/update_release.h/.cpp   ReleaseInfo, parseLatest, selectAsset,
+                                      notesSince                       (pure)
 engine/update/update_signature.h/.cpp signedMessage, verifySignature   (pure)
 engine/update/update_key.h            kUpdatePublicKey[32]
 engine/update/http_transport.h/.cpp   IHttpTransport, CurlTransport
@@ -69,7 +70,6 @@ engine/update/notes_markup.h/.cpp     parseNotes -> std::vector<NotesLine> (pure
 engine/editor/panels/update_dialog.h/.cpp  UpdateDialog (ImGui modal)
 engine/core/settings.*                UpdateSettings, schema v6
 external/monocypher/                  Monocypher 4.0.3, vendored
-tools/release_notes.py                CHANGELOG lines added between two tags
 tools/sign_release.py                 CI signer
 ```
 
@@ -96,37 +96,28 @@ than `0.1.76-rc.1`. Anything else fails to parse and nothing is offered.
 
 ### 4.3 Checking and the notes
 
-Two GETs to `api.github.com/repos/milnet01/Vestige`, both with `User-Agent:
-Vestige/<version>` and `Accept: application/vnd.github+json`:
+One GET to `api.github.com/repos/milnet01/Vestige/releases/latest`, with
+`User-Agent: Vestige/<version>` and `Accept: application/vnd.github+json`. GitHub
+returns the newest published release that is neither a draft nor a pre-release.
 
-1. `/releases/latest` — the offer. GitHub returns the newest published release
-   that is neither a draft nor a pre-release. If `tag_name` is not newer than
-   the installed version, the check ends quietly. An automatic check also
-   ends quietly when it equals `updates.skippedVersion`; a Help-menu check
-   offers it anyway, saying it was skipped.
-2. `/releases?per_page=30` — the notes, following the `Link: rel="next"`
-   header until a page holds a release at or below the installed version, at
-   most 10 pages. `accumulateNotes` keeps each published,
-   non-pre-release entry whose version is newer than installed and not newer
-   than the offer, newest first, and concatenates their `body` fields under a
-   `## <tag>` heading each. If this call fails, the offer's own body is shown
-   alone.
+- If its `tag_name` is not newer than the installed version, an automatic check
+  ends quietly and a Help-menu check reports "you have the latest version".
+- If it equals `updates.skippedVersion`, an automatic check ends quietly and a
+  Help-menu check offers it anyway, saying it was skipped.
 
-The release body is the CHANGELOG. `release.yml` stops generating notes and
-sets `body_path` to the output of:
+**The notes come from the CHANGELOG itself, not from release bodies.** Two more
+GETs fetch `CHANGELOG.md` as it stood at each tag:
+`https://raw.githubusercontent.com/milnet01/Vestige/v<installed>/CHANGELOG.md`
+and the same at `v<offered>`. `notesSince(installedText, offeredText)` returns
+the lines of the offered file that the installed file does not contain (counted
+as a multiset, so a repeated line is shown as often as it was added), in the
+offered file's order. Every entry added since the installed version is shown
+exactly once, whatever releases were published or left as drafts in between.
+If either fetch fails, the dialog offers the update with "Release notes could
+not be loaded" and a link to the release page. The release page's own body is
+unchanged (GitHub's generated notes).
 
-```
-tools/release_notes.py <previous-final-tag> <this-tag>   # stdout: markdown
-```
-
-which prints the lines `git diff <prev>..<this> -- CHANGELOG.md` adds, headings
-and bullets as written, with the diff markers removed. `<previous-final-tag>` is
-the tag of the newest *published* stable release when the job runs
-(`gh release view --json tagName`, which returns the same release as
-`/releases/latest`), not the highest tag: finals are created as drafts, and a
-draft nobody published must not swallow the notes of the versions it carried.
-
-`parseNotes` turns that markdown into lines the dialog draws: `#`…`###`
+`parseNotes` turns those lines into lines the dialog draws: `#`…`###`
 headings, `- ` / `* ` bullets with their indent, and paragraphs; `**`, `` ` ``
 and link syntax are stripped to their text. Links are not clickable. It is a
 display subset, not a markdown renderer.
@@ -183,7 +174,8 @@ of `/etc/ssl/certs/ca-certificates.crt`, `/etc/pki/tls/certs/ca-bundle.crt`,
 Ubuntu runs on distros that keep the bundle elsewhere; on Windows libcurl is
 built with Schannel and uses the system store.
 
-Caps: 256 KB for either API call, 200 MB for an asset (the largest today is the
+Caps: 256 KB for the API call, 4 MB for each CHANGELOG (681 439 bytes today,
+`ls -l CHANGELOG.md`), 200 MB for an asset (the largest today is the
 36 MB tarball, `gh release view v0.1.75-rc.1 --json assets`).
 
 The check and the download run on the job system (`JobSystem::submit`, main
@@ -194,14 +186,18 @@ once a frame. The dialog reads progress from an atomic.
 
 ```cpp
 enum class InstallKind { None, AppImage, WindowsZip, Tarball };
-InstallKind detectInstall();
+InstallKind detectInstall(std::string_view packageStamp, const char* appimageEnv,
+                          const char* appdirEnv, std::string_view selfExePath); // pure
+InstallKind detectInstall();  // reads VESTIGE_PACKAGE, the environment, /proc/self/exe
 ```
 
 `release.yml` stamps `VESTIGE_PACKAGE`: `linux` in the Linux job, whose one
 build feeds both the tarball and the AppImage, and `windows-zip` in the Windows
-job. A build without it is `None`. A `linux` build is `AppImage` when the
-`APPIMAGE` environment variable is set (the AppImage runtime sets it) and
-`Tarball` otherwise. The
+job. A build without it is `None`. A `linux` build is `AppImage` when `APPIMAGE` and `APPDIR` are set
+(the AppImage runtime sets both) **and** the running executable lies under
+`$APPDIR`; otherwise it is `Tarball`. The path test matters because child
+processes inherit both variables: a tarball Vestige started from inside another
+AppImage sees that app's `APPIMAGE`, and must not rename over it. The
 asset suffix for each kind is `-x86_64.AppImage`, `-windows-x86_64.zip` and
 `-linux-x86_64.tar.gz`; `selectAsset` requires exactly one match and exactly one
 `.sig` beside it, or nothing is offered.
@@ -222,12 +218,18 @@ before the rename deletes the temporary file and leaves the install untouched.
 **Windows zip.** Needs the install folder's parent to be writable; if it is not,
 the dialog says so and offers the download page. Download next to the install
 folder, verify, extract with miniz (already built as tinyexr's `miniz` target)
-into `<install>.update-<version>`, then check it holds `vestige.exe`. Write a
+into `<install>.update-<version>`. The zip holds one top-level folder,
+`vestige-<ver>-windows-x86_64/` (`Compress-Archive -Path $STAGE` in
+`release.yml`); that inner folder must hold `vestige.exe`, and it is what gets
+renamed into place. Write a
 PowerShell helper to the temp directory and start it detached with the absolute
 `%SystemRoot%\System32\WindowsPowerShell\v1.0\powershell.exe`; it waits until
 no process runs the old `vestige.exe` (by path, at most 60 s), renames the
 install folder to `<install>.old`, renames the staging folder into its place,
-starts the new `vestige.exe`, and on any failure renames `.old` back. The
+starts the new `vestige.exe`, and waits 20 s. **The new build failed** when
+any rename fails, the process cannot be created, or it exits within those 20 s
+with a non-zero code; then the helper puts `.old` back, deletes the staging
+folder and starts the old `vestige.exe`. The
 editor exits once the helper has started. The next successful launch deletes
 `<install>.old`.
 
@@ -304,25 +306,26 @@ relaunches or shows the error.
   *Test:* `tests/test_update_installer.cpp` — AppImage path in a temp dir with a
   fake `$APPIMAGE`: a verification failure leaves the original file byte-identical
   and no temp file behind. The Windows helper's rename-back is a manual recipe
-  on the `wintest` box: make the new `vestige.exe` fail to start, check the old
-  folder is restored.
+  on the `wintest` box: stage a build whose `vestige.exe` exits with code 1 at
+  once, run the update, check the old folder is back and running.
   *Breaks when:* the rename happens before verification, or the helper deletes
   `<install>.old` before the new build has started.
 
-- **INV-6** — The notes shown are the CHANGELOG text of every stable release in
-  (installed, offered], newest first.
-  *Test:* `tests/test_update_release.cpp` — `accumulateNotes` over a fixture
-  list holding a draft, a pre-release, a skipped-over stable and the offer,
-  split over two pages so the second is needed; and `tools/release_notes.py` on two local fixture tags prints exactly the
-  added CHANGELOG lines.
-  *Breaks when:* pre-releases or drafts leak in, the order is reversed, or a
-  release between installed and offered is dropped.
+- **INV-6** — The notes shown are every CHANGELOG line added between the
+  installed tag and the offered one, each once, in the offered file's order.
+  *Test:* `tests/test_update_release.cpp` — `notesSince` on fixture texts where
+  the offered file adds entries under two version headings, repeats one bullet
+  already present once, and reorders nothing.
+  *Breaks when:* notes are assembled from per-release bodies (overlapping drafts
+  repeat lines, unpublished ones vanish), or lines present in both files are
+  shown.
 
 - **INV-7** — A build without a release install kind never installs, and a
   `Tarball` build never writes to its own folder.
   *Test:* `tests/test_update_installer.cpp` — `installerFor(InstallKind::None)`
-  and `(Tarball)` return no installer, and a `linux` stamp without `APPIMAGE`
-  set detects as `Tarball`.
+  and `(Tarball)` return no installer; the pure `detectInstall` returns
+  `Tarball` for a `linux` stamp with `APPIMAGE` unset, and for `APPIMAGE` and
+  `APPDIR` set while the executable path lies outside `$APPDIR`.
   *Breaks when:* a developer build overwrites the build tree it is running
   from.
 
@@ -339,12 +342,13 @@ relaunches or shows the error.
 |---|---|---|
 | GitHub reachable | offline, DNS, TLS failure | Automatic check: silent. Help menu: "Could not reach GitHub" and the error. |
 | Rate limit (60/h unauthenticated per IP) | many launches, shared IP | 403/429 treated as a failed check, as above. |
-| Release has assets for this kind | a release built without the AppImage | nothing offered (INV via `selectAsset`). |
+| Release has assets for this kind | a release built without the AppImage | nothing offered (`selectAsset`). |
+| CHANGELOG reachable at both tags | raw.githubusercontent.com down, tag missing | update offered without notes, with a link to the release page. |
 | Download completes | dropped connection, cap exceeded | error in the dialog; temp file deleted. |
 | Signature verifies | tampered or re-tagged asset, key rotated | "The download could not be verified", nothing installed. |
 | Install folder writable | AppImage in a root-owned dir, zip in Program Files | dialog says so and offers the download page. |
 | Old process exits (Windows) | the editor hangs on exit | helper gives up after 60 s, deletes staging, leaves the install as it was. |
-| New build starts | missing driver, crash | Linux: the user runs the old version from its download page (no rollback, 3D_E-S0461). Windows: `.old` is kept until a successful launch. |
+| New build starts | missing driver, crash | Linux: the user runs the old version from its download page (no rollback, 3D_E-S0461). Windows: within 20 s the helper restores `.old` (§4.6); a later crash leaves `.old` on disk, deleted only by a launch that reaches its first frame. |
 
 ## 7. Tests
 
@@ -368,9 +372,13 @@ against a stub before its code lands.
   covers one package, needs an external tool, and cannot show release notes.
 - **cpp-httplib + OpenSSL** — pulls OpenSSL into the Windows build; libcurl
   with Schannel uses the system TLS there.
+- **Release bodies built from CHANGELOG diffs, accumulated in the app** (this
+  spec's first draft) — finals are created as drafts and several can wait for
+  their Publish click, so bodies cut at build time overlap or cover versions
+  never published, and the app repeats or loses lines. Diffing the CHANGELOG at
+  the two tags the user actually moves between has neither problem.
 - **Close CHANGELOG sections at each release cut** — the train would have to
-  commit to `main`; diffing CHANGELOG between tags gives the same text with no
-  process change.
+  commit to `main`, and the app would still have to join sections.
 - **A helper .exe instead of PowerShell** — another build target to sign and
   ship; PowerShell is on every supported Windows.
 
@@ -391,7 +399,7 @@ against a stub before its code lands.
 | INV-3 | `release.yml` signature-verification step |
 | INV-4 | `tests/test_update_service.cpp` |
 | INV-5 | Partial: `tests/test_update_installer.cpp` covers the AppImage path; the Windows helper is a manual recipe on `wintest` |
-| INV-6 | `tests/test_update_release.cpp`, `tools/release_notes.py` fixture run |
+| INV-6 | `tests/test_update_release.cpp` |
 | INV-7 | `tests/test_update_installer.cpp` |
 | INV-8 | `tests/test_settings.cpp` |
 | The private key never enters the repo | **nothing** — gitleaks in CI catches common key shapes, not a raw base64 seed |
@@ -400,8 +408,8 @@ against a stub before its code lands.
 
 `THIRD_PARTY_NOTICES.md` (libcurl, Monocypher), `DEPENDENCY_STANDARDS.md`'s
 registry if either is pinned below latest, `SECURITY.md` (the signing key and
-what it protects), `RELEASING.md` (release body now comes from the CHANGELOG;
-the signing secret), `TESTING.md` (updating from the editor), `CHANGELOG.md`.
+what it protects), `RELEASING.md` (the signing secret, and that the
+CHANGELOG is what users see as update notes), `TESTING.md` (updating from the editor), `CHANGELOG.md`.
 
 ## 12. Cold-eyes loop log
 
