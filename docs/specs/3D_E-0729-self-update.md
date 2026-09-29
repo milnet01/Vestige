@@ -101,9 +101,12 @@ Vestige/<version>` and `Accept: application/vnd.github+json`:
 
 1. `/releases/latest` — the offer. GitHub returns the newest published release
    that is neither a draft nor a pre-release. If `tag_name` is not newer than
-   the installed version, or equals `updates.skippedVersion`, the check ends
-   quietly.
-2. `/releases?per_page=30` — the notes. `accumulateNotes` keeps each published,
+   the installed version, the check ends quietly. An automatic check also
+   ends quietly when it equals `updates.skippedVersion`; a Help-menu check
+   offers it anyway, saying it was skipped.
+2. `/releases?per_page=30` — the notes, following the `Link: rel="next"`
+   header until a page holds a release at or below the installed version, at
+   most 10 pages. `accumulateNotes` keeps each published,
    non-pre-release entry whose version is newer than installed and not newer
    than the offer, newest first, and concatenates their `body` fields under a
    `## <tag>` heading each. If this call fails, the offer's own body is shown
@@ -118,7 +121,10 @@ tools/release_notes.py <previous-final-tag> <this-tag>   # stdout: markdown
 
 which prints the lines `git diff <prev>..<this> -- CHANGELOG.md` adds, headings
 and bullets as written, with the diff markers removed. `<previous-final-tag>` is
-the highest `vX.Y.Z` tag with no pre-release suffix below this one.
+the tag of the newest *published* stable release when the job runs
+(`gh release view --json tagName`, which returns the same release as
+`/releases/latest`), not the highest tag: finals are created as drafts, and a
+draft nobody published must not swallow the notes of the versions it carried.
 
 `parseNotes` turns that markdown into lines the dialog draws: `#`…`###`
 headings, `- ` / `* ` bullets with their indent, and paragraphs; `**`, `` ` ``
@@ -191,9 +197,11 @@ enum class InstallKind { None, AppImage, WindowsZip, Tarball };
 InstallKind detectInstall();
 ```
 
-`release.yml` compiles each package with `VESTIGE_PACKAGE` set to `appimage`,
-`windows-zip` or `tarball`; a build without it is `None`. `AppImage` also
-requires the `APPIMAGE` environment variable (set by the AppImage runtime). The
+`release.yml` stamps `VESTIGE_PACKAGE`: `linux` in the Linux job, whose one
+build feeds both the tarball and the AppImage, and `windows-zip` in the Windows
+job. A build without it is `None`. A `linux` build is `AppImage` when the
+`APPIMAGE` environment variable is set (the AppImage runtime sets it) and
+`Tarball` otherwise. The
 asset suffix for each kind is `-x86_64.AppImage`, `-windows-x86_64.zip` and
 `-linux-x86_64.tar.gz`; `selectAsset` requires exactly one match and exactly one
 `.sig` beside it, or nothing is offered.
@@ -204,7 +212,10 @@ flow (`FileMenu::isDirty` and its modal); cancelling there cancels the update.
 **AppImage.** Download to a temporary file created in the directory of
 `$APPIMAGE` (same filesystem), verify, `chmod 0755`, `rename()` over `$APPIMAGE`.
 Then remove `APPDIR`, `APPIMAGE`, `ARGV0` and `OWD` from the environment and
-`execv()` the new file with the original arguments. The old AppImage runtime,
+`execv()` the new file with the user's own arguments: `packaging/AppRun` puts
+`--assets <old mount>/usr/share/vestige/assets` in front of them, and that pair
+is dropped, since the new AppRun adds its own and the old mount's path would
+point the new build at the old build's assets. The old AppImage runtime,
 our parent, unmounts when we exit; no helper process is needed. Any failure
 before the rename deletes the temporary file and leaves the install untouched.
 
@@ -301,8 +312,8 @@ relaunches or shows the error.
 - **INV-6** — The notes shown are the CHANGELOG text of every stable release in
   (installed, offered], newest first.
   *Test:* `tests/test_update_release.cpp` — `accumulateNotes` over a fixture
-  list holding a draft, a pre-release, a skipped-over stable and the offer;
-  and `tools/release_notes.py` on two local fixture tags prints exactly the
+  list holding a draft, a pre-release, a skipped-over stable and the offer,
+  split over two pages so the second is needed; and `tools/release_notes.py` on two local fixture tags prints exactly the
   added CHANGELOG lines.
   *Breaks when:* pre-releases or drafts leak in, the order is reversed, or a
   release between installed and offered is dropped.
@@ -310,7 +321,8 @@ relaunches or shows the error.
 - **INV-7** — A build without a release install kind never installs, and a
   `Tarball` build never writes to its own folder.
   *Test:* `tests/test_update_installer.cpp` — `installerFor(InstallKind::None)`
-  and `(Tarball)` return no installer.
+  and `(Tarball)` return no installer, and a `linux` stamp without `APPIMAGE`
+  set detects as `Tarball`.
   *Breaks when:* a developer build overwrites the build tree it is running
   from.
 
