@@ -73,6 +73,16 @@ bool SystemRegistry::initializeAll(Engine& engine)
     }
 
     m_initialized = true;
+
+    // 3D_E-0721: every initialized system runs. Activation used to wait for
+    // onSceneLoadAll's scan of the scene's component types, but nothing calls
+    // onSceneLoadAll, so no system's update() ever ran outside the tests.
+    // Measured with all systems active on the meadow: 0.05 ms CPU a frame, no
+    // GPU change. A system can still be switched off with setActive(false).
+    for (auto& system : m_systems)
+    {
+        system->setActive(true);
+    }
     Logger::info("SystemRegistry: initialized " + std::to_string(m_systems.size())
                  + " systems");
     return true;

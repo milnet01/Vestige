@@ -4554,7 +4554,7 @@ shipped that have no invocation path at all.
   Kind: doc.
   Source: user-request-2026-09-29.
 
-- 🚧 [3D_E-0721] **No domain system has ever updated in the real app: every ISystem starts inactive and nothing activates it.**
+- ✅ [3D_E-0721] **No domain system has ever updated in the real app: every ISystem starts inactive and nothing activates it.**
   ISystem::m_isActive defaults to false. The only activator is
   SystemRegistry::activateSystemsForScene, called only from
   onSceneLoadAll, which has had no caller since dfbb96b (2026-04-03).
@@ -4597,6 +4597,12 @@ shipped that have no invocation path at all.
   difference); DomainSystems CPU 0.001 vs 0.047 ms. No new warnings or
   errors; the only log difference is the SYSPROBE line. Awaiting the
   user's go-ahead for the real change.
+  Resolved (2026-09-29), user chose "always on": SystemRegistry::initializeAll
+  now activates every system once all have initialized (test
+  InitializeAllActivatesEverySystem, red without the change). Measured
+  before shipping: 0.05 ms CPU a frame, no GPU change, no new log errors.
+  The scene load/unload notices are split to 3D_E-0730: the events exist
+  but nothing publishes them, and wiring them spans four subsystems.
   **Layman:** The engine's building blocks (weather, water, audio, UI and more) were never switched on, so their per-frame work has never run outside the tests.
   Kind: fix.
   Source: in-session-2026-09-29 (3D_E-0705 linker scan).
@@ -4774,6 +4780,27 @@ shipped that have no invocation path at all.
   Kind: feature.
   Source: user-request-2026-09-29.
   Lanes: editor, core, ci.
+
+- 📋 [3D_E-0730] **SceneLoadedEvent and SceneUnloadedEvent are never published, so no system or script hears a scene change.**
+  Split from 3D_E-0721 (2026-09-29). engine/core/system_events.h defines
+  both events and ScriptingSystem subscribes to SceneLoadedEvent, but no
+  code publishes either (grep for their constructors outside scripting:
+  none). Scenes are replaced in place: SceneSerializer's load and
+  FileMenu::newScene call Scene::clearEntities on the same Scene, and the
+  demo, template and first-run-wizard paths populate it directly, so a
+  change of active-scene pointer does not mark a load. Consequences:
+  Physics2DSystem creates bodies only in onSceneLoad; onSceneUnload
+  cleanup never runs; OnSceneLoaded script nodes never fire;
+  SystemRegistry::onSceneLoadAll / onSceneUnloadAll have no caller.
+  Touches scene, editor, engine and scripting, so it needs a short spec
+  (spec-format §1, three or more subsystems): where the events are
+  published, and whether the registry subscribes. Also retire the
+  activation API 3D_E-0721 made dead (activateSystemsForScene,
+  isForceActive, getOwnedComponentTypes and their overrides).
+  **Layman:** When a scene is opened or replaced, nothing tells the engine's parts, so 2D physics never sets up and the scripting "On Scene Loaded" node never fires.
+  Kind: fix.
+  Source: in-session-2026-09-29 (3D_E-0721).
+  Lanes: core, scene, scripting, editor.
 
 ## 0.3.0 — An editor a builder can use
 

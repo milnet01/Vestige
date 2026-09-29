@@ -198,6 +198,17 @@ TEST_F(SystemRegistryTest, InitializeAllCallsInRegistrationOrder)
     EXPECT_EQ(MockSystem::s_callLog[2], "C::initialize");
 }
 
+// 3D_E-0721: nothing calls onSceneLoadAll, so a system that waited for it to be
+// activated never updated in the real app. Initialization now activates all.
+TEST_F(SystemRegistryTest, InitializeAllActivatesEverySystem)
+{
+    auto* a = registry.registerSystem<MockSystem>("A");
+    auto* b = registry.registerSystem<MockSystem>("B");
+    ASSERT_TRUE(registry.initializeAll(dummyEngine()));
+    EXPECT_TRUE(a->isActive());
+    EXPECT_TRUE(b->isActive());
+}
+
 TEST_F(SystemRegistryTest, InitializeAllReturnsFalseOnFailure)
 {
     auto* sys = registry.registerSystem<MockSystem>("A");

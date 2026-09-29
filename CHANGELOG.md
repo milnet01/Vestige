@@ -23,6 +23,10 @@ may change any interface without notice.
 
 ## [Unreleased]
 
+### 2026-09-29 Fixed — The engine's building blocks run in the real app (3D_E-0721)
+
+Every engine system (weather and wind, audio following the camera, reverb, music, footsteps, UI toasts and more) had waited for a scene notice that is never sent, so none of them updated outside the tests. They now run from start-up. Measured cost: 0.05 ms a frame.
+
 ### 2026-09-29 Added — The editor can update itself and tells you what changed (3D_E-0729)
 
 After the first-run wizard, the editor asks once whether to check for new versions when it starts. *Help → Check for Updates* works either way, and Settings has an Updates tab. When a newer stable release exists, a window lists every CHANGELOG entry added since your version. Choose *Later*, *Skip this version* or *Update now*. The Linux AppImage and the Windows zip update in place and restart; the Linux tarball opens the download page. Every download is signed in the release pipeline and checked before anything is installed, and unsaved scene changes are offered for saving first. Updates work from the first release built with this change; earlier builds need one manual download.
