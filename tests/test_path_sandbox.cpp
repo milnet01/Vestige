@@ -152,9 +152,19 @@ TEST_F(PathSandboxLinkTest, FileThroughLinkInsideRootIsAccepted)
 
 TEST_F(PathSandboxLinkTest, ParentTraversalOutOfLinkTargetIsStillRejected)
 {
-    // library/trees/.. is library/, and ../../sibling leaves it entirely.
     auto p = m_root / "assets" / "ok" / "linked" / ".." / ".." / "sibling" / "out.png";
-    EXPECT_EQ(validateInsideRoots(p, rootsWithLinks()), "");
+    auto out = validateInsideRoots(p, rootsWithLinks());
+#ifdef _WIN32
+    // Win32 resolves ".." as text before following links, so this names
+    // assets/sibling/out.png, still inside the root. Whatever is accepted
+    // must be that, never somewhere outside.
+    if (!out.empty())
+        EXPECT_EQ(out.rfind(fs::weakly_canonical(m_root / "assets").string(), 0), 0u) << out;
+#else
+    // POSIX follows the link first: library/trees/.. is library/, and
+    // ../../sibling leaves the target entirely.
+    EXPECT_EQ(out, "");
+#endif
 }
 
 TEST_F(PathSandboxLinkTest, LinksOutsideTheRootAreNotTrusted)
