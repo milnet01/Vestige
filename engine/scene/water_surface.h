@@ -133,6 +133,17 @@ inline glm::vec3 waterAbsorptionCoefficients(float turbidity)
     return CLEAR_WATER + std::clamp(turbidity, 0.0f, 1.0f) * TURBID_ADD;
 }
 
+/// @brief True when @a point is under a water surface at height @a waterY
+///        whose footprint is centred on @a center (world XZ) with @a halfExtent.
+/// Drives the underwater view tint (3D_E-0724). Pure + GL-free for testing.
+inline bool isPointUnderwater(const glm::vec3& point, float waterY,
+                              const glm::vec2& center, const glm::vec2& halfExtent)
+{
+    return point.y < waterY
+        && std::abs(point.x - center.x) <= halfExtent.x
+        && std::abs(point.z - center.y) <= halfExtent.y;
+}
+
 /// @brief World-space bounds of a water surface, for frustum culling its
 ///        reflection/refraction passes (3D_E-0028).
 /// @details The mesh is built centred on the component's local origin,

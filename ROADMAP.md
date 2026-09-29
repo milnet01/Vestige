@@ -4515,6 +4515,19 @@ shipped that have no invocation path at all.
   each hit before removing it. Their companion check (enumerator used as a
   bare condition) does not apply here: engine/ and tools/ use enum class
   throughout, bar one GL binding-point enum.
+  Progress (2026-09-29): scan RUN. Debug -O0 + Release -O2, both with
+  -ffunction-sections -fdata-sections and --gc-sections
+  --print-gc-sections, VESTIGE_BUILD_TESTS=OFF, in
+  /mnt/Emulators/vestige-gc-scan/{Debug,Release} (scratch; delete when
+  done). Per-program relinks: <flavour>.<prog>.link.log. Dead = gc'd
+  from vestige, absent from every nm of the 4 binaries, Vestige::
+  namespace, non-template: 742; minus names used in tests/: 204
+  (candidate lists: own.txt, not_in_tests.txt, ranked.txt there).
+  Findings filed: 3D_E-0721 (systems never activate), 0722 (undo merge
+  never called), 0723 (reportMetrics no caller). User decision
+  2026-09-29: KEEP unused public engine API (future-game toolkit);
+  remove only internal helpers that are truly dead. Remaining: read
+  ranked.txt's internal (non-public) hits and delete the dead ones.
   **Layman:** Ask the linker which functions nothing ever calls, then remove the dead ones or fix the bug that made them dead.
   Kind: chore.
   Source: peer-doom-ants-2026-09-26 message 41.
@@ -4545,6 +4558,26 @@ shipped that have no invocation path at all.
   (switch all on; measure FPS, read logs, list work duplicated by
   Engine) and report before changing real code. activateSystemsForScene
   has no re-activation path when the editor adds a component later.
+  Progress (2026-09-29): subagent survey of every registered system
+  (file:line cited in session): 12 have EMPTY update() (Localization,
+  ParticleVfx, Water, Vegetation, Terrain, Cloth, Destruction,
+  Character, Lighting, Navigation, Sprite, ImpactAudio). Real work that
+  has never run: AtmosphereSystem (wind/weather frozen), AudioSystem
+  (listener never synced to camera, ducking, gains, autoplay),
+  AudioOcclusion (per-frame raycasts), Reverb (zones, sends),
+  MusicSystem (intensity + player update), Footstep, UISystem (toasts
+  never fade), Physics2D (bodies only via onSceneLoad). No system
+  duplicates work the engine does elsewhere. fixedUpdateAll,
+  submitRenderDataAll and drawDebugAll also have no callers. 7 systems
+  override isForceActive() but it is only read by the dead
+  activateSystemsForScene. Experiment build READY, NOT YET RUN:
+  worktree /mnt/Emulators/vestige-sysprobe (patch marked SYSPROBE:
+  onSceneLoadAll sets every system active, called once after
+  initializeAll; plus two pond_underwater visual-test viewpoints),
+  binary /mnt/Emulators/vestige-gc-scan/ProbeRelease/bin/vestige;
+  baseline /mnt/Emulators/vestige-gc-scan/Release/bin/vestige. Next:
+  run both with --profile-log --no-vsync on an idle GPU, compare frame
+  time + logs, report to user before touching real code.
   **Layman:** The engine's building blocks (weather, water, audio, UI and more) were never switched on, so their per-frame work has never run outside the tests.
   Kind: fix.
   Source: in-session-2026-09-29 (3D_E-0705 linker scan).
@@ -4583,6 +4616,22 @@ shipped that have no invocation path at all.
   shrub_sorrel_01), decimated like the lotus props to hold 60 FPS; replace
   the shore reeds with a taller reed-like band of the GPU grass field up
   to the waterline. Moved into 0.2.0 at the user's request.
+  Progress (2026-09-29): 15 Poly Haven CC0 packs downloaded (1k gltf,
+  LICENSE.txt each) to /mnt/Games/3D Engine Assets/Models/Nature/
+  {Plants,Rocks,Logs}; tools/asset_prep/prep_polyhaven_props.py (Blender
+  5.2) exports each VARIANT as its own prop (packs are variant rows) to
+  Trees/gameready/{plants,rocks,logs} = nature_local/gameready/...
+  Rocks/logs decimated, plants NOT (alpha-card leaves). engine.cpp
+  finalizeMeadowTerrain: rocks -> mossy boulders, field bushes ->
+  shrub_02 a-d, shore ring (waterline to +4 m, cell 1.5) -> fern/
+  nettle/dandelion c,d/weed/shrub_03/sorrel, log -> dead_tree_trunk +
+  tree_stump_01. Red mushroom DROPPED (no realistic CC0 exists; user
+  not yet asked, recommended). 656 props load, no errors.
+  UNCOMMITTED. OPEN: FPS unmeasured (one warm-up capture read 15 FPS
+  while the user's own app shared the GPU - not a valid number);
+  measure vs baseline before commit. Still to do: taller reed-like GPU
+  grass band at the waterline (user-approved); the painted billboard
+  wildflowers are unchanged.
   **Layman:** Some small plants around the pond look bright blue-green and cartoonish next to the realistic grass; swap or recolour them.
   Kind: fix.
   Source: in-session-2026-09-26.
@@ -4611,6 +4660,18 @@ shipped that have no invocation path at all.
   red first (floor 1.7 m over 10 m ground). The editor's orbit camera
   is deliberately unclamped (editing tool). The Jolt controller's fly
   mode (off by default) is not covered. Awaiting the user's check.
+  Progress (2026-09-29): user tested, wants freedom to fly low (a
+  rat's-eye scene): fly floor is now ControllerConfig::flyGroundClearance
+  = 0.15 m above the terrain (near plane 0.1 m), not playerHeight.
+  Also per user: collision is a per-object choice. MeshRenderer gains
+  setBlocksMovement (default true, inspector checkbox "Blocks
+  Movement", honoured by Scene::collectColliders, copied by clone; NOT
+  yet serialised - same gap as castsShadow). Meadow: rocks + logs
+  block; bushes, shore plants, lily pads, lotus do not. Trees now
+  collide: FoliageManager::appendTreeTrunkColliders adds a 0.3 m x 6 m
+  trunk box per tree (x scale) each frame (legacy AABB controller
+  only; Jolt controller path not covered). Tests:
+  test_fly_mode_ground_clamp, test_blocks_movement (red-proven).
   **Layman:** Flying the camera down went straight through the ground and showed the world from underneath; now it stops just above the ground.
   Kind: fix.
   Source: user-report-2026-09-29 (screenshots).

@@ -23,6 +23,26 @@ may change any interface without notice.
 
 ## [Unreleased]
 
+### 2026-09-29 Fixed — Camera, collision and underwater fixes (3D_E-0724, 3D_E-0725)
+
+- **The fly-mode camera no longer passes through the ground** (3D_E-0725)
+  It stops 0.15 m above the terrain under it, low enough for a rat's-eye
+  view or a dive into the pond. Trees now block the camera (a trunk-sized
+  box per tree).
+
+- **Per-object "Blocks Movement" switch in the inspector** (3D_E-0725)
+  Decide which objects the camera and player collide with. The meadow
+  turns it off for lily pads, lotus, bushes and shore plants. Not yet
+  saved in scene files (same as "Casts Shadow").
+
+- **Underwater is now murky, matching the pond seen from above** (3D_E-0724)
+  The final image is tinted through the water column with the same
+  absorption and colour the water surface uses.
+
+- **GPU tests no longer crash when run after the input-binding tests**
+  test_input_bindings.cpp shut down GLFW, and with it the shared test
+  graphics context; it now shuts down only what it started.
+
 ### 2026-09-29 Fixed — The physics collider overlay can be switched on (3D_E-0640)
 
 The editor's View menu has a new Physics Colliders item. It draws a

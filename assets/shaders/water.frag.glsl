@@ -56,6 +56,16 @@ uniform float u_softEdgeDistance;  // Water-to-geometry fade distance (metres)
 
 out vec4 fragColor;
 
+// Light crossing `thickness` metres of water: Beer's-law per-channel absorption,
+// then in-scatter toward the murk colour. Copied verbatim into
+// screen_quad.frag.glsl (underwater view); test_underwater_parity.cpp pins both.
+vec3 waterColumnTint(vec3 colour, float thickness, vec3 absorptionCoeffs, vec3 deepColour)
+{
+    vec3 absorption = exp(-absorptionCoeffs * thickness);
+    colour *= absorption;
+    return mix(colour, deepColour, 1.0 - absorption.b);
+}
+
 // --- Procedural gradient noise (Inigo Quilez) ---
 // Returns vec3(noise_value, dNoise/dx, dNoise/dy) — analytical derivatives for free normals.
 // Uses "hash without sine" for cross-platform consistency (Dave Hoskins).
@@ -244,9 +254,8 @@ void main()
         // Per-channel absorption. Clear water absorbs red fastest and blue
         // slowest; turbidity shifts that toward broadband, blue-heavy
         // absorption (see waterAbsorptionCoefficients on the CPU side).
-        vec3 absorption = exp(-u_absorptionCoeffs * waterThickness);
-        refractionColor *= absorption;
-        refractionColor = mix(refractionColor, u_deepColor.rgb, 1.0 - absorption.b);
+        refractionColor = waterColumnTint(refractionColor, waterThickness,
+                                          u_absorptionCoeffs, u_deepColor.rgb);
     }
     else
     {

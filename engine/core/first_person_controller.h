@@ -50,7 +50,10 @@ struct ControllerConfig
     // `ControlsSettings` (3D_E-0628a), which is what feeds them at runtime.
     float gamepadDeadzoneLeft = 0.15f;
     float gamepadDeadzoneRight = 0.10f;
-    float playerHeight = 1.7f;     // Eye height above ground
+    float playerHeight = 1.7f;     // Eye height above ground (walk mode)
+    // Fly mode may skim the ground (a rat's-eye view, a dive into the pond);
+    // this only has to keep the ground out of the 0.1 m near clip plane.
+    float flyGroundClearance = 0.15f;
     float playerRadius = 0.3f;     // Collision radius
     float maxSlopeAngle = 50.0f;   // Maximum walkable slope in degrees
     float terrainDampingUp = 20.0f;   // Damping rate when ascending terrain
@@ -133,6 +136,12 @@ public:
     /// @brief Computes the desired world-space velocity from input without moving the camera.
     /// Returns the velocity vector including sprint. Y component is set from Space/Shift.
     glm::vec3 computeDesiredVelocity(float deltaTime);
+
+    /// @brief Lowest camera Y allowed in fly mode at world XZ @a position.
+    /// Keeps the eye @a clearance above the ground under it (the terrain, or
+    /// world Y = 0 without one) so the camera cannot fly down through it.
+    static float flyModeFloorY(const Terrain* terrain, const glm::vec3& position,
+                               float clearance);
 
 private:
     void processKeyboardMovement(float deltaTime, glm::vec3& moveDir);

@@ -71,7 +71,24 @@ uniform sampler3D u_volumetricTexture;     // Unit 17 — integrated froxel volu
 uniform mat4      u_volView;               // World → view, for the froxel depth lookup
 uniform vec2      u_volNearFar;            // Froxel volume view-depth range (metres)
 
+// Underwater view (3D_E-0724): set when the camera is below a water surface.
+// Every pixel is seen through the water column between it and the eye, tinted
+// with the same absorption + murk colour the surface uses from above.
+uniform bool      u_underwaterEnabled;
+uniform vec3      u_underwaterAbsorption;  // waterAbsorptionCoefficients(turbidity)
+uniform vec3      u_underwaterColour;      // WaterSurfaceConfig::deepColor (linear RGB)
+
 out vec4 fragColor;
+
+// Light crossing `thickness` metres of water: Beer's-law per-channel absorption,
+// then in-scatter toward the murk colour. Copied verbatim from water.frag.glsl;
+// test_underwater_parity.cpp pins both.
+vec3 waterColumnTint(vec3 colour, float thickness, vec3 absorptionCoeffs, vec3 deepColour)
+{
+    vec3 absorption = exp(-absorptionCoeffs * thickness);
+    colour *= absorption;
+    return mix(colour, deepColour, 1.0 - absorption.b);
+}
 
 /// Reconstructs the world-space hit position of the fragment at the given UV
 /// from the depth buffer. Returns `cameraWorldPos` when the sample is on the
@@ -292,6 +309,16 @@ void main()
         // extinction that bloom then samples in linear HDR.
         vec3 fogged = mix(distanceFogColour, color, surfaceVisibility);
         color = mix(u_heightFogColour, fogged, heightT);
+    }
+
+    // 2b. Underwater: the water is nearest the eye, so it tints last. Sky
+    //     (depth == 0) is infinitely far, so it resolves to the murk colour.
+    if (u_underwaterEnabled)
+    {
+        float thickness = (fogDepth > 0.0)
+            ? length(fogWorldPosFromDepth(v_texCoord, fogDepth) - u_fogCameraWorldPos)
+            : 1.0e4;
+        color = waterColumnTint(color, thickness, u_underwaterAbsorption, u_underwaterColour);
     }
 
     // 3. Add bloom (before exposure)

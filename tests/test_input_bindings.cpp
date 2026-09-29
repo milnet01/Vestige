@@ -7,6 +7,8 @@
 
 #include <gtest/gtest.h>
 
+#include "gl_test_fixture.h"
+
 #include "core/logger.h"
 #include "input/input_bindings.h"
 #include "input/input_bindings_wire.h"
@@ -26,15 +28,25 @@ namespace
 // need GLFW state instantiate this at the top of the body; if init
 // fails the guard is constructed with `initOk == false` and the test
 // skips cleanly.
+//
+// When the shared GL test environment already initialised GLFW, glfwInit()
+// is a no-op and glfwTerminate() would destroy that environment's hidden
+// context, crashing every GL test that runs afterwards. So terminate only
+// what this scope started.
 class GlfwScope
 {
 public:
-    GlfwScope() : m_initOk(glfwInit() == GLFW_TRUE) {}
-    ~GlfwScope() { if (m_initOk) glfwTerminate(); }
+    GlfwScope()
+        : m_ownsGlfw(!Vestige::Test::GLTestEnvironment::wasInitialized())
+        , m_initOk(glfwInit() == GLFW_TRUE)
+    {
+    }
+    ~GlfwScope() { if (m_initOk && m_ownsGlfw) glfwTerminate(); }
     GlfwScope(const GlfwScope&)            = delete;
     GlfwScope& operator=(const GlfwScope&) = delete;
     bool ok() const { return m_initOk; }
 private:
+    bool m_ownsGlfw;
     bool m_initOk;
 };
 

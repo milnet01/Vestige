@@ -78,6 +78,7 @@ std::unique_ptr<Component> MeshRenderer::clone() const
     copy->m_cullingBounds = m_cullingBounds;
     copy->m_hasCullingBounds = m_hasCullingBounds;
     copy->m_castsShadow = m_castsShadow;
+    copy->m_blocksMovement = m_blocksMovement;
     copy->setEnabled(isEnabled());
     return copy;
 }

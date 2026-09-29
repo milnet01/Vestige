@@ -123,8 +123,9 @@ void FirstPersonController::update(float deltaTime, const std::vector<AABB>& col
         }
         else
         {
-            // Fly mode: basic ground clamp at player height
-            newPosition.y = std::max(newPosition.y, m_config.playerHeight);
+            // Fly mode: keep the eye above the ground
+            newPosition.y = std::max(newPosition.y,
+                flyModeFloorY(m_terrain, newPosition, m_config.flyGroundClearance));
         }
 
         // AABB collision detection
@@ -395,6 +396,17 @@ AABB FirstPersonController::getPlayerBounds() const
         bodyCenter,
         glm::vec3(m_config.playerRadius * 2.0f, m_config.playerHeight, m_config.playerRadius * 2.0f)
     );
+}
+
+float FirstPersonController::flyModeFloorY(const Terrain* terrain,
+                                           const glm::vec3& position,
+                                           float clearance)
+{
+    if (!terrain || !terrain->isInitialized())
+    {
+        return clearance;
+    }
+    return terrain->getHeight(position.x, position.z) + clearance;
 }
 
 void FirstPersonController::setTerrain(const Terrain* terrain)

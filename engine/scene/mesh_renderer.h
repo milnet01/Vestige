@@ -53,6 +53,15 @@ public:
     /// @brief Checks if this mesh casts shadows.
     bool castsShadow() const;
 
+    /// @brief Sets whether this mesh blocks the camera / player (collision).
+    /// Turn off for things not worth bumping into at the scene's scale —
+    /// lily pads, flowers, ground cover. Which things those are depends on
+    /// the scene (a pebble matters to a rat), so it is per object, not a size rule.
+    void setBlocksMovement(bool blocks) { m_blocksMovement = blocks; }
+
+    /// @brief Checks if this mesh blocks the camera / player.
+    bool blocksMovement() const { return m_blocksMovement; }
+
     /// @brief Clones this MeshRenderer (shares Mesh/Material pointers).
     std::unique_ptr<Component> clone() const override;
 
@@ -63,6 +72,7 @@ private:
     AABB m_cullingBounds;
     bool m_hasCullingBounds = false;
     bool m_castsShadow = true;
+    bool m_blocksMovement = true;
 };
 
 } // namespace Vestige

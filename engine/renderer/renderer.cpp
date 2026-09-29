@@ -1556,6 +1556,10 @@ void Renderer::endFrame(float deltaTime)
         m_screenShader.setMat4("u_fogInvViewProj",
                                glm::inverse(m_lastViewProjection));
         m_screenShader.setVec3("u_fogCameraWorldPos", m_cameraWorldPosition);
+
+        m_screenShader.setBool("u_underwaterEnabled", m_underwaterEnabled);
+        m_screenShader.setVec3("u_underwaterAbsorption", m_underwaterAbsorption);
+        m_screenShader.setVec3("u_underwaterColour", m_underwaterColour);
     }
 
     // Phase 10 volumetric (froxel) fog composite. The three compute passes

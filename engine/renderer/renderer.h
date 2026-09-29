@@ -423,6 +423,16 @@ public:
                            const glm::vec2& halfExtent = glm::vec2(0.0f),
                            float intensity = 0.15f, float scale = 0.1f);
 
+    /// @brief Tints the final image as seen through water when @a enabled
+    ///        (camera below a water surface). Call each frame; off by default.
+    void setUnderwater(bool enabled, const glm::vec3& absorption = glm::vec3(0.0f),
+                       const glm::vec3& colour = glm::vec3(0.0f))
+    {
+        m_underwaterEnabled = enabled;
+        m_underwaterAbsorption = absorption;
+        m_underwaterColour = colour;
+    }
+
     /// @brief Set caustics quality tier (0=Full, 1=Approximate, 2=Simple).
     void setCausticsQuality(int quality) { m_causticsQuality = quality; }
 
@@ -929,6 +939,9 @@ private:
     float m_causticsTime = 0.0f;
     glm::vec2 m_causticsCenter = glm::vec2(0.0f);
     glm::vec2 m_causticsHalfExtent = glm::vec2(0.0f);
+    bool m_underwaterEnabled = false;
+    glm::vec3 m_underwaterAbsorption = glm::vec3(0.0f);
+    glm::vec3 m_underwaterColour = glm::vec3(0.0f);
     float m_causticsIntensity = 0.15f;
     float m_causticsScale = 0.1f;
     int m_causticsQuality = 0;  // 0=Full, 1=Approximate, 2=Simple

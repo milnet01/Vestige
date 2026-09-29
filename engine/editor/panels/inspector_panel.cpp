@@ -495,6 +495,13 @@ void InspectorPanel::drawMeshRenderer(Entity& entity)
         mr->setCastsShadow(casts);
     }
 
+    // Blocks movement (collision)
+    bool blocks = mr->blocksMovement();
+    if (ImGui::Checkbox("Blocks Movement", &blocks))
+    {
+        mr->setBlocksMovement(blocks);
+    }
+
     // Material
     if (mr->getMaterial())
     {

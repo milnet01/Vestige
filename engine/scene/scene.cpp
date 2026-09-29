@@ -595,7 +595,7 @@ void Scene::collectCollidersRecursive(const Entity& entity, std::vector<AABB>& c
     }
 
     auto* meshRenderer = entity.getComponent<MeshRenderer>();
-    if (meshRenderer && meshRenderer->isEnabled())
+    if (meshRenderer && meshRenderer->isEnabled() && meshRenderer->blocksMovement())
     {
         AABB bounds = meshRenderer->getBounds();
         // Only add if bounds are non-zero (has collision)

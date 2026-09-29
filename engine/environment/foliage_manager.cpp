@@ -551,6 +551,21 @@ std::vector<const FoliageChunk*> FoliageManager::getVisibleChunks(
     return visible;
 }
 
+void FoliageManager::appendTreeTrunkColliders(std::vector<AABB>& out, float trunkRadius,
+                                              float trunkHeight) const
+{
+    for (const auto& [key, chunk] : m_chunks)
+    {
+        for (const TreeInstance& tree : chunk->getTrees())
+        {
+            const float r = trunkRadius * tree.scale;
+            const float h = trunkHeight * tree.scale;
+            out.push_back(AABB{tree.position - glm::vec3(r, 0.0f, r),
+                               tree.position + glm::vec3(r, h, r)});
+        }
+    }
+}
+
 void FoliageManager::getAllChunks(std::vector<const FoliageChunk*>& out) const
 {
     out.clear();

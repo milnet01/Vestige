@@ -73,6 +73,22 @@
 namespace Vestige
 {
 
+namespace
+{
+/// Marks every mesh in an instantiated model (a hierarchy) as blocking or not.
+void setBlocksMovementRecursive(Entity& entity, bool blocks)
+{
+    if (auto* mr = entity.getComponent<MeshRenderer>())
+    {
+        mr->setBlocksMovement(blocks);
+    }
+    for (const auto& child : entity.getChildren())
+    {
+        setBlocksMovementRecursive(*child, blocks);
+    }
+}
+} // namespace
+
 Engine::Engine()
     : m_isRunning(false)
     , m_isCursorCaptured(true)
@@ -1698,6 +1714,13 @@ void Engine::run()
             {
                 m_colliders.clear();
             }
+            if (m_foliageManager)
+            {
+                // Trees are foliage, not scene entities, so they add their own
+                // trunk boxes (a unit-scale trunk ~0.3 m radius, 6 m tall).
+                // TODO: revisit via Formula Workbench — art-directed trunk size.
+                m_foliageManager->appendTreeTrunkColliders(m_colliders, 0.3f, 6.0f);
+            }
             m_controller->update(deltaTime, m_colliders);
         }
 
@@ -1783,9 +1806,18 @@ void Engine::run()
                                                      center, halfExtent,
                                                      waterCfg.causticsIntensity,
                                                      waterCfg.causticsScale);
+
+                // Below the surface the whole view is seen through the water,
+                // with the murk the surface shows from above (3D_E-0724).
+                const bool underwater = isPointUnderwater(
+                    m_camera->getPosition(), waterY, center, halfExtent);
+                m_renderer->setUnderwater(underwater,
+                                          waterAbsorptionCoefficients(waterCfg.turbidity),
+                                          glm::vec3(waterCfg.deepColor));
             }
             else
             {
+                m_renderer->setUnderwater(false);
                 m_renderer->setCausticsParams(false, 0.0f, 0.0f);
                 m_terrainRenderer->setCausticsParams(false, 0.0f, 0.0f, 0);
             }
@@ -2898,7 +2930,8 @@ void Engine::finalizeMeadowTerrain()
         // pond surface; the rest follow the terrain height.
         const auto scatterGroup = [&](const std::vector<std::string>& files,
                                       uint32_t seed, const ScatterParams& params,
-                                      float yOffset, bool onWater) -> int {
+                                      float yOffset, bool onWater,
+                                      bool blocksMovement) -> int {
             std::vector<std::shared_ptr<Model>> models;
             for (const std::string& f : files)
             {
@@ -2925,6 +2958,10 @@ void Engine::finalizeMeadowTerrain()
                 e->transform.position = glm::vec3(p.x, baseY + yOffset, p.z);
                 e->transform.rotation = glm::vec3(0.0f, p.yawDeg, 0.0f);
                 e->transform.scale = glm::vec3(p.scale);
+                if (!blocksMovement)
+                {
+                    setBlocksMovementRecursive(*e, false);
+                }
                 ++placed;
             }
             return placed;
@@ -3046,15 +3083,24 @@ void Engine::finalizeMeadowTerrain()
         rock.minDist = 12.0f;
         rock.exclusionCenter = pondCenterXZ;
         rock.exclusionRadius = pondClear;
-        rock.minScale = 0.8f;
-        rock.maxScale = 2.0f;
+        // Poly Haven CC0 photoscans (3D_E-0702), 2-3 m across at unit scale.
+        rock.minScale = 0.35f;
+        rock.maxScale = 0.9f;
         propCount += scatterGroup(
-            {"rock_largeA.glb", "rock_largeB.glb", "stone_tallA.glb",
-             "rock_smallA.glb", "rock_smallB.glb", "rock_smallC.glb"},
-            0x0B0DE5u, rock, 0.0f, false);
+            {"gameready/rocks/rock_moss_set_01_rock01.gltf",
+             "gameready/rocks/rock_moss_set_01_rock02.gltf",
+             "gameready/rocks/rock_moss_set_01_rock03.gltf",
+             "gameready/rocks/rock_moss_set_01_rock04.gltf",
+             "gameready/rocks/rock_moss_set_01_rock05.gltf",
+             "gameready/rocks/rock_moss_set_01_rock06.gltf",
+             "gameready/rocks/boulder_01.gltf"},
+            0x0B0DE5u, rock, 0.0f, false, /*blocksMovement=*/true);
 
-        // Mushrooms + bushes — the dense small ground cover that breaks up the
-        // flat green. T6 (3D_E-0033): the three low-poly Kenney flower_*A.glb
+        // Bushes — Poly Haven shrub_02 photoscans (3D_E-0702), ~2 m tall, the
+        // only plants tall enough to read above the ~1 m GPU grass. They replace
+        // the Kenney teal plant_bush and the cartoon red mushroom (no realistic
+        // CC0 mushroom exists). Formerly: mushrooms + bushes, the dense small
+        // ground cover that breaks up the flat green. T6 (3D_E-0033): the three low-poly Kenney flower_*A.glb
         // props were dropped here — wildflowers are now the procedural
         // billboard star-mesh foliage (FL_YELLOW/PURPLE/WHITE above), which
         // reads better up close and casts no extra draw-call load.
@@ -3066,28 +3112,43 @@ void Engine::finalizeMeadowTerrain()
         flower.minDist = 0.0f;
         flower.exclusionCenter = pondCenterXZ;
         flower.exclusionRadius = pondClear - 4.0f;
-        flower.minScale = 0.7f;
-        flower.maxScale = 1.4f;
+        flower.minScale = 0.5f;
+        flower.maxScale = 1.0f;
         propCount += scatterGroup(
-            {"mushroom_red.glb", "plant_bush.glb"},
-            0xF10E12u, flower, 0.0f, false);
+            {"gameready/plants/shrub_02_a.gltf", "gameready/plants/shrub_02_b.gltf",
+             "gameready/plants/shrub_02_c.gltf", "gameready/plants/shrub_02_d.gltf"},
+            0xF10E12u, flower, 0.0f, false, /*blocksMovement=*/false);
 
-        // Reeds / tall plants ringing the pond shore: an annulus — inside the
-        // box around the pond, but outside the water edge (exclusion disc).
-        const float reedBox = POND_SIZE * 0.5f + 7.0f;
+        // Small plants ringing the pond shore: an annulus from the waterline
+        // outward. The GPU grass stops 1.5 m past the water (exclusionRadius
+        // above), so the band starts AT the waterline to fill that bare strip and
+        // runs a few metres on to blend into the grass edge; further out the
+        // ~1 m grass would hide plants this small.
+        const float reedBox = pondFill.floodRadius + 4.0f;
         ScatterParams reed;
         reed.regionMin = {pondCenterXZ.x - reedBox, pondCenterXZ.y - reedBox};
         reed.regionMax = {pondCenterXZ.x + reedBox, pondCenterXZ.y + reedBox};
-        reed.cellSize = 3.0f;
+        reed.cellSize = 1.5f;
         reed.jitter = 0.9f;
-        reed.minDist = 1.2f;
+        reed.minDist = 0.6f;
         reed.exclusionCenter = pondCenterXZ;
-        reed.exclusionRadius = POND_SIZE * 0.5f - 0.5f;  // just outside the water
-        reed.minScale = 0.8f;
+        reed.exclusionRadius = pondFill.floodRadius;  // the waterline
+        // Poly Haven CC0 ground plants (3D_E-0702) at real size (5-45 cm): the
+        // shore is the one band the GPU grass leaves bare, so they show here.
+        // The heavy dandelion variants (a, b: ~23k tris) are left out.
+        reed.minScale = 1.0f;
         reed.maxScale = 1.6f;
         propCount += scatterGroup(
-            {"plant_flatTall.glb", "grass.glb", "plant_bush.glb"},
-            0x8EED50u, reed, 0.0f, false);
+            {"gameready/plants/fern_02_a.gltf", "gameready/plants/fern_02_b.gltf",
+             "gameready/plants/fern_02_c.gltf", "gameready/plants/fern_02_d.gltf",
+             "gameready/plants/nettle_plant_tall_a.gltf",
+             "gameready/plants/nettle_plant_tall_b.gltf",
+             "gameready/plants/nettle_plant_medium_a.gltf",
+             "gameready/plants/dandelion_01_c.gltf", "gameready/plants/dandelion_01_d.gltf",
+             "gameready/plants/weed_plant_02_a.gltf", "gameready/plants/weed_plant_02_b.gltf",
+             "gameready/plants/shrub_03_a.gltf", "gameready/plants/shrub_03_b.gltf",
+             "gameready/plants/shrub_sorrel_01_d.gltf"},
+            0x8EED50u, reed, 0.0f, false, /*blocksMovement=*/false);
 
         // Lotus clusters floating on the water surface (inside the pond, no
         // exclusion disc). T6 part 2 (3D_E-0033): these replace the low-poly
@@ -3114,7 +3175,7 @@ void Engine::finalizeMeadowTerrain()
         lily.minScale = 0.8f;
         lily.maxScale = 1.5f;
         propCount += scatterGroup(
-            {"gameready/water/lotus_pads.gltf"}, 0x111A0u, lily, 0.02f, true);
+            {"gameready/water/lotus_pads.gltf"}, 0x111A0u, lily, 0.02f, true, /*blocksMovement=*/false);
 
         ScatterParams lotusBloom = lily;
         lotusBloom.cellSize = 6.0f;   // sparse — a few flowering clumps, not a field
@@ -3122,7 +3183,7 @@ void Engine::finalizeMeadowTerrain()
         lotusBloom.minScale = 0.7f;
         lotusBloom.maxScale = 1.1f;
         propCount += scatterGroup(
-            {"gameready/water/lotus_flowers.gltf"}, 0xB100Du, lotusBloom, 0.02f, true);
+            {"gameready/water/lotus_flowers.gltf"}, 0xB100Du, lotusBloom, 0.02f, true, /*blocksMovement=*/false);
 
         // A fallen log or two near the shore.
         const float logBox = POND_SIZE * 0.5f + 9.0f;
@@ -3136,7 +3197,8 @@ void Engine::finalizeMeadowTerrain()
         logs.exclusionRadius = POND_SIZE * 0.5f + 1.0f;
         logs.minScale = 0.9f;
         logs.maxScale = 1.4f;
-        propCount += scatterGroup({"log.glb"}, 0x106u, logs, 0.0f, false);
+        propCount += scatterGroup({"gameready/logs/dead_tree_trunk.gltf",
+                                   "gameready/logs/tree_stump_01.gltf"}, 0x106u, logs, 0.0f, false, /*blocksMovement=*/true);
 
         Logger::info("Meadow props: " + std::to_string(propCount) + " instances placed");
     }

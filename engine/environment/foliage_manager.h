@@ -99,6 +99,14 @@ public:
     /// @brief Out-param overload — see getVisibleChunks. (AUDIT H9.)
     void getAllChunks(std::vector<const FoliageChunk*>& out) const;
 
+    /// @brief Appends one upright trunk box per tree to @a out (camera/player
+    /// collision). A tree mesh carries no separate trunk measurement, so the
+    /// box is @a trunkRadius x @a trunkHeight at unit scale, times the
+    /// instance's scale: it stops the eye passing through the trunk and
+    /// leaves the canopy passable.
+    void appendTreeTrunkColliders(std::vector<AABB>& out, float trunkRadius,
+                                  float trunkHeight) const;
+
     // --- Scatter API ---
 
     /// @brief Paints scatter instances within a circular area.
