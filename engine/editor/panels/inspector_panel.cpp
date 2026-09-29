@@ -4,6 +4,7 @@
 /// @file inspector_panel.cpp
 /// @brief Inspector panel implementation — property editing for selected entities.
 #include "editor/panels/inspector_panel.h"
+#include "editor/panels/edit_tracker.h"
 #include "editor/command_history.h"
 #include "editor/commands/transform_command.h"
 #include "editor/commands/entity_property_command.h"
@@ -43,47 +44,6 @@ namespace Vestige
 // Helpers
 // ---------------------------------------------------------------------------
 
-/// @brief Phase 10.9 Slice 12 Ed1 — per-widget activation tracker.
-///
-/// Pre-Ed1 the inspector blocks used
-///     `if (changed && ImGui::IsItemDeactivatedAfterEdit())`
-/// at the *end* of a multi-widget block. `IsItemDeactivatedAfterEdit()`
-/// only queries the most recently submitted item, so drag-release
-/// events on every widget except the last were silently dropped from
-/// the undo history — releasing a drag on "Rate" recorded nothing,
-/// only the final widget's release fired the push.
-///
-/// This tracker is called immediately after each widget so per-widget
-/// activation/deactivation states are aggregated correctly across the
-/// whole block. `shouldCommit()` then triggers undo on either:
-///   - drag end (anyDeactivated → push at end-of-drag, one entry per drag), or
-///   - instant change with no drag (changed && !anyActivated → checkbox/
-///     combo / slider-tap that doesn't go through an active state).
-///
-/// Ed2 extends the same tracker to the water / cloth / rigid-body /
-/// emissive-light / material inspectors — moved to the top of the file
-/// because those `draw*` methods are defined above the original Ed1
-/// location.
-struct EditTracker
-{
-    bool anyActivated   = false;
-    bool anyDeactivated = false;
-    bool changed        = false;
-
-    /// Track the just-submitted ImGui item.
-    void track(bool widgetChanged)
-    {
-        changed |= widgetChanged;
-        if (ImGui::IsItemActivated())             anyActivated   = true;
-        if (ImGui::IsItemDeactivatedAfterEdit())  anyDeactivated = true;
-    }
-
-    /// True when the block should record a single undo entry this frame.
-    bool shouldCommit() const
-    {
-        return anyDeactivated || (changed && !anyActivated);
-    }
-};
 
 /// @brief Draws a labelled separator for component sections.
 static bool drawComponentHeader(const char* label, bool canRemove = false)
@@ -1266,6 +1226,8 @@ void InspectorPanel::drawEmissiveLight(Entity& entity)
         return;
     }
 
+    // One per section: ImGui holds one active widget at a time (3D_E-0722).
+    static DragUndo<EmissiveLightSnapshot> s_drag;
     EmissiveLightSnapshot before = EmissiveLightSnapshot::capture(*comp);
     EditTracker tr;
 
@@ -1277,10 +1239,10 @@ void InspectorPanel::drawEmissiveLight(Entity& entity)
     ImGui::SameLine();
     ImGui::TextDisabled("(0,0,0 = derive from material)");
 
-    if (tr.shouldCommit())
+    if (auto dragBefore = s_drag.commitBefore(tr, before, entity.getId()))
     {
         pushEmissiveLightUndo(m_commandHistory, m_currentScene, entity.getId(),
-                              before, EmissiveLightSnapshot::capture(*comp));
+                              *dragBefore, EmissiveLightSnapshot::capture(*comp));
     }
 
     ImGui::Spacing();
@@ -1321,6 +1283,8 @@ void InspectorPanel::drawParticleEmitter(Entity& entity)
     }
 
     auto& cfg = comp->getConfig();
+    // One per section: ImGui holds one active widget at a time (3D_E-0722).
+    static DragUndo<ParticleEmitterConfig> s_drag;
     ParticleEmitterConfig before = cfg;  // Snapshot for undo
 
     // --- Playback controls ---
@@ -1363,10 +1327,10 @@ void InspectorPanel::drawParticleEmitter(Entity& entity)
             tr.track(ImGui::DragFloat("Duration", &cfg.duration, 0.1f, 0.1f, 60.0f, "%.1f s"));
         }
 
-        if (tr.shouldCommit())
+        if (auto dragBefore = s_drag.commitBefore(tr, before, entity.getId()))
         {
             pushParticleUndo(m_commandHistory, m_currentScene, entity.getId(),
-                             before, cfg, "emission");
+                             *dragBefore, cfg, "emission");
             before = cfg;
         }
         ImGui::TreePop();
@@ -1384,10 +1348,10 @@ void InspectorPanel::drawParticleEmitter(Entity& entity)
                                          0.01f, 0.001f, 10.0f, "%.3f", "%.3f"));
         tr.track(ImGui::ColorEdit4("Start Color", &cfg.startColor.x));
 
-        if (tr.shouldCommit())
+        if (auto dragBefore = s_drag.commitBefore(tr, before, entity.getId()))
         {
             pushParticleUndo(m_commandHistory, m_currentScene, entity.getId(),
-                             before, cfg, "start properties");
+                             *dragBefore, cfg, "start properties");
             before = cfg;
         }
         ImGui::TreePop();
@@ -1423,10 +1387,10 @@ void InspectorPanel::drawParticleEmitter(Entity& entity)
                 break;
         }
 
-        if (tr.shouldCommit())
+        if (auto dragBefore = s_drag.commitBefore(tr, before, entity.getId()))
         {
             pushParticleUndo(m_commandHistory, m_currentScene, entity.getId(),
-                             before, cfg, "shape");
+                             *dragBefore, cfg, "shape");
             before = cfg;
         }
         ImGui::TreePop();
@@ -1471,10 +1435,10 @@ void InspectorPanel::drawParticleEmitter(Entity& entity)
             ImGui::Unindent();
         }
 
-        if (tr.shouldCommit())
+        if (auto dragBefore = s_drag.commitBefore(tr, before, entity.getId()))
         {
             pushParticleUndo(m_commandHistory, m_currentScene, entity.getId(),
-                             before, cfg, "over lifetime");
+                             *dragBefore, cfg, "over lifetime");
             before = cfg;
         }
         ImGui::TreePop();
@@ -1486,10 +1450,10 @@ void InspectorPanel::drawParticleEmitter(Entity& entity)
         EditTracker tr;
         tr.track(ImGui::DragFloat3("Gravity", &cfg.gravity.x, 0.1f, -50.0f, 50.0f));
 
-        if (tr.shouldCommit())
+        if (auto dragBefore = s_drag.commitBefore(tr, before, entity.getId()))
         {
             pushParticleUndo(m_commandHistory, m_currentScene, entity.getId(),
-                             before, cfg, "gravity");
+                             *dragBefore, cfg, "gravity");
             before = cfg;
         }
         ImGui::TreePop();
@@ -1518,10 +1482,10 @@ void InspectorPanel::drawParticleEmitter(Entity& entity)
             ImGui::TextDisabled("No texture (using default circle)");
         }
 
-        if (tr.shouldCommit())
+        if (auto dragBefore = s_drag.commitBefore(tr, before, entity.getId()))
         {
             pushParticleUndo(m_commandHistory, m_currentScene, entity.getId(),
-                             before, cfg, "renderer");
+                             *dragBefore, cfg, "renderer");
             before = cfg;
         }
         ImGui::TreePop();
@@ -1541,10 +1505,10 @@ void InspectorPanel::drawParticleEmitter(Entity& entity)
             tr.track(ImGui::DragFloat("Flicker Speed", &cfg.flickerSpeed, 0.5f, 1.0f, 30.0f, "%.1f"));
         }
 
-        if (tr.shouldCommit())
+        if (auto dragBefore = s_drag.commitBefore(tr, before, entity.getId()))
         {
             pushParticleUndo(m_commandHistory, m_currentScene, entity.getId(),
-                             before, cfg, "lightCoupling");
+                             *dragBefore, cfg, "lightCoupling");
             before = cfg;
         }
         ImGui::TreePop();
@@ -1700,6 +1664,8 @@ void InspectorPanel::drawWaterSurface(Entity& entity)
     if (ImGui::CollapsingHeader("Water Surface", ImGuiTreeNodeFlags_DefaultOpen))
     {
         auto& config = water->getConfig();
+        // One per section: ImGui holds one active widget at a time (3D_E-0722).
+        static DragUndo<WaterSurfaceConfig> s_drag;
         WaterSurfaceConfig before = config;
         EditTracker tr;
 
@@ -1864,10 +1830,10 @@ void InspectorPanel::drawWaterSurface(Entity& entity)
         tr.track(ImGui::SliderFloat("Depth", &config.depth, 1.0f, 100.0f));
         tr.track(ImGui::SliderInt("Grid Resolution", &config.gridResolution, 16, 256));
 
-        if (tr.shouldCommit())
+        if (auto dragBefore = s_drag.commitBefore(tr, before, entity.getId()))
         {
             pushWaterSurfaceUndo(m_commandHistory, m_currentScene, entity.getId(),
-                                 before, config);
+                                 *dragBefore, config);
         }
     }
     ImGui::PopStyleVar();
@@ -1951,6 +1917,8 @@ void InspectorPanel::drawRigidBody(Entity& entity)
 
     if (!drawComponentHeader("Rigid Body")) return;
 
+    // One per section: ImGui holds one active widget at a time (3D_E-0722).
+    static DragUndo<RigidBodySnapshot> s_drag;
     RigidBodySnapshot before = RigidBodySnapshot::capture(*rb);
     EditTracker tr;
 
@@ -2034,10 +2002,10 @@ void InspectorPanel::drawRigidBody(Entity& entity)
             "and collision-impact sound when something walks on or hits it.");
     }
 
-    if (tr.shouldCommit())
+    if (auto dragBefore = s_drag.commitBefore(tr, before, entity.getId()))
     {
         pushRigidBodyUndo(m_commandHistory, m_currentScene, entity.getId(),
-                          before, RigidBodySnapshot::capture(*rb));
+                          *dragBefore, RigidBodySnapshot::capture(*rb));
     }
 
     // --- Status ---
@@ -2161,6 +2129,8 @@ void InspectorPanel::drawClothComponent(Entity& entity)
     auto& sim = cloth->getSimulator();
     const auto& config = sim.getConfig();
 
+    // One per section: ImGui holds one active widget at a time (3D_E-0722).
+    static DragUndo<ClothInspectorSnapshot> s_drag;
     ClothInspectorSnapshot before = ClothInspectorSnapshot::capture(*cloth);
     EditTracker tr;
 
@@ -2403,10 +2373,10 @@ void InspectorPanel::drawClothComponent(Entity& entity)
         cloth->setPresetType(ClothPresetType::CUSTOM);
     }
 
-    if (tr.shouldCommit())
+    if (auto dragBefore = s_drag.commitBefore(tr, before, entity.getId()))
     {
         pushClothUndo(m_commandHistory, m_currentScene, entity.getId(),
-                      before, ClothInspectorSnapshot::capture(*cloth));
+                      *dragBefore, ClothInspectorSnapshot::capture(*cloth));
     }
 
     ImGui::Spacing();

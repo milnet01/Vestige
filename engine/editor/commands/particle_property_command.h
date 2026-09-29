@@ -58,27 +58,6 @@ public:
         return "Change " + m_propertyName + " on '" + name + "'";
     }
 
-    bool canMergeWith(const EditorCommand& other) const override
-    {
-        auto* otherCmd = dynamic_cast<const ParticlePropertyCommand*>(&other);
-        if (!otherCmd)
-        {
-            return false;
-        }
-        return m_entityId == otherCmd->m_entityId
-            && m_propertyName == otherCmd->m_propertyName;
-    }
-
-    void mergeWith(EditorCommand& other) override
-    {
-        auto* otherCmd = dynamic_cast<ParticlePropertyCommand*>(&other);
-        if (otherCmd)
-        {
-            // Keep our old config, take their new config
-            m_newConfig = otherCmd->m_newConfig;
-        }
-    }
-
 private:
     void applyConfig(const ParticleEmitterConfig& config)
     {

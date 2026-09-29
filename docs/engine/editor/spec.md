@@ -90,7 +90,7 @@ Key abstractions:
 | `EditorCamera` | class | Orbit/pan/zoom turntable camera with view presets and smoothed focus animation. `engine/editor/editor_camera.h:23` |
 | `Selection` | class | Multi-select set + primary-id accessor + modifier-aware add/toggle. `engine/editor/selection.h:18` |
 | `CommandHistory` | class | 200-command ring buffer with version-counter dirty tracking + saved-version invariant. `engine/editor/command_history.h:23` |
-| `EditorCommand` | abstract base | `execute() / undo() / getDescription() / canMergeWith() / mergeWith()`. `engine/editor/commands/editor_command.h:19` |
+| `EditorCommand` | abstract base | `execute() / undo() / getDescription()`. `engine/editor/commands/editor_command.h:19` |
 | `FileMenu` | class | File menu, save/load dialogs, recent files, 120 s auto-save, unsaved-changes modal, crash-recovery modal. `engine/editor/file_menu.h:35` |
 | `SceneSerializer` | class (static) | JSON scene I/O with metadata + format envelope; atomic write via `engine/utils/atomic_write.h`. `engine/editor/scene_serializer.h:44` |
 | `PrefabSystem` | class | Save/load entity trees to `assets/prefabs/*.json`. `engine/editor/prefab_system.h:19` |
@@ -188,8 +188,6 @@ class EditorCommand {
     virtual void execute() = 0;
     virtual void undo() = 0;
     virtual std::string getDescription() const = 0;
-    virtual bool canMergeWith(const EditorCommand&) const { return false; }
-    virtual void mergeWith(EditorCommand&) {}
 };
 ```
 
@@ -272,7 +270,7 @@ Panel and tool surfaces follow a uniform template — most expose `initialize / 
 - `Editor::prepareFrame` / `Editor::endFrame` straddle the rest of the editor draw — every panel and tool draws *between* them. ImGui's per-frame state machine fails loudly if those bracket calls are missing.
 - `Editor::drawPanels` polls panel state machines for one-shot pick / box-select / screenshot intents that the engine consumes via `consume*()` accessors next frame. The consume pattern keeps the editor from reaching into the renderer — the renderer pulls intents out of the editor instead.
 - `CommandHistory::execute` discards the redo branch and trims the oldest commands once the buffer hits `MAX_COMMANDS` (200). When trimming would erase the saved version, `m_savedVersionLost` flips to `true` and `isDirty()` returns `true` permanently until `markSaved()` runs again — by design, because the file on disk no longer corresponds to a state the user can reach via undo.
-- `EditorCommand::canMergeWith` + `mergeWith` are how slider drags collapse into one undo entry. Concrete commands implement merge by checking a target id + property tag and absorbing the new value; `transform_command.h` is the canonical example.
+- A slider drag is one undo entry, recorded when the drag ends. Inspector blocks track each widget with `EditTracker` and take the entry's "before" from `DragUndo`, which keeps the value from the frame the drag started (`engine/editor/panels/edit_tracker.h`). Commands are not merged.
 - `SceneSerializer::saveScene` writes via `engine/utils/atomic_write.h` — write-temp + fsync(file) + rename + fsync(dir). On failure the original file is intact and `SceneSerializerResult::success == false` with a populated `errorMessage`.
 - `FileMenu::tickAutoSave` writes `~/.config/vestige/autosave.scene` every 120 s **only when dirty**. On clean shutdown the autosave is deleted; if it survives a launch, the recovery modal offers to load it (`drawRecoveryModal` — `engine/editor/file_menu.h:123`).
 - `EditorMode::PLAY` hides every panel, captures the cursor, and routes input to `FirstPersonController`. The transition is instant — there is no scene rebuild on either side of the toggle (CODING_STANDARDS §33).

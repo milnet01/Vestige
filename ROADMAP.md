@@ -4583,10 +4583,20 @@ shipped that have no invocation path at all.
   Source: in-session-2026-09-29 (3D_E-0705 linker scan).
   Lanes: core.
 
-- 📋 [3D_E-0722] **Editor undo never merges commands: CommandHistory never calls canMergeWith / mergeWith.**
+- ✅ [3D_E-0722] **Editor undo never merges commands: CommandHistory never calls canMergeWith / mergeWith.**
   ParticlePropertyCommand implements canMergeWith/mergeWith, but no
   code calls either (linker gc + source search, 2026-09-29). Confirm
   in the running editor before fixing.
+  Resolved (2026-09-29): confirmed with real ImGui driven headlessly
+  (tests/test_edit_tracker_drag_undo.cpp): one DragFloat drag pushed 11
+  undo entries, one per frame, because EditTracker::shouldCommit fired on
+  `changed && !anyActivated`, true on every mid-drag frame. Fix:
+  EditTracker (moved to engine/editor/panels/edit_tracker.h) holds off
+  while a widget is active, and DragUndo<T> supplies the value from the
+  frame the drag started. Wired into all 11 commit sites (emissive light,
+  particles x7, water, rigid body, cloth). The unused canMergeWith /
+  mergeWith were deleted rather than wired; docs/engine/editor/spec.md
+  updated. Not yet clicked through in the running editor.
   **Layman:** Dragging a slider in the editor may create one undo step per tiny change instead of one for the whole drag.
   Kind: fix.
   Source: in-session-2026-09-29 (3D_E-0705 linker scan).

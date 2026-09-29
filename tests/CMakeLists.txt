@@ -177,6 +177,7 @@ add_executable(vestige_tests
     test_fly_mode_ground_clamp.cpp
     test_underwater_parity.cpp
     test_blocks_movement.cpp
+    test_edit_tracker_drag_undo.cpp
     test_post_process_accessibility.cpp
     test_audio_attenuation.cpp
     test_audio_doppler.cpp

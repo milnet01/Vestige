@@ -23,6 +23,10 @@ may change any interface without notice.
 
 ## [Unreleased]
 
+### 2026-09-29 Fixed — One slider drag in the inspector is one undo step (3D_E-0722)
+
+Dragging a particle, water, rigid-body, cloth or emissive-light slider recorded one undo step per frame, so undoing a drag walked it back a frame at a time. The drag is now recorded once, when it ends, restoring the value from before it started. The unused `EditorCommand::canMergeWith` / `mergeWith` are removed; a command that overrode them must drop those methods.
+
 ### 2026-09-29 Removed — Unused ISystem::reportMetrics hook (3D_E-0723)
 
 Nothing called it and no system overrode it; the system registry already times each system's update. A game system that declared it with `override` must drop that method.
