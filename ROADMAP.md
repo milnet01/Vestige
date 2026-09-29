@@ -4632,6 +4632,11 @@ shipped that have no invocation path at all.
   measure vs baseline before commit. Still to do: taller reed-like GPU
   grass band at the waterline (user-approved); the painted billboard
   wildflowers are unchanged.
+  Progress (2026-09-29, later): committed in f7a5814. FPS measured after
+  3D_E-0726/0727 made the props load from the project folder and made
+  --no-vsync real: meadow --demo-flythrough 70-100 FPS uncapped, GPU
+  frame mean 9.9 ms, max 11.5 ms, 9 tree species + 656 props loaded.
+  Still open: the taller reed-like GPU grass band at the waterline.
   **Layman:** Some small plants around the pond look bright blue-green and cartoonish next to the realistic grass; swap or recolour them.
   Kind: fix.
   Source: in-session-2026-09-26.
