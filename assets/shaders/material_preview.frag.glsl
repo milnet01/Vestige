@@ -37,14 +37,17 @@ const float PI = 3.14159265359;
 
 // ---- Simplified PBR (no IBL, single directional light) ----
 
-float distributionGGX(vec3 N, vec3 H, float roughness)
+float distributionGGX(float NdotH, float roughness)
 {
+    roughness = max(roughness, 0.04);  // prevent NaN at roughness=0
     float a = roughness * roughness;
     float a2 = a * a;
-    float NdotH = max(dot(N, H), 0.0);
     float NdotH2 = NdotH * NdotH;
+
     float denom = NdotH2 * (a2 - 1.0) + 1.0;
-    return a2 / (PI * denom * denom);
+    denom = PI * denom * denom;
+
+    return a2 / denom;
 }
 
 float geometrySchlickGGX(float NdotV, float roughness)
@@ -56,7 +59,9 @@ float geometrySchlickGGX(float NdotV, float roughness)
 
 vec3 fresnelSchlick(float cosTheta, vec3 F0)
 {
-    return F0 + (1.0 - F0) * pow(clamp(1.0 - cosTheta, 0.0, 1.0), 5.0);
+    float x = clamp(1.0 - cosTheta, 0.0, 1.0);
+    float x2 = x * x;
+    return F0 + (1.0 - F0) * (x2 * x2 * x);
 }
 
 void main()
@@ -91,7 +96,7 @@ void main()
         // PBR lighting
         vec3 F0 = mix(vec3(0.04), baseColor, u_metallic);
 
-        float D = distributionGGX(N, H, u_roughness);
+        float D = distributionGGX(max(dot(N, H), 0.0), u_roughness);
         float G = geometrySchlickGGX(max(dot(N, V), 0.0), u_roughness)
                 * geometrySchlickGGX(NdotL, u_roughness);
         vec3 F = fresnelSchlick(max(dot(H, V), 0.0), F0);

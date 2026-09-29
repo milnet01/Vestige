@@ -343,9 +343,7 @@ int getCascadeIndex()
     for (int i = 0; i < u_cascadeCount; i++)
     {
         if (depth < u_cascadeSplits[i])
-        {
             return i;
-        }
     }
     return u_cascadeCount - 1;
 }

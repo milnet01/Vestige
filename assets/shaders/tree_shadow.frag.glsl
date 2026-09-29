@@ -28,9 +28,9 @@ layout(location = 0) out vec4 fluxOut;
 
 // Copied from tree_mesh.frag (no shared GLSL #include) — the SAME dither the
 // visible pass uses, so the shadow dissolves in lockstep with the canopy.
-float interleavedGradientNoise(vec2 p)
+float interleavedGradientNoise(vec2 screenPos)
 {
-    return fract(52.9829189 * fract(dot(p, vec2(0.06711056, 0.00583715))));
+    return fract(52.9829189 * fract(dot(screenPos, vec2(0.06711056, 0.00583715))));
 }
 
 void main()

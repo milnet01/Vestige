@@ -47,9 +47,9 @@ uniform mat4 u_cascadeLightSpaceMatrices[4];
 
 out vec4 fragColor;
 
-float interleavedGradientNoise(vec2 p)
+float interleavedGradientNoise(vec2 screenPos)
 {
-    return fract(52.9829189 * fract(dot(p, vec2(0.06711056, 0.00583715))));
+    return fract(52.9829189 * fract(dot(screenPos, vec2(0.06711056, 0.00583715))));
 }
 
 // T10 coverage-preservation (Ben Golus): the mip level at this fragment, so the
