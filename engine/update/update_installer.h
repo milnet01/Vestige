@@ -91,6 +91,10 @@ std::vector<std::string> userArguments(const std::vector<std::string>& argv,
 ///        Returns an error, or empty on success.
 std::string extractZip(const std::vector<std::uint8_t>& zip, const std::filesystem::path& dest);
 
+/// @brief Opens an https page in the user's browser (xdg-open / the Windows
+///        shell). Anything but https:// is refused. Returns false on failure.
+bool openInBrowser(const std::string& url);
+
 /// @brief Windows zip only: deletes `<install>.old`, left by the swap helper,
 ///        once this build has reached its first frame. No-op elsewhere.
 void cleanupAfterUpdate(InstallKind kind, const std::filesystem::path& installDir);

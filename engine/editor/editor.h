@@ -23,6 +23,7 @@
 #include "scripting/node_type_registry.h"
 #include "editor/panels/validation_panel.h"
 #include "editor/panels/first_run_wizard.h"
+#include "editor/panels/update_dialog.h"
 #include "editor/panels/settings_editor_panel.h"
 #include "editor/panels/welcome_panel.h"
 #include "editor/panels/texture_viewer_panel.h"
@@ -251,6 +252,9 @@ public:
     /// @brief Gets the first-run wizard (Phase 10.5 slice 14.2 / 14.4).
     FirstRunWizard& getFirstRunWizard() { return m_firstRunWizard; }
 
+    /// @brief The self-update UI (3D_E-0729); the Engine wires its hooks.
+    UpdateDialog& getUpdateDialog() { return m_updateDialog; }
+
     /// @brief Wires the onboarding settings + asset root into the
     ///        first-run wizard, and supplies a callback for the
     ///        "Show me the Demo" button (dispatches to
@@ -375,6 +379,7 @@ private:
     ValidationPanel m_validationPanel;
     WelcomePanel m_welcomePanel;
     FirstRunWizard m_firstRunWizard;
+    UpdateDialog m_updateDialog;
     SettingsEditorPanel m_settingsEditorPanel;
     std::function<void()> m_applyDemoCallback;
     bool m_wizardWasOpenLastFrame = false;

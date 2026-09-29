@@ -43,6 +43,22 @@ SaveStatus SettingsEditor::apply(const std::filesystem::path& settingsPath)
     return status;
 }
 
+SaveStatus SettingsEditor::commitUpdatePreferences(const UpdateSettings& updates,
+                                                   const std::filesystem::path& settingsPath)
+{
+    Settings next = m_applied;
+    next.updates = updates;
+    const SaveStatus status = next.saveAtomic(settingsPath);
+    if (status == SaveStatus::Ok)
+    {
+        m_applied.updates = updates;
+    }
+    // The pending copy follows either way, so the Settings window shows the
+    // choice and a later Apply does not undo it.
+    m_pending.updates = updates;
+    return status;
+}
+
 void SettingsEditor::revert()
 {
     m_pending = m_applied;

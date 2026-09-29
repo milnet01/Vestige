@@ -404,9 +404,38 @@ void FileMenu::proceedWithPendingAction(Scene* scene, Selection& selection)
         case PendingAction::QUIT:
             m_shouldQuit = true;
             break;
+        case PendingAction::CALLBACK:
+        {
+            auto callback = std::move(m_pendingCallback);
+            m_pendingCallback = nullptr;
+            if (callback)
+            {
+                callback();
+            }
+            break;
+        }
         case PendingAction::NONE:
             break;
     }
+}
+
+void FileMenu::runAfterUnsavedCheck(std::function<void()> action)
+{
+    if (m_pendingAction != PendingAction::NONE)
+    {
+        return;  // another save/open/quit flow is already in progress
+    }
+    if (!isDirty())
+    {
+        if (action)
+        {
+            action();
+        }
+        return;
+    }
+    m_pendingCallback = std::move(action);
+    m_pendingAction = PendingAction::CALLBACK;
+    m_showUnsavedModal = true;
 }
 
 // ---------------------------------------------------------------------------

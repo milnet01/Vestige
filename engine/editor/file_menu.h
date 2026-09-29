@@ -12,6 +12,7 @@
 
 #include <chrono>
 #include <filesystem>
+#include <functional>
 #include <string>
 
 struct GLFWwindow;
@@ -86,6 +87,12 @@ public:
     /// @brief Returns true if the application should quit.
     bool shouldQuit() const;
 
+    /// @brief Runs @a action once unsaved changes are dealt with: at once if
+    ///        the scene is clean, else after the user saves or discards in the
+    ///        Unsaved Changes modal. Cancel drops it. Used by the self-updater
+    ///        before it restarts the editor (3D_E-0729).
+    void runAfterUnsavedCheck(std::function<void()> action);
+
     /// @brief Marks the scene as modified (title bar shows *).
     void markDirty();
 
@@ -110,7 +117,8 @@ private:
         NEW_SCENE,
         OPEN_SCENE,
         OPEN_RECENT,
-        QUIT
+        QUIT,
+        CALLBACK
     };
 
     void newScene(Scene* scene, Selection& selection);
@@ -153,6 +161,7 @@ private:
     // Unsaved changes modal
     bool m_showUnsavedModal = false;
     PendingAction m_pendingAction = PendingAction::NONE;
+    std::function<void()> m_pendingCallback;  ///< For PendingAction::CALLBACK.
 
     // Recent files
     RecentFiles m_recentFiles;

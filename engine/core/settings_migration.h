@@ -96,4 +96,7 @@ void migrate_v3_to_v4(nlohmann::json& j);
 /// Like every arm it MUST set `j["schemaVersion"] = 5`. Idempotent.
 void migrate_v4_to_v5(nlohmann::json& j);
 
+/// @brief v5 → v6 (3D_E-0729): adds the `updates` block, mode "ask".
+void migrate_v5_to_v6(nlohmann::json& j);
+
 } // namespace Vestige

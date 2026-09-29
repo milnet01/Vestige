@@ -23,6 +23,7 @@
 #define NOMINMAX
 #endif
 #include <windows.h>
+#include <shellapi.h>
 #else
 #include <unistd.h>
 #endif
@@ -431,6 +432,29 @@ std::unique_ptr<IInstaller> installerFor(InstallKind kind, InstallContext contex
             break;
     }
     return nullptr;
+}
+
+bool openInBrowser(const std::string& url)
+{
+    if (url.rfind("https://", 0) != 0)
+    {
+        return false;
+    }
+#ifdef _WIN32
+    const std::wstring wide(url.begin(), url.end());  // the URLs opened here are ASCII
+    const auto result = reinterpret_cast<INT_PTR>(
+        ShellExecuteW(nullptr, L"open", wide.c_str(), nullptr, nullptr, SW_SHOWNORMAL));
+    return result > 32;
+#else
+    // Spawned with an argument vector, never through a shell.
+    const pid_t pid = fork();
+    if (pid == 0)
+    {
+        execlp("xdg-open", "xdg-open", url.c_str(), static_cast<char*>(nullptr));
+        _exit(127);
+    }
+    return pid > 0;
+#endif
 }
 
 void cleanupAfterUpdate(InstallKind kind, const std::filesystem::path& installDir)

@@ -5,6 +5,9 @@
 /// @brief Engine implementation — main loop and subsystem orchestration.
 #include "core/engine.h"
 #include "utils/path_sandbox.h"
+#include "utils/asset_locator.h"
+#include "update/update_installer.h"
+#include "update/update_version.h"
 #include "core/engine_paths.h"
 #include "core/logger.h"
 #include "physics/cloth_component.h"
@@ -678,6 +681,32 @@ bool Engine::initialize(const EngineConfig& config)
         if (!config.window.isVsyncEnabled)
         {
             m_window->setVsync(false);
+        }
+
+        // Self-update UI (3D_E-0729). A developer build parses as 0.0.0 only if
+        // its stamp is malformed; detectInstall() then decides what it may do.
+        if (m_editor)
+        {
+            UpdateDialog::Hooks hooks;
+            hooks.runOnMainThread = [this](std::function<void()> work) {
+                m_jobSystem.runOnMainThread(std::move(work));
+            };
+            hooks.savePreferences = [this](const UpdateSettings& updates) {
+                if (m_settingsEditor->commitUpdatePreferences(updates, Settings::defaultPath())
+                    != SaveStatus::Ok)
+                {
+                    Logger::warning("Settings: could not save the update preference.");
+                }
+            };
+            hooks.afterUnsavedCheck = [this](std::function<void()> action) {
+                m_editor->getFileMenu().runAfterUnsavedCheck(std::move(action));
+            };
+            hooks.requestExit = [this]() { m_editor->getFileMenu().requestQuit(); };
+            hooks.openUrl = [](const std::string& url) { Update::openInBrowser(url); };
+            m_editor->getUpdateDialog().initialize(
+                std::move(hooks),
+                Update::parseVersion(VESTIGE_ENGINE_VERSION).value_or(Update::Version{}),
+                Update::detectInstall(), m_settingsEditor->applied().updates);
         }
 
         if (m_editor)
@@ -1410,6 +1439,7 @@ void Engine::run()
         // worker threads last frame, then reap completed fire-and-forget tasks
         // (MT2; docs/phases/phase_10_6_design.md §3.4).
         m_jobSystem.drainMainThreadQueue();
+        tickUpdateStartup(deltaTime);
 
         // 2. Window — poll OS events
         m_window->pollEvents();
@@ -4807,3 +4837,40 @@ void Engine::setupTabernacleScene()
 }
 
 } // namespace Vestige
+
+namespace Vestige
+{
+
+void Engine::tickUpdateStartup(float deltaTime)
+{
+    if (m_updateStartupDone || !m_editor || m_visualTestMode || m_demoFlythroughMode)
+    {
+        return;
+    }
+    m_updateStartupTimer += deltaTime;
+    if (m_updateStartupTimer < 3.0f)
+    {
+        return;  // let the first frames settle before touching disk or network
+    }
+    UpdateDialog& dialog = m_editor->getUpdateDialog();
+    const UpdateSettings& updates = m_settingsEditor->applied().updates;
+    const bool wizardDone = m_settings.onboarding.hasCompletedFirstRun
+                         && !m_editor->getFirstRunWizard().isOpen();
+    if (updates.mode == UpdateCheckMode::Ask && !wizardDone)
+    {
+        return;  // ask only once the first-run wizard is out of the way
+    }
+    m_updateStartupDone = true;
+    const Update::InstallKind kind = Update::detectInstall();
+    Update::cleanupAfterUpdate(kind, executableDir());
+    if (shouldAskAboutUpdateChecks(updates, wizardDone))
+    {
+        dialog.askAboutAutomaticChecks();
+    }
+    else if (shouldAutoCheckForUpdates(updates))
+    {
+        dialog.startCheck(/*manual=*/false);
+    }
+}
+
+}  // namespace Vestige

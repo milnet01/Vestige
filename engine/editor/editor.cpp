@@ -1041,6 +1041,11 @@ void Editor::drawPanels(Renderer* renderer, Scene* scene, Camera* camera,
                 {
                     m_firstRunWizard.openFromHelpMenu();
                 }
+                ImGui::Separator();
+                if (ImGui::MenuItem("Check for Updates..."))
+                {
+                    m_updateDialog.startCheck(/*manual=*/true);
+                }
                 ImGui::EndMenu();
             }
 
@@ -1422,6 +1427,9 @@ void Editor::drawPanels(Renderer* renderer, Scene* scene, Camera* camera,
 
         // --- Welcome panel ---
         m_welcomePanel.draw();
+
+        // --- Self-update (3D_E-0729) ---
+        m_updateDialog.draw();
 
         // --- Settings editor panel (Phase 10 slice 13.5b) ---
         m_settingsEditorPanel.draw();

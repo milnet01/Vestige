@@ -74,6 +74,7 @@ private:
     void drawGameplayTab();
     void drawAccessibilityTab();
     void drawLocalizationTab();
+    void drawUpdatesTab();
     void drawFooter();
 
     /// @brief Capture-mode rebind modal (Phase 10 slice 13.5c).

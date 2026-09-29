@@ -38,6 +38,7 @@ const char* kTabNames[] = {
     "Gameplay",
     "Accessibility",
     "Language",
+    "Updates",
 };
 
 constexpr std::size_t kNumTabs = sizeof(kTabNames) / sizeof(kTabNames[0]);
@@ -183,6 +184,7 @@ void SettingsEditorPanel::draw()
         case 3: drawGameplayTab();      break;
         case 4: drawAccessibilityTab(); break;
         case 5: drawLocalizationTab();  break;
+        case 6: drawUpdatesTab();       break;
         default: break;
     }
     ImGui::EndChild();
@@ -801,6 +803,36 @@ void SettingsEditorPanel::drawLocalizationTab()
     if (ImGui::Button("Restore language default"))
     {
         m_editor->restoreLocalizationDefaults();
+    }
+}
+
+void SettingsEditorPanel::drawUpdatesTab()
+{
+    // 3D_E-0729. Ticking stores "on", unticking "off" (including from the
+    // never-answered "ask"); the Apply button persists it like any setting.
+    const Settings& p = m_editor->pending();
+    ImGui::TextDisabled("Updates");
+    ImGui::Separator();
+    bool automatic = p.updates.mode == UpdateCheckMode::On;
+    if (ImGui::Checkbox("Check for updates on startup", &automatic))
+    {
+        m_editor->mutate([automatic](Settings& s)
+        {
+            s.updates.mode = automatic ? UpdateCheckMode::On : UpdateCheckMode::Off;
+        });
+    }
+    ImGui::TextDisabled(
+        "Contacts GitHub once per editor start. Help > Check for Updates "
+        "works either way.");
+    if (!p.updates.skippedVersion.empty())
+    {
+        ImGui::Spacing();
+        ImGui::Text("Skipped version: %s", p.updates.skippedVersion.c_str());
+        ImGui::SameLine();
+        if (ImGui::Button("Offer it again"))
+        {
+            m_editor->mutate([](Settings& s) { s.updates.skippedVersion.clear(); });
+        }
     }
 }
 

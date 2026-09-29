@@ -116,6 +116,13 @@ public:
     /// know the change isn't persisted yet.
     SaveStatus apply(const std::filesystem::path& settingsPath);
 
+    /// @brief Sets the self-update preferences in both the pending and the
+    ///        applied state and saves the applied state — so an answer to the
+    ///        update prompt persists without committing any other edit the
+    ///        user has pending in the Settings window (3D_E-0729).
+    SaveStatus commitUpdatePreferences(const UpdateSettings& updates,
+                                       const std::filesystem::path& settingsPath);
+
     /// @brief Discard pending edits: `m_pending` ← `m_applied`, and
     ///        re-push `m_applied` through every sink so subsystems
     ///        roll back from whatever live-preview state they were

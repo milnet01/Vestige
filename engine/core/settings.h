@@ -71,7 +71,10 @@ namespace Vestige
 ///    one per slice). AX8 adds `audio.outputLayout` (default "auto").
 ///    Missing fields default to current behaviour on load, so a v3
 ///    file is unchanged in effect.
-inline constexpr int kCurrentSchemaVersion = 5;
+///  - v5 (AX2 R4) — adds the audio reverb settings.
+///  - v6 (3D_E-0729) — adds `updates`: whether the editor checks for a new
+///    release on startup, and a version the user chose to skip.
+inline constexpr int kCurrentSchemaVersion = 6;
 
 // --------------------------------------------------------------
 // Display section — resolution, vsync, fullscreen, quality.
@@ -382,6 +385,34 @@ struct LocalizationSettings
     bool operator!=(const LocalizationSettings& o) const { return !(*this == o); }
 };
 
+/// @brief Self-update preferences (3D_E-0729, spec §4.7).
+///
+/// `Ask` until the user answers the one-time question shown after the
+/// first-run wizard; then `On` or `Off`. Help > Check for Updates works in
+/// every mode.
+enum class UpdateCheckMode
+{
+    Ask,
+    On,
+    Off,
+};
+
+struct UpdateSettings
+{
+    UpdateCheckMode mode = UpdateCheckMode::Ask;
+    std::string skippedVersion;  ///< "0.1.76", or empty for none.
+
+    bool operator==(const UpdateSettings& o) const;
+    bool operator!=(const UpdateSettings& o) const { return !(*this == o); }
+};
+
+/// @brief True when the editor should check on startup: only in `On`.
+bool shouldAutoCheckForUpdates(const UpdateSettings& updates);
+
+/// @brief True when the one-time "check automatically?" question is due:
+///        the mode is still `Ask` and the first-run wizard is done.
+bool shouldAskAboutUpdateChecks(const UpdateSettings& updates, bool firstRunComplete);
+
 // --------------------------------------------------------------
 // Settings root
 // --------------------------------------------------------------
@@ -416,6 +447,7 @@ struct Settings
     AccessibilitySettings  accessibility;
     OnboardingSettings     onboarding;
     LocalizationSettings   localization;
+    UpdateSettings         updates;
 
     /// @brief Loads settings from `path`. Returns the parsed
     ///        settings (or defaults on failure) plus a status code.

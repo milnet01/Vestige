@@ -220,6 +220,13 @@ private:
     bool m_visualTestMode = false;
     DemoFlythrough m_demoFlythrough;     ///< Path is built by the scene setup.
     bool m_demoFlythroughMode = false;
+
+    /// @brief Self-update startup step (3D_E-0729): a few seconds after the
+    ///        first frame, clean up after a Windows update, then ask the
+    ///        one-time question or run the automatic check. Once per launch.
+    void tickUpdateStartup(float deltaTime);
+    float m_updateStartupTimer = 0.0f;
+    bool m_updateStartupDone = false;
     static constexpr double DEMO_CAPTURE_FPS = 30.0;  ///< --demo-capture frame rate
     std::string m_demoCaptureDir;        ///< Empty = no frame capture.
     int m_demoCaptureFrame = 0;

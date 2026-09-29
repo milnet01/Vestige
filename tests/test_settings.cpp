@@ -2504,3 +2504,51 @@ TEST(SettingsEditorPanel, SafeModeStrobeSliderMaxIs3Hz_F11)
            "matches this, re-check both PhotosensitiveSafety::clampStrobeHz "
            "and the spec.";
 }
+
+// 3D_E-0729 INV-8: v5 -> v6 adds `updates` in "ask" mode, so an existing user
+// is asked once rather than checked automatically without having chosen.
+TEST(SettingsMigration, V5ToV6AddsUpdatesInAskMode)
+{
+    json j = Settings{}.toJson();
+    j.erase("updates");
+    j["schemaVersion"] = 5;
+
+    ASSERT_TRUE(migrate(j));
+    EXPECT_EQ(j["schemaVersion"].get<int>(), kCurrentSchemaVersion);
+    ASSERT_TRUE(j.contains("updates"));
+    EXPECT_EQ(j["updates"]["mode"].get<std::string>(), "ask");
+
+    Settings s;
+    s.fromJson(j);
+    EXPECT_EQ(s.updates.mode, UpdateCheckMode::Ask);
+    EXPECT_FALSE(shouldAutoCheckForUpdates(s.updates));
+}
+
+TEST(SettingsUpdates, RoundTripsAndUnknownModeAsksAgain)
+{
+    Settings s;
+    s.updates.mode = UpdateCheckMode::Off;
+    s.updates.skippedVersion = "0.1.76";
+    Settings back;
+    back.fromJson(s.toJson());
+    EXPECT_EQ(back.updates, s.updates);
+
+    json j = s.toJson();
+    j["updates"]["mode"] = "sometimes";
+    Settings odd;
+    odd.fromJson(j);
+    EXPECT_EQ(odd.updates.mode, UpdateCheckMode::Ask);
+}
+
+TEST(SettingsUpdates, OnlyOnChecksAutomaticallyAndAskWaitsForTheWizard)
+{
+    UpdateSettings u;
+    EXPECT_FALSE(shouldAutoCheckForUpdates(u));
+    EXPECT_FALSE(shouldAskAboutUpdateChecks(u, /*firstRunComplete=*/false));
+    EXPECT_TRUE(shouldAskAboutUpdateChecks(u, true));
+    u.mode = UpdateCheckMode::Off;
+    EXPECT_FALSE(shouldAutoCheckForUpdates(u));  // "No" is never checked
+    EXPECT_FALSE(shouldAskAboutUpdateChecks(u, true));
+    u.mode = UpdateCheckMode::On;
+    EXPECT_TRUE(shouldAutoCheckForUpdates(u));
+}

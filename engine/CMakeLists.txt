@@ -274,6 +274,7 @@ set(ENGINE_SOURCES
     editor/panels/ui_runtime_panel.cpp
     editor/panels/template_dialog.cpp
     editor/panels/first_run_wizard.cpp
+    editor/panels/update_dialog.cpp
     editor/panels/settings_editor_panel.cpp
     editor/panels/panel_registry.cpp
     core/settings_editor.cpp
@@ -613,3 +614,12 @@ if(NOT _vestige_stamp MATCHES "^[0-9]+\\.[0-9]+\\.[0-9]+([-+][0-9A-Za-z.-]+)?$")
 endif()
 target_compile_definitions(vestige_engine PUBLIC
     VESTIGE_ENGINE_VERSION="${_vestige_stamp}")
+
+# Which release package this build is (3D_E-0729, spec §4.6): release.yml sets
+# "linux" (one build feeds the tarball and the AppImage) or "windows-zip".
+# Empty for every other build, which then never installs an update.
+set(VESTIGE_PACKAGE "" CACHE STRING "Release package kind: linux, windows-zip, or empty")
+if(NOT VESTIGE_PACKAGE MATCHES "^(|linux|windows-zip)$")
+    message(FATAL_ERROR "VESTIGE_PACKAGE '${VESTIGE_PACKAGE}' must be linux, windows-zip or empty")
+endif()
+target_compile_definitions(vestige_engine PRIVATE VESTIGE_PACKAGE="${VESTIGE_PACKAGE}")

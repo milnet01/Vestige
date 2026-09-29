@@ -43,6 +43,7 @@ bool migrate(nlohmann::json& j)
             case 2: migrate_v2_to_v3(j); break;
             case 3: migrate_v3_to_v4(j); break;
             case 4: migrate_v4_to_v5(j); break;
+            case 5: migrate_v5_to_v6(j); break;
             default:
                 Logger::warning(
                     "Settings migration: no migration function registered for "
@@ -169,6 +170,17 @@ void migrate_v4_to_v5(nlohmann::json& j)
         }
     }
     j["schemaVersion"] = 5;
+}
+
+void migrate_v5_to_v6(nlohmann::json& j)
+{
+    // 3D_E-0729 — self-update preferences. "ask" so an existing user is asked
+    // once, like a new one, rather than checked without having chosen.
+    if (!j.contains("updates") || !j["updates"].is_object())
+    {
+        j["updates"] = nlohmann::json{{"mode", "ask"}, {"skippedVersion", ""}};
+    }
+    j["schemaVersion"] = 6;
 }
 
 } // namespace Vestige

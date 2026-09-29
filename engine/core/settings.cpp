@@ -194,6 +194,21 @@ bool LocalizationSettings::operator==(const LocalizationSettings& o) const
     return language == o.language;
 }
 
+bool UpdateSettings::operator==(const UpdateSettings& o) const
+{
+    return mode == o.mode && skippedVersion == o.skippedVersion;
+}
+
+bool shouldAutoCheckForUpdates(const UpdateSettings& updates)
+{
+    return updates.mode == UpdateCheckMode::On;
+}
+
+bool shouldAskAboutUpdateChecks(const UpdateSettings& updates, bool firstRunComplete)
+{
+    return updates.mode == UpdateCheckMode::Ask && firstRunComplete;
+}
+
 // ====== Settings root equality ================================
 
 bool Settings::operator==(const Settings& o) const
@@ -205,7 +220,8 @@ bool Settings::operator==(const Settings& o) const
         && gameplay      == o.gameplay
         && accessibility == o.accessibility
         && onboarding    == o.onboarding
-        && localization  == o.localization;
+        && localization  == o.localization
+        && updates       == o.updates;
 }
 
 // ====== JSON serialisation ====================================
@@ -481,6 +497,38 @@ void localizationFromJson(const json& j, LocalizationSettings& l)
     l.language = j.value("language", l.language);
 }
 
+// --- Updates ---
+
+const char* updateModeName(UpdateCheckMode m)
+{
+    switch (m)
+    {
+        case UpdateCheckMode::On:  return "on";
+        case UpdateCheckMode::Off: return "off";
+        case UpdateCheckMode::Ask: break;
+    }
+    return "ask";
+}
+
+json updatesToJson(const UpdateSettings& u)
+{
+    return json{
+        {"mode", updateModeName(u.mode)},
+        {"skippedVersion", u.skippedVersion},
+    };
+}
+
+void updatesFromJson(const json& j, UpdateSettings& u)
+{
+    // An unknown mode string reads as "ask": the user is asked again rather
+    // than checked (or not) against a choice they never made.
+    const std::string mode = j.value("mode", std::string("ask"));
+    u.mode = mode == "on" ? UpdateCheckMode::On
+           : mode == "off" ? UpdateCheckMode::Off
+           : UpdateCheckMode::Ask;
+    u.skippedVersion = j.value("skippedVersion", std::string{});
+}
+
 // --- Validation helpers ---
 
 float clamp01(float v)          { return std::clamp(v, 0.0f, 1.0f); }
@@ -696,6 +744,7 @@ json Settings::toJson() const
     j["accessibility"] = accessibilityToJson(accessibility);
     j["onboarding"]    = onboardingToJson(onboarding);
     j["localization"]  = localizationToJson(localization);
+    j["updates"]       = updatesToJson(updates);
     return j;
 }
 
@@ -739,6 +788,10 @@ bool Settings::fromJson(const json& jIn)
     if (j.contains("localization") && j["localization"].is_object())
     {
         localizationFromJson(j["localization"], localization);
+    }
+    if (j.contains("updates") && j["updates"].is_object())
+    {
+        updatesFromJson(j["updates"], updates);
     }
 
     // Validate always runs — clamps out-of-range values silently.
