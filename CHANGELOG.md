@@ -23,6 +23,10 @@ may change any interface without notice.
 
 ## [Unreleased]
 
+### 2026-09-29 Fixed — Project rules can now be checked (3D_E-0688)
+
+The 60 FPS rule names its measurement and a checker, `tools/fps_floor.py`. Audits file a report under `docs/audits/`. Workarounds carry a searchable `Workaround:` marker. A new test lists every shader function copied between files and fails when a copy drifts. The material preview now uses the scene's minimum roughness, so a perfectly smooth material keeps its highlight in the preview.
+
 ### 2026-09-29 Fixed — One slider drag in the inspector is one undo step (3D_E-0722)
 
 Dragging a particle, water, rigid-body, cloth or emissive-light slider recorded one undo step per frame, so undoing a drag walked it back a frame at a time. The drag is now recorded once, when it ends, restoring the value from before it started. The unused `EditorCommand::canMergeWith` / `mergeWith` are removed; a command that overrode them must drop those methods.

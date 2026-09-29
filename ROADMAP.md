@@ -4380,8 +4380,19 @@ shipped that have no invocation path at all.
   Kind: fix.
   Source: in-session-2026-09-21, observed on the 3D_E-0669 push.
 
-- 📋 [3D_E-0688] **Most project rules have no observable, so a session can breach them and leave an identical repo.**
+- ✅ [3D_E-0688] **Most project rules have no observable, so a session can breach them and leave an identical repo.**
   From the rule-14 cold read of CLAUDE.md, 2026-09-21. The lane applied one test to each rule: what would be different if I had breached this? Findings, worst first. The 60 FPS hard requirement names no scene, resolution, quality preset, build configuration or statistic, so a Debug-plus-ASan reading at 4K can report a violation that does not exist while a 65 FPS average hiding 120 ms hitches reports compliance; `tools/perf_gate.py` is a relative gate against a committed baseline and passes while the absolute floor is violated. The post-phase audit has a report template in AUDIT_STANDARDS.md and no path, and no `docs/audits/` exists, so no filed report exists anywhere and a skipped audit leaves the repo identical to a completed one. Its trigger is also unreadable: phases here are multi-month containers that stay open while delivery lands as items, so a session shipping one cannot tell whether an audit is owed. The blocking review in rule 1 and the fix-plan approval in rule 4 record nothing, so presenting a document and not presenting it produce byte-identical repositories. Rule 6's Formula Workbench rule makes only its escape branch observable, via the TODO marker; a fitted coefficient and a typed one are indistinguishable at the use site. Rules 2 and 3 have no observable at all. Rule 5's workaround record has both destinations but no searchable token, so nobody can grep what workarounds the project carries. The shader and dual-implementation parity rules have no registry and no naming convention, so un-pinned copies cannot be enumerated — 3D_E-0685 is the live instance. And the coding-standards summary says constants are UPPER_SNAKE_CASE while CODING_STANDARDS.md separately instructs mirrored `kCamelCase` platform constants, which 60 occurrences across 34 files under engine/ follow. Deliberately not fixed in the same change as the streamline: this is a rules redesign and each rule needs its own decision.
+  Resolved (2026-09-29), user chose the recommended defaults: 60 FPS
+  measured by tools/fps_floor.py (every 1 s sample after 2 s warm-up);
+  rule 4 audits before each x.y.0 release, report at
+  docs/audits/<date>-<version>.md; rule 5 Workaround: markers with a
+  search for each; shader copies enforced by
+  tests/test_shader_copies_registry.cpp. Gated by review-contract, 3
+  loops, 8 verified findings fixed, cap reached (docs/reviews/
+  CLAUDE-loop-log.md). Not changed, by decision: rules 2 and 3 are
+  guidance with no observable; rule 6's fitted-vs-typed marker was not
+  in the approved set. The constants finding moved to its own item: the
+  summary already matches CODING_STANDARDS.md, the code does not.
   **Layman:** Most of the project's own rules cannot be checked — a session could ignore them and nothing in the repository would look different.
   Kind: doc-fix.
   Source: rule-14 gate on CLAUDE.md, 2026-09-21.
@@ -4578,6 +4589,14 @@ shipped that have no invocation path at all.
   baseline /mnt/Emulators/vestige-gc-scan/Release/bin/vestige. Next:
   run both with --profile-log --no-vsync on an idle GPU, compare frame
   time + logs, report to user before touching real code.
+  Experiment RUN (2026-09-29): rebuilt on e502a1b (the old binaries had
+  the sandbox and --no-vsync bugs) in worktree
+  /mnt/Emulators/vestige-sysprobe2, build /mnt/Emulators/vestige-gc-scan/
+  Probe2. Meadow --demo-flythrough --no-vsync, baseline vs all systems
+  active: GPU frame 9.65 vs 9.63 ms, frame 12.09 vs 12.06 ms (no
+  difference); DomainSystems CPU 0.001 vs 0.047 ms. No new warnings or
+  errors; the only log difference is the SYSPROBE line. Awaiting the
+  user's go-ahead for the real change.
   **Layman:** The engine's building blocks (weather, water, audio, UI and more) were never switched on, so their per-frame work has never run outside the tests.
   Kind: fix.
   Source: in-session-2026-09-29 (3D_E-0705 linker scan).
@@ -4717,6 +4736,17 @@ shipped that have no invocation path at all.
   Kind: fix.
   Source: in-session-2026-09-29.
   Lanes: core.
+
+- 📋 [3D_E-0728] **Much of engine/ names constants kCamelCase while CODING_STANDARDS.md requires UPPER_SNAKE_CASE.**
+  Split from 3D_E-0688 (2026-09-29). CODING_STANDARDS.md's naming table
+  and the CLAUDE.md summary both say UPPER_SNAKE_CASE; engine/ carries
+  many kCamelCase constants (kMaxOcclusionRayCount, kSynthSampleRate,
+  kCurrentSchemaVersion, ...). Decide: rename the code, or let the
+  standard admit kCamelCase. A standard change is a rule-14 gate.
+  **Layman:** The code uses two different naming styles for fixed values, and the written standard only allows one; pick one and make them agree.
+  Kind: doc-fix.
+  Source: rule-14 gate on CLAUDE.md, 2026-09-21 (split 2026-09-29).
+  Lanes: docs, core.
 
 ## 0.3.0 — An editor a builder can use
 
