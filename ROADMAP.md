@@ -4515,6 +4515,16 @@ shipped that have no invocation path at all.
   Source: peer-doom-ants-2026-09-26 message 41.
   Lanes: tooling.
 
+- 📋 [3D_E-0720] **Write Vestige's discovery note: what it is for and how we would know 1.0 works.**
+  ~/.claude/workflow.md § 1 counts a project as state 1 until something a
+  stranger can read says what it is for and how we would know it works.
+  Vestige has code, a roadmap and ARCHITECTURE.md, but no such note; the
+  nearest is the 1.0.0 heading. Write it with the user (workflow.md § 3,
+  discovery), naming the signs of success 1.0 must meet.
+  **Layman:** A short page, agreed with the user, saying what the engine is for and what the Tabernacle walkthrough must do to count as working.
+  Kind: doc.
+  Source: user-request-2026-09-29.
+
 ## 0.3.0 — An editor a builder can use
 
 Breaks: the scene format. Editor work changes what a scene stores.
