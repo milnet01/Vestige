@@ -4748,6 +4748,21 @@ shipped that have no invocation path at all.
   Source: rule-14 gate on CLAUDE.md, 2026-09-21 (split 2026-09-29).
   Lanes: docs, core.
 
+- 🚧 [3D_E-0729] **Self-update: the editor checks GitHub Releases, shows what changed since the installed version, and installs a signed update.**
+  User request 2026-09-29, modelled on finbreak's updater (FIBR-0054/0131).
+  User decisions 2026-09-29: finbreak-style first version (check,
+  accumulated release notes, download, verify, swap, restart; Later /
+  Skip this version / Update now); Ed25519 signatures made automatically
+  in release.yml from a GitHub secret; ask on first run whether to check
+  automatically, plus Help > Check for Updates and a setting; AppImage
+  and Windows zip update in place, the tarball shows notes and a
+  download link. The larger 3D_E-S0461 design (project backup,
+  migrations, crash rollback) stays planned as a follow-on.
+  **Layman:** The editor can tell you a newer version exists, show you everything that changed since yours, and update itself with one click.
+  Kind: feature.
+  Source: user-request-2026-09-29.
+  Lanes: editor, core, ci.
+
 ## 0.3.0 — An editor a builder can use
 
 Breaks: the scene format. Editor work changes what a scene stores.
