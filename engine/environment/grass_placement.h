@@ -19,6 +19,7 @@
 
 #include <glm/glm.hpp>
 
+#include <cmath>
 #include <cstdint>
 
 namespace Vestige
@@ -49,6 +50,52 @@ inline bool grassInExclusionDisc(float worldX, float worldZ, glm::vec2 center, f
     const float dx = worldX - center.x;
     const float dz = worldZ - center.y;
     return (dx * dx + dz * dz) < (radius * radius);
+}
+
+/// @brief True if world XZ is inside the shore band's reach (`shoreRadius` of the
+///        exclusion centre). Disabled when `shoreRadius <= 0`.
+inline bool grassInShoreReach(float worldX, float worldZ, const GrassConfig& cfg)
+{
+    return grassInExclusionDisc(worldX, worldZ, cfg.exclusionCenter, cfg.shoreRadius);
+}
+
+/// @brief True if a candidate inside the shore band's reach is rooted under the water
+///        (no blades there). Ground lower than the pond but outside the reach is some
+///        other hollow, not the pond, and is left alone.
+inline bool grassSubmerged(float worldX, float worldZ, float terrainY, const GrassConfig& cfg)
+{
+    return grassInShoreReach(worldX, worldZ, cfg) && terrainY <= cfg.shoreWaterY;
+}
+
+/// @brief How reed-like a blade rooted here is: 1 at the waterline, easing to 0
+///        `shoreRise` metres above it and to 0 at the edge of the band's reach, so
+///        the reeds blend into the meadow with no visible ring. 0 when disabled.
+inline float grassShoreFactor(float worldX, float worldZ, float terrainY, const GrassConfig& cfg)
+{
+    if (!grassInShoreReach(worldX, worldZ, cfg) || cfg.shoreRise <= 0.0f)
+    {
+        return 0.0f;
+    }
+    const float byHeight = 1.0f - grassSmoothstep(0.0f, cfg.shoreRise, terrainY - cfg.shoreWaterY);
+    const float dx = worldX - cfg.exclusionCenter.x;
+    const float dz = worldZ - cfg.exclusionCenter.y;
+    const float dist = std::sqrt(dx * dx + dz * dz);
+    const float byReach = 1.0f - grassSmoothstep(0.8f * cfg.shoreRadius, cfg.shoreRadius, dist);
+    return byHeight * byReach;
+}
+
+/// @brief Spawn weight at a shore candidate: the splat's grass weight, raised toward
+///        `shoreMinGrassWeight` by the shore factor so reeds grow on the mud bank.
+inline float grassShoreWeight(float grassWeight, float shoreFactor, const GrassConfig& cfg)
+{
+    return glm::max(grassWeight, cfg.shoreMinGrassWeight * shoreFactor);
+}
+
+/// @brief Turn a meadow blade into a reed by the shore factor: taller and more upright.
+inline void applyGrassShore(GrassBlade& blade, float shoreFactor, const GrassConfig& cfg)
+{
+    blade.height *= glm::mix(1.0f, cfg.shoreHeightScale, shoreFactor);
+    blade.lean   *= glm::mix(1.0f, cfg.shoreLeanScale, shoreFactor);
 }
 
 /// @brief Build a deterministic per-blade seed from a unique scatter key (chunk id + index)

@@ -93,3 +93,93 @@ TEST(GrassPlacement, BladeSeedDeterministicAndInRange_G2)
         EXPECT_LE(s.facingAngle, 6.2831854f);
     }
 }
+
+// ---------------------------------------------------------------------------
+// Shore reed band (3D_E-0702)
+// ---------------------------------------------------------------------------
+
+namespace
+{
+/// A pond at the origin: water at y = 2, band reaching 20 m, reeds ending 0.5 m up.
+GrassConfig makeShoreConfig()
+{
+    GrassConfig c = makeConfig();
+    c.exclusionCenter = glm::vec2(0.0f, 0.0f);
+    c.shoreRadius = 20.0f;
+    c.shoreWaterY = 2.0f;
+    c.shoreRise = 0.5f;
+    return c;
+}
+} // namespace
+
+// The band is off by default: nothing is submerged and nothing is a reed.
+TEST(GrassPlacement, ShoreBandOffByDefault)
+{
+    const GrassConfig c = makeConfig();
+    EXPECT_FALSE(grassSubmerged(0.0f, 0.0f, -100.0f, c));
+    EXPECT_EQ(grassShoreFactor(0.0f, 0.0f, 0.0f, c), 0.0f);
+}
+
+// Ground under the water surface grows nothing, but only inside the band's reach:
+// a hollow elsewhere on the map that happens to sit lower than the pond keeps its grass.
+TEST(GrassPlacement, SubmergedGroundRejectedOnlyNearThePond)
+{
+    const GrassConfig c = makeShoreConfig();
+    EXPECT_TRUE(grassSubmerged(5.0f, 0.0f, 1.5f, c));     // pond bed
+    EXPECT_FALSE(grassSubmerged(5.0f, 0.0f, 2.1f, c));    // bank just above the water
+    EXPECT_FALSE(grassSubmerged(50.0f, 0.0f, 1.5f, c));   // low ground far from the pond
+}
+
+// Reeds are strongest at the waterline and gone `shoreRise` above it.
+TEST(GrassPlacement, ShoreFactorFadesWithHeightAboveWater)
+{
+    const GrassConfig c = makeShoreConfig();
+    const float atWater = grassShoreFactor(5.0f, 0.0f, 2.0f, c);
+    const float halfway = grassShoreFactor(5.0f, 0.0f, 2.25f, c);
+    const float atRise  = grassShoreFactor(5.0f, 0.0f, 2.5f, c);
+    EXPECT_FLOAT_EQ(atWater, 1.0f);
+    EXPECT_GT(halfway, 0.0f);
+    EXPECT_LT(halfway, 1.0f);
+    EXPECT_FLOAT_EQ(atRise, 0.0f);
+    EXPECT_FLOAT_EQ(grassShoreFactor(5.0f, 0.0f, 9.0f, c), 0.0f);   // high ground
+}
+
+// The band fades out before its reach ends, so there is no visible ring where it stops.
+TEST(GrassPlacement, ShoreFactorFadesAtTheEdgeOfItsReach)
+{
+    const GrassConfig c = makeShoreConfig();
+    EXPECT_FLOAT_EQ(grassShoreFactor(10.0f, 0.0f, 2.0f, c), 1.0f);   // well inside
+    const float nearEdge = grassShoreFactor(18.0f, 0.0f, 2.0f, c);
+    EXPECT_GT(nearEdge, 0.0f);
+    EXPECT_LT(nearEdge, 1.0f);
+    EXPECT_FLOAT_EQ(grassShoreFactor(25.0f, 0.0f, 2.0f, c), 0.0f);   // outside the reach
+}
+
+// On the mud bank the splat says "no grass"; the shore floor lets reeds grow there
+// anyway, and never lowers the weight of ground that is already grass.
+TEST(GrassPlacement, ShoreWeightFloorsTheMudBank)
+{
+    const GrassConfig c = makeShoreConfig();
+    EXPECT_FLOAT_EQ(grassShoreWeight(0.0f, 1.0f, c), c.shoreMinGrassWeight);
+    EXPECT_FLOAT_EQ(grassShoreWeight(0.0f, 0.0f, c), 0.0f);
+    EXPECT_FLOAT_EQ(grassShoreWeight(1.0f, 1.0f, c), 1.0f);
+}
+
+// A blade at the waterline is taller and more upright; away from the shore it is untouched.
+TEST(GrassPlacement, ShoreBladeIsTallerAndMoreUpright)
+{
+    const GrassConfig c = makeShoreConfig();
+    const GrassBlade meadow = makeGrassBlade(glm::vec3(0.0f), 777u, c);
+
+    GrassBlade reed = meadow;
+    applyGrassShore(reed, 1.0f, c);
+    EXPECT_FLOAT_EQ(reed.height, meadow.height * c.shoreHeightScale);
+    EXPECT_FLOAT_EQ(reed.lean, meadow.lean * c.shoreLeanScale);
+    EXPECT_GT(reed.height, meadow.height);
+    EXPECT_LT(reed.lean, meadow.lean);
+
+    GrassBlade untouched = meadow;
+    applyGrassShore(untouched, 0.0f, c);
+    EXPECT_EQ(untouched.height, meadow.height);
+    EXPECT_EQ(untouched.lean, meadow.lean);
+}

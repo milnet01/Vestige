@@ -88,7 +88,9 @@ void GrassRenderer::buildField(const Terrain& terrain, const GrassConfig& cfg)
     // Clump-max reach for the AABB pad (§5.2a): height *= mix(1, clumpHeight≤1.6, strength),
     // and lean is raised by clumpBend·strength — so the drawn geometry exceeds the roots.
     const float hMul = 1.0f + 0.6f * cfg.clumpStrength;          // clump-max height multiplier
-    const float maxBladeH = cfg.maxHeight * hMul;
+    // Shore reeds (3D_E-0702) are taller still; the pad must cover them when the band is on.
+    const float shoreMul = (cfg.shoreRadius > 0.0f) ? std::max(1.0f, cfg.shoreHeightScale) : 1.0f;
+    const float maxBladeH = cfg.maxHeight * hMul * shoreMul;
     const float maxLeanReach = maxBladeH * cfg.maxLean * (1.0f + cfg.clumpStrength);
 
     std::vector<GrassBlade> allBlades;
@@ -131,18 +133,27 @@ void GrassRenderer::buildField(const Terrain& terrain, const GrassConfig& cfg)
                         continue;   // inside the pond
                     }
 
+                    const float wy = terrain.getHeight(wx, wz);
+                    if (grassSubmerged(wx, wz, wy, cfg))
+                    {
+                        continue;   // under the pond's surface
+                    }
+                    const float shore = grassShoreFactor(wx, wz, wy, cfg);
+
                     const glm::vec3 n = terrain.getNormal(wx, wz);
                     const int tx = static_cast<int>(std::lround((wx - tc.origin.x) / tc.spacingX));
                     const int tz = static_cast<int>(std::lround((wz - tc.origin.z) / tc.spacingZ));
-                    const float grassW = terrain.getSplatWeight(tx, tz).r;
+                    const float grassW = grassShoreWeight(terrain.getSplatWeight(tx, tz).r,
+                                                          shore, cfg);
                     const float roll = grassU32ToUnit(grassHashU32(key ^ 0x00000033u));
                     if (!grassCandidateAccepted(n.y, grassW, roll, cfg))
                     {
                         continue;   // too steep, or thinned out over dirt/rock
                     }
 
-                    const float wy = terrain.getHeight(wx, wz);
-                    chunkBlades.push_back(makeGrassBlade(glm::vec3(wx, wy, wz), key, cfg));
+                    GrassBlade blade = makeGrassBlade(glm::vec3(wx, wy, wz), key, cfg);
+                    applyGrassShore(blade, shore, cfg);
+                    chunkBlades.push_back(blade);
                     minY = std::min(minY, wy);
                     maxY = std::max(maxY, wy);
                 }

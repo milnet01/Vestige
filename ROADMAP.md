@@ -4640,7 +4640,7 @@ shipped that have no invocation path at all.
   Source: in-session-2026-09-29 (3D_E-0705 linker scan).
   Lanes: core, profiling.
 
-- 📋 [3D_E-0702] **Meadow shore plants render cartoon teal next to the realistic grass.**
+- ✅ [3D_E-0702] **Meadow shore plants render cartoon teal next to the realistic grass.**
   The pond-shore reed scatter uses Kenney plant_flatTall.glb, grass.glb and
   plant_bush.glb. Their only material is an untextured base colour of about
   (0.16, 0.79, 0.67), Kenney's stylised teal. Beside the GPU grass and the
@@ -4676,6 +4676,17 @@ shipped that have no invocation path at all.
   --no-vsync real: meadow --demo-flythrough 70-100 FPS uncapped, GPU
   frame mean 9.9 ms, max 11.5 ms, 9 tree species + 656 props loaded.
   Still open: the taller reed-like GPU grass band at the waterline.
+  Resolved (2026-09-30): the reed band. GrassConfig gains a shore band
+  (shoreRadius, shoreWaterY, shoreRise, shoreHeightScale, shoreLeanScale,
+  shoreMinGrassWeight); the meadow drops the hard exclusion disc and the
+  field follows the real waterline: nothing rooted under the water, blades
+  at the waterline 1.5x taller and more upright, fading out 0.6 m above
+  it. Six tests in tests/test_grass_placement.cpp, each proven red by
+  breaking its part. Seen in --visual-test pond_shore. 1,046,254 blades.
+  FPS floor (Release, --demo-flythrough --no-vsync): worst 61.0 FPS, 0
+  samples below 60, measured while other sessions held the GPU at ~25%
+  and load average 7; an earlier run at load 12 had one sample at 59.3.
+  Not measured on a quiet machine. Red mushroom stays dropped.
   **Layman:** Some small plants around the pond look bright blue-green and cartoonish next to the realistic grass; swap or recolour them.
   Kind: fix.
   Source: in-session-2026-09-26.
@@ -4816,12 +4827,37 @@ shipped that have no invocation path at all.
   Also open: probe brightness has no external reference. The furnace
   test pins the SH maths only. UT_Ants is building an offline
   ray-traced reference; ask whether its method can be reused here.
+  From UT_Ants (2026-09-30), two things to reuse. (a) Probes inside
+  geometry: it never creates them. A lattice point becomes a probe only
+  where the collision tree says the point is empty and within one
+  spacing of a surface; at sample time a missing corner contributes
+  nothing and the weights are renormalised over the corners present
+  (its src/ubake/LightProbes.cpp bakeLightProbes, and
+  src/urender/shaders/probes.glsl indirectAt). Vestige has neither.
+  (b) Its bake casts a shadow ray per light per sample and uses no
+  shadow maps, so it cannot have the stale-cascade fault above. Its
+  offline multi-bounce reference tracer is planned, not built; it will
+  send the path.
+  Finding (2026-09-30, by reading, not yet seen on screen): the startup
+  bake has NO sun shadows at all. CascadedShadowMap's constructor sets
+  every cascade split to 0.0 and the splits are only updated inside the
+  shadow block that geometryOnly skips. calcShadow in scene.frag.glsl
+  returns 0.0 (fully lit) when the fragment's view depth exceeds the
+  last split, so with a last split of 0 every surface in every probe
+  capture is sunlit, tent interior included. After a main frame has
+  run (an editor re-bake) the splits and matrices are the main
+  camera's, compared against the CAPTURE's view depth, which is wrong
+  in a different way. Point-light shadow cubes are skipped the same
+  way. Fix direction: captureSHGrid draws its own sun shadow map
+  fitted to the grid's bounds before the probe loop, and the capture
+  passes sample that. Prove it first: mean interior-probe DC energy
+  with the sun on and off should differ far less once shadowed.
   **Layman:** The baked room lighting may be using sun shadows that were never drawn, or drawn for a different view, so indoor brightness could be wrong.
-  Kind: investigate.
+  Kind: fix.
   Source: in-session-2026-09-30 (found answering UT_Ants on probe lighting).
   Lanes: renderer.
 
-- 🚧 [3D_E-0732] **Local CI gate links stale objects after a header is edited while a gate run is compiling.**
+- ✅ [3D_E-0732] **Local CI gate links stale objects after a header is edited while a gate run is compiling.**
   sync_ci_src copied the working tree into $VESTIGE_CI_DIR/src with
   rsync -a, which keeps mtimes. update_service.h was edited at 20:25:44
   on 2026-09-29 while a gate run was compiling; that run wrote
@@ -4835,10 +4871,27 @@ shipped that have no invocation path at all.
   is left alone. scripts/test_ci_src_sync.sh runs the real function on
   a throwaway repository (red against rsync -a) and local-ci.sh's
   preflight runs it before every sync.
+  Resolved (2026-09-30): pushed in b566e86; the full gate passed all
+  eight stages with the new sync.
   **Layman:** The pre-push check could reject good code with a confusing link error, because it did not notice that a file had changed; now it always notices.
   Kind: fix.
   Source: in-session-2026-09-30 (push of 55dc283 + 6fa15ab rejected twice).
   Lanes: ci.
+
+- ✅ [3D_E-0733] **Window title and startup log say "v0.5.0", a version the project never had.**
+  app/main.cpp and Engine::initialize each carried the literal
+  "Vestige Engine v0.5.0", the same stale number 3D_E-0683 removed
+  from the scene serializer. Both now use VESTIGE_ENGINE_VERSION, the
+  build's own stamp: the release tag on a release build,
+  project(VERSION) on any other. No regression test: the defect was a
+  literal, and no literal is left to drift.
+  Resolved (2026-09-30): the Release binary carries "Vestige Engine
+  v0.1.70" (project(VERSION)); no "0.5.0" literal remains outside
+  test fixtures and external/.
+  **Layman:** The app's title bar claimed to be version 0.5.0; it now shows the version the build really is.
+  Kind: fix.
+  Source: user-report-2026-09-30.
+  Lanes: core, app.
 
 ## 0.3.0 — An editor a builder can use
 

@@ -23,6 +23,14 @@ may change any interface without notice.
 
 ## [Unreleased]
 
+### 2026-09-30 Fixed — The title bar shows the real version (3D_E-0733)
+
+The window title and the first line of the log said "v0.5.0", a number the project never had. Both now show the version the build really is: the release number on a released build, and the project's base version on a build made from source.
+
+### 2026-09-30 Changed — Reeds grow right up to the pond's edge (3D_E-0702)
+
+The meadow grass used to stop in a circle a little way back from the pond, leaving a bare strip of mud wherever the shore curved inward. The grass now follows the real waterline, and the blades nearest the water grow about half as tall again and stand more upright, like reeds, easing back into ordinary meadow grass a little way up the bank. Nothing grows under the water.
+
 ### 2026-09-29 Fixed — The engine's building blocks run in the real app (3D_E-0721)
 
 Every engine system (weather and wind, audio following the camera, reverb, music, footsteps, UI toasts and more) had waited for a scene notice that is never sent, so none of them updated outside the tests. They now run from start-up. Measured cost: 0.05 ms a frame.

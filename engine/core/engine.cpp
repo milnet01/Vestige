@@ -107,7 +107,7 @@ Engine::~Engine()
 bool Engine::initialize(const EngineConfig& config)
 {
     Logger::openLogFile("logs");
-    Logger::info("=== Vestige Engine v0.5.0 ===");
+    Logger::info("=== Vestige Engine v" VESTIGE_ENGINE_VERSION " ===");
     Logger::info("Initializing engine...");
 
     m_assetPath = config.assetPath;
@@ -2891,7 +2891,12 @@ void Engine::finalizeMeadowTerrain()
     {
         GrassConfig grassCfg;                       // tall & wild defaults (§5.2a)
         grassCfg.exclusionCenter = pondCenterXZ;
-        grassCfg.exclusionRadius = pondFill.floodRadius + 1.5f;   // pond + shore margin
+        // No hard disc: floodRadius is the pond's LARGEST reach, so a disc that
+        // clears the water everywhere left a bare strip wherever the shore is
+        // nearer. The shore band follows the real waterline instead and grows
+        // reed-like blades up to it (3D_E-0702).
+        grassCfg.shoreRadius = pondFill.floodRadius + 4.0f;
+        grassCfg.shoreWaterY = waterLevelY;
         m_grassRenderer->buildField(terrain, grassCfg);
     }
 
@@ -3172,9 +3177,7 @@ void Engine::finalizeMeadowTerrain()
             0xF10E12u, flower, 0.0f, false, /*blocksMovement=*/false);
 
         // Small plants ringing the pond shore: an annulus from the waterline
-        // outward. The GPU grass stops 1.5 m past the water (exclusionRadius
-        // above), so the band starts AT the waterline to fill that bare strip and
-        // runs a few metres on to blend into the grass edge; further out the
+        // outward, mixed in among the reed band of the GPU grass; further out the
         // ~1 m grass would hide plants this small.
         const float reedBox = pondFill.floodRadius + 4.0f;
         ScatterParams reed;
@@ -3185,8 +3188,7 @@ void Engine::finalizeMeadowTerrain()
         reed.minDist = 0.6f;
         reed.exclusionCenter = pondCenterXZ;
         reed.exclusionRadius = pondFill.floodRadius;  // the waterline
-        // Poly Haven CC0 ground plants (3D_E-0702) at real size (5-45 cm): the
-        // shore is the one band the GPU grass leaves bare, so they show here.
+        // Poly Haven CC0 ground plants (3D_E-0702) at real size (5-45 cm).
         // The heavy dandelion variants (a, b: ~23k tris) are left out.
         reed.minScale = 1.0f;
         reed.maxScale = 1.6f;

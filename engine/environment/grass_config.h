@@ -30,6 +30,21 @@ struct GrassConfig
     glm::vec2 exclusionCenter{0.0f}; ///< Pond/water disc centre (world XZ).
     float exclusionRadius = 0.0f;    ///< No blades inside this disc (0 = disabled).
 
+    // --- shore reed band (3D_E-0702) ---
+    // Inside `shoreRadius` of `exclusionCenter` the field follows the real waterline
+    // instead of the disc: a candidate whose ground is under `shoreWaterY` is dropped,
+    // and blades rooted just above it grow taller and more upright, fading back to
+    // meadow grass `shoreRise` metres above the water. The disc alone cannot do this:
+    // a pond's flood radius is its LARGEST reach, so a disc that clears the water
+    // everywhere leaves a bare strip wherever the shore is nearer.
+    float shoreRadius = 0.0f;         ///< Reach of the band from exclusionCenter (0 = disabled).
+    float shoreWaterY = 0.0f;         ///< World Y of the water surface.
+    float shoreRise = 0.6f;           ///< Height above the water where reeds end (m).
+    float shoreHeightScale = 1.5f;    ///< Blade height multiplier at the waterline.
+    float shoreLeanScale = 0.4f;      ///< Lean multiplier at the waterline (reeds stand up).
+    float shoreMinGrassWeight = 0.8f; ///< Spawn-probability floor at the waterline, where
+                                      ///< the splatmap is mud and sand, not grass.
+
     // --- tall & wild blade shape (§5.2a) ---
     float minHeight = 0.6f, maxHeight = 1.2f;   ///< Base blade height range (m).
     float minWidth  = 0.02f, maxWidth = 0.05f;  ///< Base blade width range (m).
