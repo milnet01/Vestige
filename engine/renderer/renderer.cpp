@@ -1860,7 +1860,7 @@ void Renderer::uploadMaterialUniforms(const Material& material)
 }
 
 void Renderer::drawMesh(const Mesh& mesh, const glm::mat4& modelMatrix,
-                         const Material& material, const Camera& camera,
+                         const Material& material, const Camera& /*camera*/,
                          float /*aspectRatio*/,
                          const std::vector<glm::mat4>* boneMatrices,
                          const float* morphWeights, int morphWeightCount,
@@ -1884,7 +1884,7 @@ void Renderer::drawMesh(const Mesh& mesh, const glm::mat4& modelMatrix,
     // pass, whose motion is masked out anyway.
     m_sceneShader.setMat4("u_prevModel", prevModelMatrix ? *prevModelMatrix : modelMatrix);
     m_sceneShader.setMat3("u_normalMatrix", computeNormalMatrix(modelMatrix));
-    m_sceneShader.setMat4("u_view", camera.getViewMatrix());
+    m_sceneShader.setMat4("u_view", m_lastView);
     m_sceneShader.setMat4("u_projection", m_lastProjection);
 
     // Skeletal animation: upload bone matrices if present
@@ -2502,6 +2502,9 @@ void Renderer::captureLightProbe(int probeIndex, const SceneRenderData& renderDa
     GLint viewport[4];
     glGetIntegerv(GL_VIEWPORT, viewport);
 
+    // After the viewport is saved: the shadow pass leaves its own viewport set.
+    renderBakeShadows(renderData, camera);
+
     {
         ScopedForwardZ forwardZ;  // reverse-Z is restored on scope exit
 
@@ -2517,7 +2520,8 @@ void Renderer::captureLightProbe(int probeIndex, const SceneRenderData& renderDa
 
             glClear(GL_COLOR_BUFFER_BIT | GL_DEPTH_BUFFER_BIT);
 
-            // Render scene geometry with lighting (no shadows, no post-processing)
+            // Render scene geometry with lighting, sampling the bake shadows
+            // drawn above (no post-processing)
             renderScene(renderData, camera, 1.0f, glm::vec4(0.0f),
                         true,  // geometryOnly
                         faceView, captureProj);
@@ -2643,6 +2647,9 @@ void Renderer::captureSHGrid(const SceneRenderData& renderData,
     // Save GL state
     GLint viewport[4];
     glGetIntegerv(GL_VIEWPORT, viewport);
+
+    // After the viewport is saved: the shadow pass leaves its own viewport set.
+    renderBakeShadows(renderData, camera);
 
     int captured = 0;
     {
@@ -3161,33 +3168,7 @@ void Renderer::renderScene(const SceneRenderData& renderData, const Camera& came
         m_cullingStats.instanceBatches = 0;
     }
 
-    // Apply lights from scene data
-    m_hasDirectionalLight = renderData.hasDirectionalLight;
-    if (renderData.hasDirectionalLight)
-    {
-        m_directionalLight = renderData.directionalLight;
-    }
-
-    m_pointLights.clear();
-    for (const auto& pl : renderData.pointLights)
-    {
-        if (static_cast<int>(m_pointLights.size()) < MAX_POINT_LIGHTS)
-        {
-            m_pointLights.push_back(pl);
-        }
-    }
-
-    m_spotLights.clear();
-    for (const auto& sl : renderData.spotLights)
-    {
-        if (static_cast<int>(m_spotLights.size()) < MAX_SPOT_LIGHTS)
-        {
-            m_spotLights.push_back(sl);
-        }
-    }
-
-    // Compute shadow-casting point lights (needed for uniform upload even in geometry-only mode)
-    selectShadowCastingPointLights();
+    applySceneLights(renderData);
 
     if (!geometryOnly)
     {
@@ -3441,6 +3422,11 @@ void Renderer::renderScene(const SceneRenderData& renderData, const Camera& came
 
     // Upload light uniforms once per frame (not per batch)
     uploadLightUniforms(camera);
+    if (hasOverrides)
+    {
+        // A capture's eye is where its view override puts it, not the camera.
+        m_sceneShader.setVec3("u_viewPosition", glm::vec3(glm::inverse(viewOverride)[3]));
+    }
 
     // Water clip plane for reflection/refraction passes (vec4(0) = disabled)
     m_sceneShader.setVec4("u_clipPlane", clipPlane);
@@ -3521,7 +3507,11 @@ void Renderer::renderScene(const SceneRenderData& renderData, const Camera& came
         m_sceneShader.setBool("u_useInstancing", false);
         m_sceneShader.setBool("u_useMDI", true);
         m_sceneShader.setBool("u_hasBones", false);  // MDI path doesn't support skinning
-        m_sceneShader.setMat4("u_view", camera.getViewMatrix());
+        // m_lastView, not the camera's own view: a probe capture passes a view
+        // override, and this path draws most static geometry. With the camera's
+        // view here every probe captured the main camera's picture on every
+        // face (3D_E-0735).
+        m_sceneShader.setMat4("u_view", m_lastView);
         m_sceneShader.setMat4("u_projection", m_lastProjection);
 
         m_meshPool->bind();
@@ -3686,7 +3676,7 @@ void Renderer::renderScene(const SceneRenderData& renderData, const Camera& came
         m_sceneShader.setMat4("u_model", clothItem.worldMatrix);
         m_sceneShader.setMat3("u_normalMatrix",
                               computeNormalMatrix(clothItem.worldMatrix));
-        m_sceneShader.setMat4("u_view", camera.getViewMatrix());
+        m_sceneShader.setMat4("u_view", m_lastView);
         m_sceneShader.setMat4("u_projection", m_lastProjection);
         m_sceneShader.setBool("u_hasBones", false);
 
@@ -3738,7 +3728,7 @@ void Renderer::renderScene(const SceneRenderData& renderData, const Camera& came
         glDisable(GL_CULL_FACE); // We're inside the cube — must see inner faces
 
         m_skyboxShader.use();
-        m_skyboxShader.setMat4("u_view", camera.getViewMatrix());
+        m_skyboxShader.setMat4("u_view", m_lastView);
         // Use the (potentially jittered) projection so TAA accumulates the skybox correctly
         m_skyboxShader.setMat4("u_projection", m_lastProjection);
         m_skyboxShader.setBool("u_hasCubemap", m_skybox->hasTexture());
@@ -3817,8 +3807,87 @@ void Renderer::renderScene(const SceneRenderData& renderData, const Camera& came
     if (!geometryOnly && m_gpuTimer) m_gpuTimer->endPass();
 }
 
+void Renderer::applySceneLights(const SceneRenderData& renderData)
+{
+    m_hasDirectionalLight = renderData.hasDirectionalLight;
+    if (renderData.hasDirectionalLight)
+    {
+        m_directionalLight = renderData.directionalLight;
+    }
+
+    m_pointLights.clear();
+    for (const auto& pl : renderData.pointLights)
+    {
+        if (static_cast<int>(m_pointLights.size()) < MAX_POINT_LIGHTS)
+        {
+            m_pointLights.push_back(pl);
+        }
+    }
+
+    m_spotLights.clear();
+    for (const auto& sl : renderData.spotLights)
+    {
+        if (static_cast<int>(m_spotLights.size()) < MAX_SPOT_LIGHTS)
+        {
+            m_spotLights.push_back(sl);
+        }
+    }
+
+    // Compute shadow-casting point lights (needed for uniform upload even in geometry-only mode)
+    selectShadowCastingPointLights();
+}
+
+void Renderer::renderBakeShadows(const SceneRenderData& renderData, const Camera& camera)
+{
+    // 3D_E-0731. A probe capture calls renderScene with geometryOnly, which
+    // skips the shadow passes and then samples the shadow maps anyway. Before
+    // the first frame those maps were never drawn and every cascade split is
+    // 0, which the scene shader reads as "beyond the shadow distance": the sun
+    // lit every surface in every capture, tent interior included. Later, the
+    // maps are the main camera's, which is the wrong shadow from a probe.
+    // So a bake draws its own: one sun volume over everything that casts, and
+    // the point-light cubes, which do not depend on a camera at all.
+    applySceneLights(renderData);
+
+    m_shadowCasterItems.clear();
+    m_shadowCasterItems.reserve(renderData.renderItems.size());
+    AABB casterBounds;
+    bool hasBounds = false;
+    for (const auto& item : renderData.renderItems)
+    {
+        if (!item.castsShadow)
+        {
+            continue;
+        }
+        m_shadowCasterItems.push_back(item);
+        if (item.worldBounds.getSize() == glm::vec3(0.0f))
+        {
+            continue;   // no explicit bounds: drawn, but cannot size the volume
+        }
+        if (!hasBounds)
+        {
+            casterBounds = item.worldBounds;
+            hasBounds = true;
+        }
+        else
+        {
+            casterBounds.min = glm::min(casterBounds.min, item.worldBounds.min);
+            casterBounds.max = glm::max(casterBounds.max, item.worldBounds.max);
+        }
+    }
+
+    if (m_cascadedShadowMap && m_hasDirectionalLight && hasBounds)
+    {
+        renderShadowPass(m_shadowCasterItems, camera, 1.0f, &casterBounds);
+    }
+
+    buildInstanceBatches(m_shadowCasterItems);
+    renderPointShadowPass(m_shadowCasters);
+}
+
 void Renderer::renderShadowPass(const std::vector<SceneRenderData::RenderItem>& shadowCasterItems,
-                                 const Camera& camera, float aspectRatio)
+                                 const Camera& camera, float aspectRatio,
+                                 const AABB* bakeBounds)
 {
     // Shadow maps use standard forward-Z with [-1,1] NDC depth range.
     // Must restore GL_NEGATIVE_ONE_TO_ONE because glClipControl(GL_ZERO_TO_ONE)
@@ -3848,7 +3917,12 @@ void Renderer::renderShadowPass(const std::vector<SceneRenderData::RenderItem>& 
     //
     // The first frames are forced: a cascade that has never been rasterised holds
     // undefined depth, and staggering would leave cascade 2 unwritten until frame 4.
-    const auto cascadeRebuildsThisFrame = [this, cascadeCount](int c) {
+    //
+    // A bake (bakeBounds set) fits every cascade to one volume and draws cascade 0
+    // only, the one every receiver then samples (fitAllCascadesToBounds).
+    const bool isBake = (bakeBounds != nullptr);
+    const auto cascadeRebuildsThisFrame = [this, cascadeCount, isBake](int c) {
+        if (isBake) return c == 0;
         if (c < 2 || m_shadowFrameCount <= static_cast<uint32_t>(cascadeCount)) return true;
         return (c == 2) ? (m_shadowFrameCount % 4) == 0
                         : (m_shadowFrameCount % 4) == 2;
@@ -3856,12 +3930,23 @@ void Renderer::renderShadowPass(const std::vector<SceneRenderData::RenderItem>& 
 
     // Recompute light-space matrices for exactly the cascades being rebuilt, so a
     // stale cascade's matrix still describes the depth it holds.
-    uint32_t cascadeMask = 0;
-    for (int c = 0; c < cascadeCount; c++)
+    if (isBake)
     {
-        if (cascadeRebuildsThisFrame(c)) cascadeMask |= CascadedShadowMap::cascadeBit(c);
+        m_cascadedShadowMap->fitAllCascadesToBounds(m_directionalLight, *bakeBounds);
+        // Every cascade now holds the bake's matrix, and only cascade 0 its depth.
+        // Restarting the count makes the next main frames rebuild all of them, as
+        // the first frames after start-up do.
+        m_shadowFrameCount = 0;
     }
-    m_cascadedShadowMap->update(m_directionalLight, camera, aspectRatio, cascadeMask);
+    else
+    {
+        uint32_t cascadeMask = 0;
+        for (int c = 0; c < cascadeCount; c++)
+        {
+            if (cascadeRebuildsThisFrame(c)) cascadeMask |= CascadedShadowMap::cascadeBit(c);
+        }
+        m_cascadedShadowMap->update(m_directionalLight, camera, aspectRatio, cascadeMask);
+    }
 
     m_shadowDepthShader.use();
     // Phase 13 G1: directional radiance + travel direction for the RSM flux term
@@ -3997,7 +4082,9 @@ void Renderer::renderShadowPass(const std::vector<SceneRenderData::RenderItem>& 
         // Casting stops at cascade 0's far split — exactly where receivers stop
         // sampling cascade 0 — so no second visible boundary is introduced. Grass
         // keeps its own chunk store, hence no FoliageManager gather here.
-        if (c == 0 && m_grassShadowCaster != nullptr)
+        // Not in a bake: a blade is far thinner than a texel of the whole-scene
+        // volume, and an L2 probe cannot resolve a blade's shadow.
+        if (c == 0 && m_grassShadowCaster != nullptr && !isBake)
         {
             m_grassShadowCaster->renderShadow(
                 camera, lightSpaceMatrix, m_foliageShadowTime,

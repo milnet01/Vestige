@@ -23,6 +23,10 @@ may change any interface without notice.
 
 ## [Unreleased]
 
+### 2026-09-30 Fixed — Indoor lighting in the Tabernacle is sampled where it should be, with the sun's shadows (3D_E-0735, 3D_E-0731)
+
+The soft, bounced light in the Tabernacle scene is worked out from sample points spread through the courtyard and tent. Two faults made it wrong. Every sample point was really looking out from the camera, so the whole scene got one flat colour of bounced light. And the samples ignored the sun's shadows, so the inside of the tent was treated as if it stood in full sun. Each point now sees its own surroundings with shadows in place: the tent interior is darker and takes its warm colour from the lamp, and the courtyard looks as it did.
+
 ### 2026-09-30 Changed — Releases go out when they are ready (3D_E-0734)
 
 Vestige no longer publishes a test version every Wednesday. A new version is released when there are fixes or features worth having, and it becomes the latest download as soon as every file for it has been built and signed.

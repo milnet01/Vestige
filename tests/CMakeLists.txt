@@ -179,6 +179,7 @@ add_executable(vestige_tests
     test_blocks_movement.cpp
     test_edit_tracker_drag_undo.cpp
     test_shader_copies_registry.cpp
+    test_renderer_view_override.cpp
     test_update_core.cpp
     test_update_service.cpp
     test_update_installer.cpp

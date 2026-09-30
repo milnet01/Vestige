@@ -607,8 +607,17 @@ private:
     ///        shader for the RSM flux term (Phase 13 G1). Shared by the
     ///        directional + point shadow passes so they bind albedo identically.
     void bindShadowFluxAlbedo(Shader& shader, const Material* material);
+    /// @brief Copies the scene's lights into the renderer and picks the
+    ///        shadow-casting point lights.
+    void applySceneLights(const SceneRenderData& renderData);
+    /// @brief Draws the shadow maps a probe bake samples (3D_E-0731): the sun's,
+    ///        fitted to everything that casts, and the point lights'.
+    void renderBakeShadows(const SceneRenderData& renderData, const Camera& camera);
+    /// @param bakeBounds When set, the pass is a bake: every cascade is fitted to
+    ///        this box, only cascade 0 is drawn, and GPU grass is left out.
     void renderShadowPass(const std::vector<SceneRenderData::RenderItem>& shadowCasterItems,
-                          const Camera& camera, float aspectRatio);
+                          const Camera& camera, float aspectRatio,
+                          const AABB* bakeBounds = nullptr);
     void renderPointShadowPass(const std::vector<int>& shadowCasters);
     void selectShadowCastingPointLights();
     void onWindowResize(int width, int height);

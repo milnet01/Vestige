@@ -428,6 +428,7 @@ class FrameDiagnostics   { static std::string capture(const Renderer&, const Cam
 - **`captureSHGrid(renderData, camera, aspect, faceSize)`** — for each probe in the grid, render 6 cubemap faces from the probe position, project to L2 SH coefficients, write into the 7 RGBA16F 3D textures. `faceSize` 64 default; 16 used by the radiosity baker for fast bounce iterations.
 - **`RadiosityBaker::bake(renderer, renderData, camera, aspect, config)`** — call `captureSHGrid` repeatedly; each iteration the SH grid contributes to the previous bounce's indirect lighting, until energy delta < `convergenceThreshold` or `maxBounces` reached.
 - **`captureLightProbe(probeIdx, …)`** — render the scene to a temporary cubemap from the probe's position, then convolve into irradiance + GGX-prefilter cubemaps (shared `runIblPrefilterLoop`).
+- **Both captures draw their own shadow maps first** (`renderBakeShadows`): the sun's, fitted to the bounds of everything that casts (`CascadedShadowMap::fitAllCascadesToBounds`), and the point lights'. The per-face `renderScene(..., geometryOnly = true)` calls then sample those. The main camera's cascades are not used, and the next main frames rebuild every cascade.
 
 **Exception path:**
 

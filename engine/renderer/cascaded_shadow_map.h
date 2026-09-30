@@ -7,6 +7,7 @@
 
 #include "renderer/light.h"
 #include "renderer/camera.h"
+#include "utils/aabb.h"
 
 #include <glm/glm.hpp>
 #include <glad/gl.h>
@@ -62,6 +63,20 @@ public:
     /// every cascade they skip, so matrix and depth stay in lockstep (3D_E-0029).
     void update(const DirectionalLight& light, const Camera& camera, float aspectRatio,
                 uint32_t cascadeMask = ALL_CASCADES);
+
+    /// @brief Points every cascade at one light-space volume covering
+    ///        `worldBounds`, for a probe bake (3D_E-0731).
+    ///
+    /// A bake renders from hundreds of probe positions, so cascades fitted to
+    /// the main camera's frustum are the wrong shadow for almost all of them.
+    /// After this call every cascade carries @ref computeBoundsMatrix and every
+    /// split is @ref BAKE_SPLIT_DISTANCE, so a receiver at any view depth
+    /// samples cascade 0 and no distance fade applies. The caller rasterises
+    /// cascade 0 and must force the next @ref update to rebuild all cascades.
+    void fitAllCascadesToBounds(const DirectionalLight& light, const AABB& worldBounds);
+
+    /// @brief Far split written by @ref fitAllCascadesToBounds: beyond any view depth.
+    static constexpr float BAKE_SPLIT_DISTANCE = 1.0e9f;
 
     /// @brief Sets tight depth bounds from SDSM analysis to optimize cascade distribution.
     /// When set, cascade splits are computed within [near, far] instead of
@@ -142,6 +157,10 @@ public:
         const DirectionalLight& light,
         const std::array<glm::vec3, 8>& frustumCorners,
         int resolution);
+
+    /// @brief Light-space matrix whose volume contains all of `worldBounds`.
+    static glm::mat4 computeBoundsMatrix(const DirectionalLight& light,
+                                         const AABB& worldBounds, int resolution);
 
 private:
     CascadedShadowConfig m_config;

@@ -270,6 +270,34 @@ glm::mat4 CascadedShadowMap::computeCascadeMatrix(
     return shadowMatrix;
 }
 
+glm::mat4 CascadedShadowMap::computeBoundsMatrix(const DirectionalLight& light,
+                                                 const AABB& worldBounds, int resolution)
+{
+    const glm::vec3& lo = worldBounds.min;
+    const glm::vec3& hi = worldBounds.max;
+    const std::array<glm::vec3, 8> corners = {
+        glm::vec3(lo.x, lo.y, lo.z), glm::vec3(hi.x, lo.y, lo.z),
+        glm::vec3(lo.x, hi.y, lo.z), glm::vec3(hi.x, hi.y, lo.z),
+        glm::vec3(lo.x, lo.y, hi.z), glm::vec3(hi.x, lo.y, hi.z),
+        glm::vec3(lo.x, hi.y, hi.z), glm::vec3(hi.x, hi.y, hi.z)};
+    // The cascade fit bounds the corners' sphere, so it contains the box.
+    return computeCascadeMatrix(light, corners, resolution);
+}
+
+void CascadedShadowMap::fitAllCascadesToBounds(const DirectionalLight& light,
+                                               const AABB& worldBounds)
+{
+    const glm::mat4 matrix = computeBoundsMatrix(light, worldBounds, m_config.resolution);
+    const float orthoWidth = 2.0f / std::abs(matrix[0][0]);
+    for (int i = 0; i < m_config.cascadeCount; i++)
+    {
+        const auto idx = static_cast<size_t>(i);
+        m_lightSpaceMatrices[idx] = matrix;
+        m_cascadeSplits[idx] = BAKE_SPLIT_DISTANCE;
+        m_texelWorldSizes[idx] = orthoWidth / static_cast<float>(m_config.resolution);
+    }
+}
+
 void CascadedShadowMap::setDepthBounds(float near, float far)
 {
     m_hasDepthBounds = true;

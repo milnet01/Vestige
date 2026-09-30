@@ -4822,7 +4822,7 @@ shipped that have no invocation path at all.
   Source: in-session-2026-09-29 (3D_E-0721).
   Lanes: core, scene, scripting, editor.
 
-- 📋 [3D_E-0731] **SH probe bake: capture passes skip the shadow pass but still sample the shadow maps.**
+- ✅ [3D_E-0731] **SH probe bake: capture passes skip the shadow pass but still sample the shadow maps.**
   Renderer::renderScene with geometryOnly=true (captureSHGrid,
   captureLightProbe) skips the whole shadow block, then sets
   u_hasShadows=true and binds the cascaded shadow map anyway. The
@@ -4869,6 +4869,22 @@ shipped that have no invocation path at all.
   S=1 albedo 0.5 reads 0.5 after one bounce and 1 - 0.5^12 after twelve;
   a box open to a unit sky reads the form factor 0.2395 at the floor
   centre; one lit floor read at the ceiling centre.
+  Resolved (2026-09-30): probe captures draw their own shadow maps.
+  Renderer::renderBakeShadows fits every cascade to the bounds of all
+  casters (CascadedShadowMap::fitAllCascadesToBounds), draws cascade 0,
+  draws the point-light cubes, and restarts the cascade rebuild count so
+  the next main frames redraw all cascades. GPU grass is left out of
+  the bake volume. Placement: GPU, reusing the existing shadow pass
+  (CODING_STANDARDS section 17: per-pixel visibility). Measured on the
+  Tabernacle bake, with 3D_E-0735 fixed first: probes inside the tent
+  fall from 0.536 to 0.217 (ground layer) and 0.339 to 0.138 (mid
+  layer); the layer above the roof is unchanged at 0.253; the whole-grid
+  mean falls 3.5%. Seen in the holy-place and menorah views: the
+  interior is darker and warmer, the courtyard unchanged.
+  tests/test_cascaded_shadow_map.cpp pins that the fitted volume
+  contains its box (proven red). Not done: probes inside geometry and a
+  brightness check against the ported reference tracer stay open, as
+  the notes above describe.
   **Layman:** The baked room lighting may be using sun shadows that were never drawn, or drawn for a different view, so indoor brightness could be wrong.
   Kind: fix.
   Source: in-session-2026-09-30 (found answering UT_Ants on probe lighting).
@@ -4927,6 +4943,50 @@ shipped that have no invocation path at all.
   Kind: chore.
   Source: user-request-2026-09-30.
   Lanes: ci, docs.
+
+- ✅ [3D_E-0735] **Every light probe captured the main camera's picture, so probe lighting was one colour everywhere.**
+  Renderer::renderScene takes a view override for probe captures and
+  keeps the view in use in m_lastView. The multi-draw-indirect path
+  (most static geometry), the cloth path, the skybox and drawMesh set
+  u_view from camera.getViewMatrix() instead. Only the instanced path
+  used m_lastView. So on every cubemap face of every probe the ground,
+  walls and sky were drawn from the main camera, at the main camera's
+  position. Seen by dumping one probe's six faces: five were the same
+  picture. Measured on the Tabernacle bake: before, the mean SH DC term
+  was 0.400, 0.404 and 0.408 on the three probe layers, the same
+  everywhere; after, 0.52, 0.45 and 0.42, and the tent interior differs
+  from the courtyard. All four sites now use m_lastView, and
+  u_viewPosition is taken from the override. The meadow's pictures are
+  unchanged (it has no probe grid). tests/test_renderer_view_override.cpp
+  reads renderer.cpp and fails if any u_view is set from the camera;
+  proven red by putting one site back. No test builds a Renderer, so
+  nothing renders a probe in CI.
+  **Layman:** The Tabernacle's indoor lighting was meant to be sampled from many points around the scene, but every sample was really the same view from the camera; each point now sees its own surroundings.
+  Kind: fix.
+  Source: in-session-2026-09-30 (found while proving 3D_E-0731).
+  Lanes: renderer.
+
+- 📋 [3D_E-0736] **Probe bake has no brightness reference and nothing keeps probes out of walls.**
+  Two gaps left after 3D_E-0731 and 3D_E-0735.
+  (1) No reference. tests/test_sh_probe_grid.cpp pins the SH maths with
+  a uniform environment only. Port UT_Ants' one-file CPU tracer
+  (~/.cache/uta-scratch/second-bounce/rt.cpp, scratch: copy it first)
+  and its three hand-worked cases: closed box S=1 albedo 0.5 reads 0.5
+  after one bounce and 1 - 0.5^12 after twelve; a box open to a unit
+  sky reads the form factor 0.2395 at the floor centre; one lit floor
+  read at the ceiling centre. Then compare a baked probe with the
+  traced value in a small test scene.
+  (2) Probes inside geometry. UT_Ants creates a probe only where its
+  collision tree says the point is empty and within one spacing of a
+  surface, and renormalises the trilinear weights over the corners
+  present (its LightProbes.cpp bakeLightProbes and probes.glsl
+  indirectAt). Vestige keeps every lattice point and its only defence
+  is the 0.3 m normal offset in evaluateSHGridIrradiance.
+  Also unexamined: the probe layer at y = -0.5 sits under the ground.
+  **Layman:** The baked indoor lighting now samples the right places, but nothing yet checks that its brightness is correct, and sample points that land inside a wall are still used.
+  Kind: test.
+  Source: in-session-2026-09-30 (split from 3D_E-0731; UT_Ants collaboration).
+  Lanes: renderer, tests.
 
 ## 0.3.0 — An editor a builder can use
 

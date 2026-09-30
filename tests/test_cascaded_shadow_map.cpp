@@ -312,3 +312,40 @@ TEST(CascadedShadowMapTest, LambdaBlendsBetweenLinearAndLog)
     EXPECT_GE(blendSplits[0], minFirst - 0.001f);
     EXPECT_LE(blendSplits[0], maxFirst + 0.001f);
 }
+
+// =============================================================================
+// Bake shadow volume (3D_E-0731)
+// =============================================================================
+
+// A probe bake renders from positions all over the scene, so its one shadow
+// volume must contain the whole box it is fitted to: a corner outside the
+// volume is a receiver the bake treats as unshadowed.
+TEST(CascadedShadowMapTest, BoundsMatrixContainsEveryCornerOfTheBox)
+{
+    DirectionalLight light;
+    light.direction = glm::normalize(glm::vec3(-0.4f, -1.0f, 0.3f));
+
+    AABB box;                                  // a long, low courtyard
+    box.min = glm::vec3(-15.0f, -0.5f, -40.0f);
+    box.max = glm::vec3(15.0f, 8.0f, 20.0f);
+
+    const glm::mat4 m = CascadedShadowMap::computeBoundsMatrix(light, box, 2048);
+
+    for (int i = 0; i < 8; i++)
+    {
+        const glm::vec3 corner((i & 1) ? box.max.x : box.min.x,
+                               (i & 2) ? box.max.y : box.min.y,
+                               (i & 4) ? box.max.z : box.min.z);
+        const glm::vec4 clip = m * glm::vec4(corner, 1.0f);
+        EXPECT_GE(clip.x, -1.0f) << "corner " << i;
+        EXPECT_LE(clip.x, 1.0f) << "corner " << i;
+        EXPECT_GE(clip.y, -1.0f) << "corner " << i;
+        EXPECT_LE(clip.y, 1.0f) << "corner " << i;
+        EXPECT_GE(clip.z, -1.0f) << "corner " << i;
+        EXPECT_LE(clip.z, 1.0f) << "corner " << i;
+    }
+
+    // And it is fitted, not merely huge: a point three box-lengths away is outside.
+    const glm::vec4 far = m * glm::vec4(0.0f, 0.0f, 250.0f, 1.0f);
+    EXPECT_TRUE(std::abs(far.x) > 1.0f || std::abs(far.y) > 1.0f || std::abs(far.z) > 1.0f);
+}
