@@ -4813,6 +4813,10 @@ shipped that have no invocation path at all.
   published, and whether the registry subscribes. Also retire the
   activation API 3D_E-0721 made dead (activateSystemsForScene,
   isForceActive, getOwnedComponentTypes and their overrides).
+  Progress (2026-09-30): spec accepted at
+  docs/specs/3D_E-0730-scene-change-events.md after two review loops
+  (cap reached, nothing deferred). The user chose a short spec with an
+  independent review. Not yet built.
   **Layman:** When a scene is opened or replaced, nothing tells the engine's parts, so 2D physics never sets up and the scripting "On Scene Loaded" node never fires.
   Kind: fix.
   Source: in-session-2026-09-29 (3D_E-0721).
@@ -4857,6 +4861,14 @@ shipped that have no invocation path at all.
   fitted to the grid's bounds before the probe loop, and the capture
   passes sample that. Prove it first: mean interior-probe DC energy
   with the sun on and off should differ far less once shadowed.
+  Reference to port (UT_Ants, 2026-09-30): a one-file CPU multi-bounce
+  tracer at ~/.cache/uta-scratch/second-bounce/rt.cpp (scratch, outside
+  any repo, so copy it before relying on it). It needs triangles, a
+  per-triangle albedo and a direct-light function. Its `rt check` passes
+  three hand-worked cases Vestige can reuse as a bake test: closed box
+  S=1 albedo 0.5 reads 0.5 after one bounce and 1 - 0.5^12 after twelve;
+  a box open to a unit sky reads the form factor 0.2395 at the floor
+  centre; one lit floor read at the ceiling centre.
   **Layman:** The baked room lighting may be using sun shadows that were never drawn, or drawn for a different view, so indoor brightness could be wrong.
   Kind: fix.
   Source: in-session-2026-09-30 (found answering UT_Ants on probe lighting).
