@@ -7,10 +7,12 @@
 ///       to verify the registry's lifecycle, dispatch, and auto-activation logic.
 
 #include "core/engine.h"
+#include "core/event_bus.h"
 #include "core/i_system.h"
 #include "core/system_registry.h"
 #include "core/system_events.h"
 #include "scene/component.h"
+#include "scene/scene.h"
 
 #include <gtest/gtest.h>
 #include <algorithm>
@@ -80,6 +82,10 @@ public:
         m_drawDebugCount++;
     }
 
+    void onSceneLoad(Scene& /*scene*/) override { m_sceneLoadCount++; }
+
+    void onSceneUnload(Scene& /*scene*/) override { m_sceneUnloadCount++; }
+
     bool isForceActive() const override { return m_forceActive; }
 
     std::vector<uint32_t> getOwnedComponentTypes() const override
@@ -101,6 +107,8 @@ public:
     int getUpdateCount() const { return m_updateCount; }
     int getFixedUpdateCount() const { return m_fixedUpdateCount; }
     int getDrawDebugCount() const { return m_drawDebugCount; }
+    int getSceneLoadCount() const { return m_sceneLoadCount; }
+    int getSceneUnloadCount() const { return m_sceneUnloadCount; }
     float getLastDeltaTime() const { return m_lastDeltaTime; }
     float getLastFixedDt() const { return m_lastFixedDt; }
 
@@ -112,6 +120,8 @@ private:
     int m_updateCount = 0;
     int m_fixedUpdateCount = 0;
     int m_drawDebugCount = 0;
+    int m_sceneLoadCount = 0;
+    int m_sceneUnloadCount = 0;
     float m_lastDeltaTime = 0.0f;
     float m_lastFixedDt = 0.0f;
     std::vector<uint32_t> m_ownedTypes;
@@ -207,6 +217,49 @@ TEST_F(SystemRegistryTest, InitializeAllActivatesEverySystem)
     ASSERT_TRUE(registry.initializeAll(dummyEngine()));
     EXPECT_TRUE(a->isActive());
     EXPECT_TRUE(b->isActive());
+}
+
+// 3D_E-0730 INV-5: scene events on the bus reach every active system once, a
+// switched-off system hears nothing, and shutdownAll takes the registry's
+// handlers off the bus. The listener count is the check for the last part:
+// shutdownAll also switches every system off, so the call counts would stay
+// put whether or not it unsubscribed.
+TEST_F(SystemRegistryTest, SceneEventsReachActiveSystems_INV5)
+{
+    auto* a = registry.registerSystem<MockSystem>("A");
+    auto* b = registry.registerSystem<MockSystem>("B");
+    ASSERT_TRUE(registry.initializeAll(dummyEngine()));
+    b->setActive(false);
+
+    EventBus bus;
+    const size_t listenersBefore = bus.getListenerCount();
+    registry.subscribeSceneEvents(bus);
+
+    Scene scene("Events");
+    bus.publish(SceneLoadedEvent(&scene));
+    bus.publish(SceneUnloadedEvent(&scene));
+
+    EXPECT_EQ(a->getSceneLoadCount(), 1);
+    EXPECT_EQ(a->getSceneUnloadCount(), 1);
+    EXPECT_EQ(b->getSceneLoadCount(), 0);
+    EXPECT_EQ(b->getSceneUnloadCount(), 0);
+
+    registry.shutdownAll();
+    EXPECT_EQ(bus.getListenerCount(), listenersBefore);
+}
+
+// 3D_E-0730: clear() without shutdownAll() must not leave handlers holding a
+// pointer to a registry whose systems are gone.
+TEST_F(SystemRegistryTest, ClearUnsubscribesSceneEvents_3D_E_0730)
+{
+    registry.registerSystem<MockSystem>("A");
+    ASSERT_TRUE(registry.initializeAll(dummyEngine()));
+
+    EventBus bus;
+    const size_t listenersBefore = bus.getListenerCount();
+    registry.subscribeSceneEvents(bus);
+    registry.clear();
+    EXPECT_EQ(bus.getListenerCount(), listenersBefore);
 }
 
 TEST_F(SystemRegistryTest, InitializeAllReturnsFalseOnFailure)

@@ -6,6 +6,8 @@
 #include "scene/scene.h"
 #include "physics/cloth_component.h"
 #include "scene/camera_component.h"
+#include "core/event_bus.h"
+#include "core/system_events.h"
 
 #include <algorithm>
 #include <cassert>
@@ -205,6 +207,26 @@ void Scene::setActiveCamera(CameraComponent* camera)
 CameraComponent* Scene::getActiveCamera() const
 {
     return m_activeCamera;
+}
+
+Scene::Replacement::Replacement(Scene& scene)
+    : m_scene(scene)
+{
+    // Unload is announced before the clear, so handlers still find the old
+    // entities (INV-1).
+    if (m_scene.m_replacementDepth++ == 0 && m_scene.m_eventBus)
+    {
+        m_scene.m_eventBus->publish(SceneUnloadedEvent(&m_scene));
+    }
+    m_scene.clearEntities();
+}
+
+Scene::Replacement::~Replacement()
+{
+    if (--m_scene.m_replacementDepth == 0 && m_scene.m_eventBus)
+    {
+        m_scene.m_eventBus->publish(SceneLoadedEvent(&m_scene));
+    }
 }
 
 void Scene::clearEntities()

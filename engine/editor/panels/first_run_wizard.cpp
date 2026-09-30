@@ -85,7 +85,8 @@ std::vector<GameTemplateConfig> allWizardTemplates()
 
 void applyEmptyScene(Scene& scene, ResourceManager& resources)
 {
-    scene.clearEntities();
+    // Announces SceneLoadedEvent when the function returns, once filled.
+    Scene::Replacement replacement(scene);
 
     // One ground plane, scaled up for a reasonable play area (matches
     // the default TemplateDialog::applyTemplate ground sizing).

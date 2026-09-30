@@ -5,6 +5,7 @@
 /// @brief SystemRegistry implementation -- domain system lifecycle and dispatch.
 #include "core/system_registry.h"
 #include "core/logger.h"
+#include "core/system_events.h"
 #include "scene/scene.h"
 #include "scene/entity.h"
 
@@ -90,6 +91,8 @@ bool SystemRegistry::initializeAll(Engine& engine)
 
 void SystemRegistry::shutdownAll()
 {
+    unsubscribeSceneEvents();
+
     if (!m_initialized)
     {
         return;
@@ -109,6 +112,8 @@ void SystemRegistry::shutdownAll()
 
 void SystemRegistry::clear()
 {
+    unsubscribeSceneEvents();
+
     if (m_systems.empty())
     {
         return;
@@ -184,8 +189,6 @@ void SystemRegistry::submitRenderDataAll(SceneRenderData& renderData)
 
 void SystemRegistry::onSceneLoadAll(Scene& scene)
 {
-    activateSystemsForScene(scene);
-
     for (auto& system : m_systems)
     {
         if (!system->isActive())
@@ -258,6 +261,42 @@ void SystemRegistry::activateSystemsForScene(Scene& scene)
                          + "' (matching components found)");
         }
     }
+}
+
+void SystemRegistry::subscribeSceneEvents(EventBus& bus)
+{
+    unsubscribeSceneEvents();
+
+    m_sceneEventBus = &bus;
+    m_sceneLoadedSub = bus.subscribe<SceneLoadedEvent>(
+        [this](const SceneLoadedEvent& e)
+        {
+            if (e.scene)
+            {
+                Logger::info("SystemRegistry: scene '" + e.scene->getName() + "' loaded");
+                onSceneLoadAll(*e.scene);
+            }
+        });
+    m_sceneUnloadedSub = bus.subscribe<SceneUnloadedEvent>(
+        [this](const SceneUnloadedEvent& e)
+        {
+            if (e.scene)
+            {
+                Logger::info("SystemRegistry: scene '" + e.scene->getName() + "' unloading");
+                onSceneUnloadAll(*e.scene);
+            }
+        });
+}
+
+void SystemRegistry::unsubscribeSceneEvents()
+{
+    if (!m_sceneEventBus)
+    {
+        return;
+    }
+    m_sceneEventBus->unsubscribe(m_sceneLoadedSub);
+    m_sceneEventBus->unsubscribe(m_sceneUnloadedSub);
+    m_sceneEventBus = nullptr;
 }
 
 void SystemRegistry::drawDebugAll()

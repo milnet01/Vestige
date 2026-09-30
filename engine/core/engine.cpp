@@ -1239,6 +1239,12 @@ bool Engine::initialize(const EngineConfig& config)
         return false;
     }
 
+    // 3D_E-0730: systems subscribe first, then the manager starts announcing,
+    // so the scene built above is announced once and reaches every system.
+    // The other order announces it to nobody.
+    m_systemRegistry.subscribeSceneEvents(m_eventBus);
+    m_sceneManager->attachEventBus(m_eventBus);
+
     // Post-init wiring: give the controller terrain reference for walk-mode collision
     if (m_terrain && m_terrain->isInitialized())
     {
@@ -2668,6 +2674,10 @@ void Engine::setupDemoScene()
     m_renderer->loadSkyboxHDRI("assets/hdri/syferfontein_0d_clear_1k.hdr");
 
     Scene* scene = m_sceneManager->createScene("Meadow");
+    // 3D_E-0730: createScene returns the existing scene when this runs again
+    // (the first-run wizard can call it), so empty it and announce the refill
+    // when this function returns.
+    Scene::Replacement replacement(*scene);
 
     // --- Sun -----------------------------------------------------------------
     // One shadow-casting directional light approximating the HDRI's midday sun
@@ -3375,6 +3385,10 @@ void Engine::setupMaterialDemoScene()
     m_renderer->setSsaoEnabled(true);
 
     Scene* scene = m_sceneManager->createScene("Demo");
+    // 3D_E-0730: createScene returns the existing scene when this runs again
+    // (the first-run wizard can call it), so empty it and announce the refill
+    // when this function returns.
+    Scene::Replacement replacement(*scene);
 
     // --- Create shared resources via ResourceManager ---
     auto cubeMesh = m_resourceManager->getCubeMesh();
@@ -3773,6 +3787,10 @@ void Engine::setupTabernacleScene()
     m_renderer->loadSkyboxHDRI("assets/textures/tabernacle/goegap_2k.hdr");
 
     Scene* scene = m_sceneManager->createScene("Tabernacle");
+    // 3D_E-0730: createScene returns the existing scene when this runs again
+    // (the first-run wizard can call it), so empty it and announce the refill
+    // when this function returns.
+    Scene::Replacement replacement(*scene);
 
     // --- Cubit conversion ---
     const float C = 0.445f;  // 1 cubit in meters (standard/common cubit)

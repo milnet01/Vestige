@@ -14,6 +14,8 @@
 namespace Vestige
 {
 
+class EventBus;
+
 /// @brief Manages multiple scenes and the currently active scene.
 class SceneManager
 {
@@ -45,9 +47,19 @@ public:
     /// @brief Gets the number of loaded scenes.
     size_t getSceneCount() const;
 
+    /// @brief Starts announcing scene changes on @p bus (3D_E-0730).
+    ///
+    /// Attaches the bus to the active scene and publishes `SceneLoadedEvent`
+    /// for it. From then on the active scene is the one scene with the bus:
+    /// switching, creating the first scene and removing the active scene each
+    /// publish the matching events. Call once, after the systems have
+    /// subscribed. The bus must outlive this manager.
+    void attachEventBus(EventBus& bus);
+
 private:
     std::unordered_map<std::string, std::unique_ptr<Scene>> m_scenes;
     Scene* m_activeScene;
+    EventBus* m_eventBus = nullptr;
 };
 
 } // namespace Vestige

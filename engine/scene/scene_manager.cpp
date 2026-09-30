@@ -4,7 +4,9 @@
 /// @file scene_manager.cpp
 /// @brief SceneManager implementation.
 #include "scene/scene_manager.h"
+#include "core/event_bus.h"
 #include "core/logger.h"
+#include "core/system_events.h"
 
 namespace Vestige
 {
@@ -35,6 +37,11 @@ Scene* SceneManager::createScene(const std::string& name)
     {
         m_activeScene = ptr;
         Logger::info("Active scene set to: " + name);
+        if (m_eventBus)
+        {
+            ptr->attachEventBus(m_eventBus);
+            m_eventBus->publish(SceneLoadedEvent(ptr));
+        }
     }
 
     return ptr;
@@ -49,8 +56,24 @@ bool SceneManager::setActiveScene(const std::string& name)
         return false;
     }
 
-    m_activeScene = it->second.get();
+    Scene* next = it->second.get();
+    if (next == m_activeScene)
+    {
+        return true;
+    }
+
+    if (m_eventBus && m_activeScene)
+    {
+        m_eventBus->publish(SceneUnloadedEvent(m_activeScene));
+        m_activeScene->attachEventBus(nullptr);
+    }
+    m_activeScene = next;
     Logger::info("Active scene switched to: " + name);
+    if (m_eventBus)
+    {
+        m_activeScene->attachEventBus(m_eventBus);
+        m_eventBus->publish(SceneLoadedEvent(m_activeScene));
+    }
     return true;
 }
 
@@ -74,6 +97,10 @@ void SceneManager::removeScene(const std::string& name)
     {
         if (m_activeScene == it->second.get())
         {
+            if (m_eventBus)
+            {
+                m_eventBus->publish(SceneUnloadedEvent(m_activeScene));
+            }
             m_activeScene = nullptr;
         }
         m_scenes.erase(it);
@@ -84,6 +111,16 @@ void SceneManager::removeScene(const std::string& name)
 size_t SceneManager::getSceneCount() const
 {
     return m_scenes.size();
+}
+
+void SceneManager::attachEventBus(EventBus& bus)
+{
+    m_eventBus = &bus;
+    if (m_activeScene)
+    {
+        m_activeScene->attachEventBus(m_eventBus);
+        m_eventBus->publish(SceneLoadedEvent(m_activeScene));
+    }
 }
 
 } // namespace Vestige

@@ -21,6 +21,7 @@
 #include <ctime>
 #include <fstream>
 #include <iomanip>
+#include <optional>
 #include <sstream>
 
 using json = nlohmann::json;
@@ -430,10 +431,19 @@ SceneSerializerResult SceneSerializer::saveScene(
     return result;
 }
 
-SceneSerializerResult SceneSerializer::loadScene(
+/// @brief Validates the file, then empties @p scene and fills it with the
+///        file's entities (3D_E-0730).
+///
+/// The scene is emptied by emplacing a `Scene::Replacement` into
+/// @p replacement, only once the file has passed validation, so a rejected
+/// file announces nothing and leaves the scene as it was (INV-7). The caller
+/// owns the replacement and destroys it once everything it restores from the
+/// file is in place; that is when `SceneLoadedEvent` is published.
+static SceneSerializerResult loadSceneEntities(
     Scene& scene,
     const fs::path& path,
-    ResourceManager& resources)
+    ResourceManager& resources,
+    std::optional<Scene::Replacement>& replacement)
 {
     SceneSerializerResult result;
 
@@ -469,7 +479,7 @@ SceneSerializerResult SceneSerializer::loadScene(
     {
         result.errorMessage = "Scene format version " + std::to_string(formatVersion)
                               + " is newer than supported version "
-                              + std::to_string(CURRENT_FORMAT_VERSION);
+                              + std::to_string(SceneSerializer::CURRENT_FORMAT_VERSION);
         Logger::error("Scene load: " + result.errorMessage);
         return result;
     }
@@ -484,7 +494,7 @@ SceneSerializerResult SceneSerializer::loadScene(
 
     // Clear existing scene
     std::string sceneName = meta.value("name", path.stem().string());
-    scene.clearEntities();
+    replacement.emplace(scene);
     scene.setName(sceneName);
 
     // Deserialize entities
@@ -518,6 +528,15 @@ SceneSerializerResult SceneSerializer::loadScene(
                  + std::to_string(result.warningCount) + " warnings)");
 
     return result;
+}
+
+SceneSerializerResult SceneSerializer::loadScene(
+    Scene& scene,
+    const fs::path& path,
+    ResourceManager& resources)
+{
+    std::optional<Scene::Replacement> replacement;
+    return loadSceneEntities(scene, path, resources, replacement);
 }
 
 std::string SceneSerializer::serializeToString(
@@ -724,8 +743,10 @@ SceneSerializerResult SceneSerializer::loadScene(
     Terrain* terrain,
     MusicSceneSettings* music)
 {
-    // Standard entity load
-    SceneSerializerResult result = loadScene(scene, path, resources);
+    // Standard entity load. The replacement stays open until the terrain
+    // below is restored, so SceneLoadedEvent announces the whole scene.
+    std::optional<Scene::Replacement> replacement;
+    SceneSerializerResult result = loadSceneEntities(scene, path, resources, replacement);
     if (!result.success)
     {
         return result;

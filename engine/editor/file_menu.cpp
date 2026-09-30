@@ -449,7 +449,7 @@ void FileMenu::newScene(Scene* scene, Selection& selection)
         return;
     }
 
-    scene->clearEntities();
+    Scene::Replacement replacement(*scene);
     scene->setName("Untitled Scene");
     selection.clearSelection();
     m_currentScenePath.clear();

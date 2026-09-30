@@ -5,6 +5,7 @@
 /// @brief Manages all domain system instances and their lifecycle.
 #pragma once
 
+#include "core/event_bus.h"
 #include "core/i_system.h"
 
 #include <memory>
@@ -187,14 +188,20 @@ public:
     // Scene lifecycle
     // -----------------------------------------------------------------------
 
-    /// @brief Notifies all systems of a scene load and auto-activates based on
-    ///        component types present in the scene.
+    /// @brief Calls onSceneLoad() on every active system.
     /// @param scene The newly loaded scene.
     void onSceneLoadAll(Scene& scene);
 
     /// @brief Notifies all systems of a scene unload.
     /// @param scene The scene about to be unloaded.
     void onSceneUnloadAll(Scene& scene);
+
+    /// @brief Routes `SceneLoadedEvent` / `SceneUnloadedEvent` on @p bus to
+    ///        onSceneLoadAll() / onSceneUnloadAll() (3D_E-0730).
+    ///
+    /// Call after initializeAll(). shutdownAll() and clear() unsubscribe. The
+    /// bus must outlive the subscription.
+    void subscribeSceneEvents(EventBus& bus);
 
     /// @brief Scans scene entities for component types and activates systems
     ///        whose owned component types are present. Force-active systems
@@ -224,6 +231,13 @@ private:
 
     /// @brief Whether initializeAll() has been called.
     bool m_initialized = false;
+
+    /// @brief Removes the scene-event subscriptions, if any.
+    void unsubscribeSceneEvents();
+
+    EventBus* m_sceneEventBus = nullptr;
+    SubscriptionId m_sceneLoadedSub = 0;
+    SubscriptionId m_sceneUnloadedSub = 0;
 };
 
 } // namespace Vestige

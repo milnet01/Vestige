@@ -338,8 +338,9 @@ void TemplateDialog::applyTemplate(const GameTemplateConfig& config,
         return;
     }
 
-    // Clear existing scene
-    scene->clearEntities();
+    // Clear existing scene. The replacement is held to every return below,
+    // so SceneLoadedEvent announces the filled scene.
+    Scene::Replacement replacement(*scene);
 
     // 2D template dispatch — route to createSideScrollerTemplate /
     // createShmupTemplate instead of the 3D-oriented flow below.

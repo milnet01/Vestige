@@ -31,6 +31,7 @@ namespace Vestige
 // Forward declarations for cloth rendering
 class DynamicMesh;
 class ClothComponent;
+class EventBus;
 
 /// @brief Collected render data from a scene — used by the renderer.
 struct SceneRenderData
@@ -161,8 +162,31 @@ public:
     /// @brief Gets the active camera component (nullptr if none set).
     CameraComponent* getActiveCamera() const;
 
-    /// @brief Removes all entities from the scene (keeps the root node).
-    void clearEntities();
+    /// @brief Empties the scene on construction and announces the new
+    ///        contents on destruction. The only way to empty a scene
+    ///        (3D_E-0730).
+    ///
+    /// The outermost replacement on a scene publishes `SceneUnloadedEvent`
+    /// before it clears, while the old entities still exist, and
+    /// `SceneLoadedEvent` when it is destroyed, once the caller has filled the
+    /// scene. Hold it until the scene is filled. A replacement opened while
+    /// another is open on the same scene clears again and publishes nothing.
+    /// Neither publishes unless the scene has an event bus attached.
+    class Replacement
+    {
+    public:
+        explicit Replacement(Scene& scene);
+        ~Replacement();
+        Replacement(const Replacement&) = delete;
+        Replacement& operator=(const Replacement&) = delete;
+
+    private:
+        Scene& m_scene;
+    };
+
+    /// @brief Sets the bus scene-change events are published on.
+    ///        SceneManager sets it for the active scene; null for any other.
+    void attachEventBus(EventBus* bus) { m_eventBus = bus; }
 
     /// @brief Removes an entity by ID (and all its descendants).
     /// @return True if the entity was found and removed.
@@ -263,6 +287,10 @@ public:
     };
 
 private:
+    /// @brief Removes all entities from the scene (keeps the root node).
+    ///        Private: call sites open a `Replacement` instead.
+    void clearEntities();
+
     /// @brief Applies every queued add / remove in FIFO order. Called
     ///        from `endUpdate` when the depth counter hits zero.
     void drainPendingMutations();
@@ -278,6 +306,12 @@ private:
     std::unique_ptr<Entity> m_root;
     std::unordered_map<uint32_t, Entity*> m_entityIndex;
     CameraComponent* m_activeCamera = nullptr;
+
+    /// @brief Bus for scene-change events; null unless this is the active scene.
+    EventBus* m_eventBus = nullptr;
+
+    /// @brief Open `Replacement`s on this scene; only the outermost publishes.
+    int m_replacementDepth = 0;
 
     /// @brief Nesting counter. Greater than zero means mutations are queued.
     int m_updateDepth = 0;

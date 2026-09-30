@@ -4,6 +4,8 @@
 /// @file test_scene_serializer.cpp
 /// @brief Unit tests for scene save/load round-trip serialization.
 #include "editor/scene_serializer.h"
+#include "core/event_bus.h"
+#include "core/system_events.h"
 #include "resource/resource_manager.h"
 #include "scene/scene.h"
 #include "scene/entity.h"
@@ -164,6 +166,37 @@ TEST_F(SceneSerializerTest, ReadMetadataEchoesRawFormatVersion)
     EXPECT_EQ(meta.formatVersion, 999);
 }
 
+// 3D_E-0730 INV-7: a file loadScene rejects announces nothing and leaves the
+// scene as it was, so the replacement opens only after validation.
+TEST_F(SceneSerializerTest, RejectedLoadPublishesNothing_INV7)
+{
+    nlohmann::json j;
+    j["vestige_scene"]["format_version"] = 999;
+    j["vestige_scene"]["name"] = "Future";
+    j["entities"] = nlohmann::json::array();
+
+    fs::path path = m_testDir / "future_version_load.scene";
+    std::ofstream out(path);
+    out << j.dump(4);
+    out.close();
+
+    Scene scene("Kept");
+    const uint32_t keptId = scene.createEntity("KeepMe")->getId();
+    EventBus bus;
+    scene.attachEventBus(&bus);
+    int events = 0;
+    bus.subscribe<SceneUnloadedEvent>([&events](const SceneUnloadedEvent&) { ++events; });
+    bus.subscribe<SceneLoadedEvent>([&events](const SceneLoadedEvent&) { ++events; });
+
+    ResourceManager resources;
+    SceneSerializerResult result = SceneSerializer::loadScene(scene, path, resources);
+
+    EXPECT_FALSE(result.success);
+    EXPECT_EQ(events, 0);
+    EXPECT_NE(scene.findEntityById(keptId), nullptr);
+    EXPECT_EQ(scene.getName(), "Kept");
+}
+
 TEST_F(SceneSerializerTest, LoadRejectsNonexistentFile)
 {
     SceneMetadata meta = SceneSerializer::readMetadata(m_testDir / "does_not_exist.scene");
@@ -182,7 +215,7 @@ TEST_F(SceneSerializerTest, LoadRejectsInvalidJson)
 }
 
 // ---------------------------------------------------------------------------
-// Scene clearEntities
+// Scene::Replacement empties the scene
 // ---------------------------------------------------------------------------
 
 TEST_F(SceneSerializerTest, ClearEntitiesRemovesAllChildren)
@@ -194,7 +227,7 @@ TEST_F(SceneSerializerTest, ClearEntitiesRemovesAllChildren)
 
     EXPECT_EQ(scene.getRoot()->getChildren().size(), 3u);
 
-    scene.clearEntities();
+    { Scene::Replacement replacement(scene); }
     EXPECT_EQ(scene.getRoot()->getChildren().size(), 0u);
 }
 

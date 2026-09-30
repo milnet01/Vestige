@@ -9,10 +9,13 @@
 /// system via `setPhysicsWorldForTesting`, builds a handful of entities
 /// with 2D rigid bodies + colliders, and validates the resulting Jolt
 /// simulation behaves 2D (Z locked, planar motion, gravity falls).
+#include "core/event_bus.h"
+#include "core/system_events.h"
 #include "physics/physics_world.h"
 #include "scene/collider_2d_component.h"
 #include "scene/entity.h"
 #include "scene/rigid_body_2d_component.h"
+#include "scene/scene.h"
 #include "systems/physics2d_system.h"
 
 #include <gtest/gtest.h>
@@ -295,4 +298,38 @@ TEST(Physics2DSystem, UpdateWithoutSceneIsNoop)
     PhysicsFixture fx;
     fx.system.update(0.016f);
     SUCCEED();
+}
+
+// 3D_E-0730 INV-6: a scene filled inside a Replacement gets its 2D bodies from
+// the loaded event, and the next replacement removes them. The registry's half
+// of the path is INV-5's; here two handlers stand in for it, because
+// Physics2DSystem::initialize needs a constructed Engine.
+TEST(Physics2DSystem, SceneEventsCreateAndRemoveBodies_INV6)
+{
+    PhysicsFixture fx;
+    Scene scene("Physics2DScene");
+    EventBus bus;
+    scene.attachEventBus(&bus);
+    bus.subscribe<SceneLoadedEvent>([&fx](const SceneLoadedEvent& e)
+    {
+        fx.system.onSceneLoad(*e.scene);
+    });
+    bus.subscribe<SceneUnloadedEvent>([&fx](const SceneUnloadedEvent& e)
+    {
+        fx.system.onSceneUnload(*e.scene);
+    });
+
+    {
+        Scene::Replacement replacement(scene);
+        Entity* e = scene.createEntity("Box");
+        e->transform.position = glm::vec3(0.0f, 10.0f, 0.0f);
+        e->addComponent<RigidBody2DComponent>()->type = BodyType2D::Dynamic;
+        e->addComponent<Collider2DComponent>()->shape = ColliderShape2D::Box;
+    }
+    EXPECT_EQ(fx.system.liveBodyCount(), 1u);
+
+    {
+        Scene::Replacement replacement(scene);
+    }
+    EXPECT_EQ(fx.system.liveBodyCount(), 0u);
 }

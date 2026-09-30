@@ -242,7 +242,7 @@ TEST(SceneEntityLifecycle, ClearEntitiesNullsActiveCamera_S1)
     auto* camComp = cam->addComponent<CameraComponent>();
     scene.setActiveCamera(camComp);
 
-    scene.clearEntities();
+    { Scene::Replacement replacement(scene); }
 
     EXPECT_EQ(scene.getActiveCamera(), nullptr);
 }
