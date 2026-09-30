@@ -16,8 +16,8 @@ namespace Vestige
 /// @brief Manages weather state, wind field, and atmospheric effects.
 ///
 /// Owns the EnvironmentForces subsystem that provides position-dependent
-/// wind queries for cloth, foliage, water, and particles. Always active
-/// (force-active) since wind state must advance every frame.
+/// wind queries for cloth, foliage, water, and particles. Wind state
+/// advances every frame.
 class AtmosphereSystem : public ISystem
 {
 public:
@@ -28,7 +28,6 @@ public:
     bool initialize(Engine& engine) override;
     void shutdown() override;
     void update(float deltaTime) override;
-    bool isForceActive() const override { return true; }
 
     // -- Accessors --
     EnvironmentForces& getEnvironmentForces() { return m_environmentForces; }

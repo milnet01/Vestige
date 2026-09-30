@@ -4,14 +4,13 @@
 /// @file test_system_registry.cpp
 /// @brief Unit tests for ISystem, SystemRegistry, and cross-system events.
 /// @note These tests don't require a full engine setup -- they use mock systems
-///       to verify the registry's lifecycle, dispatch, and auto-activation logic.
+///       to verify the registry's lifecycle, dispatch, and scene-event routing.
 
 #include "core/engine.h"
 #include "core/event_bus.h"
 #include "core/i_system.h"
 #include "core/system_registry.h"
 #include "core/system_events.h"
-#include "scene/component.h"
 #include "scene/scene.h"
 
 #include <gtest/gtest.h>
@@ -33,8 +32,8 @@ public:
     // Track call order across all MockSystem instances
     static std::vector<std::string> s_callLog;
 
-    explicit MockSystem(const std::string& name, bool forceActive = false)
-        : m_name(name), m_forceActive(forceActive)
+    explicit MockSystem(const std::string& name)
+        : m_name(name)
     {
     }
 
@@ -86,21 +85,10 @@ public:
 
     void onSceneUnload(Scene& /*scene*/) override { m_sceneUnloadCount++; }
 
-    bool isForceActive() const override { return m_forceActive; }
-
-    std::vector<uint32_t> getOwnedComponentTypes() const override
-    {
-        return m_ownedTypes;
-    }
-
     UpdatePhase getUpdatePhase() const override { return m_phase; }
 
     // Test helpers
     void setShouldInitSucceed(bool succeed) { m_shouldInitSucceed = succeed; }
-    void setOwnedComponentTypes(std::vector<uint32_t> types)
-    {
-        m_ownedTypes = std::move(types);
-    }
     void setUpdatePhase(UpdatePhase phase) { m_phase = phase; }
 
     bool wasInitialized() const { return m_initialized; }
@@ -114,7 +102,6 @@ public:
 
 private:
     std::string m_name;
-    bool m_forceActive = false;
     bool m_shouldInitSucceed = true;
     bool m_initialized = false;
     int m_updateCount = 0;
@@ -124,7 +111,6 @@ private:
     int m_sceneUnloadCount = 0;
     float m_lastDeltaTime = 0.0f;
     float m_lastFixedDt = 0.0f;
-    std::vector<uint32_t> m_ownedTypes;
     UpdatePhase m_phase = UpdatePhase::Update;
 };
 
@@ -622,18 +608,6 @@ TEST_F(SystemRegistryTest, SetActiveChangesState)
     EXPECT_FALSE(sys.isActive());
 }
 
-TEST_F(SystemRegistryTest, ForceActiveReturnsFalseByDefault)
-{
-    MockSystem sys("Test");
-    EXPECT_FALSE(sys.isForceActive());
-}
-
-TEST_F(SystemRegistryTest, ForceActiveOverride)
-{
-    MockSystem sys("Test", true);
-    EXPECT_TRUE(sys.isForceActive());
-}
-
 // =============================================================================
 // Metrics
 // =============================================================================
@@ -660,32 +634,6 @@ TEST_F(SystemRegistryTest, GetSystemMetricsReturnsAllSystems)
 TEST_F(SystemRegistryTest, TotalUpdateTimeForEmptyRegistry)
 {
     EXPECT_FLOAT_EQ(registry.getTotalUpdateTimeMs(), 0.0f);
-}
-
-// =============================================================================
-// Component ownership and auto-activation
-// =============================================================================
-
-// Dummy components for type ID testing
-class TestComponentA : public Component {};
-class TestComponentB : public Component {};
-class TestComponentC : public Component {};
-
-TEST_F(SystemRegistryTest, GetOwnedComponentTypesEmptyByDefault)
-{
-    MockSystem sys("Test");
-    EXPECT_TRUE(sys.getOwnedComponentTypes().empty());
-}
-
-TEST_F(SystemRegistryTest, SetOwnedComponentTypes)
-{
-    MockSystem sys("Test");
-    sys.setOwnedComponentTypes({1, 2, 3});
-    auto types = sys.getOwnedComponentTypes();
-    ASSERT_EQ(types.size(), 3u);
-    EXPECT_EQ(types[0], 1u);
-    EXPECT_EQ(types[1], 2u);
-    EXPECT_EQ(types[2], 3u);
 }
 
 // =============================================================================

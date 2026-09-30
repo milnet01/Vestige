@@ -7,11 +7,9 @@
 #include "core/logger.h"
 #include "core/system_events.h"
 #include "scene/scene.h"
-#include "scene/entity.h"
 
 #include <algorithm>
 #include <chrono>
-#include <unordered_set>
 
 namespace Vestige
 {
@@ -210,56 +208,6 @@ void SystemRegistry::onSceneUnloadAll(Scene& scene)
         }
 
         system->onSceneUnload(scene);
-    }
-}
-
-void SystemRegistry::activateSystemsForScene(Scene& scene)
-{
-    // Collect all component type IDs present in the scene
-    std::unordered_set<uint32_t> sceneComponentTypes;
-    scene.forEachEntity([&sceneComponentTypes](const Entity& entity)
-    {
-        auto typeIds = entity.getComponentTypeIds();
-        for (uint32_t id : typeIds)
-        {
-            sceneComponentTypes.insert(id);
-        }
-    });
-
-    // Activate systems whose owned components are present, or that are force-active
-    for (auto& system : m_systems)
-    {
-        if (system->isForceActive())
-        {
-            system->setActive(true);
-            continue;
-        }
-
-        auto ownedTypes = system->getOwnedComponentTypes();
-        if (ownedTypes.empty())
-        {
-            // Systems with no owned components default to active
-            system->setActive(true);
-            continue;
-        }
-
-        bool hasMatchingComponent = false;
-        for (uint32_t typeId : ownedTypes)
-        {
-            if (sceneComponentTypes.count(typeId) > 0)
-            {
-                hasMatchingComponent = true;
-                break;
-            }
-        }
-
-        system->setActive(hasMatchingComponent);
-
-        if (hasMatchingComponent)
-        {
-            Logger::info("SystemRegistry: auto-activated '" + system->getSystemName()
-                         + "' (matching components found)");
-        }
     }
 }
 

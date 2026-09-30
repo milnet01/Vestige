@@ -132,15 +132,6 @@ public:
     virtual void drawDebug() {}
 
     // -----------------------------------------------------------------------
-    // Component ownership -- used by SystemRegistry for auto-activation
-    // -----------------------------------------------------------------------
-
-    /// @brief Returns the component type IDs owned by this system.
-    /// Used by SystemRegistry to auto-activate systems based on scene contents.
-    /// @return Vector of ComponentTypeId values. Empty means no auto-activation.
-    virtual std::vector<uint32_t> getOwnedComponentTypes() const { return {}; }
-
-    // -----------------------------------------------------------------------
     // Activation state
     // -----------------------------------------------------------------------
 
@@ -149,10 +140,6 @@ public:
 
     /// @brief Activate or deactivate this system.
     void setActive(bool active) { m_isActive = active; }
-
-    /// @brief Whether this system should always be active regardless of scene contents.
-    /// Override to return true for systems like Lighting and Atmosphere.
-    virtual bool isForceActive() const { return false; }
 
     // -----------------------------------------------------------------------
     // Performance budget

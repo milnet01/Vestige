@@ -31,7 +31,6 @@ public:
     void shutdown() override;
     void update(float deltaTime) override;
     void drawDebug() override;
-    std::vector<uint32_t> getOwnedComponentTypes() const override;
 
     // -- Accessors --
     NavMeshBuilder& getBuilder() { return m_builder; }

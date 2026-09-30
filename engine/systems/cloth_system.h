@@ -15,8 +15,8 @@ namespace Vestige
 /// @brief Manages cloth and soft body simulation.
 ///
 /// Cloth simulation is entity-component based (ClothComponent instances
-/// update through SceneManager). This system provides domain grouping,
-/// auto-activation tracking, and performance budget enforcement.
+/// update through SceneManager). This system provides domain grouping
+/// and performance budget enforcement.
 /// Future: GPU compute cloth pipeline.
 class ClothSystem : public ISystem
 {
@@ -28,7 +28,6 @@ public:
     bool initialize(Engine& engine) override;
     void shutdown() override;
     void update(float deltaTime) override;
-    std::vector<uint32_t> getOwnedComponentTypes() const override;
 
 private:
     static inline const std::string m_name = "Cloth";

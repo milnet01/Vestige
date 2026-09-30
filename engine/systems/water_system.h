@@ -29,7 +29,6 @@ public:
     bool initialize(Engine& engine) override;
     void shutdown() override;
     void update(float deltaTime) override;
-    std::vector<uint32_t> getOwnedComponentTypes() const override;
 
     // -- Accessors --
     WaterRenderer& getWaterRenderer() { return m_waterRenderer; }

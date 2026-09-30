@@ -6,7 +6,7 @@
 |-------|-------|
 | Subsystem | `engine/systems` |
 | Status | `shipped` (foundation; some systems are empty-pump stubs — see §3 status table) |
-| Spec version | `1.0` |
+| Spec version | `1.1` |
 | Last reviewed | `2026-04-28` (initial draft — pending cold-eyes review) |
 | Owners | `milnet01` |
 | Engine version range | `v0.6.0+` (Phase 9A introduced `ISystem` / `SystemRegistry`; Phase 9B-onwards wrapped concrete domain systems) |
@@ -18,10 +18,10 @@
 `engine/systems` is the layer that *implements* the engine's domain `ISystem` (Interface for an engine subsystem) contracts — the concrete `TerrainSystem`, `AtmosphereSystem`, `AudioSystem`, `UISystem`, `LightingSystem`, `NavigationSystem`, `ParticleVfxSystem`, `Physics2DSystem`, `SpriteSystem`, `VegetationSystem`, `WaterSystem`, `ClothSystem`, `CharacterSystem`, `DestructionSystem` classes that `engine/core`'s `SystemRegistry` instantiates, sorts, ticks, and tears down each frame. Each class in this directory is a thin façade that:
 
 - holds the *primitive* subsystems that actually do the work (e.g. `TerrainSystem` owns the `Terrain` heightfield + `TerrainRenderer`; `AudioSystem` owns the `AudioEngine` OpenAL wrapper; `NavigationSystem` owns the `NavMeshBuilder` + `NavMeshQuery` Recast/Detour wrappers),
-- declares its `UpdatePhase` placement (`PreUpdate` / `Update` / `PostCamera` / `PostPhysics` / `Render`) and `getOwnedComponentTypes()` so `SystemRegistry` can stable-sort and auto-activate it,
+- declares its `UpdatePhase` placement (`PreUpdate` / `Update` / `PostCamera` / `PostPhysics` / `Render`) so `SystemRegistry` can stable-sort it,
 - forwards per-frame `update(dt)` to the underlying primitive(s) so the registry's per-system metrics + budget enforcement applies uniformly.
 
-The directory exists as its own subsystem because the alternative — letting every domain primitive register itself directly with `SystemRegistry` — would duplicate the activation / ordering / metrics boilerplate across `environment/`, `audio/`, `navigation/`, `physics/`, `renderer/`, `ui/`, scattering the registry contract across the whole tree. Centralising the wrappers here keeps the include graph one-way (`core → systems → primitive subsystems`) and gives `SystemRegistry` a single, audit-able list of every domain system that runs each frame. For the engine's primary use case — first-person walkthroughs of biblical structures (Tabernacle, Solomon's Temple) — this is what gets terrain, sky, water, vegetation, audio, UI, and navmesh all stepping in lock-step at 60 frames per second (FPS).
+The directory exists as its own subsystem because the alternative — letting every domain primitive register itself directly with `SystemRegistry` — would duplicate the ordering / metrics boilerplate across `environment/`, `audio/`, `navigation/`, `physics/`, `renderer/`, `ui/`, scattering the registry contract across the whole tree. Centralising the wrappers here keeps the include graph one-way (`core → systems → primitive subsystems`) and gives `SystemRegistry` a single, audit-able list of every domain system that runs each frame. For the engine's primary use case — first-person walkthroughs of biblical structures (Tabernacle, Solomon's Temple) — this is what gets terrain, sky, water, vegetation, audio, UI, and navmesh all stepping in lock-step at 60 frames per second (FPS).
 
 > **Distinction from `engine/core/i_system.h`.** That header defines the *interface* (the abstract base class + `UpdatePhase` enum). This subsystem ships the *implementations*. A new domain system goes here, not next to `i_system.h`.
 
@@ -30,7 +30,7 @@ The directory exists as its own subsystem because the alternative — letting ev
 | In scope | Out of scope |
 |----------|--------------|
 | Concrete `ISystem` implementations: `AtmosphereSystem`, `AudioSystem`, `CharacterSystem`, `ClothSystem`, `DestructionSystem`, `LightingSystem`, `NavigationSystem`, `ParticleVfxSystem`, `Physics2DSystem`, `SpriteSystem`, `TerrainSystem`, `UISystem`, `VegetationSystem`, `WaterSystem` | The `ISystem` interface, `UpdatePhase` enum, `SystemRegistry` lifecycle / dispatch — `engine/core/i_system.h`, `engine/core/system_registry.h` |
-| Per-system declaration of update phase, force-active flag, owned component types, opt-in lifecycle hooks (`onSceneLoad`, `onSceneUnload`, `drawDebug`) | Cross-system orchestration, init-prefix rollback, per-frame phase walk — `engine/core/system_registry.cpp` |
+| Per-system declaration of update phase, opt-in lifecycle hooks (`onSceneLoad`, `onSceneUnload`, `drawDebug`) | Cross-system orchestration, init-prefix rollback, per-frame phase walk — `engine/core/system_registry.cpp` |
 | Per-system thin forwarders that call into the primitive subsystem(s) they own (e.g. `AtmosphereSystem::update` → `EnvironmentForces::update`) | The primitive subsystems themselves (`Terrain`, `TerrainRenderer`, `EnvironmentForces`, `AudioEngine`, `NavMeshBuilder`, `FoliageManager`, `ParticleRenderer`, `WaterRenderer`, `WaterFbo`, `SpriteRenderer`, `SpriteBatchRenderer`, `PhysicsCharacterController`, `JPH::PhysicsSystem`, `UICanvas`, `UITheme`, `NotificationQueue`, …) — those live in `engine/{environment,audio,navigation,physics,renderer,ui}/` |
 | `UISystem`'s screen-stack state machine, modal capture, focus / tab navigation, accessibility-toggle plumbing, notification queue tick | The pure `GameScreen` state machine + ImGui editor panels — `engine/ui/`, `engine/editor/` |
 | `NavigationSystem`'s editor-facing `bakeNavMesh` + runtime `findPath` / `findNearestPoint` query API | The Recast / Detour wrappers themselves — `engine/navigation/` |
@@ -38,7 +38,7 @@ The directory exists as its own subsystem because the alternative — letting ev
 | `SpriteSystem`'s headless `collectVisible` / `sortDrawList` / `buildBatches` static helpers (testable without a Graphics-Library context) | The instanced quad shader + `SpriteRenderer` GPU pump — `engine/renderer/sprite_renderer.h` |
 | `AudioSystem`'s per-frame listener sync, ducking advance, `AudioSourceComponent` auto-acquire + per-frame `AL_GAIN` / pitch / position push | OpenAL device + buffer cache, Head-Related Transfer Function (HRTF) chain, mixer struct — `engine/audio/` |
 
-If a reader cannot tell whether a piece of behaviour belongs to the wrapper here or to the primitive in another subsystem, the rule of thumb is: *if `SystemRegistry` cares about it (phase, force-active, owned components, per-frame timing, scene activation), it lives here; if the GPU or the audio thread cares about it, it lives next to its primitive.*
+If a reader cannot tell whether a piece of behaviour belongs to the wrapper here or to the primitive in another subsystem, the rule of thumb is: *if `SystemRegistry` cares about it (phase, per-frame timing, scene-load hooks), it lives here; if the GPU or the audio thread cares about it, it lives next to its primitive.*
 
 ## 3. Architecture
 
@@ -77,22 +77,22 @@ If a reader cannot tell whether a piece of behaviour belongs to the wrapper here
 
 Status by system (shipping behaviour as of Phase 10.9):
 
-| System | File | Status | Owned primitives | Update phase | Force-active | Owned components |
-|--------|------|--------|------------------|--------------|--------------|-------------------|
-| `AtmosphereSystem` | `atmosphere_system.{h,cpp}` | active | `EnvironmentForces` | `Update` | yes | none (global wind state) |
-| `AudioSystem` | `audio_system.{h,cpp}` | active | `AudioEngine` | `PostCamera` | yes | `AudioSourceComponent` |
-| `CharacterSystem` | `character_system.{h,cpp}` | active (init-only) | `PhysicsCharacterController` | `Update` | no | none (controller stepped in `Engine::run`) |
-| `ClothSystem` | `cloth_system.{h,cpp}` | empty-pump (active per-component) | none directly | `Update` | no | `ClothComponent` |
-| `DestructionSystem` | `destruction_system.{h,cpp}` | **W13 stub** (no-op after Phase 10.9 W13) | none | `Update` | no | none (was `BreakableComponent`) |
-| `LightingSystem` | `lighting_system.{h,cpp}` | empty-pump (Renderer-embedded) | none | `Update` | yes | none |
-| `NavigationSystem` | `navigation_system.{h,cpp}` | active (editor-driven bake; runtime queries) | `NavMeshBuilder`, `NavMeshQuery` | `Update` | no | `NavAgentComponent` |
-| `ParticleVfxSystem` | `particle_system.{h,cpp}` | empty-pump (component-driven) | `ParticleRenderer` | `Update` | no | `ParticleEmitterComponent`, `GPUParticleEmitter` |
-| `Physics2DSystem` | `physics2d_system.{h,cpp}` | active | shares `PhysicsWorld` (3D Jolt) | `Update` | no | (uses scene-load hook; bodies tracked by entity id) |
-| `SpriteSystem` | `sprite_system.{h,cpp}` | active | `SpriteRenderer` | `Update` | no | inherits empty default — `SpriteComponent` ticking happens via scene traversal, not via `getOwnedComponentTypes()` registration |
-| `TerrainSystem` | `terrain_system.{h,cpp}` | active | `Terrain`, `TerrainRenderer` | `Update` | yes | none (global heightfield) |
-| `UISystem` | `ui_system.{h,cpp}` | active | `SpriteBatchRenderer`, `UICanvas`, `UITheme`, `NotificationQueue` | `Render` | yes | none (HUD / menus are global) |
-| `VegetationSystem` | `vegetation_system.{h,cpp}` | active | `FoliageManager`, `FoliageRenderer`, `TreeRenderer` | `Update` | no | none (environment-based) |
-| `WaterSystem` | `water_system.{h,cpp}` | active | `WaterRenderer`, `WaterFbo` | `Update` | no | `WaterSurfaceComponent` |
+| System | File | Status | Owned primitives | Update phase |
+|--------|------|--------|------------------|--------------|
+| `AtmosphereSystem` | `atmosphere_system.{h,cpp}` | active | `EnvironmentForces` | `Update` |
+| `AudioSystem` | `audio_system.{h,cpp}` | active | `AudioEngine` | `PostCamera` |
+| `CharacterSystem` | `character_system.{h,cpp}` | active (init-only) | `PhysicsCharacterController` | `Update` |
+| `ClothSystem` | `cloth_system.{h,cpp}` | empty-pump (active per-component) | none directly | `Update` |
+| `DestructionSystem` | `destruction_system.{h,cpp}` | **W13 stub** (no-op after Phase 10.9 W13) | none | `Update` |
+| `LightingSystem` | `lighting_system.{h,cpp}` | empty-pump (Renderer-embedded) | none | `Update` |
+| `NavigationSystem` | `navigation_system.{h,cpp}` | active (editor-driven bake; runtime queries) | `NavMeshBuilder`, `NavMeshQuery` | `Update` |
+| `ParticleVfxSystem` | `particle_system.{h,cpp}` | empty-pump (component-driven) | `ParticleRenderer` | `Update` |
+| `Physics2DSystem` | `physics2d_system.{h,cpp}` | active | shares `PhysicsWorld` (3D Jolt) | `Update` |
+| `SpriteSystem` | `sprite_system.{h,cpp}` | active | `SpriteRenderer` | `Update` |
+| `TerrainSystem` | `terrain_system.{h,cpp}` | active | `Terrain`, `TerrainRenderer` | `Update` |
+| `UISystem` | `ui_system.{h,cpp}` | active | `SpriteBatchRenderer`, `UICanvas`, `UITheme`, `NotificationQueue` | `Render` |
+| `VegetationSystem` | `vegetation_system.{h,cpp}` | active | `FoliageManager`, `FoliageRenderer`, `TreeRenderer` | `Update` |
+| `WaterSystem` | `water_system.{h,cpp}` | active | `WaterRenderer`, `WaterFbo` | `Update` |
 
 Key abstractions (small per-class surface; one-line each):
 
@@ -126,7 +126,6 @@ This subsystem has 14 public headers (≥ 8 → facade pattern: one block per he
 class AtmosphereSystem : public ISystem {
     bool initialize(Engine&) override;        // EnvironmentForces ctor-init.
     void update(float dt) override;            // EnvironmentForces::update(dt).
-    bool isForceActive() const override { return true; }
     EnvironmentForces& getEnvironmentForces();
 };
 ```
@@ -137,7 +136,6 @@ class AudioSystem : public ISystem {
     bool initialize(Engine&) override;
     void update(float dt) override;            // listener sync → ducking → mixer → per-component AL state.
     UpdatePhase getUpdatePhase() const override { return UpdatePhase::PostCamera; }
-    bool isForceActive() const override { return true; }
     bool isAvailable() const;                  // false if no audio hardware.
     AudioEngine& getAudioEngine();
     const std::unordered_map<uint32_t, unsigned int>& activeSources() const;
@@ -158,7 +156,6 @@ class CharacterSystem : public ISystem {
 class ClothSystem : public ISystem {
     bool initialize(Engine&) override;
     void update(float) override;               // no-op; per-component update via scene traversal.
-    std::vector<uint32_t> getOwnedComponentTypes() const override;  // ClothComponent.
 };
 ```
 
@@ -167,7 +164,6 @@ class ClothSystem : public ISystem {
 class DestructionSystem : public ISystem {
     bool initialize(Engine&) override;
     void update(float) override;               // no-op.
-    std::vector<uint32_t> getOwnedComponentTypes() const override;  // empty after W13.
 };
 ```
 
@@ -176,7 +172,6 @@ class DestructionSystem : public ISystem {
 class LightingSystem : public ISystem {
     bool initialize(Engine&) override;
     void update(float) override;               // no-op; lighting lives in Renderer.
-    bool isForceActive() const override { return true; }
 };
 ```
 
@@ -186,7 +181,6 @@ class NavigationSystem : public ISystem {
     bool initialize(Engine&) override;
     void update(float) override;               // no-op (Phase 11A: agent path advance).
     void drawDebug() override;                 // no-op (Phase 11A: navmesh wireframe).
-    std::vector<uint32_t> getOwnedComponentTypes() const override;  // NavAgentComponent.
 
     bool bakeNavMesh(Scene&, const NavMeshBuildConfig& = {});
     bool hasNavMesh() const;
@@ -201,7 +195,6 @@ class NavigationSystem : public ISystem {
 class ParticleVfxSystem : public ISystem {
     bool initialize(Engine&) override;
     void update(float) override;               // no-op; emitters tick via SceneManager.
-    std::vector<uint32_t> getOwnedComponentTypes() const override;  // ParticleEmitter, GPUParticleEmitter.
     ParticleRenderer& getParticleRenderer();
 };
 ```
@@ -248,7 +241,6 @@ class SpriteSystem : public ISystem {
 class TerrainSystem : public ISystem {
     bool initialize(Engine&) override;         // builds 257×257 demo heightfield.
     void update(float) override;               // no-op; renderer pumped by render loop.
-    bool isForceActive() const override { return true; }
     Terrain& getTerrain();
     TerrainRenderer& getTerrainRenderer();
 };
@@ -260,7 +252,6 @@ class UISystem : public ISystem {
     bool initialize(Engine&) override;
     void update(float dt) override;            // ticks NotificationQueue with theme transitionDuration.
     UpdatePhase getUpdatePhase() const override { return UpdatePhase::Render; }
-    bool isForceActive() const override { return true; }
 
     void renderUI(int screenW, int screenH);
     bool wantsCaptureInput() const;            // modal OR cursor-over-interactive.
@@ -308,7 +299,6 @@ class VegetationSystem : public ISystem {
 class WaterSystem : public ISystem {
     bool initialize(Engine&) override;         // 25%-resolution reflection / refraction FBOs.
     void update(float) override;               // no-op; rendering driven by render loop.
-    std::vector<uint32_t> getOwnedComponentTypes() const override;  // WaterSurfaceComponent.
     WaterRenderer& getWaterRenderer();
     WaterFbo&      getWaterFbo();
 };
@@ -317,14 +307,13 @@ class WaterSystem : public ISystem {
 **Non-obvious contract details:**
 
 - `AudioSystem` runs in **`UpdatePhase::PostCamera`** and `UISystem` in **`UpdatePhase::Render`** (every other system uses the default `UpdatePhase::Update`). Order matters: AudioSystem reads camera pos/forward/up *after* the camera is stepped (closes the listener-after-camera dependency, Slice 11 W6); UISystem prepares ImGui-frame state *after* every other domain system has settled.
-- `AudioSystem`, `AtmosphereSystem`, `LightingSystem`, `TerrainSystem`, `UISystem` are **force-active** (`isForceActive() == true`) — they own global state (mixer, wind, lighting, heightfield, screen stack) that the scene-driven activation heuristic would otherwise deactivate when the scene has zero matching components.
-- `DestructionSystem` is a deliberate **no-op stub** post-W13: it is registered solely so `test_domain_systems` invariants (`name`, `forceActive`) still hold. The fracture/dismemberment cluster lives at `engine/experimental/physics/` and is not built into shipping configurations.
+- Every system is active from `SystemRegistry::initializeAll` until `setActive(false)` or shutdown (3D_E-0721). Nothing switches a system off because of what a scene contains (3D_E-0730).
+- `DestructionSystem` is a deliberate **no-op stub** post-W13: it stays registered only because `Engine` still constructs it. The fracture/dismemberment cluster lives at `engine/experimental/physics/` and is not built into shipping configurations.
 - `Physics2DSystem` shares the **single** `PhysicsWorld` with the 3D physics path (Phase 9F-2). 2D bodies are extruded along Z by `zThickness` (clamped to ≥ 0.06 m for Jolt's convex radius) with `JPH::EAllowedDOFs::Plane2D`. There is no separate broadphase.
 - `SpriteSystem`'s static helpers (`collectVisible`, `sortDrawList`, `buildBatches`) are **deliberately Graphics-Library-free** so the sort + pack logic is unit-testable without a window. Only `render()` touches the GPU.
 - `NavigationSystem::bakeNavMesh` is **editor-driven** — there is no implicit auto-bake on scene load. After bake it publishes `NavMeshBakedEvent` on the shared `EventBus`.
 - `UISystem::setScreenBuilder(screen, {})` clears any override and falls back to the built-in `menu_prefabs` default. Passing `GameScreen::None` to `setRootScreen` clears the canvas (used by editor / headless tests).
 - `CharacterSystem::update` is **intentionally empty** — the controller step is in `Engine::run` because it is tightly coupled with `Camera` and `FirstPersonController`. The system exists for lifecycle + future animation subsystems.
-- Accessor `getOwnedComponentTypes()` returns by value (small vectors of `uint32_t`); `SystemRegistry` walks them on scene load to compute auto-activation. Force-active systems may legally return an empty list.
 
 **Stability:** every `<name>_system.h` header in this directory is part of the engine's public façade and respects semantic versioning for v0.x. Two evolution points to flag explicitly: (a) `UISystem`'s screen-stack and accessibility setters are still settling (multiple sub-slice revisions through Phase 10.9) — additive only, but the prefab override contract may change; (b) `NavigationSystem::update` and `drawDebug` are placeholders pending Phase 11A agent advance + navmesh wireframe.
 
@@ -341,7 +330,7 @@ class WaterSystem : public ISystem {
 
 **Scene load / unload:**
 
-1. `SystemRegistry::activateSystemsForScene(scene)` walks every entity, collects component-type ids, activates each non-force-active system whose `getOwnedComponentTypes()` intersects the scene set.
+1. `Scene::Replacement` publishes `SceneUnloadedEvent` before a scene's contents are cleared and `SceneLoadedEvent` once the new contents are in place; `SceneManager` does the same when the active scene changes. `SystemRegistry` turns each into `onSceneUnload` / `onSceneLoad` on every active system (`docs/specs/3D_E-0730-scene-change-events.md`).
 2. `Physics2DSystem::onSceneLoad(scene)` calls `ensureBody` for every entity with both `RigidBody2DComponent` + `Collider2DComponent`. `onSceneUnload` removes them all.
 3. (Other systems with scene-load hooks are reserved for Phase 11A — `NavigationSystem` agent activation, `AudioSystem` ambience prebake.)
 
@@ -465,7 +454,7 @@ Per CODING_STANDARDS §11. Wrapper-layer policy is **uniform across every system
 
 | Concern | Test file | Coverage |
 |---------|-----------|----------|
-| `ISystem` invariants for every concrete system (name, force-active, owned components) | `tests/test_domain_systems.cpp` | All 14 systems — pinned contract |
+| `ISystem` invariants for every concrete system (name, initial state, owned primitives) | `tests/test_domain_systems.cpp` | All 14 systems — pinned contract |
 | `SystemRegistry` registration / phase sort / init-prefix rollback | `tests/test_system_registry.cpp` | Lifecycle (in `engine/core`'s test set, listed here for cross-reference) |
 | `AudioSystem` listener / mixer / per-source state push | `tests/test_audio_attenuation.cpp`, `test_audio_doppler.cpp`, `test_audio_occlusion.cpp`, `test_audio_source_state.cpp`, `test_audio_source_component.cpp`, `test_audio_engine_sandbox.cpp`, `test_audio_mixer.cpp`, `test_audio_music.cpp`, `test_audio_music_stream.cpp`, `test_audio_reverb.cpp`, `test_audio_hrtf.cpp`, `test_audio_ambient.cpp`, `test_audio_panel.cpp`, `test_audio_stop_sound.cpp` | Full mixer + per-component pipeline |
 | `Physics2DSystem` body lifecycle + impulse / velocity / transform | `tests/test_physics2d_system.cpp` | Body create / destroy, scene-load auto-spawn, helpers |
@@ -477,12 +466,12 @@ Per CODING_STANDARDS §11. Wrapper-layer policy is **uniform across every system
 | `ClothSystem` (via cloth simulator suite) | `tests/test_cloth_simulator.cpp`, `test_cloth_collision.cpp`, `test_cloth_constraint_graph.cpp`, `test_cloth_presets.cpp`, `test_cloth_solver_backend.cpp`, `test_cloth_solver_improvements.cpp`, `test_cloth_backend_factory.cpp`, `test_gpu_cloth_simulator.cpp` | Component simulation + solver parity |
 | `ParticleVfxSystem` (via particle-data + GPU-particle suites) | `tests/test_particle_data.cpp`, `test_gpu_particle_system.cpp` | Emitter component + GPU pipeline |
 | `TerrainSystem` size caps | `tests/test_terrain_size_caps.cpp` | Heightfield bounds |
-| `AtmosphereSystem` / `LightingSystem` / `VegetationSystem` / `DestructionSystem` | `tests/test_domain_systems.cpp` | Name / force-active / owned-components only — no per-frame body to test |
+| `AtmosphereSystem` / `LightingSystem` / `VegetationSystem` / `DestructionSystem` | `tests/test_domain_systems.cpp` | Name / owned primitives only — no per-frame body to test |
 | Lighting effects (emissive surfaces) | `tests/test_emissive_lighting.cpp` | Renderer-side emissive contribution |
 
 **Adding a test for this subsystem:** drop a new `tests/test_<system>_<thing>.cpp` next to its peers; link against `vestige_engine` + `gtest_main` in `tests/CMakeLists.txt` (auto-discovered via `gtest_discover_tests`). Use the system class directly without an `Engine` instance — every wrapper in this directory **except `UISystem::renderUI`, `SpriteSystem::render`, and the `*Renderer::init` calls inside `initialize()`** is unit-testable headlessly because the wrapper is pure forwarding logic. GPU / GLFW-bound paths exercise via `engine/testing/visual_test_runner.h`. Headless `Physics2DSystem` tests use `setPhysicsWorldForTesting(...)` to bypass `Engine::initialize`.
 
-**Coverage gap:** the `update()` body of force-active systems (`AtmosphereSystem`, `AudioSystem`, `LightingSystem`, `TerrainSystem`, `UISystem`) is exercised end-to-end only through the visual-test runner — `test_domain_systems` pins names / flags / component lists but does not pump frames. The wrapper bodies are short enough that this is a deliberate trade-off, not a defect.
+**Coverage gap:** the `update()` body of the global systems (`AtmosphereSystem`, `AudioSystem`, `LightingSystem`, `TerrainSystem`, `UISystem`) is exercised end-to-end only through the visual-test runner — `test_domain_systems` pins names and owned primitives but does not pump frames. The wrapper bodies are short enough that this is a deliberate trade-off, not a defect.
 
 ## 12. Accessibility
 
@@ -521,7 +510,7 @@ Constraint summary for downstream code that consumes `engine/systems`:
 | `engine/navigation/nav_mesh_builder.h`, `nav_mesh_query.h`, `nav_mesh_config.h`, `nav_agent_component.h` | engine subsystem | Owned by `NavigationSystem`. |
 | `engine/physics/physics_character_controller.h`, `physics_world.h`, `cloth_component.h` | engine subsystem | Owned by Character / Physics2D / Cloth. |
 | `engine/renderer/camera.h`, `particle_renderer.h`, `terrain_renderer.h`, `foliage_renderer.h`, `tree_renderer.h`, `water_renderer.h`, `water_fbo.h`, `sprite_renderer.h`, `sprite_atlas.h`, `text_renderer.h`, `renderer.h` | engine subsystem | Owned by the respective wrappers; AudioSystem reads camera transform. |
-| `engine/scene/water_surface.h`, `particle_emitter.h`, `gpu_particle_emitter.h`, `sprite_component.h`, `rigid_body_2d_component.h`, `collider_2d_component.h` | engine subsystem | `getOwnedComponentTypes()` and per-frame component walk. |
+| `engine/scene/water_surface.h`, `particle_emitter.h`, `gpu_particle_emitter.h`, `sprite_component.h`, `rigid_body_2d_component.h`, `collider_2d_component.h` | engine subsystem | Per-frame component walk. |
 | `engine/ui/game_screen.h`, `sprite_batch_renderer.h`, `ui_canvas.h`, `ui_notification_toast.h`, `ui_signal.h`, `ui_theme.h`, `subtitle_renderer.h`, `menu_prefabs.h` | engine subsystem | Owned by `UISystem`. |
 | `<glm/glm.hpp>` | external | Math primitives. |
 | `<Jolt/...>` (`Body/BodyCreationSettings.h`, `Body/BodyInterface.h`, `Body/AllowedDOFs.h`, `Collision/Shape/{BoxShape,SphereShape,CapsuleShape,CylinderShape,ConvexHullShape,MeshShape,StaticCompoundShape}.h`) | external (Jolt 5+) | 2D body creation with `Plane2D` DOF. |
@@ -559,7 +548,7 @@ Internal cross-references:
 
 | # | Question | Owner | Target |
 |---|----------|-------|--------|
-| 1 | `DestructionSystem` is a no-op stub; do we revive it in Phase 11A by re-promoting the experimental physics cluster, or remove it entirely? Currently kept for `test_domain_systems` invariants. | milnet01 | Phase 11A entry |
+| 1 | `DestructionSystem` is a no-op stub; do we revive it in Phase 11A by re-promoting the experimental physics cluster, or remove it entirely? Currently kept because `Engine` constructs it. | milnet01 | Phase 11A entry |
 | 2 | `LightingSystem` is an empty pump (lighting lives in `Renderer`). Does Phase 11 lift the global-illumination probe grid (per `docs/GI_ROADMAP.md`) into this wrapper, or keep lighting renderer-embedded? | milnet01 | Phase 11 entry |
 | 3 | `NavigationSystem::update` is a no-op (agents have no path-advance yet). Phase 11A is expected to land agent advance + `drawDebug` wireframe. | milnet01 | Phase 11A |
 | 4 | Performance budgets in §8 are placeholders. Need a one-shot Tracy / RenderDoc capture across a populated Tabernacle scene to fill measured numbers. | milnet01 | Phase 11 audit (concrete: end of Phase 10.9) |
@@ -573,3 +562,4 @@ Internal cross-references:
 | Date | Spec version | Author | Change |
 |------|--------------|--------|--------|
 | 2026-04-28 | 1.0 | milnet01 | Initial spec — `engine/systems` as the domain-`ISystem` implementation layer, post-Phase 10.9 audit. Captures W13 stub status of `DestructionSystem`, force-active flags introduced in Slice 8 W5, `UpdatePhase::PostCamera` / `Render` overrides introduced in Slice 11 Sy1. |
+| 2026-10-01 | 1.1 | milnet01 | 3D_E-0730: scene-driven activation removed with `isForceActive` and `getOwnedComponentTypes`; scene load / unload now arrive as events routed by `SystemRegistry`. |

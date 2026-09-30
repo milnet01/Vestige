@@ -6,8 +6,6 @@
 #include "systems/cloth_system.h"
 #include "core/engine.h"
 #include "core/logger.h"
-#include "physics/cloth_component.h"
-#include "scene/component.h"
 
 namespace Vestige
 {
@@ -27,11 +25,6 @@ void ClothSystem::shutdown()
 void ClothSystem::update(float /*deltaTime*/)
 {
     // Cloth updates through entity component system (SceneManager)
-}
-
-std::vector<uint32_t> ClothSystem::getOwnedComponentTypes() const
-{
-    return { ComponentTypeId::get<ClothComponent>() };
 }
 
 } // namespace Vestige

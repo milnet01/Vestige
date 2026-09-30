@@ -27,11 +27,11 @@ These are consumed by production code (the Engine main loop, character controlle
 
 `engine/systems/destruction_system.cpp` was previously the cluster's pump but had an empty `update()` body. After W13 it's a registered ISystem stub:
 
-- Still constructed and registered by `Engine::initialize` (so `test_domain_systems` invariants hold).
-- `getOwnedComponentTypes()` returns an empty vector — the system can't reference `BreakableComponent` (which moved to `experimental/physics/`) without violating the production-to-experimental dependency rule.
+- Still constructed and registered by `Engine::initialize`.
+- It does not reference `BreakableComponent` (which moved to `experimental/physics/`); doing so would violate the production-to-experimental dependency rule.
 - `update()` is a no-op — same as it was before W13; the relocation just makes the empty-pump status explicit.
 
-To restore destruction as a live subsystem: bring the cluster files back from `experimental/physics/` to `physics/`, restore the `BreakableComponent` registration, write a real `update()` that drives fracture detection + ragdoll spawn.
+To restore destruction as a live subsystem: bring the cluster files back from `experimental/physics/` to `physics/` and write a real `update()` that drives fracture detection + ragdoll spawn.
 
 ## Why "experimental" instead of deleted
 
@@ -48,8 +48,7 @@ To bring a subsystem back to production:
 2. Move the consumed files back from `engine/experimental/physics/` to `engine/physics/`.
 3. Update `engine/CMakeLists.txt` to remove the `experimental/physics/` prefix.
 4. Update `#include` paths in the cluster's own files + their tests + DestructionSystem.
-5. Re-register `BreakableComponent` (or relevant types) in `DestructionSystem::getOwnedComponentTypes()`.
-6. Write at least one integration test that exercises the production call path, not just the math.
+5. Write at least one integration test that exercises the production call path, not just the math.
 
 ## Constraints
 

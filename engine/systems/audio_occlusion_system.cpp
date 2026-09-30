@@ -16,7 +16,6 @@
 #include "systems/audio_system.h"
 #include "physics/physics_world.h"
 #include "physics/rigid_body.h"
-#include "scene/component.h"
 #include "scene/entity.h"
 #include "scene/scene.h"
 #include "scene/scene_manager.h"
@@ -493,14 +492,6 @@ void AudioOcclusionSystem::update(float deltaTime)
         it = (seen.find(it->first) == seen.end()) ? m_targets.erase(it)
                                                    : std::next(it);
     }
-}
-
-std::vector<uint32_t> AudioOcclusionSystem::getOwnedComponentTypes() const
-{
-    // Auto-activate whenever the scene has audio sources to occlude. Shares
-    // ownership of the type with AudioSystem — ownership only drives
-    // activation, so listing it in both systems is fine.
-    return { ComponentTypeId::get<AudioSourceComponent>() };
 }
 
 } // namespace Vestige

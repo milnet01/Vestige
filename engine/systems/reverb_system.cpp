@@ -15,7 +15,6 @@
 #include "core/logger.h"
 #include "core/system_registry.h"
 #include "systems/audio_system.h"
-#include "scene/component.h"
 #include "scene/entity.h"
 #include "scene/scene.h"
 #include "scene/scene_manager.h"
@@ -407,19 +406,6 @@ AcousticBakeResult ReverbSystem::bakeAcoustics(Scene& scene)
     // the fresh IRs next frame without needing a scene reload.
     invalidateBakedProbes();
     return result;
-}
-
-std::vector<uint32_t> ReverbSystem::getOwnedComponentTypes() const
-{
-    // Reverb zones OR baked acoustic probes (NOT AudioSourceComponent): with the
-    // default isForceActive() == false, the system activates when a scene has
-    // either authored reverb zones or baked probes (B4) — a scene with sources
-    // but neither stays dry. A baked-only scene (probes, no zones) must still
-    // activate, or its baked IRs would never reach the slot.
-    return {
-        ComponentTypeId::get<ReverbZoneComponent>(),
-        ComponentTypeId::get<AcousticProbeComponent>()
-    };
 }
 
 } // namespace Vestige

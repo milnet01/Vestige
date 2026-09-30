@@ -7,8 +7,6 @@
 #include "core/engine.h"
 #include "core/logger.h"
 #include "core/system_events.h"
-#include "navigation/nav_agent_component.h"
-#include "scene/component.h"
 
 namespace Vestige
 {
@@ -78,13 +76,6 @@ std::vector<glm::vec3> NavigationSystem::findPath(const glm::vec3& start,
 glm::vec3 NavigationSystem::findNearestPoint(const glm::vec3& point)
 {
     return m_query.findNearestPoint(point);
-}
-
-std::vector<uint32_t> NavigationSystem::getOwnedComponentTypes() const
-{
-    return {
-        ComponentTypeId::get<NavAgentComponent>()
-    };
 }
 
 } // namespace Vestige

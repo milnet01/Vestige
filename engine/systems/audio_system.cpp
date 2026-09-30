@@ -9,7 +9,6 @@
 #include "audio/audio_source_component.h"
 #include "audio/audio_source_state.h"
 #include "environment/environment_forces.h"
-#include "scene/component.h"
 
 #include <nlohmann/json.hpp>
 
@@ -298,13 +297,6 @@ void AudioSystem::update(float deltaTime)
 
     // AX13 — hand this frame's activity to next frame's router pass.
     m_busActivePrev = busActiveCurr;
-}
-
-std::vector<uint32_t> AudioSystem::getOwnedComponentTypes() const
-{
-    return {
-        ComponentTypeId::get<AudioSourceComponent>()
-    };
 }
 
 } // namespace Vestige

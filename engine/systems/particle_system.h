@@ -17,7 +17,7 @@ namespace Vestige
 ///
 /// Owns the ParticleRenderer. Particle emitters are entity components
 /// (ParticleEmitter, GpuParticleEmitter) that update through the scene
-/// manager; this system handles renderer lifecycle and auto-activation.
+/// manager; this system handles the renderer lifecycle.
 class ParticleVfxSystem : public ISystem
 {
 public:
@@ -28,7 +28,6 @@ public:
     bool initialize(Engine& engine) override;
     void shutdown() override;
     void update(float deltaTime) override;
-    std::vector<uint32_t> getOwnedComponentTypes() const override;
 
     // -- Accessors --
     ParticleRenderer& getParticleRenderer() { return m_particleRenderer; }

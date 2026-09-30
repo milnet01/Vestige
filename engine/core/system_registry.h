@@ -203,12 +203,6 @@ public:
     /// bus must outlive the subscription.
     void subscribeSceneEvents(EventBus& bus);
 
-    /// @brief Scans scene entities for component types and activates systems
-    ///        whose owned component types are present. Force-active systems
-    ///        are always activated.
-    /// @param scene The scene to scan.
-    void activateSystemsForScene(Scene& scene);
-
     // -----------------------------------------------------------------------
     // Debug and metrics
     // -----------------------------------------------------------------------

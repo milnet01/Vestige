@@ -79,10 +79,6 @@ public:
     void shutdown() override;
     void update(float deltaTime) override { (void)deltaTime; }  // event-driven
 
-    /// @brief Event-driven and global: stay registered/subscribed regardless of
-    ///        scene contents. Mirrors AudioSystem / FootstepSystem.
-    bool isForceActive() const override { return true; }
-
 private:
     /// @brief Bus callback: decide + synthesise one impact strike. The
     ///        untagged-collision gate is read live from

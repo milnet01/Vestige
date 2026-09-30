@@ -6,9 +6,6 @@
 #include "systems/particle_system.h"
 #include "core/engine.h"
 #include "core/logger.h"
-#include "scene/component.h"
-#include "scene/particle_emitter.h"
-#include "scene/gpu_particle_emitter.h"
 
 namespace Vestige
 {
@@ -33,14 +30,6 @@ void ParticleVfxSystem::shutdown()
 void ParticleVfxSystem::update(float /*deltaTime*/)
 {
     // Particles update through entity component system (SceneManager)
-}
-
-std::vector<uint32_t> ParticleVfxSystem::getOwnedComponentTypes() const
-{
-    return {
-        ComponentTypeId::get<ParticleEmitterComponent>(),
-        ComponentTypeId::get<GPUParticleEmitter>()
-    };
 }
 
 } // namespace Vestige

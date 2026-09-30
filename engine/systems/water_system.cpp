@@ -6,8 +6,6 @@
 #include "systems/water_system.h"
 #include "core/engine.h"
 #include "core/logger.h"
-#include "scene/water_surface.h"
-#include "scene/component.h"
 
 namespace Vestige
 {
@@ -40,11 +38,6 @@ void WaterSystem::shutdown()
 void WaterSystem::update(float /*deltaTime*/)
 {
     // Water rendering is driven by the render loop in engine.cpp
-}
-
-std::vector<uint32_t> WaterSystem::getOwnedComponentTypes() const
-{
-    return { ComponentTypeId::get<WaterSurfaceComponent>() };
 }
 
 } // namespace Vestige

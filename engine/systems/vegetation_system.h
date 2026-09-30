@@ -19,8 +19,7 @@ namespace Vestige
 /// @brief Manages vegetation placement, LOD, and rendering.
 ///
 /// Owns FoliageManager, FoliageRenderer, and TreeRenderer. Vegetation
-/// is environment-based (not entity components), so this system does
-/// not declare owned component types for auto-activation.
+/// is environment-based, not entity components.
 class VegetationSystem : public ISystem
 {
 public:

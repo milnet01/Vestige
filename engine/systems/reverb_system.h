@@ -57,11 +57,9 @@ std::vector<LoadedAcousticProbe> loadAcousticsIndex(const std::string& sceneSour
 /// the slot wet gain, and writes each spatial source's `reverbSend`, all of
 /// which `AudioSystem`'s compose loop consumes the same frame.
 ///
-/// **Ownership differs from AX1 on purpose.** `getOwnedComponentTypes()` returns
-/// `{ ReverbZoneComponent, AcousticProbeComponent }`, so with the default
-/// `isForceActive() == false` the system activates when a scene has authored
-/// reverb zones **or** baked acoustic probes (B4) — a scene with sources but
-/// neither stays dry, which is the intended no-reverb path.
+/// A scene with sources but neither authored reverb zones nor baked acoustic
+/// probes (B4) stays dry: `update()` finds no zone, so the slot slews to 0 and
+/// no source gets a send. That is the intended no-reverb path.
 ///
 /// Design of record: docs/phases/phase_10_audio_reverb_design.md § 5.
 class ReverbSystem : public ISystem
@@ -74,7 +72,6 @@ public:
     bool initialize(Engine& engine) override;
     void shutdown() override;
     void update(float deltaTime) override;
-    std::vector<uint32_t> getOwnedComponentTypes() const override;
 
     /// @brief PostCamera — same phase as AudioSystem, registered before it.
     UpdatePhase getUpdatePhase() const override { return UpdatePhase::PostCamera; }

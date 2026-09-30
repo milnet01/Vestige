@@ -27,7 +27,7 @@
 | `InputManager` — GLFW keyboard / mouse / gamepad polling + event publishing | Action-map data structures (`InputBinding`, `InputActionMap`) — `engine/input/` |
 | `FirstPersonController` — WASD + mouse-look + gamepad camera controller, AABB / terrain collision | Physics character controller — `engine/physics/physics_character_controller.h` |
 | `EventBus` + `Event` base + common event structs (`Window*Event`, `Key*Event`, `Mouse*Event`, `SceneLoadedEvent`, `WeatherChangedEvent`, …) | Domain-specific events that don't cross subsystems (those live with their owner) |
-| `ISystem` interface + `UpdatePhase` enum + `SystemRegistry` (auto-activation, per-frame dispatch, metrics) | Concrete domain systems — `engine/systems/`, `engine/audio/`, `engine/ui/`, … |
+| `ISystem` interface + `UpdatePhase` enum + `SystemRegistry` (scene-event routing, per-frame dispatch, metrics) | Concrete domain systems — `engine/systems/`, `engine/audio/`, `engine/ui/`, … |
 | `Logger` — six-level engine logger, ring buffer for editor console, file output | Per-frame profiler markers — `engine/profiler/` |
 | `Settings` — JSON load / save / migrate / validate, schema versioning | Renderer accessibility internals (color-vision filter, post-process toggles consume `Settings` via sinks but live in `engine/renderer/` and `engine/accessibility/`) |
 | `settings_apply` — sink interfaces + production sinks for video / audio / accessibility / HRTF / subtitles / photosensitive / input | Concrete subsystem behaviour invoked by the sinks (the sinks are thin forwarders) |
@@ -75,7 +75,7 @@ Key abstractions:
 | `system_events.h` | header | Catalogue of canonical typed events (`SceneLoadedEvent`, `WeatherChangedEvent`, `KeyPressedEvent`, …) — the public type vocabulary for `EventBus::publish<T>`. `engine/core/system_events.h` |
 | `ISystem` | interface | 4 pure virtuals + opt-in hooks for every domain system. `engine/core/i_system.h:78` |
 | `UpdatePhase` | enum | `PreUpdate` / `Update` / `PostCamera` / `PostPhysics` / `Render` ordering tag. `engine/core/i_system.h:50` |
-| `SystemRegistry` | class | Lifecycle + per-frame dispatch + auto-activation + per-system metrics. `engine/core/system_registry.h:56` |
+| `SystemRegistry` | class | Lifecycle + per-frame dispatch + scene-event routing + per-system metrics. `engine/core/system_registry.h:56` |
 | `Logger` | class (static) | Six-level engine logger + 1000-entry ring buffer + timestamped log file. `engine/core/logger.h:34` |
 | `Settings` | struct | Persisted user settings root (display / audio / controls / gameplay / accessibility / onboarding). `engine/core/settings.h:300` |
 | `validate(Settings&)` | free function | Clamp every field to its declared range; called by `fromJson`. `engine/core/settings.h:350` |
@@ -350,7 +350,7 @@ Constraint summary for downstream UIs that consume `engine/core`:
 | `engine/accessibility/photosensitive_safety.h`, `post_process_accessibility.h` | engine subsystem | Apply-sink target structs. |
 | `engine/renderer/color_vision_filter.h`, `camera.h` | engine subsystem | Apply-sink target enum + camera the FPC drives. (FPC ↔ Camera is the one bidirectional dependency: `engine/renderer/camera.h` does **not** include core, `engine/core/first_person_controller.h` does include camera.) |
 | `engine/ui/ui_theme.h`, `subtitle.h`, `caption_map.h` | engine subsystem | Apply-sink targets. |
-| `engine/scene/scene.h`, `entity.h` | engine subsystem | `SystemRegistry::activateSystemsForScene` walks scene component types. |
+| `engine/scene/scene.h` | engine subsystem | `SystemRegistry` hands the scene named by `SceneLoadedEvent` / `SceneUnloadedEvent` to each active system (3D_E-0730). |
 | `engine/profiler/performance_profiler.h` | engine subsystem | Per-frame timing. `SystemRegistry` times each system's update itself. |
 | `engine/core/system_events.h` | this subsystem (re-export) | Public event-type vocabulary; downstream code includes this rather than re-declaring event structs. (Same subsystem; listed here because it's a load-bearing public include target.) |
 | `<glm/glm.hpp>` | external | Math primitives (`vec2`, `vec3`). |

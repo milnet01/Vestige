@@ -152,7 +152,6 @@ public:
     }
 
     /// @brief Returns the type IDs of all components attached to this entity.
-    /// Used by SystemRegistry for auto-activation based on scene contents.
     std::vector<uint32_t> getComponentTypeIds() const
     {
         std::vector<uint32_t> ids;

@@ -16,7 +16,7 @@ namespace Vestige
 ///
 /// Physics entities are component-based (BreakableComponent, RigidBody).
 /// PhysicsWorld stays in Engine as shared infrastructure. This system
-/// provides domain grouping, auto-activation, and performance metrics.
+/// provides domain grouping and performance metrics.
 class DestructionSystem : public ISystem
 {
 public:
@@ -27,7 +27,6 @@ public:
     bool initialize(Engine& engine) override;
     void shutdown() override;
     void update(float deltaTime) override;
-    std::vector<uint32_t> getOwnedComponentTypes() const override;
 
 private:
     static inline const std::string m_name = "Destruction";

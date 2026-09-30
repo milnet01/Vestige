@@ -175,7 +175,6 @@ public:
     bool initialize(Engine& engine) override;
     void shutdown() override;
     void update(float deltaTime) override;
-    std::vector<uint32_t> getOwnedComponentTypes() const override;
 
     /// @brief Runs in `PostCamera` — the same phase as `AudioSystem` — and is
     ///        registered *before* it, so the stable-sort schedules occlusion

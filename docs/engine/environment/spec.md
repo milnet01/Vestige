@@ -42,7 +42,7 @@ If a reader can't tell which side of the line a feature falls on, the row needs 
                  ┌────────────────────────────────────┐
                  │     AtmosphereSystem (ISystem)     │
                  │  engine/systems/atmosphere_system  │
-                 │  owns ⇩, force-active, drives Wx   │
+                 │  owns ⇩, ticks always, drives Wx   │
                  └─────────────┬──────────────────────┘
                                │ owns by-value
                                ▼
@@ -367,7 +367,7 @@ public:
 
 **Non-obvious contract details:**
 
-- `EnvironmentForces::update(dt)` is the **single mutator on the per-frame hot path** — every other query is `const`. `AtmosphereSystem::update` (force-active) is the sole legitimate caller; do not call it twice in one frame or the gust state machine advances at 2× rate.
+- `EnvironmentForces::update(dt)` is the **single mutator on the per-frame hot path** — every other query is `const`. `AtmosphereSystem::update` is the sole legitimate caller; do not call it twice in one frame or the gust state machine advances at 2× rate.
 - `EnvironmentForces` query results are **frame-coherent** within an `update()` cycle: `m_cachedFlutter` is computed once per `update` and re-used by every `getWindVelocity()` call until the next `update`, so two systems that query the same world position in the same frame see the same wind vector (deterministic).
 - `getTemperature`, `getHumidity`, `getWetness`, `getAirDensity` accept a `worldPos` but currently return the global field — the position parameter is **forward-compat** (Phase 15 will introduce position-varying weather). Treat the signature as load-bearing, not the implementation.
 - `EnvironmentForces::reset()` re-seeds the LCG (Linear Congruential Generator) RNG (Random Number Generator) with the fixed seed `54321u` — gust-state replays are deterministic across runs.
@@ -388,7 +388,7 @@ public:
 
 **Steady-state per-frame:**
 
-1. `AtmosphereSystem::update(dt)` (registered in `UpdatePhase::Update` group, force-active per `engine/systems/atmosphere_system.h:31`) → `EnvironmentForces::update(dt)`:
+1. `AtmosphereSystem::update(dt)` (registered in `UpdatePhase::Update` group; active from initialization, like every system) → `EnvironmentForces::update(dt)`:
    1. `m_elapsed += dt`.
    2. `updateGustState(dt)` advances the gust state machine (calm ↔ blow), the direction-shift state machine, and uses the LCG RNG.
    3. `m_cachedFlutter` is recomputed from `m_elapsed` (two-sine combination).

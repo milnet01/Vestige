@@ -49,18 +49,6 @@ TEST_F(DomainSystemTest, AtmosphereSystemName)
     EXPECT_EQ(sys.getSystemName(), "Atmosphere");
 }
 
-TEST_F(DomainSystemTest, AtmosphereSystemIsForceActive)
-{
-    AtmosphereSystem sys;
-    EXPECT_TRUE(sys.isForceActive());
-}
-
-TEST_F(DomainSystemTest, AtmosphereSystemNoOwnedComponents)
-{
-    AtmosphereSystem sys;
-    EXPECT_TRUE(sys.getOwnedComponentTypes().empty());
-}
-
 TEST_F(DomainSystemTest, AtmosphereSystemStartsInactive)
 {
     AtmosphereSystem sys;
@@ -87,19 +75,6 @@ TEST_F(DomainSystemTest, ParticleSystemName)
     EXPECT_EQ(sys.getSystemName(), "ParticleVFX");
 }
 
-TEST_F(DomainSystemTest, ParticleSystemNotForceActive)
-{
-    ParticleVfxSystem sys;
-    EXPECT_FALSE(sys.isForceActive());
-}
-
-TEST_F(DomainSystemTest, ParticleSystemOwnsComponents)
-{
-    ParticleVfxSystem sys;
-    auto types = sys.getOwnedComponentTypes();
-    EXPECT_EQ(types.size(), 2u);
-}
-
 TEST_F(DomainSystemTest, ParticleSystemHasRenderer)
 {
     ParticleVfxSystem sys;
@@ -114,19 +89,6 @@ TEST_F(DomainSystemTest, WaterSystemName)
 {
     WaterSystem sys;
     EXPECT_EQ(sys.getSystemName(), "Water");
-}
-
-TEST_F(DomainSystemTest, WaterSystemNotForceActive)
-{
-    WaterSystem sys;
-    EXPECT_FALSE(sys.isForceActive());
-}
-
-TEST_F(DomainSystemTest, WaterSystemOwnsComponents)
-{
-    WaterSystem sys;
-    auto types = sys.getOwnedComponentTypes();
-    EXPECT_EQ(types.size(), 1u);
 }
 
 TEST_F(DomainSystemTest, WaterSystemHasRendererAndFbo)
@@ -144,18 +106,6 @@ TEST_F(DomainSystemTest, VegetationSystemName)
 {
     VegetationSystem sys;
     EXPECT_EQ(sys.getSystemName(), "Vegetation");
-}
-
-TEST_F(DomainSystemTest, VegetationSystemNotForceActive)
-{
-    VegetationSystem sys;
-    EXPECT_FALSE(sys.isForceActive());
-}
-
-TEST_F(DomainSystemTest, VegetationSystemNoOwnedComponents)
-{
-    VegetationSystem sys;
-    EXPECT_TRUE(sys.getOwnedComponentTypes().empty());
 }
 
 TEST_F(DomainSystemTest, VegetationSystemHasSubsystems)
@@ -176,21 +126,6 @@ TEST_F(DomainSystemTest, TerrainSystemName)
     EXPECT_EQ(sys.getSystemName(), "Terrain");
 }
 
-TEST_F(DomainSystemTest, TerrainSystemIsForceActive_W5)
-{
-    // Terrain is global state (heightfield, splatmap, GPU buffers), not a
-    // per-entity component, so the no-owned-components heuristic must not
-    // deactivate it.
-    TerrainSystem sys;
-    EXPECT_TRUE(sys.isForceActive());
-}
-
-TEST_F(DomainSystemTest, TerrainSystemNoOwnedComponents)
-{
-    TerrainSystem sys;
-    EXPECT_TRUE(sys.getOwnedComponentTypes().empty());
-}
-
 TEST_F(DomainSystemTest, TerrainSystemHasSubsystems)
 {
     TerrainSystem sys;
@@ -208,19 +143,6 @@ TEST_F(DomainSystemTest, ClothSystemName)
     EXPECT_EQ(sys.getSystemName(), "Cloth");
 }
 
-TEST_F(DomainSystemTest, ClothSystemNotForceActive)
-{
-    ClothSystem sys;
-    EXPECT_FALSE(sys.isForceActive());
-}
-
-TEST_F(DomainSystemTest, ClothSystemOwnsComponents)
-{
-    ClothSystem sys;
-    auto types = sys.getOwnedComponentTypes();
-    EXPECT_EQ(types.size(), 1u);
-}
-
 // ==========================================================================
 // DestructionSystem
 // ==========================================================================
@@ -231,25 +153,6 @@ TEST_F(DomainSystemTest, DestructionSystemName)
     EXPECT_EQ(sys.getSystemName(), "Destruction");
 }
 
-TEST_F(DomainSystemTest, DestructionSystemNotForceActive)
-{
-    DestructionSystem sys;
-    EXPECT_FALSE(sys.isForceActive());
-}
-
-TEST_F(DomainSystemTest, DestructionSystemOwnsNoComponents_W13)
-{
-    // Phase 10.9 Slice 8 W13: the cluster (BreakableComponent +
-    // ragdoll / fracture / dismemberment / grab / stasis) was
-    // relocated to engine/experimental/physics/. DestructionSystem
-    // stays as a registered ISystem stub for invariant testing but
-    // can't reference experimental/ types from production code, so
-    // `getOwnedComponentTypes()` now returns empty.
-    DestructionSystem sys;
-    auto types = sys.getOwnedComponentTypes();
-    EXPECT_EQ(types.size(), 0u);
-}
-
 // ==========================================================================
 // CharacterSystem
 // ==========================================================================
@@ -258,18 +161,6 @@ TEST_F(DomainSystemTest, CharacterSystemName)
 {
     CharacterSystem sys;
     EXPECT_EQ(sys.getSystemName(), "Character");
-}
-
-TEST_F(DomainSystemTest, CharacterSystemNotForceActive)
-{
-    CharacterSystem sys;
-    EXPECT_FALSE(sys.isForceActive());
-}
-
-TEST_F(DomainSystemTest, CharacterSystemNoOwnedComponents)
-{
-    CharacterSystem sys;
-    EXPECT_TRUE(sys.getOwnedComponentTypes().empty());
 }
 
 TEST_F(DomainSystemTest, CharacterSystemHasController)
@@ -288,18 +179,6 @@ TEST_F(DomainSystemTest, LightingSystemName)
     EXPECT_EQ(sys.getSystemName(), "Lighting");
 }
 
-TEST_F(DomainSystemTest, LightingSystemIsForceActive)
-{
-    LightingSystem sys;
-    EXPECT_TRUE(sys.isForceActive());
-}
-
-TEST_F(DomainSystemTest, LightingSystemNoOwnedComponents)
-{
-    LightingSystem sys;
-    EXPECT_TRUE(sys.getOwnedComponentTypes().empty());
-}
-
 // ==========================================================================
 // AudioSystem
 // ==========================================================================
@@ -308,22 +187,6 @@ TEST_F(DomainSystemTest, AudioSystemName)
 {
     AudioSystem sys;
     EXPECT_EQ(sys.getSystemName(), "Audio");
-}
-
-TEST_F(DomainSystemTest, AudioSystemIsForceActive_W5)
-{
-    // OpenAL device + listener + buffer cache are global state owned by the
-    // system; ducking decay, listener sync, and caption queue must keep
-    // ticking even with zero AudioSourceComponents in the scene.
-    AudioSystem sys;
-    EXPECT_TRUE(sys.isForceActive());
-}
-
-TEST_F(DomainSystemTest, AudioSystemOwnsComponents)
-{
-    AudioSystem sys;
-    auto types = sys.getOwnedComponentTypes();
-    EXPECT_EQ(types.size(), 1u);
 }
 
 TEST_F(DomainSystemTest, AudioSystemHasAudioEngine)
@@ -352,21 +215,6 @@ TEST_F(DomainSystemTest, UISystemName)
 {
     UISystem sys;
     EXPECT_EQ(sys.getSystemName(), "UI");
-}
-
-TEST_F(DomainSystemTest, UISystemIsForceActive_W5)
-{
-    // Screen stack, theme, notifications, and modal state are global
-    // infrastructure; the system must keep ticking even with zero scene
-    // entities (HUD, pause menus, settings dialogs, toast queue).
-    UISystem sys;
-    EXPECT_TRUE(sys.isForceActive());
-}
-
-TEST_F(DomainSystemTest, UISystemNoOwnedComponents)
-{
-    UISystem sys;
-    EXPECT_TRUE(sys.getOwnedComponentTypes().empty());
 }
 
 TEST_F(DomainSystemTest, UISignalConnectAndEmit)
@@ -425,19 +273,6 @@ TEST_F(DomainSystemTest, NavigationSystemName)
 {
     NavigationSystem sys;
     EXPECT_EQ(sys.getSystemName(), "Navigation");
-}
-
-TEST_F(DomainSystemTest, NavigationSystemNotForceActive)
-{
-    NavigationSystem sys;
-    EXPECT_FALSE(sys.isForceActive());
-}
-
-TEST_F(DomainSystemTest, NavigationSystemOwnsComponents)
-{
-    NavigationSystem sys;
-    auto types = sys.getOwnedComponentTypes();
-    EXPECT_EQ(types.size(), 1u);
 }
 
 TEST_F(DomainSystemTest, NavigationSystemNoMeshInitially)
@@ -532,37 +367,4 @@ TEST_F(DomainSystemTest, AllSystemsInheritFromISystem)
         EXPECT_FALSE(sys->getSystemName().empty());
         EXPECT_FALSE(sys->isActive());  // all start inactive
     }
-}
-
-TEST_F(DomainSystemTest, ForceActiveSystemsCorrectlyIdentified)
-{
-    AtmosphereSystem atmo;
-    ParticleVfxSystem particle;
-    WaterSystem water;
-    VegetationSystem veg;
-    TerrainSystem terrain;
-    ClothSystem cloth;
-    DestructionSystem destruction;
-    CharacterSystem character;
-    LightingSystem lighting;
-    AudioSystem audio;
-    UISystem ui;
-    NavigationSystem navigation;
-
-    // Force-active set after Phase 10.9 Slice 8 W5: Atmosphere + Lighting
-    // (already shipped) plus Terrain + Audio + UI (W5 — global state, no
-    // owned per-entity components but needs to keep ticking).
-    EXPECT_TRUE(atmo.isForceActive());
-    EXPECT_TRUE(lighting.isForceActive());
-    EXPECT_TRUE(terrain.isForceActive());
-    EXPECT_TRUE(audio.isForceActive());
-    EXPECT_TRUE(ui.isForceActive());
-
-    EXPECT_FALSE(particle.isForceActive());
-    EXPECT_FALSE(water.isForceActive());
-    EXPECT_FALSE(veg.isForceActive());
-    EXPECT_FALSE(cloth.isForceActive());
-    EXPECT_FALSE(destruction.isForceActive());
-    EXPECT_FALSE(character.isForceActive());
-    EXPECT_FALSE(navigation.isForceActive());
 }

@@ -74,12 +74,6 @@ public:
     void shutdown() override;
     void update(float deltaTime) override;
 
-    /// @brief Global, controller-driven — keep ticking even with no owned
-    ///        components in the scene. update() guards internally on controller
-    ///        + audio availability, so this is cheap when there is no player.
-    ///        Mirrors AudioSystem's force-active policy.
-    bool isForceActive() const override { return true; }
-
 private:
     /// @brief Synthesise + play one strike at the foot, with the surface under
     ///        the foot as the timbre and `speedMps` as the impact energy.

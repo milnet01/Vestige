@@ -15,9 +15,8 @@ namespace Vestige
 /// @brief Manages lighting, shadows, probes, and global illumination.
 ///
 /// Lighting is currently embedded in the Renderer class. This system
-/// provides the domain system entry point for auto-activation, performance
-/// metrics, and future lighting control APIs. Always force-active since
-/// scenes always need lighting.
+/// provides the domain system entry point for performance metrics and
+/// future lighting control APIs.
 class LightingSystem : public ISystem
 {
 public:
@@ -28,7 +27,6 @@ public:
     bool initialize(Engine& engine) override;
     void shutdown() override;
     void update(float deltaTime) override;
-    bool isForceActive() const override { return true; }
 
 private:
     static inline const std::string m_name = "Lighting";
