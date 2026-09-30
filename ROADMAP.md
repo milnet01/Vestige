@@ -4692,7 +4692,7 @@ shipped that have no invocation path at all.
   Source: in-session-2026-09-26.
   Lanes: scene, assets.
 
-- 🚧 [3D_E-0724] **Underwater view is crystal clear while the same pond is murky from above.**
+- ✅ [3D_E-0724] **Underwater view is crystal clear while the same pond is murky from above.**
   Only the water SURFACE shader applied the Beer's-law murk, so once
   the camera was below it nothing tinted the view. Fix: the final
   composite (screen_quad.frag.glsl) tints each pixel through the water
@@ -4702,6 +4702,9 @@ shipped that have no invocation path at all.
   Not yet done: the surface seen from below still shows the planar
   reflection (Fresnel reads 1 from underneath); the murk hides it at
   the meadow's turbidity. Awaiting the user's in-app check.
+  Resolved (2026-10-01): the user checked it in the app: "very murky,
+  excellent". The reflection seen from below stays hidden by the murk
+  at the meadow's turbidity, as noted above.
   **Layman:** Diving into the pond showed the bottom sharp and clear; now everything under the water fades into the same green-brown murk you see from the bank.
   Kind: fix.
   Source: user-report-2026-09-29 (screenshots).
