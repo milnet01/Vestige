@@ -35,7 +35,7 @@ Mandatory rules. All new code must conform.
 | Member variable | `m_camelCase` | `glm::vec3 m_position` |
 | Static member | `s_camelCase` | `static Renderer* s_instance` |
 | Global (avoid) | `g_camelCase` | `int g_windowWidth` |
-| Constant | `UPPER_SNAKE_CASE` | `constexpr int MAX_LIGHTS = 16` |
+| Constant | `UPPER_SNAKE_CASE` or `kCamelCase`; match the file you are in | `constexpr int MAX_LIGHTS = 16`, `constexpr int kMaxOcclusionRayCount = 16` |
 | Macro | `VESTIGE_UPPER_SNAKE` | `#define VESTIGE_ASSERT(...)` |
 | Enum class + values | `PascalCase` / `PascalCase` | `enum class RenderMode { Wireframe, Solid }` |
 | Namespace | `PascalCase` | `namespace Vestige` |

@@ -79,7 +79,7 @@ All C++ code must follow [CODING_STANDARDS.md](CODING_STANDARDS.md):
 - Classes: `PascalCase`
 - Functions: `camelCase`
 - Members: `m_camelCase`
-- Constants: `UPPER_SNAKE_CASE`
+- Constants: `UPPER_SNAKE_CASE` or `kCamelCase` (match the file you are in)
 - Braces: Allman style (opening brace on new line)
 - Indentation: 4 spaces
 - `#pragma once` for include guards

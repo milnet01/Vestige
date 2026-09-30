@@ -4754,12 +4754,17 @@ shipped that have no invocation path at all.
   Source: in-session-2026-09-29.
   Lanes: core.
 
-- 📋 [3D_E-0728] **Much of engine/ names constants kCamelCase while CODING_STANDARDS.md requires UPPER_SNAKE_CASE.**
+- ✅ [3D_E-0728] **Much of engine/ names constants kCamelCase while CODING_STANDARDS.md requires UPPER_SNAKE_CASE.**
   Split from 3D_E-0688 (2026-09-29). CODING_STANDARDS.md's naming table
   and the CLAUDE.md summary both say UPPER_SNAKE_CASE; engine/ carries
   many kCamelCase constants (kMaxOcclusionRayCount, kSynthSampleRate,
   kCurrentSchemaVersion, ...). Decide: rename the code, or let the
   standard admit kCamelCase. A standard change is a rule-14 gate.
+  Resolved (2026-09-30): user decision the same day, the standard admits
+  both. CODING_STANDARDS.md's naming table, CONTRIBUTING.md and the
+  CLAUDE.md summary now read UPPER_SNAKE_CASE or kCamelCase, matching
+  the file being edited. No code renamed. No review ran: the change
+  only brings the documents into line with code that already exists.
   **Layman:** The code uses two different naming styles for fixed values, and the written standard only allows one; pick one and make them agree.
   Kind: doc-fix.
   Source: rule-14 gate on CLAUDE.md, 2026-09-21 (split 2026-09-29).
