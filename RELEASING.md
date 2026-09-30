@@ -1,84 +1,45 @@
 # Releasing Vestige
 
-Vestige ships on a **weekly release train** with a one-week release-candidate
-(RC) bake. The cadence is automated by
-[`.github/workflows/release-cadence.yml`](.github/workflows/release-cadence.yml),
-which delegates the actual artifact build + GitHub Release to
+Vestige releases **on demand**: when there are fixes, features or improvements
+worth giving users, the maintainer says so and one release goes out. There is
+no schedule, no release candidate and no draft waiting on a click.
+
+The build and the GitHub Release are made by
 [`.github/workflows/release.yml`](.github/workflows/release.yml).
 
-## The model in one picture
+## Cutting a release
 
-```
-main  ──●──●──●──●──●──●──●──●──●──●──●──▶   (trunk: where all features land)
-         \                  \
-          \ Wed: cut         \ Wed: cut
-           ▼                  ▼
-   release/0.1.61      release/0.1.62        (short-lived stabilization branches)
-   v0.1.61-rc.1        v0.1.62-rc.1
-        │                   │
-   (1 week bake)       (1 week bake)
-        ▼                   ▼
-   v0.1.61 (final)    v0.1.62 (final)
-```
+All work lands on `main`, and a release is cut from `main`.
 
-- **You always work on `main`.** Commit / merge features there as normal.
-- Each **Wednesday 09:00 UTC** the cadence workflow:
-  1. **Promotes** last week's RC to a **full release** — it tags the RC's
-     `release/X.Y.Z` branch HEAD as `vX.Y.Z`. That build is published as a
-     **draft**: go to the repo's *Releases* page and click **Publish** (the one
-     manual gate on a public release).
-  2. **Cuts** a new RC — creates `release/X.Y.(Z+1)` from current `main` and tags
-     `vX.Y.(Z+1)-rc.1`. That build **auto-publishes as a pre-release** for testers.
-- Versions step by **patch** while pre-1.0 (0.1.61 → 0.1.62 → …). They are
-  derived from existing git tags, so nothing commits a version bump to `main`.
+1. **Bump the version** in `CMakeLists.txt` (`project(VERSION …)`) and the
+   `VERSION` file. `.claude/bump.json` lists both.
+2. **Move the changelog**: `## [Unreleased]` in `CHANGELOG.md` becomes
+   `## [X.Y.Z] - <date>`, with a fresh empty `[Unreleased]` above it.
+3. **Commit, tag and push**: tag the commit `vX.Y.Z` and push the commit and
+   the tag together. The pre-push gate (`scripts/local-ci.sh`) runs first.
+4. **The tag push starts `release.yml`**, which builds the Linux tarball, the
+   AppImage and the Windows zip, signs each, attaches them to a draft release,
+   and then publishes that release as **Latest**. Nothing is public until every
+   download is attached.
 
-## Why release branches (and not a dev branch)
+Which number to pick (PATCH or MINOR) is
+[`docs/standards/versioning-overrides.md`](docs/standards/versioning-overrides.md)'s
+to decide.
 
-Features keep landing on `main` all week. If a release were cut straight from
-`main` at hotfix time, it would drag in every half-finished feature since the RC.
-Putting each release on its own `release/X.Y.Z` branch means the baking RC is
-**frozen** except for deliberate hotfixes — new `main` work can't pollute it.
+## Rebuilding an existing tag
 
-## Hotfixing an RC
+Actions tab → *Release* → *Run workflow* → enter the tag. The run rebuilds that
+tag and republishes its release.
 
-When a bug is found in the current RC (or you need a fix in the next release
-without the rest of `main`'s new features):
+## Fixing a bad release
 
-1. Commit the fix to the **active release branch** and push it:
-   ```bash
-   git fetch origin
-   git switch release/0.1.62          # the active RC's branch
-   git cherry-pick <fix-commit>       # or commit the fix directly
-   git push origin release/0.1.62
-   ```
-2. Run the **Release cadence** workflow manually with **`mode=hotfix`**
-   (Actions tab → Release cadence → Run workflow). It will:
-   - re-tag the branch as the next RC (`v0.1.62-rc.2`) and re-publish the
-     pre-release with the fix, and
-   - **back-merge** `release/0.1.62` into `main` so next week's RC inherits the
-     fix. (If that merge conflicts, the job fails loudly with instructions — the
-     RC is still published; resolve the merge into `main` by hand.)
-3. The fix promotes to the full release on the normal Wednesday.
-
-## Manual / off-schedule release
-
-- **Start the cadence now (don't wait for Wednesday):** Actions tab → *Release
-  cadence* → *Run workflow* → `mode=cadence`.
-- **Build a specific existing tag:** Actions tab → *Release* → *Run workflow* →
-  enter the tag, or just push a `vX.Y.Z` tag (a `…-rc.N` tag publishes a
-  pre-release; a bare `vX.Y.Z` tag publishes a draft final).
+Fix it on `main` and cut the next PATCH release. There are no release branches.
 
 ## Safety properties
 
-- **One Publish click** gates every public final release (drafts), while RCs flow
-  to testers automatically.
-- **No personal access token** — the cadence calls `release.yml` directly
-  (`workflow_call`), so it never relies on a token-pushed tag triggering another
-  workflow.
-- **Re-runs are safe** — tags/branches already created make a re-run fail rather
-  than double-publish.
-- **Hotfixes never lose their fix** — promotion tags the release-branch HEAD
-  (RC + hotfixes), and hotfixes are back-merged to `main`.
+- **Never half a release** — the Linux and Windows jobs upload to a draft, and
+  a separate job publishes it only after both have finished. If either build
+  fails, the draft stays private.
 - **Every download is signed** — `release.yml` signs the tarball, AppImage and
   zip with the `VESTIGE_UPDATE_SIGNING_KEY` secret (`tools/sign_release.py`)
   and verifies each signature against `engine/update/update_key.h` before
@@ -87,9 +48,15 @@ without the rest of `main`'s new features):
 - **Update notes are the CHANGELOG** — the editor shows users the CHANGELOG
   lines added between their version's tag and the new one, so what is written
   there is what they read.
+- **A tag carrying `-rc` is never Latest** — release candidates are not part
+  of this process, but if such a tag is pushed it publishes as a pre-release.
 
 ## Versioning note
 
-`VERSION` / the CMake `project(VERSION …)` is the development baseline and the
-floor the cadence bumps from. The authoritative version of any release is its git
-tag.
+`project(VERSION …)` and the `VERSION` file carry the version of the most
+recent release until the next one bumps them, so a build from source reports
+the release it was built on top of. The authoritative version of a release is
+its git tag, and a release build is stamped with it.
+
+How releases worked before 2026-09-30 (a weekly train with release branches
+and release candidates): `git log -- .github/workflows/release-cadence.yml`.

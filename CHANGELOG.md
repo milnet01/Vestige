@@ -23,6 +23,10 @@ may change any interface without notice.
 
 ## [Unreleased]
 
+### 2026-09-30 Changed — Releases go out when they are ready (3D_E-0734)
+
+Vestige no longer publishes a test version every Wednesday. A new version is released when there are fixes or features worth having, and it becomes the latest download as soon as every file for it has been built and signed.
+
 ### 2026-09-30 Fixed — The title bar shows the real version (3D_E-0733)
 
 The window title and the first line of the log said "v0.5.0", a number the project never had. Both now show the version the build really is: the release number on a released build, and the project's base version on a build made from source.

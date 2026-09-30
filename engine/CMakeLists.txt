@@ -599,8 +599,9 @@ endif()
 
 # 3D_E-0683 — the version stamped into every saved scene
 # (SceneSerializer::ENGINE_VERSION). A release build passes the tag it is
-# built for (.github/workflows/release.yml), because the weekly cadence tags
-# without editing project(VERSION); any other build stamps project(VERSION).
+# built for (.github/workflows/release.yml), so a tag rebuilt from a tree whose
+# project(VERSION) differs is still stamped right; any other build stamps
+# project(VERSION).
 # Validated because it is compiled into a C++ string literal. PUBLIC because
 # the constant lives in a header.
 # Unset or empty means project(VERSION), re-read on every configure so a

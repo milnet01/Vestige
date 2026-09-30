@@ -59,8 +59,9 @@ cheap to judge. It does not bound the promise.
   The same header declares `ENGINE_VERSION`, stamped into every saved scene.
   **It is the version of the build that saved the file** (`3D_E-0683`). A
   release build stamps its tag's version: `.github/workflows/release.yml`
-  passes it as `VESTIGE_VERSION_STAMP`, because the weekly cadence tags without
-  editing `project(VERSION)`. Any other build stamps `project(VERSION)`. It is
+  passes it as `VESTIGE_VERSION_STAMP`, so the stamp is right even when a tag is
+  rebuilt from a tree whose `project(VERSION)` differs. Any other build stamps
+  `project(VERSION)`. It is
   informational: `SceneSerializer::readMetadata` parses it into
   `SceneMetadata::engineVersion` and no engine code branches on it, so its
   value changing is never a breaking change. A loader decision keys on
@@ -160,8 +161,8 @@ phases.
 
 Under § 4 a MINOR bump inside `0.x` means a breaking change, so **every MINOR
 release heading is followed by a line naming the surface it breaks.** Work that
-breaks no surface does not need a MINOR release heading — it ships in the
-ordinary PATCH cadence.
+breaks no surface does not need a MINOR release heading — it ships in an
+ordinary PATCH release.
 
 **Listed or not.** § 1's list makes the common cases cheap; it does not bound
 the promise, and that catch-all reaches this rule. A heading may name a surface
@@ -170,7 +171,7 @@ stays the cheap path rather than drifting behind the roadmap.
 
 **A release that CREATES a surface takes the MINOR too, and names it.** § 1
 defines breaking as something that used to work stopping, which a new surface
-never does — so this rule would otherwise send it to the PATCH cadence. It takes
+never does — so this rule would otherwise send it to a PATCH release. It takes
 the MINOR because that release is the last moment the semantics are free: after
 it, users depend on them. A heading may therefore name a `### Not yet a surface`
 entry whose roadmap item ships in that release, and **that entry moves out of
@@ -187,9 +188,9 @@ because they shipped before this convention existed. `## Unscheduled — no rele
 work not scheduled against any release; it names no surface, and an item
 sitting there is not a claim that it breaks nothing.
 
-The weekly cadence in `.github/workflows/release-cadence.yml` bumps the PATCH
-only. A MINOR bump is therefore always deliberate, and closing a milestone is
-the occasion for one.
+Releases are cut on demand (`RELEASING.md`), and an ordinary one bumps the
+PATCH. A MINOR bump is always deliberate, and closing a milestone is the
+occasion for one.
 
 ## Cold-eyes loop log
 

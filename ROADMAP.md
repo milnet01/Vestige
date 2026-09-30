@@ -4893,6 +4893,24 @@ shipped that have no invocation path at all.
   Source: user-report-2026-09-30.
   Lanes: core, app.
 
+- ✅ [3D_E-0734] **Releases go out on demand; the weekly release train is retired.**
+  User decisions 2026-09-30: no weekly cadence, no release candidates,
+  no draft waiting on a click, and no independent review of the
+  rewritten release rules. release-cadence.yml is removed (and was
+  disabled on GitHub the same afternoon, before its Wednesday run).
+  release.yml loses its workflow_call entry; both build jobs attach to
+  a draft and a new publish job makes it Latest once both have
+  finished, so users never see half a release. RELEASING.md is
+  rewritten; versioning-overrides.md and engine/CMakeLists.txt lose
+  their cadence wording. project(VERSION) and VERSION move from 0.1.70
+  to 0.1.75, the last published release, and from now on are bumped by
+  each release. Not yet exercised: the publish job runs for the first
+  time at the next release.
+  **Layman:** New versions are published when there is something worth giving users, in one step, instead of automatically every Wednesday.
+  Kind: chore.
+  Source: user-request-2026-09-30.
+  Lanes: ci, docs.
+
 ## 0.3.0 — An editor a builder can use
 
 Breaks: the scene format. Editor work changes what a scene stores.

@@ -32,17 +32,6 @@ on:
   push:
     tags:
       - "v*"
-  # Callable by release-cadence.yml so the weekly RC / promotion / hotfix flow
-  # reuses this exact build+publish logic. workflow_call runs in the caller's
-  # run with inherited permissions, so it needs NO PAT — the GITHUB_TOKEN
-  # "tags pushed by a token don't trigger workflows" trap is sidestepped
-  # entirely (the cadence pushes the tag, then calls this directly).
-  workflow_call:
-    inputs:
-      tag:
-        description: "Tag to build + publish (e.g. v0.1.61-rc.1 or v0.1.61). Must already exist."
-        required: true
-        type: string
   workflow_dispatch:
     inputs:
       version:
@@ -54,19 +43,11 @@ concurrency:
   # Serialise release runs for a given tag. A manual re-run of the same
   # tag cancels the in-flight one rather than racing for the upload.
   #
-  # Key on the TAG, not github.ref. Under workflow_call, github.ref is the
-  # CALLER's ref — refs/heads/main for every release-cadence.yml run — so a
-  # cadence run put its promote build and its RC build in one group and
-  # cancel-in-progress had the RC kill the promote every time. That silently
-  # stranded v0.1.64 as a draft with a half-uploaded asset set, and cancelled
-  # the 2026-07-22, -07-29 and -07-31 runs.
-  #
-  # Each trigger carries the tag under a different name: workflow_call passes
-  # inputs.tag, workflow_dispatch passes inputs.version, and a tag push has it
-  # in github.ref. All three are listed so every path keys on the thing being
-  # built — two manual builds of different tags must not cancel each other
-  # either, which the inputs.tag-only form still got wrong.
-  group: release-${{ inputs.tag || inputs.version || github.ref }}
+  # Key on the TAG being built. Each trigger carries it under a different
+  # name: workflow_dispatch passes inputs.version, and a tag push has it in
+  # github.ref. Both are listed so two manual builds of different tags do not
+  # cancel each other.
+  group: release-${{ inputs.version || github.ref }}
   cancel-in-progress: true
 
 # Default to nothing at the workflow level; each job requests exactly what it
@@ -83,6 +64,8 @@ jobs:
     name: Linux x86_64 tarball
     runs-on: ubuntu-24.04
     timeout-minutes: 60
+    outputs:
+      tag: ${{ steps.version.outputs.tag }}
     permissions:
       # Needed for softprops/action-gh-release to create / update releases.
       # Nothing else. No `security-events`, no `id-token`.
@@ -96,7 +79,7 @@ jobs:
           # For workflow_dispatch runs, the checked-out ref is the
           # branch default (usually main); pin to the requested tag so
           # the built binary actually carries the tagged source.
-          ref: ${{ inputs.tag || inputs.version || github.ref }}
+          ref: ${{ inputs.version || github.ref }}
           # The release upload uses GITHUB_TOKEN via the release action's own
           # env, not the checkout credentials, so these need not persist.
           persist-credentials: false
@@ -143,16 +126,14 @@ jobs:
           # Passed through the environment, never interpolated into the script
           # body: a ${{ }} expansion inside `run:` is substituted before the
           # shell sees it, so a crafted dispatch input would execute here.
-          INPUT_TAG: ${{ inputs.tag }}
           INPUT_VERSION: ${{ inputs.version }}
         run: |
           # Strip refs/tags/ prefix; fall back to VERSION file for
           # manual dispatch that forgot the input.
-          # Resolve the tag from whichever trigger fired: workflow_call (cadence)
-          # → inputs.tag; workflow_dispatch → inputs.version; tag push → the ref.
+          # Resolve the tag from whichever trigger fired: workflow_dispatch →
+          # inputs.version; tag push → the ref.
           # VERSION file is the last-resort fallback.
-          TAG="$INPUT_TAG"
-          [ -z "$TAG" ] && TAG="$INPUT_VERSION"
+          TAG="$INPUT_VERSION"
           if [ -z "$TAG" ]; then
             T="${GITHUB_REF#refs/tags/}"
             [ "$T" != "$GITHUB_REF" ] && TAG="$T"
@@ -304,10 +285,14 @@ jobs:
             Vestige-*-x86_64.AppImage
             Vestige-*-x86_64.AppImage.sig
             Vestige-*-x86_64.AppImage.zsync
-          # RC tags (…-rc.N) publish immediately as pre-releases (testers);
-          # final tags (vX.Y.Z) are created as DRAFTS to gate the public
-          # release behind one manual "Publish" click. See release-cadence.yml.
-          draft: ${{ !contains(steps.version.outputs.tag, '-rc') }}
+          # Attached to a DRAFT: this job and the Windows job upload
+          # separately, and a release made public by whichever finishes first
+          # would offer users an update with half its downloads missing. The
+          # publish job below makes it public once both have finished.
+          # A tag carrying "-rc" is not part of the release process
+          # (RELEASING.md), but if one is pushed it is marked a pre-release so
+          # it can never become Latest.
+          draft: true
           prerelease: ${{ contains(steps.version.outputs.tag, '-rc') }}
           fail_on_unmatched_files: true
           generate_release_notes: true
@@ -327,7 +312,7 @@ jobs:
         # No submodules in this repo; same drop applied in c768aff.
         uses: actions/checkout@9c091bb21b7c1c1d1991bb908d89e4e9dddfe3e0  # v6
         with:
-          ref: ${{ inputs.tag || inputs.version || github.ref }}
+          ref: ${{ inputs.version || github.ref }}
           persist-credentials: false
 
       # zizmor: cache-poisoning (low confidence) — REVIEWED AND KEPT, 3D_E-0635.
@@ -356,14 +341,12 @@ jobs:
           # Passed through the environment, never interpolated into the script
           # body: a ${{ }} expansion inside `run:` is substituted before the
           # shell sees it, so a crafted dispatch input would execute here.
-          INPUT_TAG: ${{ inputs.tag }}
           INPUT_VERSION: ${{ inputs.version }}
         run: |
-          # Resolve the tag from whichever trigger fired: workflow_call (cadence)
-          # → inputs.tag; workflow_dispatch → inputs.version; tag push → the ref.
+          # Resolve the tag from whichever trigger fired: workflow_dispatch →
+          # inputs.version; tag push → the ref.
           # VERSION file is the last-resort fallback.
-          TAG="$INPUT_TAG"
-          [ -z "$TAG" ] && TAG="$INPUT_VERSION"
+          TAG="$INPUT_VERSION"
           if [ -z "$TAG" ]; then
             T="${GITHUB_REF#refs/tags/}"
             [ "$T" != "$GITHUB_REF" ] && TAG="$T"
@@ -455,9 +438,35 @@ jobs:
           files: |
             vestige-*-windows-x86_64.zip
             vestige-*-windows-x86_64.zip.sig
-          # RC tags publish as pre-releases; final tags are gated drafts.
-          # See the linux-release attach step + release-cadence.yml.
-          draft: ${{ !contains(steps.version.outputs.tag, '-rc') }}
+          # A draft until the publish job runs: see the linux-release attach step.
+          draft: true
           prerelease: ${{ contains(steps.version.outputs.tag, '-rc') }}
           fail_on_unmatched_files: true
           generate_release_notes: true
+
+  # ─────────────────────────────────────────────────────────────────────
+  # Publish — make the draft public once every download is attached.
+  # No manual click: a release is public as soon as it is complete
+  # (RELEASING.md). If either build fails this job does not run and the
+  # draft stays private.
+  # ─────────────────────────────────────────────────────────────────────
+  publish:
+    name: Publish the release
+    needs: [linux-release, windows-release]
+    if: startsWith(needs.linux-release.outputs.tag, 'v')
+    runs-on: ubuntu-24.04
+    timeout-minutes: 5
+    permissions:
+      # Needed to edit the release. Nothing else.
+      contents: write
+    steps:
+      - name: Publish
+        env:
+          GH_TOKEN: ${{ github.token }}
+          GH_REPO: ${{ github.repository }}
+          TAG: ${{ needs.linux-release.outputs.tag }}
+        run: |
+          case "$TAG" in
+            *-rc*) gh release edit "$TAG" --draft=false --prerelease ;;
+            *)     gh release edit "$TAG" --draft=false --latest ;;
+          esac
