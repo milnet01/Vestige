@@ -47,7 +47,7 @@ int main(int argc, char* argv[])
 static int runEngine(int argc, char* argv[])
 {
     Vestige::EngineConfig config;
-    config.window.title = "Vestige Engine v" VESTIGE_ENGINE_VERSION;
+    config.window.title = std::string("Vestige Engine v") + VESTIGE_ENGINE_VERSION;
     config.window.width = 1280;
     config.window.height = 720;
     config.window.isVsyncEnabled = true;

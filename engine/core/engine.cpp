@@ -107,7 +107,7 @@ Engine::~Engine()
 bool Engine::initialize(const EngineConfig& config)
 {
     Logger::openLogFile("logs");
-    Logger::info("=== Vestige Engine v" VESTIGE_ENGINE_VERSION " ===");
+    Logger::info(std::string("=== Vestige Engine v") + VESTIGE_ENGINE_VERSION + " ===");
     Logger::info("Initializing engine...");
 
     m_assetPath = config.assetPath;
