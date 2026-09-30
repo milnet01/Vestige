@@ -4802,6 +4802,44 @@ shipped that have no invocation path at all.
   Source: in-session-2026-09-29 (3D_E-0721).
   Lanes: core, scene, scripting, editor.
 
+- 📋 [3D_E-0731] **SH probe bake: capture passes skip the shadow pass but still sample the shadow maps.**
+  Renderer::renderScene with geometryOnly=true (captureSHGrid,
+  captureLightProbe) skips the whole shadow block, then sets
+  u_hasShadows=true and binds the cascaded shadow map anyway. The
+  Tabernacle bake runs in setupTabernacleScene before any main frame.
+  Not yet proven either way: what the cascade texture and light-space
+  matrices hold at that moment, and whether cascades fitted to the main
+  camera cover probes far from it. Outcomes to tell apart: sun reaching
+  tent-interior probes unshadowed (too bright), or probes read as
+  shadowed (too dark). Check: dump one interior and one courtyard probe
+  capture with shadows forced off and on, and compare.
+  Also open: probe brightness has no external reference. The furnace
+  test pins the SH maths only. UT_Ants is building an offline
+  ray-traced reference; ask whether its method can be reused here.
+  **Layman:** The baked room lighting may be using sun shadows that were never drawn, or drawn for a different view, so indoor brightness could be wrong.
+  Kind: investigate.
+  Source: in-session-2026-09-30 (found answering UT_Ants on probe lighting).
+  Lanes: renderer.
+
+- 🚧 [3D_E-0732] **Local CI gate links stale objects after a header is edited while a gate run is compiling.**
+  sync_ci_src copied the working tree into $VESTIGE_CI_DIR/src with
+  rsync -a, which keeps mtimes. update_service.h was edited at 20:25:44
+  on 2026-09-29 while a gate run was compiling; that run wrote
+  test_update_service.cpp.o at 20:26:13 from the OLD header. The next
+  sync copied the new header with its 20:25:44 mtime, older than the
+  object, so ninja rebuilt nothing and the link failed with "undefined
+  reference to UpdateService::check(const std::string&, bool)" in both
+  Debug and Release.
+  Fix: the sync compares content (rsync --checksum) and no longer keeps
+  mtimes, so a changed file is stamped when copied and an unchanged one
+  is left alone. scripts/test_ci_src_sync.sh runs the real function on
+  a throwaway repository (red against rsync -a) and local-ci.sh's
+  preflight runs it before every sync.
+  **Layman:** The pre-push check could reject good code with a confusing link error, because it did not notice that a file had changed; now it always notices.
+  Kind: fix.
+  Source: in-session-2026-09-30 (push of 55dc283 + 6fa15ab rejected twice).
+  Lanes: ci.
+
 ## 0.3.0 — An editor a builder can use
 
 Breaks: the scene format. Editor work changes what a scene stores.

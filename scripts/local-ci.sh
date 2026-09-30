@@ -203,15 +203,21 @@ CI_STAGE_TIMEOUT="${VESTIGE_CI_STAGE_TIMEOUT:-5400}"
 # hand run tests uncommitted edits too). Ignored local files stay out, as they
 # are absent from GitHub's checkout: on 2026-09-28 the gitignored symlinks in
 # assets/models/nature_local/ pointed outside the repo and broke copy_assets in
-# the container. rsync keeps mtimes, so unchanged files do not rebuild; files
-# gone from the tree are removed from the copy. It is mounted at the repo's own
-# path, so paths baked in at configure time match a host build's.
+# the container. Files gone from the tree are removed from the copy. It is
+# mounted at the repo's own path, so paths baked in at configure time match a
+# host build's.
+# The copy compares CONTENT (--checksum) and does not keep mtimes: a changed
+# file is stamped with the time it is copied, an unchanged one is left alone.
+# Keeping the working tree's mtime is wrong here: a header edited while a run
+# is compiling is older than the objects that run writes, so ninja never
+# rebuilds them and the next run links stale objects (3D_E-0732, two rejected
+# pushes). scripts/test_ci_src_sync.sh pins both halves.
 sync_ci_src() {
     local src="$CI_DIR/src" tmp
     tmp="$(mktemp -d)" || return 1
     mkdir -p "$src"
     git -C "$REPO_ROOT" ls-files -z -co --exclude-standard | sort -z > "$tmp/want"
-    rsync -a --from0 --ignore-missing-args --files-from="$tmp/want" "$REPO_ROOT/" "$src/" || { rm -rf "$tmp"; return 1; }
+    rsync -rlpgoD --checksum --from0 --ignore-missing-args --files-from="$tmp/want" "$REPO_ROOT/" "$src/" || { rm -rf "$tmp"; return 1; }
     ( cd "$src" && find . \( -type f -o -type l \) -print0 | sed -z 's|^\./||' | sort -z ) > "$tmp/have"
     comm -z -23 "$tmp/have" "$tmp/want" | ( cd "$src" && xargs -0 -r rm -f -- )
     rm -rf "$tmp"
@@ -247,7 +253,7 @@ ver_line() {  # ver_line <label> <cmd...> -- prints "  label  <first version-ish
 preflight() {
     banner "preflight — tool versions (Linux stages: the Ubuntu 24.04 CI container)"
     mkdir -p "$REPO_ROOT/.ci-tools"
-    if ensure_ci_image && sync_ci_src; then
+    if ensure_ci_image && scripts/test_ci_src_sync.sh && sync_ci_src; then
         CI_IMAGE_OK=1
         printf '  %-11s %s\n' "source" "$CI_DIR/src ($(git -C "$REPO_ROOT" ls-files -co --exclude-standard | wc -l) files git would carry)"
         printf '  %-11s %s\n' "image" "$CI_IMAGE"
