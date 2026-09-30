@@ -323,8 +323,10 @@ TEST_F(SmaaGpuTest, ThreePassesSoftenAStairSteppedEdge)
                 (static_cast<float>(y) > boundary) ? glm::vec4(1.0f) : glm::vec4(0.0f, 0.0f, 0.0f, 1.0f);
         }
     }
-    input.bindColorTexture(0);
-    glTexSubImage2D(GL_TEXTURE_2D, 0, 0, 0, W, H, GL_RGBA, GL_FLOAT, img.data());
+    // Upload by name: glTexSubImage2D writes to whatever is bound on the ACTIVE
+    // unit, which an earlier test may have left at 1 (3D_E-0737).
+    glTextureSubImage2D(input.getColorAttachmentId(), 0, 0, 0, W, H, GL_RGBA, GL_FLOAT,
+                        img.data());
 
     Smaa smaa(W, H);
     Triangle tri;

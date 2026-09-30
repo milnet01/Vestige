@@ -4997,6 +4997,23 @@ shipped that have no invocation path at all.
   Source: in-session-2026-09-30 (split from 3D_E-0731; UT_Ants collaboration).
   Lanes: renderer, tests.
 
+- ✅ [3D_E-0737] **The SMAA GPU test fails whenever a test before it leaves texture unit 1 active.**
+  SmaaGpuTest.ThreePassesSoftenAStairSteppedEdge bound its input with
+  glBindTextureUnit(0, …) and then uploaded with glTexSubImage2D, which
+  writes to the texture on the ACTIVE unit. The ColorGradingParityTest
+  cases leave glActiveTexture(GL_TEXTURE1) set, so when one ran first in
+  the same process the upload hit nothing (GL_INVALID_OPERATION, the
+  0x1282 logged at FBO creation), the input stayed black and every SMAA
+  assertion read zero. 3D_E-0730 changed the test count, which moved the
+  two into one gate shard. Reproduced on the host (llvmpipe and RX 6600)
+  by running the pair alone; red before, green after.
+  Fix: upload by name with glTextureSubImage2D. The other two upload
+  sites in tests bind and upload on the same unit, so they are unaffected.
+  **Layman:** A check on the anti-aliasing passed or failed depending on which test ran just before it; it now passes either way.
+  Kind: fix.
+  Source: in-session-2026-10-01 (pre-push gate rejected 3D_E-0730's push).
+  Lanes: tests, renderer.
+
 ## 0.3.0 — An editor a builder can use
 
 Breaks: the scene format. Editor work changes what a scene stores.
