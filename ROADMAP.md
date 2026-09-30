@@ -4800,7 +4800,7 @@ shipped that have no invocation path at all.
   Source: user-request-2026-09-29.
   Lanes: editor, core, ci.
 
-- 📋 [3D_E-0730] **SceneLoadedEvent and SceneUnloadedEvent are never published, so no system or script hears a scene change.**
+- ✅ [3D_E-0730] **SceneLoadedEvent and SceneUnloadedEvent are never published, so no system or script hears a scene change.**
   Split from 3D_E-0721 (2026-09-29). engine/core/system_events.h defines
   both events and ScriptingSystem subscribes to SceneLoadedEvent, but no
   code publishes either (grep for their constructors outside scripting:
@@ -4820,6 +4820,12 @@ shipped that have no invocation path at all.
   docs/specs/3D_E-0730-scene-change-events.md after two review loops
   (cap reached, nothing deferred). The user chose a short spec with an
   independent review. Not yet built.
+  Resolved (2026-10-01): built to docs/specs/3D_E-0730-scene-change-events.md
+  in commits 5187a7e (events) and 7179c1a (activation API removed).
+  INV-1..7 each seen red against the broken part named in the spec's
+  section 7, then green. Release suite 3997 passed; the app logs
+  "scene 'Meadow' loaded" (and 'Tabernacle' with --biblical-demo) once
+  after start-up, with no errors.
   **Layman:** When a scene is opened or replaced, nothing tells the engine's parts, so 2D physics never sets up and the scripting "On Scene Loaded" node never fires.
   Kind: fix.
   Source: in-session-2026-09-29 (3D_E-0721).

@@ -23,6 +23,10 @@ may change any interface without notice.
 
 ## [Unreleased]
 
+### 2026-10-01 Fixed — The engine is told when a scene opens or is replaced (3D_E-0730)
+
+Opening a scene, starting a new one, applying a template or loading the demo never told the engine's systems that the scene had changed. So 2D physics never gave anything a body in the running app, and nothing tidied up after the old scene. Every way of replacing a scene now sends a notice before the old contents go and another once the new ones are in place, and each system reacts to both. The old rule that switched systems off when a scene lacked certain objects is gone, so every system keeps running whatever the scene holds.
+
 ### 2026-09-30 Fixed — Indoor lighting in the Tabernacle is sampled where it should be, with the sun's shadows (3D_E-0735, 3D_E-0731)
 
 The soft, bounced light in the Tabernacle scene is worked out from sample points spread through the courtyard and tent. Two faults made it wrong. Every sample point was really looking out from the camera, so the whole scene got one flat colour of bounced light. And the samples ignored the sun's shadows, so the inside of the tent was treated as if it stood in full sun. Each point now sees its own surroundings with shadows in place: the tent interior is darker and takes its warm colour from the lamp, and the courtyard looks as it did.
