@@ -590,6 +590,12 @@ Foundations shipped via commit `fa0b100` — "Phase 9C: New domain systems — A
   Kind: implement.
 
 - 📋 [3D_E-S0016] **Ambient soundscapes (biome-based, time-of-day-based) — deferred to Phase 10.**
+  Layman: Places in a scene get background sound, such as wind, water or night insects, that fades in as you approach and changes with the time of day.
+  Progress (2026-10-02): spec docs/specs/3D_E-S0016-ambient-soundscapes.md
+  accepted at the review cap (2 loops, 11 findings fixed). Scope agreed
+  with the user: no biome input; the time-of-day clock lives in
+  AmbientSystem and is not saved with the scene. Builds on 3D_E-0738
+  (2D loop flag) and 3D_E-0739 (playback tickets). Not yet built.
   Kind: implement.
 
 - ✅ [3D_E-S0017] **Sound material interactions (footstep sounds derived from physics material types) — deferred to Phase 10. ^3d_e-0023**
@@ -5075,7 +5081,7 @@ shipped that have no invocation path at all.
   Source: in-session-2026-10-02.
   Lanes: audio.
 
-- 📋 [3D_E-0740] **Can a music layer that underruns lose its source to another sound while the music player still uses it?**
+- ✅ [3D_E-0740] **Can a music layer that underruns lose its source to another sound while the music player still uses it?**
   Seen while fixing 3D_E-0739; not reproduced. AudioMusicPlayer::playLayer
   takes a pool source with acquireSource and keeps it for the layer's
   life. AudioEngine::reclaimFinishedSources, run by updateGains every
@@ -5086,6 +5092,13 @@ shipped that have no invocation path at all.
   playSound may take it while the music player still queues buffers on
   it. To settle: check the update order of MusicSystem against
   AudioSystem, then force an underrun.
+  Resolved 2026-10-02: yes, and worse than sharing — reclaim also
+  detached the layer's queued buffers, so its resume check (queued > 0)
+  failed and the layer went silent. reclaimFinishedSources now frees only
+  sources in m_livePlaybacks; a source taken with acquireSource stays the
+  caller's until releaseSource. Test AudioEnginePlaybackTicket.
+  HeldSourceIsNotReclaimedWhenItStops (null device) red with the old
+  reclaim, green with the fix.
   **Layman:** Check whether background music that briefly runs dry can end up sharing its playback channel with a sound effect.
   Kind: investigate.
   Source: in-session-2026-10-02.

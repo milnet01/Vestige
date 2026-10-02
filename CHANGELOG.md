@@ -23,6 +23,15 @@ may change any interface without notice.
 
 ## [Unreleased]
 
+### 2026-10-02 Fixed — Music that briefly runs dry no longer falls silent for good (3D_E-0740)
+
+If a music layer's stream ran dry for a moment, the engine's clean-up
+could treat its playback channel as finished: it threw away the audio
+queued on it and handed the channel to the next sound effect. The
+music then stayed silent until the layer was restarted. The clean-up
+now only reclaims channels the engine started itself, so the music
+player keeps its channel and resumes.
+
 ### 2026-10-02 Fixed — A sound cut off to make room no longer takes over the sound that replaced it (3D_E-0739)
 
 When too many sounds played at once, the engine stopped a quieter one

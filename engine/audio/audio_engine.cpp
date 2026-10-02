@@ -1550,9 +1550,13 @@ void AudioEngine::updateGains()
 
 void AudioEngine::reclaimFinishedSources()
 {
+    // 3D_E-0740 — only the engine's own playbacks are reclaimed. A source a
+    // caller took with acquireSource and kept (a music layer's streaming
+    // source) reads AL_STOPPED after an underrun; freeing it detached its
+    // queued buffers and let the next playSound take it from under its owner.
     for (size_t i = 0; i < m_sourcePool.size(); ++i)
     {
-        if (m_sourceInUse[i])
+        if (m_sourceInUse[i] && m_livePlaybacks.count(m_sourcePool[i]) != 0)
         {
             ALint state;
             alGetSourcei(m_sourcePool[i], AL_SOURCE_STATE, &state);

@@ -191,6 +191,10 @@ public:
 
     /// @brief Acquires a source from the pool.
     ///
+    /// A source taken here and not played through a `playSound*` path stays
+    /// the caller's until `releaseSource`: reclaiming frees only the
+    /// engine's own playbacks (3D_E-0740).
+    ///
     /// Lookup order:
     ///  1. First unused slot.
     ///  2. Reclaim finished sources, then re-scan.
