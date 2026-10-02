@@ -323,6 +323,7 @@ set(ENGINE_SOURCES
     systems/audio_system.cpp
     systems/audio_occlusion_system.cpp
     systems/reverb_system.cpp
+    systems/ambient_system.cpp
     systems/music_system.cpp
     # UI/HUD system
     ui/sprite_batch_renderer.cpp

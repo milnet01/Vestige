@@ -80,6 +80,48 @@ TimeOfDayWeights computeTimeOfDayWeights(float hourOfDay)
     return w;
 }
 
+float timeOfDayWindowWeight(std::uint8_t windows, float hourOfDay)
+{
+    const TimeOfDayWeights w = computeTimeOfDayWeights(hourOfDay);
+    const float perWindow[4] = {w.dawn, w.day, w.dusk, w.night};
+    float sum = 0.0f;
+    for (unsigned int n = 0; n < 4; ++n)
+    {
+        if ((windows & (1u << n)) != 0u)
+        {
+            sum += perWindow[n];
+        }
+    }
+    return sum;
+}
+
+std::vector<float> computeAmbientZoneWeights(
+    const std::vector<AmbientZoneMixInput>& zones, float hourOfDay)
+{
+    std::vector<float> base;
+    base.reserve(zones.size());
+    for (const AmbientZoneMixInput& z : zones)
+    {
+        base.push_back(computeAmbientZoneVolume(z.zone, z.distance)
+                       * timeOfDayWindowWeight(z.windows, hourOfDay));
+    }
+
+    std::vector<float> weights(zones.size(), 0.0f);
+    for (std::size_t i = 0; i < zones.size(); ++i)
+    {
+        float shadow = 0.0f;
+        for (std::size_t j = 0; j < zones.size(); ++j)
+        {
+            if (zones[j].zone.priority > zones[i].zone.priority)
+            {
+                shadow = std::max(shadow, base[j]);
+            }
+        }
+        weights[i] = base[i] * (1.0f - std::min(shadow, 1.0f));
+    }
+    return weights;
+}
+
 bool tickRandomOneShot(RandomOneShotScheduler& scheduler,
                         float deltaSeconds,
                         const UniformSampleFn& sampleFn)

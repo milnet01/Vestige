@@ -273,3 +273,75 @@ TEST(RandomOneShot, DrawsFreshIntervalEachFireUsingSamplerSequence)
     EXPECT_TRUE(tickRandomOneShot(s, 0.0f, sampler));
     EXPECT_NEAR(s.timeUntilNextFire, 20.0f, kEps);
 }
+
+// ----- 3D_E-S0016 — window mask and zone mix ---------------------
+
+namespace
+{
+
+/// A zone whose base weight is `base`: listener inside the core, so the
+/// distance term is 1 and `maxVolume` sets the base directly.
+AmbientZoneMixInput zoneAt(float base, int priority)
+{
+    AmbientZoneMixInput in;
+    in.zone.maxVolume = base;
+    in.zone.priority  = priority;
+    in.windows        = kAllTimeOfDayWindows;
+    in.distance       = 0.0f;
+    return in;
+}
+
+}  // namespace
+
+TEST(AmbientWindowWeight, AllWindowsIsOneAtEveryHourAndNoneIsZero)  // INV-2
+{
+    for (int step = 0; step <= 96; ++step)
+    {
+        const float hour = 0.25f * static_cast<float>(step);
+        EXPECT_NEAR(timeOfDayWindowWeight(kAllTimeOfDayWindows, hour), 1.0f, kEps)
+            << "hour " << hour;
+        EXPECT_FLOAT_EQ(timeOfDayWindowWeight(0, hour), 0.0f) << "hour " << hour;
+    }
+}
+
+TEST(AmbientWindowWeight, OneWindowFadesRatherThanSwitching)  // INV-2
+{
+    // Night alone: strongest at its 01:00 peak, weaker on the way to dawn,
+    // nothing at midday. A mask read as "any enabled window active" would
+    // give exactly 1 or 0.
+    const auto night = static_cast<std::uint8_t>(
+        1u << static_cast<unsigned int>(TimeOfDayWindow::Night));
+    const float peak    = timeOfDayWindowWeight(night, 1.0f);
+    const float partial = timeOfDayWindowWeight(night, 4.0f);
+    EXPECT_GT(partial, 0.0f);
+    EXPECT_LT(partial, peak);
+    EXPECT_LT(peak, 1.0f);
+    EXPECT_NEAR(timeOfDayWindowWeight(night, 13.0f), 0.0f, kEps);
+}
+
+TEST(AmbientZoneMix, HigherPriorityShadowsByItsBase)  // INV-1
+{
+    const auto w = computeAmbientZoneWeights({zoneAt(0.5f, 1), zoneAt(1.0f, 0)}, 12.0f);
+    ASSERT_EQ(w.size(), 2u);
+    EXPECT_NEAR(w[0], 0.5f, kEps);
+    EXPECT_NEAR(w[1], 0.5f, kEps);
+}
+
+TEST(AmbientZoneMix, ShadowUsesBasesNotShadowedWeights)  // INV-1
+{
+    // Priority 2 at base 0.5 shadows priority 1 down to 0.5, but the
+    // priority-0 zone is shadowed by the largest BASE above it (1), so 0.
+    // Taking the priority-1 zone's shadowed weight would give 0.5.
+    const auto w = computeAmbientZoneWeights(
+        {zoneAt(0.5f, 2), zoneAt(1.0f, 1), zoneAt(1.0f, 0)}, 12.0f);
+    ASSERT_EQ(w.size(), 3u);
+    EXPECT_NEAR(w[2], 0.0f, kEps);
+}
+
+TEST(AmbientZoneMix, EqualPrioritiesDoNotShadow)  // INV-1
+{
+    const auto w = computeAmbientZoneWeights({zoneAt(1.0f, 0), zoneAt(1.0f, 0)}, 12.0f);
+    ASSERT_EQ(w.size(), 2u);
+    EXPECT_NEAR(w[0], 1.0f, kEps);
+    EXPECT_NEAR(w[1], 1.0f, kEps);
+}

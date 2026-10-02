@@ -589,13 +589,21 @@ Foundations shipped via commit `fa0b100` — "Phase 9C: New domain systems — A
 - ✅ [3D_E-S0015] **Spatial audio — 3D positioned sound sources with distance attenuation (`AudioSourceComponent::spatial`, `AudioEngine` listener pose).**
   Kind: implement.
 
-- 📋 [3D_E-S0016] **Ambient soundscapes (biome-based, time-of-day-based) — deferred to Phase 10.**
+- ✅ [3D_E-S0016] **Ambient soundscapes (biome-based, time-of-day-based) — deferred to Phase 10.**
   Layman: Places in a scene get background sound, such as wind, water or night insects, that fades in as you approach and changes with the time of day.
   Progress (2026-10-02): spec docs/specs/3D_E-S0016-ambient-soundscapes.md
   accepted at the review cap (2 loops, 11 findings fixed). Scope agreed
   with the user: no biome input; the time-of-day clock lives in
   AmbientSystem and is not saved with the scene. Builds on 3D_E-0738
   (2D loop flag) and 3D_E-0739 (playback tickets). Not yet built.
+  Resolved 2026-10-02: built to docs/specs/3D_E-S0016-ambient-soundscapes.md.
+  AmbientZoneComponent (serialized as "AmbientZone"), AmbientSystem
+  (PostCamera, before AudioSystem), AudioEngine::setSourceVolume with a
+  per-source makeup, and the Audio panel's zones as scene entities with
+  clock controls. INV-1..7 tested (21 tests); three seen red under
+  targeted mutation. App starts with the system initialized, no errors
+  (visual-test on Xvfb). Owed: an in-app listening check, which needs
+  real ambience clips (3D_E-0036).
   Kind: implement.
 
 - ✅ [3D_E-S0017] **Sound material interactions (footstep sounds derived from physics material types) — deferred to Phase 10. ^3d_e-0023**

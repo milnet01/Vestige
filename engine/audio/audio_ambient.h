@@ -5,8 +5,9 @@
 /// @brief Phase 10 spatial audio — environmental ambient zones,
 ///        time-of-day weighting, and a random one-shot scheduler.
 ///
-/// Three independent primitives that the engine-side AmbientSystem
-/// composes into a full ambient-audio pipeline:
+/// Three independent primitives that `AmbientSystem`
+/// (engine/systems/ambient_system.h) composes into a full ambient-audio
+/// pipeline (3D_E-S0016):
 ///
 ///   1. **Ambient zones** — positional loops (wind, water, hum)
 ///      gated by a sphere-with-linear-falloff in world space,
@@ -24,15 +25,14 @@
 ///      deterministic uniform-sample callback; the engine plugs in
 ///      `std::uniform_real_distribution` at the call site.
 ///
-/// All three are pure-function / data-only. Weather-driven
-/// modulation is expected to land as a thin multiplier at the
-/// AmbientSystem layer once the Phase 15 weather controller
-/// publishes its rain / wind intensity outputs — no coupling in
-/// this module.
+/// All three are pure-function / data-only. Weather-driven modulation is
+/// not part of this module or of AmbientSystem.
 #pragma once
 
+#include <cstdint>
 #include <functional>
 #include <string>
+#include <vector>
 
 namespace Vestige
 {
@@ -95,6 +95,29 @@ const char* timeOfDayWindowLabel(TimeOfDayWindow window);
 /// @param hourOfDay Time in hours (0.0 to 24.0). Values outside the
 ///        range are wrapped modulo 24.
 TimeOfDayWeights computeTimeOfDayWeights(float hourOfDay);
+
+/// @brief Bit `n` of a window mask is the `TimeOfDayWindow` whose value is `n`.
+constexpr std::uint8_t kAllTimeOfDayWindows = 0x0F;
+
+/// @brief Sum of `computeTimeOfDayWeights(hourOfDay)` over the windows set in
+///        `windows`: 1 at every hour with all four set, 0 with none.
+float timeOfDayWindowWeight(std::uint8_t windows, float hourOfDay);
+
+/// @brief One zone's inputs to `computeAmbientZoneWeights`.
+struct AmbientZoneMixInput
+{
+    AmbientZone   zone;
+    std::uint8_t  windows  = kAllTimeOfDayWindows;
+    float         distance = 0.0f;  ///< Listener distance to the zone (m).
+};
+
+/// @brief Every zone's weight for one frame (3D_E-S0016 §4.2):
+///        `base = computeAmbientZoneVolume × timeOfDayWindowWeight`, then
+///        `weight = base × (1 − shadow)`, where `shadow` is the largest
+///        `base` among zones of strictly higher priority. Equal priorities
+///        do not shadow each other. Same order as `zones`.
+std::vector<float> computeAmbientZoneWeights(
+    const std::vector<AmbientZoneMixInput>& zones, float hourOfDay);
 
 // ----- Random one-shot scheduler --------------------------------
 

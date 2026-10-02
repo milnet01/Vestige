@@ -33,6 +33,7 @@
 #include <gtest/gtest.h>
 
 #include "audio/acoustic_probe_component.h"
+#include "audio/ambient_zone_component.h"
 #include "audio/audio_source_component.h"
 #include "audio/reverb_zone_component.h"
 #include "core/logger.h"
@@ -256,6 +257,65 @@ TEST(EntitySerializerRegistry, ReverbZoneAbsentFieldsTakeDefaults)
     EXPECT_EQ(zone->preset,            ReverbPreset::Generic);
     EXPECT_TRUE(zone->irPath.empty());
     EXPECT_FLOAT_EQ(zone->wetGain,     0.30f);
+}
+
+// ---------------------------------------------------------------------------
+// 3D_E-S0016 INV-6 — AmbientZoneComponent survives the JSON round-trip
+// ---------------------------------------------------------------------------
+
+TEST(EntitySerializerRegistry, AmbientZoneAllFieldsRoundTrip)
+{
+    Scene sceneOut("Out");
+    Entity* src = sceneOut.createEntity("AmbientHost");
+    auto* out = src->addComponent<AmbientZoneComponent>();
+    out->zone.clipPath    = "audio/ambience/wind.ogg";
+    out->zone.coreRadius  = 12.5f;   // not the 10 default
+    out->zone.falloffBand = 7.25f;   // not the 5 default
+    out->zone.maxVolume   = 0.6f;
+    out->zone.priority    = 3;
+    out->windows          = 0x05;    // dawn + dusk, not all four
+    out->oneShotClips     = {"audio/ambience/bird1.ogg", "audio/ambience/bird2.ogg"};
+    out->oneShotVolume    = 0.4f;
+    out->minIntervalSeconds = 8.0f;
+    out->maxIntervalSeconds = 20.0f;
+
+    ResourceManager resources;
+    json j = EntitySerializer::serializeEntity(*src, resources);
+    ASSERT_TRUE(j["components"].contains("AmbientZone"))
+        << "AmbientZone not registered with the serializer";
+
+    Scene sceneIn("In");
+    Entity* dst = EntitySerializer::deserializeEntity(j, sceneIn, resources);
+    ASSERT_NE(dst, nullptr);
+    auto* in = dst->getComponent<AmbientZoneComponent>();
+    ASSERT_NE(in, nullptr) << "AmbientZone dropped on deserialisation";
+    EXPECT_EQ(in->zone.clipPath, "audio/ambience/wind.ogg");
+    EXPECT_FLOAT_EQ(in->zone.coreRadius, 12.5f);
+    EXPECT_FLOAT_EQ(in->zone.falloffBand, 7.25f);
+    EXPECT_FLOAT_EQ(in->zone.maxVolume, 0.6f);
+    EXPECT_EQ(in->zone.priority, 3);
+    EXPECT_EQ(in->windows, 0x05);
+    EXPECT_EQ(in->oneShotClips, out->oneShotClips);
+    EXPECT_FLOAT_EQ(in->oneShotVolume, 0.4f);
+    EXPECT_FLOAT_EQ(in->minIntervalSeconds, 8.0f);
+    EXPECT_FLOAT_EQ(in->maxIntervalSeconds, 20.0f);
+}
+
+TEST(EntitySerializerRegistry, EntityWithoutAmbientZoneLoadsWithoutOne)
+{
+    Scene sceneOut("Out");
+    Entity* src = sceneOut.createEntity("Plain");
+    ResourceManager resources;
+    json j = EntitySerializer::serializeEntity(*src, resources);
+    if (j.contains("components"))
+    {
+        EXPECT_FALSE(j["components"].contains("AmbientZone"));
+    }
+
+    Scene sceneIn("In");
+    Entity* dst = EntitySerializer::deserializeEntity(j, sceneIn, resources);
+    ASSERT_NE(dst, nullptr);
+    EXPECT_EQ(dst->getComponent<AmbientZoneComponent>(), nullptr);
 }
 
 // ---------------------------------------------------------------------------

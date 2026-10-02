@@ -732,6 +732,15 @@ std::uint64_t AudioEngine::playbackTicket(unsigned int source) const
     return 0;
 }
 
+void AudioEngine::setSourceVolume(unsigned int source, float volume)
+{
+    auto it = m_livePlaybacks.find(source);
+    if (it != m_livePlaybacks.end())
+    {
+        it->second.sourceVolume = volume * it->second.makeup;
+    }
+}
+
 unsigned int AudioEngine::playSound(const std::string& filePath, const glm::vec3& position,
                                      float volume, bool loop, AudioBus bus,
                                      SoundPriority priority)
@@ -764,9 +773,10 @@ unsigned int AudioEngine::playSound(const std::string& filePath, const glm::vec3
     // before it is stored / resolved, so updateGains and the eviction
     // candidate scan reuse it. Returns 1.0 (no-op) when loudness is disabled
     // or the clip has no cached measurement.
-    volume *= loudnessMakeupForPath(filePath);
+    const float makeup = loudnessMakeupForPath(filePath);
+    volume *= makeup;
     m_livePlaybacks[source] = SourceMix{
-        bus, volume, priority, std::chrono::steady_clock::now()};
+        bus, volume, priority, std::chrono::steady_clock::now(), makeup};
     const float initialGain =
         resolveSourceGain(
             currentMixer(), bus, volume, effectiveDuck(bus));
@@ -808,9 +818,10 @@ unsigned int AudioEngine::playSoundSpatial(const std::string& filePath,
     // before it is stored / resolved, so updateGains and the eviction
     // candidate scan reuse it. Returns 1.0 (no-op) when loudness is disabled
     // or the clip has no cached measurement.
-    volume *= loudnessMakeupForPath(filePath);
+    const float makeup = loudnessMakeupForPath(filePath);
+    volume *= makeup;
     m_livePlaybacks[source] = SourceMix{
-        bus, volume, priority, std::chrono::steady_clock::now()};
+        bus, volume, priority, std::chrono::steady_clock::now(), makeup};
     const float initialGain =
         resolveSourceGain(
             currentMixer(), bus, volume, effectiveDuck(bus));
@@ -854,9 +865,10 @@ unsigned int AudioEngine::playSoundSpatial(const std::string& filePath,
     // before it is stored / resolved, so updateGains and the eviction
     // candidate scan reuse it. Returns 1.0 (no-op) when loudness is disabled
     // or the clip has no cached measurement.
-    volume *= loudnessMakeupForPath(filePath);
+    const float makeup = loudnessMakeupForPath(filePath);
+    volume *= makeup;
     m_livePlaybacks[source] = SourceMix{
-        bus, volume, priority, std::chrono::steady_clock::now()};
+        bus, volume, priority, std::chrono::steady_clock::now(), makeup};
     const float initialGain =
         resolveSourceGain(
             currentMixer(), bus, volume, effectiveDuck(bus));
@@ -905,9 +917,10 @@ unsigned int AudioEngine::playSound2D(const std::string& filePath, float volume,
     // before it is stored / resolved, so updateGains and the eviction
     // candidate scan reuse it. Returns 1.0 (no-op) when loudness is disabled
     // or the clip has no cached measurement.
-    volume *= loudnessMakeupForPath(filePath);
+    const float makeup = loudnessMakeupForPath(filePath);
+    volume *= makeup;
     m_livePlaybacks[source] = SourceMix{
-        bus, volume, priority, std::chrono::steady_clock::now()};
+        bus, volume, priority, std::chrono::steady_clock::now(), makeup};
     const float initialGain =
         resolveSourceGain(
             currentMixer(), bus, volume, effectiveDuck(bus));

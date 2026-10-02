@@ -357,6 +357,13 @@ public:
     ///        eviction hands the victim's source name to the new sound.
     std::uint64_t playbackTicket(unsigned int source) const;
 
+    /// @brief 3D_E-S0016 — replaces the volume of a playback the engine is
+    ///        tracking; the next `updateGains` uploads it. `volume` is
+    ///        pre-makeup, as passed to `playSound2D`: the engine applies the
+    ///        clip's loudness makeup again. An unknown or released source is
+    ///        ignored.
+    void setSourceVolume(unsigned int source, float volume);
+
     /// @brief Caption-routing callback (Phase 10.9 P4).
     ///
     /// Every `playSound*` overload invokes this at the top of the
@@ -863,6 +870,9 @@ private:
         float         sourceVolume = 1.0f;
         SoundPriority priority     = SoundPriority::Normal;
         std::chrono::steady_clock::time_point startTime{};
+        /// 3D_E-S0016 — the clip's loudness makeup, already folded into
+        /// `sourceVolume`; `setSourceVolume` applies it again.
+        float         makeup       = 1.0f;
     };
     std::unordered_map<unsigned int, SourceMix> m_livePlaybacks;
     /// Phase 10.9 W7 — pointer to the engine-owned mixer, not a per-frame

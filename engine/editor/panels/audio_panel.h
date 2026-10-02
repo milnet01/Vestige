@@ -21,6 +21,7 @@
 namespace Vestige
 {
 
+class AmbientSystem;
 class AudioSystem;
 class Entity;
 class ReverbSystem;
@@ -37,8 +38,9 @@ class SettingsEditor;
 ///                   `ReverbZoneComponent` entities, AX2 R4),
 ///                   acoustic-probe placement + "Bake Acoustics"
 ///                   (real `AcousticProbeComponent` entities, AX3 B5),
-///                   and ambient-zone placement (still editor-draft, no
-///                   runtime ambient component yet).
+///                   and ambient-zone placement (real
+///                   `AmbientZoneComponent` entities played by
+///                   `AmbientSystem`, 3D_E-S0016) with the time-of-day clock.
 ///   - **Debug**   — voice-pool utilisation, HRTF status + dataset
 ///                   selector, distance-model picker, and an
 ///                   overlay toggle so the viewport can draw each
@@ -52,15 +54,6 @@ class SettingsEditor;
 class AudioPanel
 {
 public:
-    /// @brief Editor-draft ambient zone — position + the full
-    ///        `AmbientZone` params the runtime will consume.
-    struct AmbientZoneInstance
-    {
-        std::string name   = "Ambient Zone";
-        glm::vec3   center = glm::vec3(0.0f);
-        AmbientZone params;
-    };
-
     /// @brief Draws the panel inside its own ImGui window. `scene`
     ///        and `audioSystem` may be null — the panel disables
     ///        the matching tab when either is missing.
@@ -190,15 +183,22 @@ public:
     ///        disables the bake button.
     void wireReverbSystem(ReverbSystem* reverbSystem) { m_reverbSystem = reverbSystem; }
 
-    // -- Ambient zones (editor draft) ------------------------------
+    // -- Ambient zones (scene-backed AmbientZoneComponent, 3D_E-S0016) ----
 
-    const std::vector<AmbientZoneInstance>& ambientZones() const { return m_ambientZones; }
+    /// @brief Creates an "Ambient Zone" entity with a default
+    ///        `AmbientZoneComponent`, selects it, and returns it.
+    Entity* createAmbientZone(Scene& scene);
 
-    int  addAmbientZone(const AmbientZoneInstance& zone);
-    bool removeAmbientZone(int index);
+    /// @brief Removes the ambient-zone entity @a entityId from @a scene,
+    ///        clearing the selection if it pointed at it. True iff removed.
+    bool removeAmbientZone(Scene& scene, std::uint32_t entityId);
 
-    int  selectedAmbientZone() const      { return m_selectedAmbientZone; }
-    void selectAmbientZone(int index)     { m_selectedAmbientZone = index; }
+    std::uint32_t selectedAmbientZone() const     { return m_selectedAmbientZoneEntity; }
+    void selectAmbientZone(std::uint32_t entityId) { m_selectedAmbientZoneEntity = entityId; }
+
+    /// @brief Wires the live `AmbientSystem` so the Zones tab can show and
+    ///        set the time-of-day clock. Null hides the clock controls.
+    void wireAmbientSystem(AmbientSystem* ambientSystem) { m_ambientSystem = ambientSystem; }
 
     // -- Per-source mute / solo ------------------------------------
 
@@ -246,10 +246,10 @@ private:
     DuckingState*  m_engineDuckingState  = nullptr; ///< Phase 10.9 P3 authoritative state.
     DuckingParams* m_engineDuckingParams = nullptr; ///< Phase 10.9 P3 authoritative params.
 
-    std::vector<AmbientZoneInstance> m_ambientZones;
     std::uint32_t m_selectedReverbZoneEntity = 0;  ///< AX2 R4 (0 = none).
     std::uint32_t m_selectedAcousticProbeEntity = 0;  ///< AX3 B5 (0 = none).
-    int m_selectedAmbientZone = -1;
+    std::uint32_t m_selectedAmbientZoneEntity = 0;  ///< 3D_E-S0016 (0 = none).
+    AmbientSystem* m_ambientSystem = nullptr;        ///< Clock controls; may be null.
 
     ReverbSystem* m_reverbSystem = nullptr;  ///< Debug read-outs + bake; may be null.
 

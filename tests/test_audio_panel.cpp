@@ -10,6 +10,7 @@
 #include <gtest/gtest.h>
 
 #include "audio/acoustic_probe_component.h"
+#include "audio/ambient_zone_component.h"
 #include "audio/reverb_zone_component.h"
 #include "core/settings.h"
 #include "core/settings_editor.h"
@@ -32,8 +33,7 @@ TEST(AudioPanel, DefaultsAreClosed)
     EXPECT_FALSE(p.isOpen());
     EXPECT_FALSE(p.isZoneOverlayEnabled());
     EXPECT_EQ(p.selectedReverbZone(),  0u);   // 0 = no entity selected.
-    EXPECT_EQ(p.selectedAmbientZone(), -1);
-    EXPECT_TRUE(p.ambientZones().empty());
+    EXPECT_EQ(p.selectedAmbientZone(), 0u);  // 0 = no entity selected.
     EXPECT_FALSE(p.hasAnySoloedSource());
 }
 
@@ -216,25 +216,58 @@ TEST(AudioPanel, ReverbZoneAndAcousticProbeSelectionsAreIndependent)
 
 // -- Ambient zone management --------------------------------------
 
-TEST(AudioPanel, AddAmbientZoneReturnsIndex)
+namespace
 {
-    AudioPanel p;
-    AudioPanel::AmbientZoneInstance z;
-    z.name = "Wind";
-    EXPECT_EQ(p.addAmbientZone(z), 0);
-    EXPECT_EQ(p.ambientZones().size(), 1u);
+
+int countAmbientZones(Scene& scene)
+{
+    int n = 0;
+    scene.forEachEntity([&n](Entity& e)
+    {
+        if (e.getComponent<AmbientZoneComponent>() != nullptr)
+        {
+            ++n;
+        }
+    });
+    return n;
 }
 
-TEST(AudioPanel, RemoveAmbientZoneMirrorsReverbBehavior)
+}  // namespace
+
+TEST(AudioPanel, CreateAmbientZoneAddsASelectedEntity)  // 3D_E-S0016 INV-7
 {
     AudioPanel p;
-    p.addAmbientZone({});
-    p.addAmbientZone({});
-    p.selectAmbientZone(1);
+    Scene scene("test");
 
-    EXPECT_TRUE(p.removeAmbientZone(1));
-    EXPECT_EQ(p.selectedAmbientZone(), -1);
-    EXPECT_EQ(p.ambientZones().size(), 1u);
+    Entity* e = p.createAmbientZone(scene);
+    ASSERT_NE(e, nullptr);
+    EXPECT_NE(e->getComponent<AmbientZoneComponent>(), nullptr);
+    EXPECT_EQ(p.selectedAmbientZone(), e->getId());
+    EXPECT_EQ(countAmbientZones(scene), 1);
+}
+
+TEST(AudioPanel, RemoveSelectedAmbientZoneClearsSelection)
+{
+    AudioPanel p;
+    Scene scene("test");
+
+    const std::uint32_t id = p.createAmbientZone(scene)->getId();
+    EXPECT_TRUE(p.removeAmbientZone(scene, id));
+    EXPECT_EQ(p.selectedAmbientZone(), 0u);
+    EXPECT_EQ(countAmbientZones(scene), 0);
+}
+
+TEST(AudioPanel, RemoveNonSelectedAmbientZoneKeepsSelection)
+{
+    AudioPanel p;
+    Scene scene("test");
+
+    const std::uint32_t firstId  = p.createAmbientZone(scene)->getId();
+    const std::uint32_t secondId = p.createAmbientZone(scene)->getId();  // selected
+
+    EXPECT_TRUE(p.removeAmbientZone(scene, firstId));
+    EXPECT_EQ(p.selectedAmbientZone(), secondId);
+    EXPECT_EQ(countAmbientZones(scene), 1);
 }
 
 // -- Mute / solo --------------------------------------------------

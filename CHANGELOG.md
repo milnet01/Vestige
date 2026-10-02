@@ -23,6 +23,18 @@ may change any interface without notice.
 
 ## [Unreleased]
 
+### 2026-10-02 Added — Ambient zones play background sound that fades with distance and time of day (3D_E-S0016)
+
+A scene can now hold ambient zones: places with a looping background
+sound, such as wind, a stream or night insects, and optional random
+calls, such as a bird or a creak, scattered inside them. The sound
+fades in as you walk closer, a stronger zone of higher priority can
+drown out a weaker one, and each zone can be limited to dawn, day,
+dusk or night. Zones are placed and edited in the editor's Audio
+panel and saved with the scene. The panel also sets the time of day
+and how fast it runs. Zones used to exist only as an editor draft
+that was neither saved nor heard.
+
 ### 2026-10-02 Fixed — Music that briefly runs dry no longer falls silent for good (3D_E-0740)
 
 If a music layer's stream ran dry for a moment, the engine's clean-up

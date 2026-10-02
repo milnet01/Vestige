@@ -7,6 +7,7 @@
 
 #include "audio/acoustic_baker.h"
 #include "audio/acoustic_probe_component.h"
+#include "audio/ambient_zone_component.h"
 #include "audio/audio_attenuation.h"
 #include "audio/audio_engine.h"
 #include "audio/audio_mix_monitor.h"
@@ -19,6 +20,7 @@
 #include "core/settings_editor.h"
 #include "scene/entity.h"
 #include "scene/scene.h"
+#include "systems/ambient_system.h"
 #include "systems/audio_system.h"
 #include "systems/reverb_system.h"
 
@@ -70,28 +72,22 @@ bool AudioPanel::removeAcousticProbe(Scene& scene, std::uint32_t entityId)
     return removed;
 }
 
-int AudioPanel::addAmbientZone(const AmbientZoneInstance& zone)
+Entity* AudioPanel::createAmbientZone(Scene& scene)
 {
-    m_ambientZones.push_back(zone);
-    return static_cast<int>(m_ambientZones.size()) - 1;
+    Entity* entity = scene.createEntity("Ambient Zone");
+    entity->addComponent<AmbientZoneComponent>();
+    m_selectedAmbientZoneEntity = entity->getId();
+    return entity;
 }
 
-bool AudioPanel::removeAmbientZone(int index)
+bool AudioPanel::removeAmbientZone(Scene& scene, std::uint32_t entityId)
 {
-    if (index < 0 || index >= static_cast<int>(m_ambientZones.size()))
+    const bool removed = scene.removeEntity(entityId);
+    if (removed && m_selectedAmbientZoneEntity == entityId)
     {
-        return false;
+        m_selectedAmbientZoneEntity = 0;
     }
-    m_ambientZones.erase(m_ambientZones.begin() + index);
-    if (m_selectedAmbientZone == index)
-    {
-        m_selectedAmbientZone = -1;
-    }
-    else if (m_selectedAmbientZone > index)
-    {
-        m_selectedAmbientZone--;
-    }
-    return true;
+    return removed;
 }
 
 void AudioPanel::setSourceMuted(std::uint32_t entityId, bool muted)
@@ -469,50 +465,119 @@ void AudioPanel::drawZonesTab(Scene* scene)
     ImGui::Spacing();
     ImGui::Separator();
     ImGui::TextUnformatted("Ambient zones");
+    if (m_ambientSystem != nullptr)
+    {
+        float hour = m_ambientSystem->hourOfDay();
+        if (ImGui::SliderFloat("Hour of day", &hour, 0.0f, 24.0f, "%.2f"))
+        {
+            m_ambientSystem->setHourOfDay(hour);
+        }
+        float rate = m_ambientSystem->hoursPerMinute();
+        if (ImGui::SliderFloat("Hours per minute", &rate, 0.0f, 60.0f, "%.2f"))
+        {
+            m_ambientSystem->setHoursPerMinute(rate);
+        }
+    }
+    if (!scene)
+    {
+        ImGui::TextDisabled("No scene — ambient zones unavailable.");
+        return;
+    }
     if (ImGui::Button("Add ambient zone"))
     {
-        addAmbientZone(AmbientZoneInstance{});
-        m_selectedAmbientZone = static_cast<int>(m_ambientZones.size()) - 1;
+        createAmbientZone(*scene);
     }
     ImGui::Separator();
-    for (std::size_t i = 0; i < m_ambientZones.size(); ++i)
+    scene->forEachEntity([&](Entity& entity)
     {
-        ImGui::PushID(static_cast<int>(i + 10000));
-        const bool isSelected = (static_cast<int>(i) == m_selectedAmbientZone);
-        if (ImGui::Selectable(m_ambientZones[i].name.c_str(), isSelected))
+        if (entity.getComponent<AmbientZoneComponent>() == nullptr)
         {
-            m_selectedAmbientZone = static_cast<int>(i);
+            return;
+        }
+        const std::uint32_t id = entity.getId();
+        ImGui::PushID(static_cast<int>(id));
+        const bool isSelected = (id == m_selectedAmbientZoneEntity);
+        if (ImGui::Selectable(entity.getName().c_str(), isSelected))
+        {
+            m_selectedAmbientZoneEntity = id;
         }
         ImGui::PopID();
+    });
+
+    Entity* selected = scene->findEntityById(m_selectedAmbientZoneEntity);
+    AmbientZoneComponent* z =
+        selected ? selected->getComponent<AmbientZoneComponent>() : nullptr;
+    if (z == nullptr)
+    {
+        return;
+    }
+    ImGui::Separator();
+    ImGui::PushID(static_cast<int>(m_selectedAmbientZoneEntity));
+    char nameBuf[128];
+    std::snprintf(nameBuf, sizeof(nameBuf), "%s", selected->getName().c_str());
+    if (ImGui::InputText("Name", nameBuf, sizeof(nameBuf)))
+    {
+        selected->setName(nameBuf);
+    }
+    // Position is the entity transform — set it via the scene hierarchy /
+    // gizmo like any entity, not here.
+    char clipBuf[256];
+    std::snprintf(clipBuf, sizeof(clipBuf), "%s", z->zone.clipPath.c_str());
+    if (ImGui::InputText("Bed clip", clipBuf, sizeof(clipBuf)))
+    {
+        z->zone.clipPath = clipBuf;
+    }
+    ImGui::SliderFloat("Core radius",  &z->zone.coreRadius,  0.1f, 100.0f, "%.1f");
+    ImGui::SliderFloat("Falloff band", &z->zone.falloffBand, 0.0f, 100.0f, "%.1f");
+    ImGui::SliderFloat("Max volume",   &z->zone.maxVolume,   0.0f, 1.0f,   "%.2f");
+    ImGui::InputInt("Priority", &z->zone.priority);
+
+    ImGui::TextUnformatted("Plays at");
+    for (int n = 0; n < 4; ++n)
+    {
+        const auto bit = static_cast<std::uint8_t>(1u << static_cast<unsigned int>(n));
+        bool on = (z->windows & bit) != 0;
+        ImGui::SameLine();
+        if (ImGui::Checkbox(timeOfDayWindowLabel(static_cast<TimeOfDayWindow>(n)), &on))
+        {
+            z->windows = static_cast<std::uint8_t>(on ? (z->windows | bit)
+                                                      : (z->windows & ~bit));
+        }
     }
 
-    if (m_selectedAmbientZone >= 0 &&
-        m_selectedAmbientZone < static_cast<int>(m_ambientZones.size()))
+    ImGui::TextUnformatted("One-shots");
+    for (std::size_t i = 0; i < z->oneShotClips.size(); ++i)
     {
-        ImGui::Separator();
-        auto& z = m_ambientZones[static_cast<std::size_t>(m_selectedAmbientZone)];
-        char nameBuf[128];
-        std::snprintf(nameBuf, sizeof(nameBuf), "%s", z.name.c_str());
-        if (ImGui::InputText("Name", nameBuf, sizeof(nameBuf)))
+        ImGui::PushID(static_cast<int>(i));
+        char shotBuf[256];
+        std::snprintf(shotBuf, sizeof(shotBuf), "%s", z->oneShotClips[i].c_str());
+        if (ImGui::InputText("Clip", shotBuf, sizeof(shotBuf)))
         {
-            z.name = nameBuf;
+            z->oneShotClips[i] = shotBuf;
         }
-        ImGui::DragFloat3("Center", &z.center.x, 0.1f);
-        char clipBuf[256];
-        std::snprintf(clipBuf, sizeof(clipBuf), "%s", z.params.clipPath.c_str());
-        if (ImGui::InputText("Clip path", clipBuf, sizeof(clipBuf)))
+        ImGui::SameLine();
+        const bool removeShot = ImGui::Button("Remove");
+        ImGui::PopID();
+        if (removeShot)
         {
-            z.params.clipPath = clipBuf;
-        }
-        ImGui::SliderFloat("Core radius",  &z.params.coreRadius,  0.1f, 100.0f, "%.1f");
-        ImGui::SliderFloat("Falloff band", &z.params.falloffBand, 0.0f, 100.0f, "%.1f");
-        ImGui::SliderFloat("Max volume",   &z.params.maxVolume,   0.0f, 1.0f,   "%.2f");
-        ImGui::InputInt("Priority", &z.params.priority);
-        if (ImGui::Button("Remove ambient zone"))
-        {
-            removeAmbientZone(m_selectedAmbientZone);
+            z->oneShotClips.erase(z->oneShotClips.begin()
+                                  + static_cast<std::ptrdiff_t>(i));
+            break;
         }
     }
+    if (ImGui::Button("Add one-shot clip"))
+    {
+        z->oneShotClips.emplace_back();
+    }
+    ImGui::SliderFloat("One-shot volume", &z->oneShotVolume, 0.0f, 1.0f, "%.2f");
+    ImGui::SliderFloat("Min interval (s)", &z->minIntervalSeconds, 0.5f, 300.0f, "%.1f");
+    ImGui::SliderFloat("Max interval (s)", &z->maxIntervalSeconds, 0.5f, 300.0f, "%.1f");
+
+    if (ImGui::Button("Remove ambient zone"))
+    {
+        removeAmbientZone(*scene, m_selectedAmbientZoneEntity);
+    }
+    ImGui::PopID();
 }
 
 void AudioPanel::drawSpectrumViewer(AudioSystem* audioSystem)

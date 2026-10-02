@@ -25,6 +25,7 @@
 #include "systems/lighting_system.h"
 #include "systems/audio_occlusion_system.h"
 #include "systems/reverb_system.h"
+#include "systems/ambient_system.h"
 #include "audio/acoustic_baker.h"
 #include "systems/audio_system.h"
 #include "systems/music_system.h"
@@ -291,6 +292,11 @@ bool Engine::initialize(const EngineConfig& config)
     // slot (parametric params or convolution IR swap), and writes each source's
     // reverbSend, which AudioSystem's compose loop reads the same frame.
     m_systemRegistry.registerSystem<ReverbSystem>();
+
+    // 3D_E-S0016: ambient zone beds + one-shots. Same PostCamera phase,
+    // registered BEFORE AudioSystem so the volumes it sets are uploaded by
+    // AudioSystem's updateGains in the same frame.
+    m_systemRegistry.registerSystem<AmbientSystem>();
     auto* audioSys = m_systemRegistry.registerSystem<AudioSystem>();
 
     // W8 part 2/2: streaming-music player + its ISystem wrapper. The player
@@ -739,6 +745,8 @@ bool Engine::initialize(const EngineConfig& config)
             // wet gain (the system pointer is stable post-registration).
             m_editor->getAudioPanel().wireReverbSystem(
                 m_systemRegistry.getSystem<ReverbSystem>());
+            m_editor->getAudioPanel().wireAmbientSystem(
+                m_systemRegistry.getSystem<AmbientSystem>());
         }
     }
 

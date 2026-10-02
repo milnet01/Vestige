@@ -14,6 +14,7 @@
 #include "audio/acoustic_probe_component.h"
 #include "audio/audio_source_component.h"
 #include "audio/reverb_zone_component.h"
+#include "audio/ambient_zone_component.h"
 #include "scene/entity.h"
 #include "scene/mesh_renderer.h"
 #include "scene/light_component.h"
@@ -880,6 +881,38 @@ static void deserializeReverbZone(const json& j, Entity& entity, ResourceManager
     comp->wetGain     = j.value("wetGain", 0.30f);
 }
 
+static json serializeAmbientZone(const AmbientZoneComponent& comp)
+{
+    json j;
+    j["clipPath"]           = comp.zone.clipPath;
+    j["coreRadius"]         = comp.zone.coreRadius;
+    j["falloffBand"]        = comp.zone.falloffBand;
+    j["maxVolume"]          = comp.zone.maxVolume;
+    j["priority"]           = comp.zone.priority;
+    j["windows"]            = comp.windows;
+    j["oneShotClips"]       = comp.oneShotClips;
+    j["oneShotVolume"]      = comp.oneShotVolume;
+    j["minIntervalSeconds"] = comp.minIntervalSeconds;
+    j["maxIntervalSeconds"] = comp.maxIntervalSeconds;
+    return j;
+}
+
+static void deserializeAmbientZone(const json& j, Entity& entity, ResourceManager&)
+{
+    auto* comp = entity.addComponent<AmbientZoneComponent>();
+    const AmbientZoneComponent defaults;
+    comp->zone.clipPath    = j.value("clipPath", defaults.zone.clipPath);
+    comp->zone.coreRadius  = j.value("coreRadius", defaults.zone.coreRadius);
+    comp->zone.falloffBand = j.value("falloffBand", defaults.zone.falloffBand);
+    comp->zone.maxVolume   = j.value("maxVolume", defaults.zone.maxVolume);
+    comp->zone.priority    = j.value("priority", defaults.zone.priority);
+    comp->windows          = j.value("windows", defaults.windows);
+    comp->oneShotClips     = j.value("oneShotClips", defaults.oneShotClips);
+    comp->oneShotVolume    = j.value("oneShotVolume", defaults.oneShotVolume);
+    comp->minIntervalSeconds = j.value("minIntervalSeconds", defaults.minIntervalSeconds);
+    comp->maxIntervalSeconds = j.value("maxIntervalSeconds", defaults.maxIntervalSeconds);
+}
+
 static json serializeAcousticProbe(const AcousticProbeComponent& comp)
 {
     json j;
@@ -989,6 +1022,15 @@ static void ensureBuiltinsRegistered()
                 return c ? serializeReverbZone(*c) : json();
             },
             deserializeReverbZone
+        });
+
+        reg.registerEntry({
+            "AmbientZone",
+            [](const Entity& e, const ResourceManager&) -> json {
+                auto* c = e.getComponent<AmbientZoneComponent>();
+                return c ? serializeAmbientZone(*c) : json();
+            },
+            deserializeAmbientZone
         });
 
         reg.registerEntry({
