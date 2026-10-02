@@ -13,7 +13,6 @@
 #include <nlohmann/json.hpp>
 
 #include <fstream>
-#include <iterator>
 #include "scene/entity.h"
 #include "scene/scene.h"
 #include "scene/scene_manager.h"
@@ -288,8 +287,15 @@ void AudioSystem::update(float deltaTime)
     for (auto it = m_lodTiers.begin(); it != m_lodTiers.end(); )
     {
         // AX5 — keep the tier map in step with the tracked sources.
-        it = m_sourceTracker.find(it->first) == nullptr ? m_lodTiers.erase(it)
-                                                        : std::next(it);
+        const bool tracked = m_sourceTracker.find(it->first) != nullptr;
+        if (tracked)
+        {
+            ++it;
+        }
+        else
+        {
+            it = m_lodTiers.erase(it);
+        }
     }
 
     // AX13 — hand this frame's activity to next frame's router pass.
