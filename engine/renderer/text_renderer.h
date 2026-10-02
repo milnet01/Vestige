@@ -142,6 +142,12 @@ public:
     /// @brief Measures the width of a text string in pixels (at scale 1.0).
     float measureTextWidth(const std::string& text) const;
 
+    /// @brief The `y` to pass to `renderText2D` so a line of capitals at
+    ///        @a scale is centred on @a centerY. `renderText2D`'s `y` is the
+    ///        top of the line: the baseline sits one ascender below it
+    ///        (3D_E-0748). Returns @a centerY when no font is loaded.
+    float topForCenteredCaps(float centerY, float scale) const;
+
     /// @brief Phase 10.9 Pe1 — open a frame-scoped batch. While a batch
     ///        is open, every `renderText2D` / `renderText2DOblique` call
     ///        merely appends glyphs to the shared batch buffer; nothing

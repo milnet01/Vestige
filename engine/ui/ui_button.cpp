@@ -155,12 +155,9 @@ void UIButton::render(SpriteBatchRenderer& batch,
     if (textRenderer != nullptr && !label.empty())
     {
         const glm::vec3 col = textColor(style, renderState, *theme);
-        // Vertical centring: TextRenderer::renderText2D draws with the
-        // text's baseline near the y coord; centre by approximation
-        // (typeButton px size + 25% of size for the cap-height bias).
         const float textScale = 0.4f;  // typeButton (20px) at ~50px font baseline.
         const float pad = theme->buttonPadX;
-        const float y = absPos.y + size.y * 0.5f + theme->typeButton * 0.30f;
+        const float y = textRenderer->topForCenteredCaps(absPos.y + size.y * 0.5f, textScale);
         textRenderer->renderText2D(label, absPos.x + pad, y, textScale, col,
                                     screenWidth, screenHeight);
 
@@ -172,11 +169,16 @@ void UIButton::render(SpriteBatchRenderer& batch,
             const float kbdH = 22.0f;
             const glm::vec2 kbdPos{absPos.x + size.x - pad - kbdW,
                                     absPos.y + (size.y - kbdH) * 0.5f};
-            drawBorder(batch, kbdPos, {kbdW, kbdH}, theme->panelStroke, 1.0f);
+            // On a filled PRIMARY button the dim key-cap colours vanish into
+            // the accent fill; take the label's ink instead (3D_E-0748).
+            const bool filled = (style == UIButtonStyle::PRIMARY);
+            drawBorder(batch, kbdPos, {kbdW, kbdH},
+                       filled ? glm::vec4(col, 1.0f) : theme->panelStroke, 1.0f);
             textRenderer->renderText2D(shortcut.text,
                                         kbdPos.x + 6.0f,
-                                        kbdPos.y + kbdH * 0.5f + 4.0f,
-                                        0.22f, theme->textSecondary,
+                                        textRenderer->topForCenteredCaps(
+                                            kbdPos.y + kbdH * 0.5f, 0.22f),
+                                        0.22f, filled ? col : theme->textSecondary,
                                         screenWidth, screenHeight);
         }
     }

@@ -48,7 +48,8 @@ void UIKeybindRow::render(SpriteBatchRenderer& batch,
     {
         textRenderer->renderText2D(label,
                                     absPos.x,
-                                    absPos.y + size.y * 0.5f + 5.0f,
+                                    textRenderer->topForCenteredCaps(
+                                        absPos.y + size.y * 0.5f, 0.34f),
                                     0.34f, theme->textPrimary,
                                     screenWidth, screenHeight);
     }
@@ -74,7 +75,7 @@ void UIKeybindRow::render(SpriteBatchRenderer& batch,
         const float scale = 0.26f;
         const float approx = static_cast<float>(keyLabel.size()) * 8.0f * scale * 2.5f;
         const float tx = keyX + (keyW - approx) * 0.5f;
-        const float ty = keyY + keyH * 0.5f + 4.0f;
+        const float ty = textRenderer->topForCenteredCaps(keyY + keyH * 0.5f, scale);
         textRenderer->renderText2D(keyLabel, tx, ty, scale, keyColor,
                                     screenWidth, screenHeight);
     }
@@ -83,7 +84,7 @@ void UIKeybindRow::render(SpriteBatchRenderer& batch,
     if (textRenderer != nullptr)
     {
         const float cx = absPos.x + size.x - clearW;
-        const float cy = absPos.y + size.y * 0.5f + 4.0f;
+        const float cy = textRenderer->topForCenteredCaps(absPos.y + size.y * 0.5f, 0.22f);
         textRenderer->renderText2D(std::string(tr("ui.keybind.clear")),
                                     cx, cy, 0.22f,
                                     theme->textSecondary,

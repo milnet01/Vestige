@@ -119,7 +119,7 @@ void UISlider::render(SpriteBatchRenderer& batch,
         const float scale = 0.32f;
         const float approxWidth = static_cast<float>(formatted.size()) * 9.0f * scale * 2.5f;
         const float x = absPos.x + size.x - approxWidth;
-        const float y = absPos.y + size.y * 0.5f + 5.0f;
+        const float y = textRenderer->topForCenteredCaps(absPos.y + size.y * 0.5f, scale);
         textRenderer->renderText2D(formatted, x, y, scale,
                                     theme->textSecondary,
                                     screenWidth, screenHeight);

@@ -126,7 +126,7 @@ void UIDropdown::render(SpriteBatchRenderer& batch,
     {
         const float scale = 0.30f;
         const float pad   = 16.0f;
-        const float y     = absPos.y + size.y * 0.5f + 5.0f;
+        const float y     = textRenderer->topForCenteredCaps(absPos.y + size.y * 0.5f, scale);
         textRenderer->renderText2D(currentLabel(),
                                     absPos.x + pad, y, scale,
                                     theme->textPrimary,
@@ -163,7 +163,8 @@ void UIDropdown::render(SpriteBatchRenderer& batch,
             const glm::vec3 col = selected ? glm::vec3(theme->accent) : theme->textPrimary;
             textRenderer->renderText2D(options[i].label,
                                         menuPos.x + 16.0f,
-                                        menuPos.y + yOff + itemH * 0.5f + 5.0f,
+                                        textRenderer->topForCenteredCaps(
+                                            menuPos.y + yOff + itemH * 0.5f, 0.30f),
                                         0.30f, col,
                                         screenWidth, screenHeight);
         }

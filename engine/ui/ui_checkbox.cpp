@@ -84,7 +84,7 @@ void UICheckbox::render(SpriteBatchRenderer& batch,
     {
         const float scale = 0.36f;
         const float labelX = absPos.x + box + 12.0f;
-        const float labelY = absPos.y + box * 0.5f + 5.0f;
+        const float labelY = textRenderer->topForCenteredCaps(absPos.y + box * 0.5f, scale);
         textRenderer->renderText2D(label, labelX, labelY, scale,
                                     theme->textPrimary,
                                     screenWidth, screenHeight);

@@ -649,6 +649,19 @@ bool TextRenderer::isInitialized() const
     return m_initialized;
 }
 
+float TextRenderer::topForCenteredCaps(float centerY, float scale) const
+{
+    if (m_fontStack.fontCount() == 0)
+    {
+        return centerY;
+    }
+    const Font& font = *m_fontStack.fontAt(0);  // renderText2D's baseline font
+    const float capHeight = font.hasGlyph('H')
+        ? static_cast<float>(font.getGlyph('H').bearing.y)
+        : font.getAscender() * 0.7f;
+    return centerY + capHeight * scale * 0.5f - font.getAscender() * scale;
+}
+
 float TextRenderer::measureTextWidth(const std::string& text) const
 {
     // Not initialized → empty stack; resolveGlyph would return a null Hit.
