@@ -22,6 +22,8 @@ namespace Vestige
 {
 
 class AmbientSystem;
+class AudioEngine;
+class AudioSourceComponent;
 class AudioSystem;
 class Entity;
 class ReverbSystem;
@@ -200,6 +202,31 @@ public:
     ///        set the time-of-day clock. Null hides the clock controls.
     void wireAmbientSystem(AmbientSystem* ambientSystem) { m_ambientSystem = ambientSystem; }
 
+    // -- Sound emitters + preview (3D_E-S0022) ----------------------
+    //
+    // ImGui-free like the zone methods, so `test_audio_panel` can drive them.
+
+    /// @brief Creates a "Sound Emitter" entity with a default
+    ///        `AudioSourceComponent` and returns it. Position it like any
+    ///        entity, with the gizmo.
+    Entity* createSoundEmitter(Scene& scene);
+
+    /// @brief Plays @a source's clip once, non-positionally on its bus, so an
+    ///        author can hear it. Stops a preview this panel started first.
+    ///        True iff a playback started.
+    bool startPreview(AudioEngine& engine, const AudioSourceComponent& source);
+
+    /// @brief Stops the preview this panel started, if its source still
+    ///        carries the playback ticket it was given (3D_E-0739), so it
+    ///        never stops a sound that took the source over.
+    void stopPreview(AudioEngine& engine);
+
+    /// @brief True while the preview this panel started is still playing.
+    bool isPreviewing(const AudioEngine& engine) const;
+
+    /// @brief Source the last preview was given (0 = none); for tests.
+    unsigned int previewSource() const { return m_previewSource; }
+
     // -- Per-source mute / solo ------------------------------------
 
     void setSourceMuted(std::uint32_t entityId, bool muted);
@@ -227,7 +254,7 @@ public:
 
 private:
     void drawMixerTab();
-    void drawSourcesTab(Scene* scene);
+    void drawSourcesTab(Scene* scene, AudioSystem* audioSystem);
     void drawZonesTab(Scene* scene);
     void drawDebugTab(AudioSystem* audioSystem);
     void drawSpectrumViewer(AudioSystem* audioSystem);  ///< AX12
@@ -249,6 +276,8 @@ private:
     std::uint32_t m_selectedReverbZoneEntity = 0;  ///< AX2 R4 (0 = none).
     std::uint32_t m_selectedAcousticProbeEntity = 0;  ///< AX3 B5 (0 = none).
     std::uint32_t m_selectedAmbientZoneEntity = 0;  ///< 3D_E-S0016 (0 = none).
+    unsigned int  m_previewSource = 0;  ///< 3D_E-S0022 preview, held by ticket.
+    std::uint64_t m_previewTicket = 0;
     AmbientSystem* m_ambientSystem = nullptr;        ///< Clock controls; may be null.
 
     ReverbSystem* m_reverbSystem = nullptr;  ///< Debug read-outs + bake; may be null.

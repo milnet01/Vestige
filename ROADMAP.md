@@ -640,7 +640,17 @@ Foundations shipped via commit `fa0b100` — "Phase 9C: New domain systems — A
   (ScriptContext tests run without an Engine).
   Kind: implement.
 
-- 📋 [3D_E-S0022] **Editor: sound emitter placement, reverb zone painting, audio preview — deferred to Phase 10.**
+- ✅ [3D_E-S0022] **Editor: sound emitter placement, reverb zone painting, audio preview — deferred to Phase 10.**
+  Layman: The editor can add sound sources to a scene and play their sounds to check them.
+  Resolved 2026-10-02: emitter placement (AudioPanel::createSoundEmitter,
+  Sources tab button) and audio preview (startPreview / stopPreview /
+  isPreviewing, held by playback ticket). Tests: AudioPanel emitter and
+  preview tests, the ticket guard seen red under mutation.
+  NOT BUILT, DECISION FOR THE USER: reverb zone painting. Reverb (and
+  ambient) zones are created from the Audio panel, moved and sized with
+  the gizmo and radius sliders, and drawn by the zone overlay toggle.
+  Recommendation: drop painting unless a level needs irregular zone
+  shapes, which the sphere-with-falloff model cannot express anyway.
   Kind: implement.
 
 **Note:** Detailed audio specs are in Phase 10 (Polish and Features). Phase 9C implemented the Audio domain-system wrapper + OpenAL integration + spatial audio; Phase 10 will deliver the full feature set.

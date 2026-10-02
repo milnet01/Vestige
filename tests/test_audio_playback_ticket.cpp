@@ -10,39 +10,24 @@
 /// silent null backend, which the bundled build includes; where no device
 /// opens the test skips. POSIX only, like test_settings.cpp's env tests.
 #include "audio/audio_engine.h"
+#include "audio_device_helpers.h"
 
 #include <gtest/gtest.h>
 
 #include <AL/al.h>
 
-#include <cstdlib>
 #include <string>
 
 using namespace Vestige;
 
 #ifndef _WIN32
 
-namespace
-{
-
-/// Opens `engine` on OpenAL Soft's null backend, restoring ALSOFT_DRIVERS.
-bool openNullDevice(AudioEngine& engine)
-{
-    const char* previous = std::getenv("ALSOFT_DRIVERS");
-    const std::string saved = (previous != nullptr) ? previous : "";
-    ::setenv("ALSOFT_DRIVERS", "null", 1);
-    const bool opened = engine.initialize();
-    if (previous != nullptr) ::setenv("ALSOFT_DRIVERS", saved.c_str(), 1);
-    else                     ::unsetenv("ALSOFT_DRIVERS");
-    return opened;
-}
-
-}  // namespace
+using Vestige::TestAudio::openNullAudioDevice;
 
 TEST(AudioEnginePlaybackTicket, ReacquiredSourceGetsANewTicket)
 {
     AudioEngine engine;
-    if (!openNullDevice(engine))
+    if (!openNullAudioDevice(engine))
     {
         GTEST_SKIP() << "no OpenAL device could be opened";
     }
@@ -68,7 +53,7 @@ TEST(AudioEnginePlaybackTicket, ReacquiredSourceGetsANewTicket)
 TEST(AudioEnginePlaybackTicket, HeldSourceIsNotReclaimedWhenItStops)
 {
     AudioEngine engine;
-    if (!openNullDevice(engine))
+    if (!openNullAudioDevice(engine))
     {
         GTEST_SKIP() << "no OpenAL device could be opened";
     }

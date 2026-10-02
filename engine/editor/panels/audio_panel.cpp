@@ -72,6 +72,42 @@ bool AudioPanel::removeAcousticProbe(Scene& scene, std::uint32_t entityId)
     return removed;
 }
 
+Entity* AudioPanel::createSoundEmitter(Scene& scene)
+{
+    Entity* entity = scene.createEntity("Sound Emitter");
+    entity->addComponent<AudioSourceComponent>();
+    return entity;
+}
+
+bool AudioPanel::startPreview(AudioEngine& engine, const AudioSourceComponent& source)
+{
+    stopPreview(engine);
+    if (source.clipPath.empty())
+    {
+        return false;
+    }
+    m_previewSource = engine.playSound2D(source.clipPath, source.volume, source.bus);
+    m_previewTicket = engine.playbackTicket(m_previewSource);
+    return m_previewSource != 0;
+}
+
+void AudioPanel::stopPreview(AudioEngine& engine)
+{
+    if (m_previewTicket != 0 && engine.playbackTicket(m_previewSource) == m_previewTicket)
+    {
+        engine.stopSound(m_previewSource);
+    }
+    m_previewSource = 0;
+    m_previewTicket = 0;
+}
+
+bool AudioPanel::isPreviewing(const AudioEngine& engine) const
+{
+    return m_previewTicket != 0
+        && engine.playbackTicket(m_previewSource) == m_previewTicket
+        && engine.isSourcePlaying(m_previewSource);
+}
+
 Entity* AudioPanel::createAmbientZone(Scene& scene)
 {
     Entity* entity = scene.createEntity("Ambient Zone");
@@ -167,7 +203,7 @@ void AudioPanel::draw(AudioSystem* audioSystem, Scene* scene)
         }
         if (ImGui::BeginTabItem("Sources"))
         {
-            drawSourcesTab(scene);
+            drawSourcesTab(scene, audioSystem);
             ImGui::EndTabItem();
         }
         if (ImGui::BeginTabItem("Zones"))
@@ -243,7 +279,7 @@ void AudioPanel::drawMixerTab()
     ImGui::Text("Current gain: %.2f", static_cast<double>(duckingState().currentGain));
 }
 
-void AudioPanel::drawSourcesTab(Scene* scene)
+void AudioPanel::drawSourcesTab(Scene* scene, AudioSystem* audioSystem)
 {
     if (!scene)
     {
@@ -251,6 +287,21 @@ void AudioPanel::drawSourcesTab(Scene* scene)
         return;
     }
 
+    if (ImGui::Button("Add sound emitter"))
+    {
+        createSoundEmitter(*scene);
+    }
+    AudioEngine* previewEngine =
+        (audioSystem != nullptr && audioSystem->isAvailable())
+            ? &audioSystem->getAudioEngine() : nullptr;
+    if (previewEngine != nullptr && isPreviewing(*previewEngine))
+    {
+        ImGui::SameLine();
+        if (ImGui::Button("Stop preview"))
+        {
+            stopPreview(*previewEngine);
+        }
+    }
     ImGui::TextUnformatted("Active audio sources:");
     ImGui::Separator();
 
@@ -276,6 +327,14 @@ void AudioPanel::drawSourcesTab(Scene* scene)
         if (ImGui::Checkbox("Solo", &soloed))
         {
             setSourceSoloed(id, soloed);
+        }
+        if (previewEngine != nullptr && !src->clipPath.empty())
+        {
+            ImGui::SameLine();
+            if (ImGui::Button("Preview"))
+            {
+                startPreview(*previewEngine, *src);
+            }
         }
 
         ImGui::Indent();

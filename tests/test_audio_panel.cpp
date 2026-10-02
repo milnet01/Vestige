@@ -10,6 +10,8 @@
 #include <gtest/gtest.h>
 
 #include "audio/acoustic_probe_component.h"
+#include "audio/audio_engine.h"
+#include "audio/audio_source_component.h"
 #include "audio/ambient_zone_component.h"
 #include "audio/reverb_zone_component.h"
 #include "core/settings.h"
@@ -17,6 +19,7 @@
 #include "editor/panels/audio_panel.h"
 #include "scene/entity.h"
 #include "scene/scene.h"
+#include "audio_device_helpers.h"
 
 using namespace Vestige;
 
@@ -269,6 +272,82 @@ TEST(AudioPanel, RemoveNonSelectedAmbientZoneKeepsSelection)
     EXPECT_EQ(p.selectedAmbientZone(), secondId);
     EXPECT_EQ(countAmbientZones(scene), 1);
 }
+
+// -- Sound emitters + preview (3D_E-S0022) -----------------------
+
+TEST(AudioPanel, CreateSoundEmitterAddsAnAudioSource)
+{
+    AudioPanel p;
+    Scene scene("test");
+    Entity* e = p.createSoundEmitter(scene);
+    ASSERT_NE(e, nullptr);
+    EXPECT_NE(e->getComponent<AudioSourceComponent>(), nullptr);
+    EXPECT_EQ(e->getName(), "Sound Emitter");
+}
+
+TEST(AudioPanel, PreviewWithoutAClipStartsNothing)
+{
+    AudioPanel p;
+    AudioEngine engine;  // no device
+    AudioSourceComponent source;
+    EXPECT_FALSE(p.startPreview(engine, source));
+    EXPECT_FALSE(p.isPreviewing(engine));
+}
+
+#ifndef _WIN32
+
+TEST(AudioPanel, PreviewPlaysAndStops)
+{
+    AudioEngine engine;
+    if (!TestAudio::openNullAudioDevice(engine))
+    {
+        GTEST_SKIP() << "no OpenAL device could be opened";
+    }
+    const auto wav = TestAudio::writeTestWav("vestige_preview.wav", 2.0f);
+    AudioPanel p;
+    AudioSourceComponent source;
+    source.clipPath = wav.string();
+
+    ASSERT_TRUE(p.startPreview(engine, source));
+    EXPECT_TRUE(p.isPreviewing(engine));
+    const unsigned int played = p.previewSource();
+    p.stopPreview(engine);
+    EXPECT_FALSE(p.isPreviewing(engine));
+    EXPECT_EQ(engine.playbackTicket(played), 0u) << "the preview was not stopped";
+
+    engine.shutdown();
+    std::filesystem::remove(wav);
+}
+
+TEST(AudioPanel, StopPreviewSparesASoundThatTookItsSource)
+{
+    AudioEngine engine;
+    if (!TestAudio::openNullAudioDevice(engine))
+    {
+        GTEST_SKIP() << "no OpenAL device could be opened";
+    }
+    const auto wav = TestAudio::writeTestWav("vestige_preview_taken.wav", 2.0f);
+    AudioPanel p;
+    AudioSourceComponent source;
+    source.clipPath = wav.string();
+    ASSERT_TRUE(p.startPreview(engine, source));
+    const unsigned int held = p.previewSource();
+
+    // Evicted: the source goes back to the pool and another sound takes it.
+    engine.releaseSource(held);
+    const unsigned int other = engine.acquireSource(SoundPriority::Normal);
+    ASSERT_EQ(other, held);
+    const std::uint64_t otherTicket = engine.playbackTicket(other);
+
+    p.stopPreview(engine);
+    EXPECT_EQ(engine.playbackTicket(other), otherTicket)
+        << "stopping the preview released a source another sound now holds";
+
+    engine.shutdown();
+    std::filesystem::remove(wav);
+}
+
+#endif
 
 // -- Mute / solo --------------------------------------------------
 

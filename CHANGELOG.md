@@ -23,6 +23,14 @@ may change any interface without notice.
 
 ## [Unreleased]
 
+### 2026-10-02 Added — Editor: place sound emitters and preview their sound (3D_E-S0022)
+
+The Audio panel's Sources tab has an Add sound emitter button, which
+puts a new sound source in the scene to position like any object, and
+a Preview button on each source that plays its clip once so you can
+hear it while editing. Stop preview ends it, and never cuts off a
+different sound that has since taken over the same playback channel.
+
 ### 2026-10-02 Added — Scripts can play a spoken line, with its caption (3D_E-S0021)
 
 A new Play Dialogue scripting node plays a voice clip as a spoken line:
