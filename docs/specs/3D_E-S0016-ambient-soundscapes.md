@@ -1,7 +1,7 @@
 <!-- ants-spec-format: 1 -->
 # 3D_E-S0016 — Ambient soundscapes that play in the running app
 
-**Status:** draft (2026-10-02).
+**Status:** accepted (2026-10-02).
 **Kind:** implement.
 **Source:** ROADMAP 3D_E-S0016 ("Ambient soundscapes (biome-based, time-of-day-based)").
 
@@ -62,7 +62,8 @@ entity as an ambient zone. Its position is the entity's world position, as
   whose enum value is `n`). Default: all four set.
 - `std::vector<std::string> oneShotClips`, `float oneShotVolume` (default 1),
   and the scheduler's `minIntervalSeconds` / `maxIntervalSeconds` (defaults
-  15 and 45, as `RandomOneShotScheduler`'s). An empty list disables one-shots.
+  15 and 45, as `RandomOneShotScheduler`'s). An empty list disables one-shots;
+  an empty bed clip does not.
 
 `EntitySerializer` saves and loads it beside `ReverbZoneComponent`, under its
 own key. A file without the key loads with no component; no scene format
@@ -101,8 +102,9 @@ Each frame it:
 1. Advances the clock: `hour += deltaTime × hoursPerMinute / 60`, wrapped into
    [0, 24). Public `hourOfDay`, `setHourOfDay`, `hoursPerMinute` and
    `setHoursPerMinute`; defaults 12 and 0.
-2. Computes §4.2's weights for every entity carrying an `AmbientZoneComponent`
-   with a non-empty clip, using the camera position as the listener.
+2. Computes §4.2's weights for every entity carrying an `AmbientZoneComponent`,
+   using the camera position as the listener. A zone with an empty bed clip
+   still has a weight, so its one-shots play; it has no bed.
 3. Reconciles one looping bed per zone, keyed by entity id. Each zone's bed
    is held as its source and `AudioEngine::playbackTicket` for it, and the
    zone **owns** the bed only while that source still carries that ticket and
@@ -116,11 +118,12 @@ Each frame it:
      → `stopSound` on an owned bed, and forget any bed it no longer owns;
    - clip changed → `stopSound` on the owned bed, then start the new clip as
      above.
-   A start that returns source 0 is not retried for 1 second, so a missing
-   clip or a full pool does not repeat the engine's warning every frame. No
-   start is attempted while `AudioEngine::isAvailable()` is false: every
-   `playSound*` call announces its clip's caption before it checks for a
-   device, so retries with no device would show a caption every second.
+   Every `playSound*` call announces its clip's caption before it loads the
+   clip, takes a source or checks for a device, so each failed start shows the
+   caption too. After a zone's n-th failed start in a row (source 0) it waits
+   min(2^(n−1), 60) seconds before the next: 1, 2, 4 … 60. A successful start,
+   a clip change or the weight reaching 0 resets n. No start is attempted while
+   `AudioEngine::isAvailable()` is false.
 4. Arms each zone's `RandomOneShotScheduler` when the system first sees the
    zone, with `timeUntilNextFire` drawn from its interval as a fire would draw
    it, and ticks it only while the zone's weight is above 0. On a fire it
@@ -130,22 +133,26 @@ Each frame it:
    with volume `oneShotVolume × windowWeight(windows, hour)`. One-shots do not
    loop and are not tracked.
 
-The planning in step 3 is a pure function of the previous frame's beds and
-their clips, whether each is still owned, the time since each zone's last
-failed start, and this frame's weights and clips. `AmbientSystem`
-applies its result to the `AudioEngine`, so it can be tested without a device.
-Randomness comes from one `std::mt19937` per system, seeded once at
-initialisation. Tests pass their own uniform samples to the pure helpers.
+Steps 3 and 4 are pure functions. Step 3 takes the previous frame's beds and
+their clips, whether each is still owned, each zone's failed-start count and
+time since its last failed start, and this frame's weights and clips. Step 4
+takes each zone's scheduler, weight and the frame time, and draws through a
+`UniformSampleFn`. `AmbientSystem` applies their results to the `AudioEngine`
+and binds the sample function to one `std::mt19937`, seeded once at
+initialisation, so both can be tested without a device and with chosen samples.
 
 ### 4.4 Setting a playing source's volume
 
 `AudioEngine::setSourceVolume(unsigned int source, float volume)` (new)
 replaces the stored volume of a source the engine is tracking, so the next
 `updateGains` uses it. Callers pass the same pre-makeup volume they gave
-`playSound2D`; the engine keeps each source's loudness makeup in `SourceMix`
-at play time and applies it again. An unknown or released source is
-ignored. Writing `AL_GAIN` directly would be overwritten by `updateGains`,
-which recomputes every tracked source's gain each frame.
+`playSound2D`. Today `SourceMix::sourceVolume` already holds volume × makeup
+and the makeup is not kept, so `SourceMix` gains a `makeup` field, set
+wherever a `SourceMix` is recorded (1 where no clip has one), and
+`setSourceVolume` stores `volume × makeup`. `updateGains` and the eviction
+scan read `sourceVolume` unchanged. An unknown or released source is ignored.
+Writing `AL_GAIN` directly would be overwritten by `updateGains`, which
+recomputes every tracked source's gain each frame.
 
 ### 4.5 The editor
 
@@ -164,8 +171,9 @@ and the index-based selection go. The tab also shows and sets
   (1 − shadow)`, where `shadow` is the largest base weight among zones of
   strictly higher priority.
   *Test:* `tests/test_audio_ambient.cpp`: a priority-1 zone at base 0.5 over a
-  priority-0 zone at base 1 gives the lower zone 0.5; two priority-0 zones at
-  base 1 each keep 1.
+  priority-0 zone at base 1 gives the lower zone 0.5; zones at priority 2, 1
+  and 0 with bases 0.5, 1 and 1 give the priority-0 zone 0 (0.5 if the shadow
+  used weights); two priority-0 zones at base 1 each keep 1.
   *Breaks when:* equal priorities shadow each other, or the shadow takes the
   shadowing zone's weight after its own shadow instead of its base.
 
@@ -177,13 +185,13 @@ and the index-based selection go. The tab also shows and sets
   a hard switch instead of a fade.
 
 - **INV-3** — After a frame's plan is applied, each zone with weight above 0
-  owns exactly one looping bed playing its current clip, unless its last start
-  returned source 0 less than 1 second ago, and each zone with weight 0, an
-  empty clip, a removed component or a removed entity owns none. The plan
-  never sets the volume
-  of, or stops, a source whose ticket is not the one the zone stored. A bed
-  lost to eviction is started again on the first frame its weight is above 0;
-  a start that returned source 0 is retried no sooner than 1 second later.
+  owns exactly one looping bed playing its current clip, unless it is waiting
+  out a failed start's back-off, and each zone with weight 0, an empty clip,
+  a removed component or a removed entity owns none. The plan never sets the
+  volume of, or stops, a source whose ticket is not the one the zone stored.
+  A bed lost to eviction is started again on the first frame its weight is
+  above 0; after n failed starts in a row the next comes min(2^(n−1), 60)
+  seconds later.
   *Test:* `tests/test_ambient_system.cpp`, driving the pure planner over
   frames with a fake pool whose sources carry tickets, including a source
   re-granted to another sound.
@@ -216,20 +224,20 @@ and the index-based selection go. The tab also shows and sets
 
 - **INV-7** — `AudioPanel::createAmbientZone` adds an entity carrying an
   `AmbientZoneComponent` and selects it; `removeAmbientZone` removes it and
-  clears the selection.
+  clears the selection when it pointed at that zone, as `removeReverbZone`
+  does.
   *Test:* `tests/test_audio_panel.cpp`, replacing the two draft-list tests.
   *Breaks when:* the panel keeps a private list again, so zones are not saved.
 
 ## 6. Failure modes
 
-- A clip that fails to load returns source 0. The zone retries once a
-  second (§4.3); the loader's own warning is the signal.
+- A clip that fails to load returns source 0. The zone backs off (§4.3), so
+  its caption and the loader's warning repeat at most once a minute.
 - More zones above weight 0 than the source pool holds: beds play at
-  `SoundPriority::Low`, so the pool evicts them before anything else, and they
-  restart when a source frees.
-- No audio device: no bed is started (§4.3 step 3), so a bed's caption does
-  not repeat every second. One-shots still fire and announce their captions,
-  as every `playSound*` call does with no device.
+  `SoundPriority::Low` and cannot evict each other, so a waiting zone backs off
+  the same way and restarts when a source frees.
+- No audio device: no bed is started (§4.3 step 3). One-shots still fire and
+  announce their captions, as every `playSound*` call does with no device.
 
 ## 7. Tests
 
