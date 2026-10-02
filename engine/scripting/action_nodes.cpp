@@ -19,6 +19,8 @@
 #include "scene/entity.h"
 #include "scene/light_component.h"
 #include "systems/audio_system.h"
+#include "systems/music_system.h"
+#include "audio/audio_music.h"
 #include "physics/rigid_body.h"
 
 namespace Vestige
@@ -103,6 +105,71 @@ void registerActionNodeTypes(NodeTypeRegistry& registry)
                 if (audioSys && audioSys->isAvailable())
                 {
                     audioSys->getAudioEngine().playSound(clip, pos, vol);
+                }
+            }
+            ctx.triggerOutput(node, "Then");
+        }
+    });
+
+    // -----------------------------------------------------------------------
+    // SetMusicIntensity / PlayMusicStinger — drive the adaptive music
+    // (3D_E-S0018). Intensity 0..1 picks the layer mix; silence 0..1 fades
+    // it all down. Both are clamped by intensityToLayerWeights.
+    // -----------------------------------------------------------------------
+    registry.registerNode({
+        "SetMusicIntensity",
+        "Set Music Intensity",
+        "Audio",
+        "Sets the adaptive music's intensity (0 calm .. 1 combat) and silence (0..1)",
+        {
+            {PinKind::EXECUTION, "Exec", ScriptDataType::BOOL, {}},
+            {PinKind::DATA, "intensity", ScriptDataType::FLOAT, ScriptValue(0.5f)},
+            {PinKind::DATA, "silence", ScriptDataType::FLOAT, ScriptValue(0.0f)},
+        },
+        {{PinKind::EXECUTION, "Then", ScriptDataType::BOOL, {}}},
+        "",
+        false, false,
+        [](ScriptContext& ctx, const ScriptNodeInstance& node)
+        {
+            const auto intensity = ctx.readInputAs<float>(node, "intensity");
+            const auto silence   = ctx.readInputAs<float>(node, "silence");
+            if (ctx.engine() != nullptr)
+            {
+                if (auto* music = ctx.engine()->getSystemRegistry().getSystem<MusicSystem>())
+                {
+                    music->setIntensity(intensity);
+                    music->setSilence(silence);
+                }
+            }
+            ctx.triggerOutput(node, "Then");
+        }
+    });
+
+    registry.registerNode({
+        "PlayMusicStinger",
+        "Play Music Stinger",
+        "Audio",
+        "Plays a one-off musical accent over the music after a delay",
+        {
+            {PinKind::EXECUTION, "Exec", ScriptDataType::BOOL, {}},
+            {PinKind::DATA, "clipPath", ScriptDataType::STRING, ScriptValue(std::string(""))},
+            {PinKind::DATA, "delay", ScriptDataType::FLOAT, ScriptValue(0.0f)},
+            {PinKind::DATA, "volume", ScriptDataType::FLOAT, ScriptValue(1.0f)},
+        },
+        {{PinKind::EXECUTION, "Then", ScriptDataType::BOOL, {}}},
+        "",
+        false, false,
+        [](ScriptContext& ctx, const ScriptNodeInstance& node)
+        {
+            MusicStinger stinger;
+            stinger.clipPath     = ctx.readInputAs<std::string>(node, "clipPath");
+            stinger.delaySeconds = ctx.readInputAs<float>(node, "delay");
+            stinger.volume       = ctx.readInputAs<float>(node, "volume");
+            if (!stinger.clipPath.empty() && ctx.engine() != nullptr)
+            {
+                if (auto* music = ctx.engine()->getSystemRegistry().getSystem<MusicSystem>())
+                {
+                    music->playStinger(stinger);
                 }
             }
             ctx.triggerOutput(node, "Then");

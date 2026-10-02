@@ -23,6 +23,7 @@ namespace Vestige
 {
 
 class AudioMusicPlayer;
+struct MusicStinger;
 
 class MusicSystem final : public ISystem
 {
@@ -57,6 +58,10 @@ public:
     /// next `update(dt)` applies them via `intensityToLayerWeights`.
     void setIntensity(float intensity) { m_intensity = intensity; }
     void setSilence(float silence) { m_silence = silence; }
+
+    /// 3D_E-S0018 — queues a one-off musical accent on the player; it
+    /// plays after `stinger.delaySeconds` on the Music bus.
+    void playStinger(const MusicStinger& stinger);
 
     float getIntensity() const { return m_intensity; }
     float getSilence() const { return m_silence; }

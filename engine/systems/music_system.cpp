@@ -22,4 +22,9 @@ void MusicSystem::update(float deltaSeconds)
     m_player.update(deltaSeconds);
 }
 
+void MusicSystem::playStinger(const MusicStinger& stinger)
+{
+    m_player.enqueueStinger(stinger);
+}
+
 } // namespace Vestige

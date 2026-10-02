@@ -610,7 +610,15 @@ Foundations shipped via commit `fa0b100` — "Phase 9C: New domain systems — A
   Delivered 2026-07-01 via the AX4 procedural / material-aware audio bundle (Phase 10): footstep + impact sounds synthesised from the struck SurfaceMaterial.
   Kind: implement.
 
-- 📋 [3D_E-S0018] **Music system (layered tracks, transitions, adaptive intensity) — deferred to Phase 10.**
+- ✅ [3D_E-S0018] **Music system (layered tracks, transitions, adaptive intensity) — deferred to Phase 10.**
+  Layman: Background music that blends between calm and intense layers, which a game's scripts can now steer.
+  Resolved 2026-10-02: the layered player, transitions and intensity
+  mix already ran (AudioMusicPlayer, MusicSystem, scene music settings),
+  but nothing set the intensity or fired a stinger. Added
+  MusicSystem::playStinger and the script nodes SetMusicIntensity and
+  PlayMusicStinger. Tests: NodeLibraryTest census and
+  AudioMusicPlayerTest.MusicSystemPlayStingerQueuesOnThePlayer, both
+  seen red under mutation. Not run: an in-app listening check.
   Kind: implement.
 
 - ✅ [3D_E-S0019] **Reverb zones (indoor/outdoor, auto-detect room geometry) — deferred to Phase 10.**

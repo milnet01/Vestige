@@ -23,6 +23,14 @@ may change any interface without notice.
 
 ## [Unreleased]
 
+### 2026-10-02 Added — Scripts can drive the adaptive music (3D_E-S0018)
+
+The layered music could already blend from calm to combat, but nothing
+in a game could tell it to. Two new visual-scripting nodes do: Set
+Music Intensity moves the music between its calm and intense layers
+(and can fade it toward silence), and Play Music Stinger plays a
+short musical accent over it after an optional delay.
+
 ### 2026-10-02 Added — Ambient zones play background sound that fades with distance and time of day (3D_E-S0016)
 
 A scene can now hold ambient zones: places with a looping background

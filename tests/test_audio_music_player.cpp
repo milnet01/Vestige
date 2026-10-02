@@ -20,6 +20,7 @@
 #include "audio/audio_engine.h"
 #include "audio/audio_music.h"
 #include "audio/audio_music_player.h"
+#include "systems/music_system.h"
 #include "editor/scene_serializer.h"
 #include "resource/resource_manager.h"
 #include "scene/scene.h"
@@ -377,4 +378,16 @@ TEST_F(MusicSceneSerializerTest, PreV2SceneLoadsWithEmptyMusic)
                                              nullptr, &music);
     ASSERT_TRUE(loaded.success) << loaded.errorMessage;
     EXPECT_TRUE(music.layers.empty());
+}
+
+// 3D_E-S0018 — the music system's stinger call reaches the player's queue,
+// which is what the PlayMusicStinger script node uses.
+TEST_F(AudioMusicPlayerTest, MusicSystemPlayStingerQueuesOnThePlayer)
+{
+    MusicSystem music(player);
+    MusicStinger stinger;
+    stinger.clipPath     = "audio/music/hit.ogg";
+    stinger.delaySeconds = 0.5f;
+    music.playStinger(stinger);
+    EXPECT_EQ(player.getPendingStingerCount(), 1u);
 }
