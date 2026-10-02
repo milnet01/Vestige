@@ -1,7 +1,7 @@
 <!-- ants-spec-format: 1 -->
 # 3D_E-0035 — Give players a graphics settings page
 
-**Status:** spec draft (2026-10-02).
+**Status:** accepted (2026-10-02).
 **Kind:** implement.
 **Source:** ROADMAP 3D_E-0035 (user-request-2026-07-11).
 **Pairs with:** 3D_E-0746 (menus answer the mouse), 3D_E-0747 (the overlay draws).
@@ -156,7 +156,7 @@ shows at once. The page holds no settings state of its own.
 ```cpp
 struct SettingsMenuActions
 {
-    std::function<void()> apply;            // SettingsEditor::apply(Settings::defaultPath())
+    std::function<void()> apply;            // SettingsEditor::apply(settingsPath)
     std::function<void()> revert;           // SettingsEditor::revert()
     std::function<void()> restoreDefaults;  // SettingsEditor::restoreGraphicsDefaults()
     std::function<bool()> isDirty;          // SettingsEditor::isDirty()
@@ -217,8 +217,10 @@ in each `assets/localization/<code>.json` table that
 returns false. `UISlider` moves by `keyStep` (new field, default a
 twentieth of its range) and fires `onValueChanged`. `UIDropdown` moves
 the selection one option, clamped, and fires `onSelectionChanged`.
-`UISystem::handleKey` sends Left and Right to the focused element's
-`adjust` first and moves focus only when it returns false. Up, Down and
+A slider or dropdown returns true even when clamped at an end, so the
+key is consumed and focus stays. `UISystem::handleKey` sends Left and
+Right to the focused element's `adjust` first and moves focus only when
+it returns false. Up, Down and
 Tab always move focus.
 
 ## 5. Invariants
@@ -271,9 +273,11 @@ Tab always move focus.
   or the handler runs before the modal pops.
 
 - **INV-8** — Left and Right adjust a focused slider or dropdown, and
-  move focus from any other element.
+  keep focus on it even at the end of its range; from any other element
+  they move focus.
   *Test:* `tests/test_ui_system_input.cpp`, `UISystemKeys.*`.
-  *Breaks when:* `handleKey` moves focus before asking `adjust`.
+  *Breaks when:* `handleKey` moves focus before asking `adjust`, or a
+  clamped `adjust` returns false.
 
 - **INV-9** — Loading settings leaves the editor clean: `isDirty()` is
   false after construction and `forceLiveApply()`.
