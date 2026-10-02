@@ -23,6 +23,33 @@ may change any interface without notice.
 
 ## [Unreleased]
 
+### 2026-10-02 Fixed — Switching menu screens no longer leaves the keyboard on a vanished button (3D_E-0745)
+
+After moving through a menu with the keyboard and switching screens,
+the next key press could act on a button that no longer existed. The
+selection is now cleared whenever a screen is replaced.
+
+### 2026-10-02 Fixed — Menus show the real version and no invented session details (3D_E-0744)
+
+The main and pause menus showed a wrong version number (0.6.2) and
+made-up details about a last visit, a save slot and times. They now
+show the real version and leave those details out until there is a
+save system to supply them.
+
+### 2026-10-02 Added — 360-degree recordings stay in place as you look around (3D_E-S0099)
+
+A 4-channel ambisonic recording, such as a forest or a cathedral
+captured in all directions, plays as a soundfield fixed in the world:
+turn your head and the sounds stay where they are, through headphones
+or speakers.
+
+### 2026-10-02 Fixed — Surround and 360-degree sound files play correctly instead of as noise (3D_E-0743)
+
+Sound files with more than two channels were treated as stereo and
+played as noise. 5.1 and 7.1 files now play as surround, 4-channel
+files as 360-degree (ambisonic) sound, and a layout the engine cannot
+play is refused with a message naming the ones it can.
+
 ### 2026-10-02 Added — Editor: place sound emitters and preview their sound (3D_E-S0022)
 
 The Audio panel's Sources tab has an Add sound emitter button, which

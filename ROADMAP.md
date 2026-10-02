@@ -958,7 +958,9 @@ Full spatial audio pipeline with dynamic mixing, occlusion, and adaptive music. 
 - ✅ [3D_E-S0098] **AX6. Air absorption + atmospheric filtering — distance-based high-frequency rolloff per ISO 9613-1. Currently distance only attenuates *gain*; air physically also attenuates *high frequencies*, especially over outdoor distances. Shipped 2026-06-29 (slice 2 of the audio quick-wins bundle). New `engine/audio/audio_air_absorption.{h,cpp}` — the exact ISO 9613-1 closed form evaluated at a 4 kHz HF anchor, converted dB/m → linear HF gain (not a placeholder constant; the formula is itself cheap, so no Workbench fit was needed — a fitted approximation is left as a future optimization via the `TODO: revisit via Formula Workbench` note). AX6 had to introduce the per-source EFX low-pass path that did not exist — there was no `alFilter*` / `AL_LOWPASS_GAINHF` call anywhere in `engine/` and `AudioSourceAlState` carried no HF field. Added: `ALC_EXT_EFX` probe + one reusable `AL_FILTER_LOWPASS` object in `AudioEngine` (gen in `initialize`, delete in `shutdown`, rewritten + re-bound via `AL_DIRECT_FILTER` per spatial source in `applySourceState`; silent no-op → gain-only when EFX absent); `float lowPassGainHf` on `AudioSourceAlState`; and the previously-dead `computeObstructionLowPass` is now wired (occlusion HF × air HF, multiplicative). `composeAudioSourceAlState` gained two trailing params (`listenerPosition`, `AirAbsorptionParams`, both defaulted for the pre-AX6 call sites); `AudioSystem::update` threads the camera position + a once-per-frame `EnvironmentForces` weather snapshot. Settings: `AudioSettings::airAbsorptionEnabled` (default on) rides the same v4 schema bump as AX8 (migration defaults it true) with a sibling `AudioAirAbsorptionApplySink`/`AudioEngineAirAbsorptionApplySink` pair, a Settings-panel checkbox, and an audio-debug status line. 12 new tests (7 ISO-curve + 4 compose-stage + 1 apply-forward); 3572 pass.**
   Kind: implement.
 
-- 📋 [3D_E-S0099] **AX7. Ambisonics (B-format) source playback + render — first-order ambisonics (4 channels) for 360° captured sound (drone-recorded forests, cathedral recordings, weather beds). Decodes to the user's listener orientation via existing HRTF path. Standard ambisonic decoder is ~100 LOC of public-domain math. Pairs with HRTF for "you turn your head and the soundscape rotates correctly" output on headphones, and with surround (AX8) on speakers.**
+- ✅ [3D_E-S0099] **AX7. Ambisonics (B-format) source playback + render — first-order ambisonics (4 channels) for 360° captured sound (drone-recorded forests, cathedral recordings, weather beds). Decodes to the user's listener orientation via existing HRTF path. Standard ambisonic decoder is ~100 LOC of public-domain math. Pairs with HRTF for "you turn your head and the soundscape rotates correctly" output on headphones, and with surround (AX8) on speakers.**
+  Layman: Recordings made in every direction at once play so that turning your head turns the sound around you.
+  Resolved 2026-10-02: OpenAL decodes first-order B-format through the existing HRTF path; a non-positional ambisonic playback is world-locked (not listener-relative, rolloff 0) in playSound2D and applySourceState. Test AudioChannelFormat.AmbisonicPlaybackIsWorldLocked, red with the ambisonic check disabled.
   Kind: implement.
 
 - ✅ [3D_E-S0100] **AX8. Surround output (5.1 / 7.1) — OpenAL Soft already supports surround; we just didn't expose channel-config selection. Shipped 2026-06-29 (Phase 10 Audio quick-wins bundle, slice 1; design `docs/phases/phase_10_audio_quickwins_design.md` §3). New headless module `engine/audio/audio_output_mode.{h,cpp}`: `enum class AudioOutputLayout { Auto, Mono, Stereo, Surround51, Surround71 }` + label / string round-trip helpers (unknown-token → Auto, mirroring `qualityPresetFromString`) + `resolveOutputMode(layout, hrtfEnabledSetting)` mapping to the `ALC_OUTPUT_MODE_SOFT` token. Corrects two stale facts in the original bullet: the modern selector is `ALC_SOFT_output_mode` (not `ALC_FORMAT_CHANNELS_SOFT`), and "Headphones+HRTF" is *not* a layout — HRTF is a separate `ALC_HRTF_SOFT` attribute, so `resolveOutputMode` honours an HRTF-precedence rule (HRTF on ⟹ `ALC_ANY_SOFT`, never surround, never `ALC_STEREO_HRTF_SOFT`). Routed through the existing `AudioEngine::applyHrtfSettings()` → `alcResetDeviceSOFT` path (one reset now builds both the HRTF and output-mode attributes; no double reset; attr array grown 5→7); `AudioEngine::setOutputLayout` / `getOutputLayout` / `isSurroundOutputSupported` added, the last gated on a runtime `alcIsExtensionPresent(device, "ALC_SOFT_output_mode")` probe so devices without it silently keep the driver downmix. Settings: `AudioSettings::outputLayout` (default Auto = current behaviour) + schema v3→v4 bump with `migrate_v3_to_v4` defaulting the field to `"auto"`; `AudioOutputApplySink` / `AudioEngineOutputApplySink` + `ApplyTargets::audioOutput` wired through `Engine` beside the HRTF sink; settings-panel dropdown greyed with a "HRTF forces stereo headphone output" tooltip while HRTF is on; audio debug-tab status line shows the live layout + surround support. Mono is included deliberately — a real accessibility config for single-sided-hearing users (`ALC_MONO_SOFT`). 6 new headless `AudioOutputMode.*` tests (labels, string round-trip, unknown-token fallback, the HRTF-off layout table against the vendored `<AL/alext.h>` tokens, HRTF-wins-for-every-layout, never-returns-`ALC_STEREO_HRTF_SOFT`) + settings round-trip / `V3ToV4` migration / `OutputLayoutForwardedVerbatim` apply tests. 3557 tests pass (3 Release-gated GPU perf benchmarks skipped). Zero per-frame cost (settings-change-time reset only).**
@@ -5174,7 +5176,7 @@ shipped that have no invocation path at all.
   Source: in-session-2026-10-02.
   Lanes: audio.
 
-- 🚧 [3D_E-0743] **A sound file with more than two channels is uploaded as stereo and plays garbled.**
+- ✅ [3D_E-0743] **A sound file with more than two channels is uploaded as stereo and plays garbled.**
   Found while reading clip loading for 3D_E-S0099. AudioClip's loaders
   accept 1 to 8 channels (MAX_AUDIO_CHANNELS), but AudioClip::getALFormat
   returns AL_FORMAT_STEREO16 for any count above one, and
@@ -5185,12 +5187,16 @@ shipped that have no invocation path at all.
   ambisonics (AmbiX: ACN order, SN3D scaling, set on the buffer), 6 5.1,
   8 7.1 — used by every upload; any other count refused at load with an
   error naming the supported layouts.
+  Resolved 2026-10-02: alFormatForChannels + uploadPcm16 (AmbiX on
+  4-channel buffers), used by every upload; unsupported counts refused
+  at load. Tests AudioChannelFormat.* (null device for the buffer
+  checks), red with 4 channels mapped to stereo.
   **Layman:** Surround and 360-degree sound files played as noise instead of sound; they now play correctly or are refused with a clear message.
   Kind: fix.
   Source: in-session-2026-10-02.
   Lanes: audio.
 
-- 🚧 [3D_E-0744] **The main and pause menus show made-up data: version 0.6.2, a fake last session, world time, autosave time and save slot.**
+- ✅ [3D_E-0744] **The main and pause menus show made-up data: version 0.6.2, a fake last session, world time, autosave time and save slot.**
   Found while inventorying menu strings for 3D_E-0024. menu_prefabs.cpp
   carries text from the menu design mock-up into the running app: "v 0.6.2"
   and "BUILD 0.6.2-a14f" (the engine is 0.1.x), a "last session" card
@@ -5199,12 +5205,16 @@ shipped that have no invocation path at all.
   "SLOT 03". Fix: the version label reads VESTIGE_ENGINE_VERSION; the
   build hash, the card and the made-up session lines are removed until a
   save system supplies real values.
+  Resolved 2026-10-02: version from VESTIGE_ENGINE_VERSION; the mock-up
+  card, location, times and slot removed. Test
+  MenuPrefabs.MenusShowTheRealVersionAndNoPlaceholderData, red with the
+  fake build string restored.
   **Layman:** The menus showed a wrong version number and invented details about your last visit; they now show the real version and leave out what is not known yet.
   Kind: fix.
   Source: in-session-2026-10-02.
   Lanes: ui.
 
-- 🚧 [3D_E-0745] **A menu screen change leaves the keyboard focus pointing at a destroyed button.**
+- ✅ [3D_E-0745] **A menu screen change leaves the keyboard focus pointing at a destroyed button.**
   Found while reading UISystem for 3D_E-0024. UISystem::m_focusedElement
   points into m_canvas or m_modalCanvas. setRootScreen, pushModalScreen
   and popModalScreen clear those canvases, destroying the elements, but
@@ -5212,6 +5222,9 @@ shipped that have no invocation path at all.
   `focused = false` through it, and Enter in handleKey emits the
   destroyed element's onClick. Fix: drop the focus whenever a canvas
   that may hold it is cleared.
+  Resolved 2026-10-02: setRootScreen, pushModalScreen and popModalScreen
+  drop the focus pointer before clearing a canvas. Tests
+  UISystemFocusTest.*Drops*, red with the resets removed.
   **Layman:** Moving through a menu with the keyboard and then switching screens could make the next key press act on a button that no longer exists.
   Kind: fix.
   Source: in-session-2026-10-02.
