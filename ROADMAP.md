@@ -1241,12 +1241,19 @@ Full spatial audio pipeline with dynamic mixing, occlusion, and adaptive music. 
   Kind: enhancement.
   Source: user-request-2026-07-11 (realism overhaul; fixture 3D_E-0027).
 
-- 📋 [3D_E-0035] **Runtime graphics-settings menu for shipped games/apps — player-facing quality presets + per-setting controls.**
+- ✅ [3D_E-0035] **Runtime graphics-settings menu for shipped games/apps — player-facing quality presets + per-setting controls.**
   Games/apps built with the editor should ship a **runtime** graphics-settings UI so the END USER (not just the developer in the editor) can tune quality. Two layers: (1) a master preset — **Low / Medium / High / Ultra** — and (2) individual settings, each with the control type that fits it: **sliders** for continuous values (render/resolution scale, view/shadow distance, FOV, texture-detail bias), **comboboxes/dropdowns** for discrete modes (ray tracing off/low/med/high/ultra — forward-looking, once RT lands with the planned Vulkan/RT work; anti-aliasing off/FXAA/TAA; shadow quality; reflection mode; VSync; window mode), and **checkboxes** for on/off effects (bloom, SSAO, motion blur, volumetric fog). Changing any individual setting flips the preset to **Custom**. Settings persist to a config file, apply live where possible (else on-confirm), and map onto the engine's existing quality plumbing (`FormulaQualityManager` + per-subsystem quality tiers — e.g. the terrain/grass tiers from 3D_E-0031/0032). Reusable engine/runtime feature — every shipped game gets it — and distinct from the editor's own developer settings panel. Needs a small research pass on control-type conventions (which settings are sliders vs dropdowns vs checkboxes) and a design doc before build.
   Spec accepted 2026-10-02: docs/specs/3D_E-0035-graphics-settings-menu.md
   (review-contract, 2 loops at cap, 8 findings fixed). Needed first and
   done: 3D_E-0746 (mouse), 0747 (overlay drew nothing), 0748, 0749.
   Scope decisions recorded in its §3 for the user to overrule.
+  Resolved 2026-10-02 (ca2e413, 1e5556f): Settings Display page with
+  preset, render scale and ten more options; options saved (schema v7),
+  Custom survives a restart, Apply / Revert / Restore Defaults work,
+  closing without Apply reverts, Left/Right adjust. Checked in the app
+  under --player. Options without a runtime setter (shadows, view
+  distance, FOV, motion blur, texture detail, reflections, ray tracing,
+  resolution list) are out of scope per spec §9, not yet queued.
   **Layman:** Every game we make should have a proper "Settings → Graphics" menu where the player picks Low/Medium/High/Ultra or fine-tunes each option — sliders for smooth things, dropdowns for modes, checkboxes for on/off.
   Kind: feature.
   Source: user-request-2026-07-11.

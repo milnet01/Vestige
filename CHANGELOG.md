@@ -23,6 +23,16 @@ may change any interface without notice.
 
 ## [Unreleased]
 
+### 2026-10-02 Added — Graphics settings for players (3D_E-0035)
+
+The game's Settings screen now has graphics options: a quality preset
+(Low, Medium, High, Ultra) plus render scale, anti-aliasing, ambient
+occlusion, bloom, volumetric fog, four detail levels, vertical sync and
+window mode. Changes show at once. Apply keeps them, and Revert or
+closing Settings undoes them. A hand-tuned "Custom" setup now survives a
+restart. Sliders and lists also respond to the Left and Right keys.
+Older settings files upgrade by themselves.
+
 ### 2026-10-02 Fixed — Menu text sits where it belongs (3D_E-0748, 3D_E-0749)
 
 Words on buttons, dropdowns, checkboxes, sliders and key-binding rows
