@@ -1,7 +1,7 @@
 <!-- ants-spec-format: 1 -->
 # 3D_E-0024 — Translatable in-game interface and five more languages
 
-**Status:** draft (2026-10-02).
+**Status:** accepted (2026-10-02).
 **Kind:** feature.
 **Source:** ROADMAP 3D_E-0024 (user request 2026-07-04).
 
@@ -102,8 +102,10 @@ For tests, `ScopedStringTableOverride` (in `localization_service.h`, compiled
 only under `VESTIGE_TEST_HOOKS` like the hook in `atomic_write.h`) installs a
 `StringTable` that `tr` and `trf` consult before any service, for its lifetime.
 Each widget's text is built by a function a test can call without a renderer:
-`UIInteractionPrompt`'s existing composition, `composeText` in
-`subtitle_renderer.cpp`, and new `UIFpsCounter::composeText(float fps)` and
+`UIInteractionPrompt`'s existing composition,
+`composeSubtitleText(const Subtitle&)` (today `composeText` in
+`subtitle_renderer.cpp`'s anonymous namespace, moved out and declared in
+`subtitle_renderer.h`), and new `UIFpsCounter::composeText(float fps)` and
 `UISlider::composePercentText(int percent)`, which `render()` then draws.
 
 ### 4.4 Keys
@@ -123,16 +125,19 @@ All new keys live in `en.json` first. Prefixes:
 - `subtitle.speaker_line` (`"{speaker}: {text}"`) and `subtitle.sound_cue`
   (`"[{text}]"`).
 
-Proper nouns and the product name ("Vestige") are not keyed.
+Proper nouns, the product name and the copyright line are not keyed; each such
+`makeLabel` carries the audit's existing `// i18n-exempt` marker, since §4.6
+makes `makeLabel` a checked sink.
 
 ### 4.5 Language change rebuilds the open screens
 
-`UISystem` subscribes to `LanguageChangedEvent` at initialisation. The event
-only marks the open screens stale; the next `UISystem::update` rebuilds the
-root canvas and the top modal with their current builders. The event is
-published synchronously inside `setLanguage`, so rebuilding in the handler
-would clear a canvas that a language button's click callback may still be
-iterating. The rebuild does not emit `onRootScreenChanged`, `onModalPushed` or
+`UISystem` subscribes to `LanguageChangedEvent` at initialisation; the handler
+calls a public `markTextStale()`, which only marks the open screens stale. The
+next `UISystem::update` rebuilds the root canvas and the top modal with their
+current builders. The event is published synchronously inside `setLanguage`,
+so rebuilding in the handler would clear a canvas that any caller of
+`setLanguage` from a click callback (a future in-game language control) may
+still be iterating. The rebuild does not emit `onRootScreenChanged`, `onModalPushed` or
 `onModalPopped`, since no screen changed. The subscription is released in
 `shutdown`.
 
@@ -172,8 +177,10 @@ running the audit and reading its report.
 - **INV-3** — After a `LanguageChangedEvent`, the next `UISystem::update`
   rebuilds the open root screen and the top modal once each, the handler
   itself rebuilds nothing, and none of the screen-change signals fire.
-  *Test:* `tests/test_ui_system_screen_stack.cpp`, with counting builders
-  and signal listeners.
+  *Test:* `tests/test_ui_system_screen_stack.cpp`, which builds `UISystem`
+  without `initialize`, calls `markTextStale()` as the handler would, and
+  counts builder calls and signal emissions across the call and the next
+  `update`.
   *Breaks when:* the rebuild goes through `setRootScreen`, which clears the
   modal stack and emits `onRootScreenChanged`.
 
@@ -193,29 +200,32 @@ running the audit and reading its report.
 - **INV-6** — `localization_audit.py` fails on a key-shaped literal under
   `ui.`, `subtitle.` or `input.` that `en.json` lacks, and on a literal passed
   to `makeLabel` or `makeButton`.
-  *Test:* a new fixture directory, `tests/fixtures/localization_audit_keys/`,
-  whose only defect is such a literal, run by a new `WILL_FAIL` ctest beside
-  `LocalizationAuditCatchesHardcoded`. A separate fixture, because the
-  existing one already fails on its hardcoded literal.
-  *Breaks when:* the new check is skipped or its pattern does not match a key
-  in a table.
+  *Test:* two new fixture directories, each with one defect and its own
+  `WILL_FAIL` ctest beside `LocalizationAuditCatchesHardcoded`:
+  `tests/fixtures/localization_audit_keys/` holds a key-shaped literal missing
+  from its `en.json`, and `tests/fixtures/localization_audit_menu/` holds a
+  `makeLabel("...")` literal. Separate from the existing fixture, which already
+  fails on its own literal.
+  *Breaks when:* either new check is skipped, or the key pattern does not
+  match a key held in a table.
 
 ## 6. Failure modes
 
 - A table missing a key: `tr` falls back to English, then to the key itself,
   as today.
-- A pattern missing a slot its call fills: that value is not shown; INV-4's
-  check against `en.json` keys does not catch it, so translators keep every
-  slot (stated in `docs/localization/review.md`).
+- A pattern missing a slot its call fills: that value is not shown, and no
+  check here catches it, so translators keep every slot (stated in
+  `docs/localization/review.md`).
 
 ## 7. Tests
 
 - `tests/test_localization_format.cpp` (new) — INV-1, INV-2.
 - `tests/test_ui_system_screen_stack.cpp` — INV-3.
 - `tests/test_localization_tables.cpp` (new) — INV-4, INV-5.
-- The new audit fixture and its `WILL_FAIL` ctest — INV-6.
-- Manual, in the app: switch to French in Settings with the main menu open,
-  see it change, and see accented letters render.
+- The two new audit fixtures and their `WILL_FAIL` ctests — INV-6.
+- Manual, in the app: choose French in the editor's Settings panel (the only
+  language control today), enter play mode, and see the main and pause menus
+  in French with accented letters rendered.
 
 ## 8. Alternatives considered (and rejected)
 
@@ -243,9 +253,9 @@ running the audit and reading its report.
 | INV-1, INV-2 | `tests/test_localization_format.cpp` |
 | INV-3 | `tests/test_ui_system_screen_stack.cpp` |
 | INV-4, INV-5 | `tests/test_localization_tables.cpp` |
-| INV-6 | the new audit fixture and its `WILL_FAIL` ctest |
+| INV-6 | the two new audit fixtures and their `WILL_FAIL` ctests |
 | A translation says what the English says | **nothing** — `docs/localization/review.md` lists the languages no speaker has checked |
-| The open screen changes language in the app | **nothing** automated; the manual check in §7 |
+| The menus show the chosen language in the app | **nothing** automated; the manual check in §7 |
 
 ## 11. Cross-doc impact
 
