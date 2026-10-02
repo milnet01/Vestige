@@ -1307,6 +1307,25 @@ Full spatial audio pipeline with dynamic mixing, occlusion, and adaptive music. 
   vegetation. Payoff if it half-works: still useful for the *filler*
   layer (undergrowth, pond weed, shore reeds) where per-plant realism
   matters least, with downloaded assets kept for hero plants.
+  Research pass 2026-10-02. Answer to the item's question: yes in
+  principle, if the textures are BAKED, not noise in-shader.
+  - Veins: Runions et al. 2005 (SIGGRAPH) grow open or closed venation
+    from auxin points, the same space-colonisation step as branches, so
+    one algorithm serves both. Ref
+    https://algorithmicbotany.org/papers/venation.sig2005.html
+  - Maps: albedo, normal (from a vein height map), roughness and a
+    translucency map; translucency is what keeps leaves from reading as
+    plastic. Ref https://graphics.cs.yale.edu/sites/default/files/leaf2005.pdf
+  - Proof of reach: Infinigen (BSD-3, offline, Blender) makes photoreal
+    plant scenes procedurally. Ref https://arxiv.org/pdf/2306.09310
+  - Branches: space colonisation; ez-tree (MIT, three.js) is a working
+    reference for parameters. Ref https://github.com/dgreenheck/ez-tree
+  Plan: (A) a throwaway CPU bake of one lily-pad texture set (venation,
+  Workbench-fit colour curve, edge browning, mottle; albedo, normal,
+  roughness, translucency), shown in the meadow beside the CC-BY lotus;
+  (B) only if A convinces, write-spec the generator. Waits on the user:
+  the colour fit needs reference photos (the same photos 3D_E-0034 lacks)
+  and the go/no-go after A is a judgement by eye.
   **Layman:** Instead of hunting for free plant models online, teach the engine to grow its own plants — trunk, branches, leaves and the leaf pictures too.
   Kind: research.
   Source: user-request-2026-07-31 (raised during 3D_E-0033 T6 lily sourcing).
@@ -2554,6 +2573,12 @@ Full spatial audio pipeline with dynamic mixing, occlusion, and adaptive music. 
   flake this hand-run gate. Still open here: the no-sky 0.48-0.55 ms
   figure, the 10.6 us harness sync overhead, and section 11.10's 0.1 ms
   noise figure, all single samples from the retired harness.
+  Deferred 2026-10-02: the remaining three figures need a quiet GPU.
+  That evening the desktop (browser, music, compositor) held the GPU at
+  25-35 % busy, against 4 % for the 2026-09-26 readings, so a re-take
+  would not compare. Method ready: no-sky = the god-ray pass with the
+  depth fill 0.5 instead of 0.0; sync overhead = an empty timed bracket;
+  noise = the volumetric dispatch with p.noise.enabled on vs off.
   **Layman:** Some published speed numbers in the design doc were each measured once, before the stopwatch was fixed.
   Kind: investigate.
   Source: in-session-2026-09-02 (3D_E-0626).
@@ -2583,6 +2608,12 @@ Full spatial audio pipeline with dynamic mixing, occlusion, and adaptive music. 
   - Fog density noise (3D value-noise FBM; Perlin/Worley deferred to a future cloud feature) for non-uniform, natural-looking fog
   - Artist controls: density, anisotropy (forward/back scatter), albedo, extinction ^3d_e-0013
   Progress (2026-06-18): slice 11.6 froxel foundation shipped end-to-end and user-visible. The three compute passes (inject/scatter/integrate) feed the HDR composite, which samples the integrated volume per opaque pixel (C_out = T·C_scene + S, replacing the analytic distance/height term); per-froxel CSM sun shadowing gives free god-ray shafts. Ships on by default at a light-haze density (≈22% extinction at 50 m), 60 FPS gate verified on the RX 6600 (full 160×90×64 dispatch well inside the 2.0 ms fog-stack budget). Slice 11.7 (Workbench-fit Schlick phase) was evaluated and **dropped 2026-06-18** (design §7): fitting Schlick to Henyey-Greenstein can't meet a useful accuracy bound over the needed anisotropy range, there's no perf pressure to replace HG (`pow(x,1.5)`=`x·√x` is cheap, fog stack far inside budget), and it needs a cross-formula Workbench capability that doesn't ship (now tracked as FW W9). Slice 11.8 (value-noise-FBM density noise) shipped 2026-06-18 — the inject pass modulates the froxel medium with a drifting 3-octave integer-hash value-noise field (CPU spec `fogDensityNoise` pinned bit-for-bit to the GLSL by a parity test; reduce-motion freezes the drift), so the haze reads as non-uniform rather than a flat wash; on by default at provisional look constants, 60 FPS gate re-verified with noise on. Slice 11.11 (placeable mist / ground-fog volumes) shipped 2026-06-18 — box/sphere volumes with a soft-edge falloff and optional animated turbulence (reusing the 11.8 value-noise field) feed the inject pass via a 32-cap `std430` SSBO (over-cap dropped + logged); `fogVolumeDensity` CPU spec pinned to the GLSL by a parity test, plumbed through `Renderer::setFogVolumes()` (empty until the editor panel authors them), reduce-motion freezes the turbulence, 60 FPS gate re-verified with a 12-volume heavy scene. Slice 11.5 (screen-space god rays) shipped 2026-06-18 — a half-res Mitchell radial-blur fallback (`god_rays.frag.glsl` + combine) that gathers HDR sky radiance toward the sun's screen position and additively combines it into the pre-bloom HDR scene (so shafts bloom); pure CPU `godRaysSunScreenInfo()` projects the sun + computes an edge fade (unit-tested), per-pixel gather on GPU; gated by a new `godRaysEnabled` flag **and** `!volumetricActive` so it never doubles the free froxel god rays; off under the accessibility safe preset. Slice 11.10 (editor FogPanel) shipped 2026-06-19 — a four-tab ImGui panel (Window → Fog: Distance / Height / Volumetric / Debug) over the renderer's fog state, registered through the Ed5 `PanelRegistry`; it resolves the `TODO 11.10` markers by lifting the previously-inlined volumetric medium + density-noise + god-ray-margin constants into authored `VolumetricFogParams` / `GodRayParams` structs (defaults reproduce the prior literals byte-for-byte, pinned by a parity-guard test) and adds a per-scene god-ray intensity gain. The radial-blur sampling constants + the `fogVolumeDensity` `F_turb`/octave look-constants stay inlined (design §6.2/§12.2 — the latter must, for the bit-exact parity extractor). **The Phase 10 Fog / Volumetric bundle is now complete** (11.6 + 11.8 + 11.11 + 11.5 + 11.10; 11.7 dropped). The remaining sub-item on this bullet — temporal reprojection (and the full froxel-volume upgrade) — is deliberately **Phase 13** scope, not Phase 10 (see the Phase 13 "Volumetric lighting" item), so this box stays open as the cross-phase tracker.
+  Decision for the user (2026-10-02): everything in this item for Phase
+  10 shipped; the only open part, temporal reprojection, is deliberately
+  Phase 13 per the body above. Recommend moving it out of 0.2.0 to the
+  release that carries Phase 13 volumetric lighting, so 0.2.0 does not
+  wait on it.
+  Layman: Realistic fog with light shafts; the part still open, smoother fog over time, is planned for a later release.
   Kind: implement.
 
 - ✅ [3D_E-S0130] **Volumetric god rays / crepuscular rays — visible light shafts from the sun through openings**
