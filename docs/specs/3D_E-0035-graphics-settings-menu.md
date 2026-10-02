@@ -158,26 +158,42 @@ struct SettingsMenuActions
 {
     std::function<void()> apply;            // SettingsEditor::apply(Settings::defaultPath())
     std::function<void()> revert;           // SettingsEditor::revert()
-    std::function<void()> restoreDefaults;  // SettingsEditor::restoreDisplayDefaults()
+    std::function<void()> restoreDefaults;  // SettingsEditor::restoreGraphicsDefaults()
     std::function<bool()> isDirty;          // SettingsEditor::isDirty()
 };
 ```
+
+`SettingsEditor::restoreGraphicsDefaults()` is new. It resets the page's
+fields — preset, render scale, `graphics`, `vsync`, `fullscreen` — to
+`DisplaySettings{}`'s values and keeps the window size, which this page
+does not show. `restoreDisplayDefaults` stays as it is for the editor.
 
 Apply and Revert are enabled only while `isDirty()` is true, and the
 footer status reads `ui.settings.saved` or `ui.settings.unsaved` to match.
 These update each frame like the page.
 
-`Engine::initialize` registers the Settings builder (chrome, actions,
-page) with `UISystem::setScreenBuilder` when game screens are on. It
-connects `UISystem::onModalPopped`: when Settings closes and the editor
-is dirty, it calls `revert()`.
+One free function in `graphics_settings_page.h` does the wiring, so the
+engine and the tests run the same code:
+
+```cpp
+/// Registers the Settings builder (chrome, actions, page) and connects
+/// onModalPopped: when Settings closes and `editor` is dirty, revert().
+void wireSettingsScreen(UISystem& ui, SettingsEditor& editor,
+                        const std::filesystem::path& settingsPath);
+
+/// Every localisation key the page and the footer use (INV-10).
+std::vector<std::string_view> settingsPageKeys();
+```
+
+`Engine::initialize` calls it, with `Settings::defaultPath()`, when game
+screens are on.
 
 ### 4.4 Controls
 
 | Control | Type | Values | Field |
 |---|---|---|---|
 | Quality preset | dropdown | Low, Medium, High, Ultra, Custom | `qualityPreset` |
-| Render scale | slider | 50–100 %, step 5 | `renderScale` |
+| Render scale | slider | 50–100 %; `keyStep` 5 %; drag is continuous | `renderScale` |
 | Anti-aliasing | dropdown | Off, FXAA, SMAA, TAA, MSAA 4× | `graphics.antiAlias` |
 | Ambient occlusion | checkbox | on / off | `graphics.ambientOcclusion` |
 | Bloom | checkbox | on / off | `graphics.bloom` |
@@ -191,8 +207,9 @@ is dirty, it calls `revert()`.
 
 Picking Custom from the preset dropdown changes nothing but the label.
 Vertical sync and window mode are not part of a preset and do not set
-Custom. Every label and option is a `ui.settings.graphics.*` key present
-in all nine tables of `engine/localization/supported_languages.h`.
+Custom. Every label and option is a `ui.settings.graphics.*` key, present
+in each `assets/localization/<code>.json` table that
+`kSupportedLanguages` lists.
 
 ### 4.5 Keyboard adjustment
 
@@ -243,14 +260,15 @@ Tab always move focus.
   *Test:* `tests/test_settings.cpp`,
   `SettingsApply.QualityPresetCannotReEnableAccessibilityDisabledHeavyPost`,
   rewritten to go through `selectQualityPreset` and `applyGraphics`.
-  *Breaks when:* the page or `applyGraphics` drives the passes past
-  `Renderer::setHeavyPostEnabled`.
+  *Breaks when:* `applyGraphics` sends `graphics.volumetrics` anywhere
+  but `setHeavyPostEnabled`.
 
 - **INV-7** — Closing Settings with unapplied changes reverts them: the
   sinks receive the applied state again, and `isDirty()` is false.
-  *Test:* `tests/test_graphics_settings_page.cpp`, `CloseWithoutApplyReverts`.
-  *Breaks when:* the close handler is not connected, or runs before the
-  modal pops.
+  *Test:* `tests/test_graphics_settings_page.cpp`, `CloseWithoutApplyReverts`,
+  which calls `wireSettingsScreen`.
+  *Breaks when:* `wireSettingsScreen` does not connect the close handler,
+  or the handler runs before the modal pops.
 
 - **INV-8** — Left and Right adjust a focused slider or dropdown, and
   move focus from any other element.
@@ -261,6 +279,15 @@ Tab always move focus.
   false after construction and `forceLiveApply()`.
   *Test:* `tests/test_settings.cpp`, `SettingsEditor.LoadIsNotDirty`.
   *Breaks when:* the push path writes into `m_pending` again.
+
+- **INV-10** — Every key the page and the footer use, `ui.settings.unsaved`
+  included, is in all nine tables. `LocalizationAuditStrict` checks
+  English only and reports the rest without failing, so it does not
+  cover this.
+  *Test:* `tests/test_localization_tables.cpp`,
+  `LocalizationTables.SettingsPageKeysInEveryTable`, over
+  `settingsPageKeys()`.
+  *Breaks when:* a key is added to `en.json` and not to another table.
 
 ## 6. Failure modes
 
@@ -286,7 +313,7 @@ Tab always move focus.
 | INV-1, INV-3, INV-4, INV-5, INV-6, INV-9 | `tests/test_settings.cpp` | pure CPU |
 | INV-2, INV-7 | `tests/test_graphics_settings_page.cpp` (new) | builds the page on a canvas, drives it through `UISystem` press/key calls, recording sinks |
 | INV-8 | `tests/test_ui_system_input.cpp` | |
-| §4.4 strings | `tools/localization_audit.py --strict` (ctest `LocalizationAuditStrict`) | all keys in all tables |
+| INV-10 | `tests/test_localization_tables.cpp` | |
 
 Each new test is seen failing against the code without its rule before
 it lands. The in-app check is `vestige --player`, Esc, Settings: change
@@ -329,7 +356,7 @@ the preset and one option, Apply, restart, and see both kept.
 | INV-7 | `tests/test_graphics_settings_page.cpp::CloseWithoutApplyReverts` |
 | INV-8 | `tests/test_ui_system_input.cpp::UISystemKeys.*` |
 | INV-9 | `tests/test_settings.cpp::SettingsEditor.LoadIsNotDirty` |
-| §4.4 strings in nine languages | ctest `LocalizationAuditStrict` |
+| INV-10 | `tests/test_localization_tables.cpp::LocalizationTables.SettingsPageKeysInEveryTable` |
 | Options stay readable and centred | **nothing** automated — the in-app check in §7 |
 
 ## 11. Cross-doc impact
