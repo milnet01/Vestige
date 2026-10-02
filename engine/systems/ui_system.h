@@ -17,6 +17,7 @@
 
 #include <cstdint>
 #include <functional>
+#include <initializer_list>
 #include <string>
 #include <unordered_map>
 #include <vector>
@@ -376,5 +377,13 @@ private:
     bool          m_textStale   = false;
     std::uint32_t m_languageSub = 0;  ///< LanguageChangedEvent subscription (0 = none).
 };
+
+/// @brief Draws each canvas as one layer — its sprites, then its text — in
+///        the order given, so a later canvas covers an earlier one's text as
+///        well as its panels (3D_E-0749). Null entries are skipped. Text is
+///        batched per layer when @a text is initialised.
+void renderUICanvasLayers(std::initializer_list<UICanvas*> layers,
+                          SpriteBatchRenderer& batch, TextRenderer* text,
+                          int screenWidth, int screenHeight);
 
 } // namespace Vestige

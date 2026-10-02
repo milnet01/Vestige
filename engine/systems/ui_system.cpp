@@ -197,39 +197,26 @@ void UISystem::renderUI(int screenWidth, int screenHeight)
 
     const UIOverlayGlState overlayState;
 
-    // Render root canvas first, then modal overlay on top. Both share the
-    // same sprite-batch pass so draw order is strictly back-to-front.
-    //
-    // Phase 10.9 Pe1 — open a frame-scoped TextRenderer batch so every
-    // widget's `renderText2D` call accumulates into one upload + draw
-    // at `endBatch2D`. Pre-Pe1 a typical HUD frame issued ~18 separate
-    // text draws (FPS counter + each menu label + each keybind row +
-    // subtitles + toasts).
+    // Phase 10.9 Pe1 — text is batched: each widget's `renderText2D` call
+    // accumulates and is drawn in one upload + draw at `endBatch2D`.
     TextRenderer* textPtrForBatch = (m_engine != nullptr)
         ? m_engine->getRenderer().getTextRenderer()
         : nullptr;
-    if (textPtrForBatch != nullptr && textPtrForBatch->isInitialized())
-    {
-        textPtrForBatch->beginBatch2D(screenWidth, screenHeight);
-    }
 
-    m_spriteBatch.begin(screenWidth, screenHeight);
-    if (rootHasElements)
-    {
-        m_canvas.render(m_spriteBatch, screenWidth, screenHeight);
-    }
-    if (modalHasElements)
-    {
-        m_modalCanvas.render(m_spriteBatch, screenWidth, screenHeight);
-    }
+    // Root canvas, then the modal over it — each a layer of its own, so the
+    // modal covers the root's text and not only its panels (3D_E-0749).
+    renderUICanvasLayers({rootHasElements ? &m_canvas : nullptr,
+                          modalHasElements ? &m_modalCanvas : nullptr},
+                         m_spriteBatch, textPtrForBatch, screenWidth, screenHeight);
 
     // Subtitles last so they sit on top of modal UI. Layout is computed
     // against the text renderer's actual font pixel size so plate
     // width matches rendered glyph width byte-for-byte.
-    TextRenderer* textPtr = hasSubtitles ? textPtrForBatch : nullptr;
-    if (hasSubtitles && textPtr != nullptr && textPtr->isInitialized())
+    if (hasSubtitles && textPtrForBatch != nullptr && textPtrForBatch->isInitialized())
     {
-        TextRenderer& text = *textPtr;
+        TextRenderer& text = *textPtrForBatch;
+        text.beginBatch2D(screenWidth, screenHeight);
+        m_spriteBatch.begin(screenWidth, screenHeight);
         SubtitleLayoutParams params;
         params.screenWidth   = screenWidth;
         params.screenHeight  = screenHeight;
@@ -239,19 +226,34 @@ void UISystem::renderUI(int screenWidth, int screenHeight)
             params,
             [&text](const std::string& s) { return text.measureTextWidth(s); });
         renderSubtitles(lines, m_spriteBatch, text,
-                        screenWidth, screenHeight);
+                        screenWidth, screenHeight);  // ends the sprite batch
+        text.endBatch2D();
     }
-    else
-    {
-        m_spriteBatch.end();
-    }
+}
 
-    // Pe1 — flush every queued text draw in one upload + draw.
-    if (textPtrForBatch != nullptr && textPtrForBatch->isBatching())
+void renderUICanvasLayers(std::initializer_list<UICanvas*> layers,
+                          SpriteBatchRenderer& batch, TextRenderer* text,
+                          int screenWidth, int screenHeight)
+{
+    const bool batchText = (text != nullptr && text->isInitialized());
+    for (UICanvas* canvas : layers)
     {
-        textPtrForBatch->endBatch2D();
+        if (canvas == nullptr)
+        {
+            continue;
+        }
+        if (batchText)
+        {
+            text->beginBatch2D(screenWidth, screenHeight);
+        }
+        batch.begin(screenWidth, screenHeight);
+        canvas->render(batch, screenWidth, screenHeight);
+        batch.end();
+        if (batchText && text->isBatching())
+        {
+            text->endBatch2D();
+        }
     }
-
 }
 
 // -- Phase 10 slice 12.2: screen-stack machinery ----------------------------
