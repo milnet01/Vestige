@@ -968,6 +968,16 @@ Full spatial audio pipeline with dynamic mixing, occlusion, and adaptive music. 
   Kind: implement.
 
 - 📋 [3D_E-S0102] **AX10. Generative / parametric music layer — extend the existing `MusicLayer` system with a tier of *generative* layers: e.g. a "rainfall" bed whose density is a function of weather intensity, or a "tension" layer whose harmonic colour is parametrised by the AI Director's encounter score (Phase 16). Algorithmic generation (Markov chord progression, granular sample re-trigger) keeps a long sequence from sounding looped without ballooning asset count. No copyright-encumbered ML models; classical algorithmic-composition techniques only.**
+  Layman: Music that writes and varies itself as the game plays, so long sessions do not sound looped.
+  DECISION FOR THE USER (checked 2026-10-02). Two halves: a "tension"
+  layer steered by the AI Director's score, which is blocked (no AI
+  Director exists, Phase 16), and a weather-driven generative bed
+  (e.g. rain density from WeatherState::precipitation), which is
+  buildable but needs a design (Markov chords vs granular re-trigger)
+  and source samples the tree does not have, so nothing could be heard
+  or checked yet. Recommendation: move both halves out of 0.2.0 — the
+  first to the AI Director's release, the second to whenever a project
+  needs music beyond the shipped layered player.
   Kind: implement.
 
 - ✅ [3D_E-S0103] **AX11. Audio device hot-swap + per-output device routing — currently the audio device is opened at `AudioEngine::initialize` and never re-evaluated. Detect device-list changes via `ALC_DEVICE_NOTIFICATIONS_SOFT` extension, surface a "Default device changed (USB headphones connected) — switch?" toast, swap without restart. Allows the user to plug headphones in mid-session and have HRTF auto-enable (Phase 10 HRTF Auto mode already handles the path; just needs the device-change trigger).**
@@ -982,6 +992,13 @@ Full spatial audio pipeline with dynamic mixing, occlusion, and adaptive music. 
   Kind: implement.
 
 - 📋 [3D_E-S0106] **AX14. AI-Director-aware music transitions — when Phase 16's AI Director changes encounter score (calm → tension → combat), music transitions hit on musical sync points (bar / beat / phrase) rather than crossfading mid-bar. Requires per-clip BPM / beat-grid metadata and the `MusicStingerQueue` already shipped. Cheap, huge perceptual upgrade vs. naïve crossfade.**
+  Layman: Music changes on the beat when the game's mood shifts, instead of crossfading mid-bar.
+  Blocked (checked 2026-10-02): it reacts to the AI Director's encounter
+  score, and no AI Director exists in engine/ (Phase 16). Recommendation
+  for the user: move it to the release that builds the AI Director; the
+  beat-grid part could ship sooner as "stingers and intensity changes
+  wait for the next bar", driven by the SetMusicIntensity node
+  (3D_E-S0018), if that is wanted for 0.2.0.
   Kind: implement.
 
 - ✅ [3D_E-S0107] **Editor integration — `AudioPanel` in `engine/editor/panels/audio_panel.{h,cpp}` ships a four-tab editor surface over the Phase 10 audio pipeline: Mixer (per-bus gains for Master/Music/Voice/Sfx/Ambient/Ui + dialogue-duck trigger + attack/release/floor controls + live current-gain readout), Sources (iterates scene via `Scene::forEachEntity` picking `AudioSourceComponent`, per-entity mute/solo checkboxes + volume/pitch/min-max-distance sliders + attenuation model readout), Zones (reverb-zone add/remove/select with name + center + core radius + falloff band + preset combo; mirror placement surface for ambient zones with clipPath + priority), Debug (audio-availability indicator + distance model + Doppler factor + speed-of-sound + HRTF mode/status/dataset + available-dataset enumeration). Panel exposes `computeEffectiveSourceGain(entityId, bus)` — mute beats solo, solo-exclusive routing when any source soloed, otherwise `master · bus · duckGain` clamped to [0, 1]. Registered via `Engine::initialize` → `Editor::setAudioSystem(m_systemRegistry.getSystem<AudioSystem>())` + drawn each editor frame alongside NavigationPanel. 18 headless unit tests cover defaults, open/close toggle, zone add/remove/selection-shift, mute/solo state, effective-gain routing, and overlay toggle.**
@@ -5156,6 +5173,49 @@ shipped that have no invocation path at all.
   Kind: fix.
   Source: in-session-2026-10-02.
   Lanes: audio.
+
+- 🚧 [3D_E-0743] **A sound file with more than two channels is uploaded as stereo and plays garbled.**
+  Found while reading clip loading for 3D_E-S0099. AudioClip's loaders
+  accept 1 to 8 channels (MAX_AUDIO_CHANNELS), but AudioClip::getALFormat
+  returns AL_FORMAT_STEREO16 for any count above one, and
+  AudioMusicPlayer::refillLayer does the same for streams. A 4-, 6- or
+  8-channel file is uploaded with the wrong frame size and plays as
+  noise; a 3-, 5- or 7-channel file likewise.
+  Fix: one channel-to-format map — 1 mono, 2 stereo, 4 first-order
+  ambisonics (AmbiX: ACN order, SN3D scaling, set on the buffer), 6 5.1,
+  8 7.1 — used by every upload; any other count refused at load with an
+  error naming the supported layouts.
+  **Layman:** Surround and 360-degree sound files played as noise instead of sound; they now play correctly or are refused with a clear message.
+  Kind: fix.
+  Source: in-session-2026-10-02.
+  Lanes: audio.
+
+- 🚧 [3D_E-0744] **The main and pause menus show made-up data: version 0.6.2, a fake last session, world time, autosave time and save slot.**
+  Found while inventorying menu strings for 3D_E-0024. menu_prefabs.cpp
+  carries text from the menu design mock-up into the running app: "v 0.6.2"
+  and "BUILD 0.6.2-a14f" (the engine is 0.1.x), a "last session" card
+  reading "The Tabernacle / Outer Court Pillar 07 of 20", "WORLD TIME
+  14:22:08", "TABERNACLE OUTER COURT PILLAR 07", "AUTOSAVE 14:19:42" and
+  "SLOT 03". Fix: the version label reads VESTIGE_ENGINE_VERSION; the
+  build hash, the card and the made-up session lines are removed until a
+  save system supplies real values.
+  **Layman:** The menus showed a wrong version number and invented details about your last visit; they now show the real version and leave out what is not known yet.
+  Kind: fix.
+  Source: in-session-2026-10-02.
+  Lanes: ui.
+
+- 🚧 [3D_E-0745] **A menu screen change leaves the keyboard focus pointing at a destroyed button.**
+  Found while reading UISystem for 3D_E-0024. UISystem::m_focusedElement
+  points into m_canvas or m_modalCanvas. setRootScreen, pushModalScreen
+  and popModalScreen clear those canvases, destroying the elements, but
+  never reset the pointer. The next setFocusedElement writes
+  `focused = false` through it, and Enter in handleKey emits the
+  destroyed element's onClick. Fix: drop the focus whenever a canvas
+  that may hold it is cleared.
+  **Layman:** Moving through a menu with the keyboard and then switching screens could make the next key press act on a button that no longer exists.
+  Kind: fix.
+  Source: in-session-2026-10-02.
+  Lanes: ui.
 
 ## 0.3.0 — An editor a builder can use
 

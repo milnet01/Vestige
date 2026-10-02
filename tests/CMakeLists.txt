@@ -107,6 +107,7 @@ add_executable(vestige_tests
     test_audio_playback_ticket.cpp
     test_ambient_system.cpp
     test_audio_bus_activity.cpp
+    test_audio_channel_formats.cpp
     test_physics_character_controller.cpp
     test_physics_constraint.cpp
     test_cloth_simulator.cpp

@@ -7,10 +7,9 @@
 ///
 /// `ALSOFT_DRIVERS=null` selects the null backend, which the bundled OpenAL
 /// build includes; a test skips when `openNullAudioDevice` returns false.
-/// POSIX only: the Windows (Wine) behaviour of the null backend is unchecked.
+/// The device opener is POSIX only: the Windows (Wine) behaviour of the null
+/// backend is unchecked. The WAV writer works everywhere.
 #pragma once
-
-#ifndef _WIN32
 
 #include "audio/audio_engine.h"
 
@@ -23,6 +22,7 @@
 namespace Vestige::TestAudio
 {
 
+#ifndef _WIN32
 /// Initialises `engine` on the null backend, restoring ALSOFT_DRIVERS.
 inline bool openNullAudioDevice(AudioEngine& engine)
 {
@@ -34,6 +34,7 @@ inline bool openNullAudioDevice(AudioEngine& engine)
     else                     ::unsetenv("ALSOFT_DRIVERS");
     return opened;
 }
+#endif
 
 namespace detail
 {
@@ -52,33 +53,38 @@ inline void putU16(std::ofstream& out, std::uint16_t v)
 }
 }  // namespace detail
 
-/// Writes `seconds` of a quiet 16-bit mono square tone at 22050 Hz to the
-/// temp directory as `name` and returns its path.
-inline std::filesystem::path writeTestWav(const std::string& name, float seconds)
+/// Writes `seconds` of a quiet 16-bit square tone at 22050 Hz, with
+/// `channels` interleaved channels, to the temp directory as `name` and
+/// returns its path.
+inline std::filesystem::path writeTestWav(const std::string& name, float seconds,
+                                          std::uint16_t channels = 1)
 {
     const auto path = std::filesystem::temp_directory_path() / name;
     constexpr std::uint32_t kRate = 22050;
     const auto frames = static_cast<std::uint32_t>(seconds * static_cast<float>(kRate));
+    const std::uint32_t frameBytes = 2u * channels;
     std::ofstream out(path, std::ios::binary);
     out.write("RIFF", 4);
-    detail::putU32(out, 36 + frames * 2);
+    detail::putU32(out, 36 + frames * frameBytes);
     out.write("WAVEfmt ", 8);
     detail::putU32(out, 16);
-    detail::putU16(out, 1);           // PCM
-    detail::putU16(out, 1);           // mono
+    detail::putU16(out, 1);                       // PCM
+    detail::putU16(out, channels);
     detail::putU32(out, kRate);
-    detail::putU32(out, kRate * 2);   // byte rate
-    detail::putU16(out, 2);           // block align
-    detail::putU16(out, 16);          // bits per sample
+    detail::putU32(out, kRate * frameBytes);      // byte rate
+    detail::putU16(out, static_cast<std::uint16_t>(frameBytes));  // block align
+    detail::putU16(out, 16);                      // bits per sample
     out.write("data", 4);
-    detail::putU32(out, frames * 2);
+    detail::putU32(out, frames * frameBytes);
     for (std::uint32_t i = 0; i < frames; ++i)
     {
-        detail::putU16(out, static_cast<std::uint16_t>((i / 25) % 2 == 0 ? 2000 : 63536));
+        const auto v = static_cast<std::uint16_t>((i / 25) % 2 == 0 ? 2000 : 63536);
+        for (std::uint16_t c = 0; c < channels; ++c)
+        {
+            detail::putU16(out, v);
+        }
     }
     return path;
 }
 
 }  // namespace Vestige::TestAudio
-
-#endif

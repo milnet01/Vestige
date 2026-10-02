@@ -7,6 +7,7 @@
 #include "core/logger.h"
 
 #include <AL/al.h>
+#include <AL/alext.h>
 
 #include <dr_wav.h>
 #include <dr_mp3.h>
@@ -38,9 +39,41 @@ float AudioClip::getDurationSeconds() const
     return static_cast<float>(m_frameCount) / static_cast<float>(m_sampleRate);
 }
 
+int alFormatForChannels(std::uint32_t channels)
+{
+    switch (channels)
+    {
+    case 1: return AL_FORMAT_MONO16;
+    case 2: return AL_FORMAT_STEREO16;
+    case 4: return AL_FORMAT_BFORMAT3D_16;
+    case 6: return AL_FORMAT_51CHN16;
+    case 8: return AL_FORMAT_71CHN16;
+    default: return 0;
+    }
+}
+
+bool uploadPcm16(unsigned int buffer, std::uint32_t channels,
+                 const std::int16_t* samples, std::size_t bytes,
+                 std::uint32_t sampleRate)
+{
+    const int format = alFormatForChannels(channels);
+    if (format == 0)
+    {
+        return false;
+    }
+    alBufferData(buffer, static_cast<ALenum>(format), samples,
+                 static_cast<ALsizei>(bytes), static_cast<ALsizei>(sampleRate));
+    if (channels == 4)
+    {
+        alBufferi(buffer, AL_AMBISONIC_LAYOUT_SOFT, AL_ACN_SOFT);
+        alBufferi(buffer, AL_AMBISONIC_SCALING_SOFT, AL_SN3D_SOFT);
+    }
+    return true;
+}
+
 int AudioClip::getALFormat() const
 {
-    return (m_channels == 1) ? AL_FORMAT_MONO16 : AL_FORMAT_STEREO16;
+    return alFormatForChannels(m_channels);
 }
 
 std::optional<AudioClip> AudioClip::loadFromFile(const std::string& filePath)
@@ -55,25 +88,39 @@ std::optional<AudioClip> AudioClip::loadFromFile(const std::string& filePath)
                        [](unsigned char c) { return std::tolower(c); });
     }
 
+    std::optional<AudioClip> clip;
     if (ext == ".wav")
     {
-        return loadWav(filePath);
+        clip = loadWav(filePath);
     }
     else if (ext == ".mp3")
     {
-        return loadMp3(filePath);
+        clip = loadMp3(filePath);
     }
     else if (ext == ".flac")
     {
-        return loadFlac(filePath);
+        clip = loadFlac(filePath);
     }
     else if (ext == ".ogg")
     {
-        return loadOgg(filePath);
+        clip = loadOgg(filePath);
+    }
+    else
+    {
+        Logger::error("[AudioClip] Unsupported audio format: " + ext);
+        return std::nullopt;
     }
 
-    Logger::error("[AudioClip] Unsupported audio format: " + ext);
-    return std::nullopt;
+    // 3D_E-0743 — refuse a channel layout nothing can play, rather than
+    // upload it in the wrong format and play noise.
+    if (clip && alFormatForChannels(clip->getChannels()) == 0)
+    {
+        Logger::error("[AudioClip] " + std::to_string(clip->getChannels())
+                      + " channels is not a supported layout (1 mono, 2 stereo, "
+                        "4 first-order ambisonics, 6 for 5.1, 8 for 7.1): " + filePath);
+        return std::nullopt;
+    }
+    return clip;
 }
 
 std::optional<AudioClip> AudioClip::loadWav(const std::string& filePath)

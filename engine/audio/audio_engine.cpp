@@ -527,11 +527,8 @@ unsigned int AudioEngine::loadBuffer(const std::string& filePath)
     // could ask the driver to delete a garbage handle.
     ALuint buffer = 0;
     alGenBuffers(1, &buffer);
-    alBufferData(buffer,
-                 static_cast<ALenum>(clip->getALFormat()),
-                 clip->getSamples().data(),
-                 static_cast<ALsizei>(clip->getDataSizeBytes()),
-                 static_cast<ALsizei>(clip->getSampleRate()));
+    uploadPcm16(buffer, clip->getChannels(), clip->getSamples().data(),
+                clip->getDataSizeBytes(), clip->getSampleRate());
 
     ALenum err = alGetError();
     if (err != AL_NO_ERROR)
@@ -731,6 +728,42 @@ std::uint64_t AudioEngine::playbackTicket(unsigned int source) const
     }
     return 0;
 }
+
+namespace
+{
+
+/// True when `source` plays a 4-channel buffer, which `uploadPcm16` only
+/// ever makes as first-order ambisonics (3D_E-0743).
+bool holdsAmbisonicBuffer(ALuint source)
+{
+    ALint buffer = 0;
+    alGetSourcei(source, AL_BUFFER, &buffer);
+    if (buffer == 0)
+    {
+        return false;
+    }
+    ALint channels = 0;
+    alGetBufferi(static_cast<ALuint>(buffer), AL_CHANNELS, &channels);
+    return channels == 4;
+}
+
+/// 3D_E-S0099 — a non-positional playback. An ambisonic soundfield is
+/// world-locked (not listener-relative, no distance falloff) so it turns
+/// as the listener turns; anything else is pinned to the listener.
+void applyNonSpatialMode(ALuint source)
+{
+    if (holdsAmbisonicBuffer(source))
+    {
+        alSourcei(source, AL_SOURCE_RELATIVE, AL_FALSE);
+        alSourcef(source, AL_ROLLOFF_FACTOR, 0.0f);
+    }
+    else
+    {
+        alSourcei(source, AL_SOURCE_RELATIVE, AL_TRUE);
+    }
+}
+
+}  // namespace
 
 void AudioEngine::setSourceVolume(unsigned int source, float volume)
 {
@@ -942,7 +975,7 @@ unsigned int AudioEngine::playSound2D(const std::string& filePath, float volume,
     alSource3f(source, AL_POSITION, 0.0f, 0.0f, 0.0f);
     alSourcef(source, AL_GAIN, initialGain);
     alSourcei(source, AL_LOOPING, loop ? AL_TRUE : AL_FALSE);
-    alSourcei(source, AL_SOURCE_RELATIVE, AL_TRUE);  // Relative to listener (2D)
+    applyNonSpatialMode(source);  // listener-pinned, or a world-locked soundfield
     alSourcePlay(source);
     return source;
 }
@@ -1381,8 +1414,14 @@ void AudioEngine::applySourceState(unsigned int source,
     alSourcef(source, AL_REFERENCE_DISTANCE,  state.referenceDistance);
     alSourcef(source, AL_MAX_DISTANCE,        state.maxDistance);
     alSourcef(source, AL_ROLLOFF_FACTOR,      state.rolloffFactor);
-    alSourcei(source, AL_SOURCE_RELATIVE,
-              state.spatial ? AL_FALSE : AL_TRUE);
+    if (state.spatial)
+    {
+        alSourcei(source, AL_SOURCE_RELATIVE, AL_FALSE);
+    }
+    else
+    {
+        applyNonSpatialMode(source);  // after the rolloff above, which it may zero
+    }
 
     // AX6 — per-source high-frequency damping via the EFX direct
     // low-pass filter. Binding AL_DIRECT_FILTER copies the filter's
@@ -1497,11 +1536,8 @@ unsigned int AudioEngine::loadReverbIr(const std::string& path)
 
     ALuint buffer = 0;
     alGenBuffers(1, &buffer);
-    alBufferData(buffer,
-                 static_cast<ALenum>(clip->getALFormat()),
-                 clip->getSamples().data(),
-                 static_cast<ALsizei>(clip->getDataSizeBytes()),
-                 static_cast<ALsizei>(clip->getSampleRate()));
+    uploadPcm16(buffer, clip->getChannels(), clip->getSamples().data(),
+                clip->getDataSizeBytes(), clip->getSampleRate());
     if (alGetError() != AL_NO_ERROR)
     {
         Logger::error("[AudioEngine] Failed to upload reverb IR: " + path);

@@ -5,6 +5,7 @@
 /// @brief Streaming-music player implementation (W8 part 2/2).
 
 #include "audio/audio_music_player.h"
+#include "audio/audio_clip.h"
 
 #include "audio/audio_engine.h"
 #include "audio/audio_mixer.h"
@@ -87,6 +88,15 @@ bool AudioMusicPlayer::loadLayer(MusicLayer layer, const std::string& clipPath)
     }
 
     const stb_vorbis_info info = stb_vorbis_get_info(decoder);
+    if (alFormatForChannels(static_cast<std::uint32_t>(info.channels)) == 0)
+    {
+        // 3D_E-0743 — a layout nothing can play would stream as noise.
+        Logger::warning("[AudioMusicPlayer] music clip " + clipPath + " has "
+                        + std::to_string(info.channels)
+                        + " channels, not a supported layout; not loaded");
+        stb_vorbis_close(decoder);
+        return false;
+    }
 
     StreamingLayer& slot = layerFor(layer);
     slot.id         = layer;
@@ -266,12 +276,10 @@ StreamTickPlan AudioMusicPlayer::stepDecodeOnce(StreamingLayer& layer)
     {
         const ALuint dst = layer.freeBuffers.front();
         layer.freeBuffers.pop_front();
-        alBufferData(dst,
-                     channels == 1 ? AL_FORMAT_MONO16 : AL_FORMAT_STEREO16,
-                     scratch.data(),
-                     static_cast<ALsizei>(gotFrames * channels
-                                          * static_cast<int>(sizeof(short))),
-                     layer.sampleRate);
+        uploadPcm16(dst, static_cast<std::uint32_t>(channels), scratch.data(),
+                    static_cast<std::size_t>(gotFrames * channels)
+                        * sizeof(std::int16_t),
+                    static_cast<std::uint32_t>(layer.sampleRate));
         alSourceQueueBuffers(layer.source, 1, &dst);
     }
 

@@ -278,7 +278,10 @@ public:
                                   AudioBus bus = AudioBus::Sfx,
                                   SoundPriority priority = SoundPriority::Normal);
 
-    /// @brief Plays a non-spatial (2D) sound.
+    /// @brief Plays a non-spatial (2D) sound. A 4-channel (first-order
+    ///        ambisonic) clip plays as a world-locked soundfield that turns
+    ///        as the listener turns, with no distance falloff (3D_E-S0099);
+    ///        anything else is pinned to the listener.
     /// @param filePath Path to the audio file.
     /// @param volume Volume (0.0 to 1.0).
     /// @param bus Mixer bus (defaults to `Ui` — 2D sounds are most
