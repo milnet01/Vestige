@@ -64,11 +64,10 @@ constexpr int kH = 1080;
 template <typename T>
 T* place(UICanvas& canvas, std::unique_ptr<T> el, glm::vec2 pos, glm::vec2 size)
 {
-    T* raw = el.get();
-    raw->position = pos;
-    raw->size = size;
+    el->position = pos;
+    el->size = size;
     canvas.addElement(std::move(el));
-    return raw;
+    return static_cast<T*>(canvas.getElementAt(canvas.getElementCount() - 1));
 }
 
 /// Opens the Settings modal with a builder that adds one button at
