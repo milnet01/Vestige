@@ -112,6 +112,41 @@ void registerActionNodeTypes(NodeTypeRegistry& registry)
     });
 
     // -----------------------------------------------------------------------
+    // PlayDialogue — a spoken line (3D_E-S0021): non-positional, on the
+    // Voice bus at Critical priority so the pool never evicts it. Its
+    // caption comes from the caption map like any played clip, and the
+    // Voice bus ducks the music while it plays.
+    // -----------------------------------------------------------------------
+    registry.registerNode({
+        "PlayDialogue",
+        "Play Dialogue",
+        "Audio",
+        "Plays a spoken line on the Voice bus, with its caption",
+        {
+            {PinKind::EXECUTION, "Exec", ScriptDataType::BOOL, {}},
+            {PinKind::DATA, "clipPath", ScriptDataType::STRING, ScriptValue(std::string(""))},
+            {PinKind::DATA, "volume", ScriptDataType::FLOAT, ScriptValue(1.0f)},
+        },
+        {{PinKind::EXECUTION, "Then", ScriptDataType::BOOL, {}}},
+        "",
+        false, false,
+        [](ScriptContext& ctx, const ScriptNodeInstance& node)
+        {
+            const auto clip = ctx.readInputAs<std::string>(node, "clipPath");
+            const auto vol  = ctx.readInputAs<float>(node, "volume");
+            if (!clip.empty() && ctx.engine() != nullptr)
+            {
+                if (auto* audioSys = ctx.engine()->getSystemRegistry().getSystem<AudioSystem>())
+                {
+                    audioSys->getAudioEngine().playSound2D(
+                        clip, vol, AudioBus::Voice, SoundPriority::Critical);
+                }
+            }
+            ctx.triggerOutput(node, "Then");
+        }
+    });
+
+    // -----------------------------------------------------------------------
     // SetMusicIntensity / PlayMusicStinger — drive the adaptive music
     // (3D_E-S0018). Intensity 0..1 picks the layer mix; silence 0..1 fades
     // it all down. Both are clamped by intensityToLayerWeights.

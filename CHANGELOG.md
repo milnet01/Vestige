@@ -23,6 +23,15 @@ may change any interface without notice.
 
 ## [Unreleased]
 
+### 2026-10-02 Added — Scripts can play a spoken line, with its caption (3D_E-S0021)
+
+A new Play Dialogue scripting node plays a voice clip as a spoken line:
+heard the same wherever the listener stands, never cut off to make
+room for other sounds, shown with its caption when one is written for
+the clip, and with the music lowered while it plays. Moving a
+character's mouth in time with the words is a separate, larger piece
+of work, recorded as 3D_E-0741.
+
 ### 2026-10-02 Fixed — Music ducks under every voice line, not only under scene sound sources (3D_E-0742)
 
 The music dips while someone speaks, but the engine only noticed

@@ -629,7 +629,15 @@ Foundations shipped via commit `fa0b100` — "Phase 9C: New domain systems — A
   Delivered 2026-07-01 via the AX1 audio-occlusion bundle (Phase 10): AudioOcclusionSystem drives per-source occlusionFraction/Material from volumetric multi-ray casts against scene geometry (Fibonacci-sphere sampling, MT2-parallel, ray-budgeted).
   Kind: implement.
 
-- 📋 [3D_E-S0021] **Voice/dialogue playback (integrates with existing lip sync system) — deferred to Phase 10.**
+- ✅ [3D_E-S0021] **Voice/dialogue playback (integrates with existing lip sync system) — deferred to Phase 10.**
+  Layman: Scripts can play a spoken line that is captioned and lowers the music while it plays.
+  Resolved 2026-10-02 for voice playback: PlayDialogue script node
+  (Voice bus, Critical priority, non-positional; caption from the caption
+  map; music ducked since 3D_E-0742). The lip-sync half is split out as
+  3D_E-0741 (considered, decision for the user): no scene has a face rig
+  and the experimental README estimates a multi-week push. Test: the
+  NodeLibraryTest census; the node body itself has no behaviour test
+  (ScriptContext tests run without an Engine).
   Kind: implement.
 
 - 📋 [3D_E-S0022] **Editor: sound emitter placement, reverb zone painting, audio preview — deferred to Phase 10.**

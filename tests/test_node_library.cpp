@@ -99,7 +99,7 @@ TEST_F(NodeLibraryTest, RegistersExpectedActionNodes)
         "PlayAnimation", "SpawnParticles",
         "SetMaterial", "SetVisibility",
         "SetLightColor", "SetLightIntensity",
-        "PublishEvent", "SetMusicIntensity", "PlayMusicStinger"
+        "PublishEvent", "SetMusicIntensity", "PlayMusicStinger", "PlayDialogue"
     };
     for (const char* name : expected)
     {
