@@ -316,3 +316,35 @@ TEST_F(UISystemFocusTest, HandleKeyReturnsFalseForUnhandledKey_S4)
     EXPECT_FALSE(sys.handleKey(GLFW_KEY_A, 0));
     EXPECT_FALSE(sys.handleKey(GLFW_KEY_F5, 0));
 }
+
+// ---------------------------------------------------------------------------
+// 3D_E-0745 — a screen change must not leave focus on a destroyed element.
+// ---------------------------------------------------------------------------
+
+TEST_F(UISystemFocusTest, RootScreenChangeDropsFocusOnTheOldCanvas)
+{
+    UITheme theme = UITheme::defaultTheme();
+    auto btn = makeButton("A", theme);
+    UIElement* raw = btn.get();
+    sys.getCanvas().addElement(std::move(btn));
+    sys.setFocusedElement(raw);
+    ASSERT_EQ(sys.getFocusedElement(), raw);
+
+    sys.setRootScreen(GameScreen::None);  // clears the canvas, destroying `raw`
+    EXPECT_EQ(sys.getFocusedElement(), nullptr)
+        << "focus still points at an element the screen change destroyed";
+}
+
+TEST_F(UISystemFocusTest, ModalPopDropsFocusOnTheModalCanvas)
+{
+    UITheme theme = UITheme::defaultTheme();
+    sys.pushModalScreen(GameScreen::None);
+    auto btn = makeButton("B", theme);
+    UIElement* raw = btn.get();
+    sys.getModalCanvas().addElement(std::move(btn));
+    sys.setFocusedElement(raw);
+
+    sys.popModalScreen();  // clears the modal canvas
+    EXPECT_EQ(sys.getFocusedElement(), nullptr)
+        << "focus still points into the popped modal";
+}

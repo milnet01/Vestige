@@ -306,6 +306,7 @@ void UISystem::setRootScreen(GameScreen screen)
 {
     // Clear any modals and the root canvas before rebuilding. Modal capture
     // is dropped — the caller can re-raise a modal by pushing one.
+    m_focusedElement = nullptr;  // 3D_E-0745: the canvases it points into go
     m_modalStack.clear();
     m_modalCanvas.clear();
     m_canvas.clear();
@@ -327,6 +328,7 @@ void UISystem::pushModalScreen(GameScreen screen)
     // The modal-stack model is single-slot in slice 12.2 — the existing
     // canvas gets rebuilt for each push/pop. Deeper stacks arrive in a
     // later slice if a design calls for nested dialogs.
+    m_focusedElement = nullptr;  // 3D_E-0745: may point into the old modal
     m_modalCanvas.clear();
     m_modalStack.push_back(screen);
     if (auto builder = resolveBuilder(screen))
@@ -345,6 +347,7 @@ void UISystem::popModalScreen()
     }
     const GameScreen popped = m_modalStack.back();
     m_modalStack.pop_back();
+    m_focusedElement = nullptr;  // 3D_E-0745: may point into the popped modal
     m_modalCanvas.clear();
 
     if (m_modalStack.empty())
