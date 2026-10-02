@@ -23,6 +23,15 @@ may change any interface without notice.
 
 ## [Unreleased]
 
+### 2026-10-02 Fixed — The game's menus show, and work with the mouse (3D_E-0746, 3D_E-0747)
+
+The in-game menus and heads-up display were never drawn: the graphics
+card skipped them as hidden back faces. They now appear. Menus also
+answer the mouse now: buttons click, checkboxes tick, sliders drag and
+dropdowns open and pick. The cursor shows while a menu is open, and
+disabled buttons stay inert. A new `--player` launch option plays the
+scene as a game would, with Esc opening the pause menu.
+
 ### 2026-10-02 Changed — Meadow sky has clouds, and the sun matches it (3D_E-0034)
 
 The meadow's clear, hazy sky photo is replaced with Poly Haven's

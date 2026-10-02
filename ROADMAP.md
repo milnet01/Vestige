@@ -5254,6 +5254,66 @@ shipped that have no invocation path at all.
   Source: in-session-2026-10-02.
   Lanes: ui.
 
+- ✅ [3D_E-0746] **In-game menus ignore the mouse: no click reaches a button, slider or dropdown.**
+  Found while researching 3D_E-0035. UISystem fires a widget's onClick
+  only from handleKey (Enter / Space on the focused element). Nothing in
+  engine/ calls UISystem::updateMouseHit, and no code turns a mouse
+  press into onClick; only tests call either. So the main, pause and
+  settings menus work by keyboard alone. UISlider and UIDropdown also
+  leave dragging and opening to "the caller", and no caller exists.
+  Fix: route mouse presses in menu screens to the element under the
+  cursor (modal canvas first), and give slider and dropdown their own
+  press/drag/select handling. Blocks 3D_E-0035's player menu.
+  Resolved 2026-10-02 (b6458b3): UISystem routes left presses to the
+  topmost widget (modal first); checkbox, slider and dropdown handle
+  press, drag and pick; disabled buttons ignore click and Enter; the
+  cursor is free in menus. New --player flag reaches these menus. In the
+  app a mouse click on Settings opened Settings. UISystemMouse tests red
+  with each fix removed.
+  **Layman:** Players cannot click anything in the game's menus with the mouse; only the keyboard works.
+  Kind: fix.
+  Source: in-session-2026-10-02.
+  Lanes: ui.
+
+- ✅ [3D_E-0747] **The in-game UI overlay never draws: back-face culling discards every sprite quad.**
+  Found verifying 3D_E-0746 in the app. UISystem::renderUI saved and set
+  depth and blend but not culling. The sprite batch's top-left-origin
+  ortho projection makes every quad clockwise, and the 3D pass leaves
+  GL_CULL_FACE on, so the GPU culled the whole overlay: pause menu, HUD,
+  settings, subtitles plates. The screen state machine ran (log showed
+  "Pause: Playing -> Paused") with nothing on screen. Fix: a scoped
+  UIOverlayGlState that also turns culling off and restores it.
+  Resolved 2026-10-02 (b6458b3): UIOverlayGlState turns culling off for
+  the overlay and restores it. The --player pause menu now shows. GL test
+  UIOverlayGlStateTest red with the switch removed, green on the GPU and
+  on llvmpipe.
+  **Layman:** The game's menus and on-screen display were invisible because the graphics card was told to skip drawing them.
+  Kind: fix.
+  Source: in-session-2026-10-02.
+  Lanes: ui, renderer.
+
+- 📋 [3D_E-0748] **Menu button labels sit below their boxes, and the shortcut key-caps are empty.**
+  Seen in the --player pause menu once 3D_E-0747 made it visible. Each
+  UIButton draws its label baseline at or below the box's bottom edge,
+  so "Resume" crosses the border. The shortcut key-cap boxes (ESC, F5)
+  draw with no visible text in the pause menu. Screenshots taken with
+  demoreel shot --gpu -s 1920x1080 -- vestige --player, Esc.
+  **Layman:** Words on the menu buttons hang off the bottom of each button, and the small key hints are blank.
+  Kind: fix.
+  Source: in-session-2026-10-02.
+  Lanes: ui.
+
+- 📋 [3D_E-0749] **Text of the screen under a modal draws on top of the modal's panels.**
+  Seen with Settings open over the pause menu. UISystem::renderUI draws
+  all sprite quads first and flushes every text draw in one batch at the
+  end (Phase 10.9 Pe1), so the pause menu's labels land on top of the
+  Settings panel. Fix: flush text per canvas, root then modal, or give
+  the modal an opaque layer that text respects.
+  **Layman:** When the Settings window opens over the pause menu, the pause menu's words show through it.
+  Kind: fix.
+  Source: in-session-2026-10-02.
+  Lanes: ui.
+
 ## 0.3.0 — An editor a builder can use
 
 Breaks: the scene format. Editor work changes what a scene stores.
