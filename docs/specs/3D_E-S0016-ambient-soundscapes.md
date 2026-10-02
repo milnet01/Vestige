@@ -31,7 +31,9 @@ runtime ambient component yet": the zones are not saved and nothing plays them.
 
 The engine has no clock for the time of day; nothing else in `engine/` reads
 or sets one. A looping non-spatial sound became possible only with 3D_E-0738,
-which gave `AudioEngine::playSound2D` a loop flag.
+which gave `AudioEngine::playSound2D` a loop flag, and a holder can tell
+whether a source is still its own only since 3D_E-0739 added
+`AudioEngine::playbackTicket`.
 
 ## 3. Scope decisions (agreed with the user)
 
@@ -101,13 +103,19 @@ Each frame it:
    `setHoursPerMinute`; defaults 12 and 0.
 2. Computes §4.2's weights for every entity carrying an `AmbientZoneComponent`
    with a non-empty clip, using the camera position as the listener.
-3. Reconciles one looping bed per zone, keyed by entity id:
-   - weight > 0 and no playing source → `playSound2D(clip, weight,
+3. Reconciles one looping bed per zone, keyed by entity id. Each zone's bed
+   is held as its source and `AudioEngine::playbackTicket` for it, and the
+   zone **owns** the bed only while that source still carries that ticket and
+   is playing. Eviction hands a source's name to another sound (3D_E-0739),
+   so the system never calls `setSourceVolume` or `stopSound` on a source it
+   does not own.
+   - weight > 0 and no owned bed → `playSound2D(clip, weight,
      AudioBus::Ambient, SoundPriority::Low, loop = true)`;
-   - weight > 0 and a playing source → set its volume to the weight;
-   - weight = 0, or the entity gone, or the component removed → `stopSound`.
-   A source that has stopped on its own (evicted from the pool) counts as no
-   playing source, so it restarts on the next frame its weight is above 0.
+   - weight > 0 and an owned bed → set its volume to the weight;
+   - weight = 0, or the entity gone, or the component removed → `stopSound`
+     on an owned bed, and forget any bed it no longer owns.
+   A start that returns source 0 is not retried for 1 second, so a missing
+   clip or a full pool does not repeat the engine's warning every frame.
 4. Ticks each zone's `RandomOneShotScheduler` only while its weight is above
    0. On a fire it picks one of `oneShotClips` and plays it with
    `playSoundSpatial` on the `Ambient` bus at `SoundPriority::Low`, at a point
@@ -115,8 +123,9 @@ Each frame it:
    with volume `oneShotVolume × windowWeight(windows, hour)`. One-shots do not
    loop and are not tracked.
 
-The planning in step 3 is a pure function of the previous frame's handles,
-whether each is still playing, and this frame's weights. `AmbientSystem`
+The planning in step 3 is a pure function of the previous frame's beds,
+whether each is still owned, the time since each zone's last failed start,
+and this frame's weights. `AmbientSystem`
 applies its result to the `AudioEngine`, so it can be tested without a device.
 Randomness comes from one `std::mt19937` per system, seeded once at
 initialisation. Tests pass their own uniform samples to the pure helpers.
@@ -160,13 +169,17 @@ and the index-based selection go. The tab also shows and sets
   a hard switch instead of a fade.
 
 - **INV-3** — After a frame's plan is applied, each zone with weight above 0
-  has exactly one playing looping source, and each zone with weight 0, a
-  removed component or a removed entity has none. A source that stopped on
-  its own is started again on the next frame its weight is above 0.
+  owns exactly one looping bed, and each zone with weight 0, a removed
+  component or a removed entity owns none. The plan never sets the volume
+  of, or stops, a source whose ticket is not the one the zone stored. A bed
+  lost to eviction is started again on the first frame its weight is above 0;
+  a start that returned source 0 is retried no sooner than 1 second later.
   *Test:* `tests/test_ambient_system.cpp`, driving the pure planner over
-  frames with a fake set of playing sources.
+  frames with a fake pool whose sources carry tickets, including a source
+  re-granted to another sound.
   *Breaks when:* a zone that falls to weight 0 keeps its source, holding one
-  of the pool's sources while silent.
+  of the pool's sources while silent; or a zone whose bed was evicted stops
+  the sound that now holds that source.
 
 - **INV-4** — The clock advances by `deltaTime × hoursPerMinute / 60` and
   stays in [0, 24); a rate of 0 holds it.
@@ -197,10 +210,8 @@ and the index-based selection go. The tab also shows and sets
 
 ## 6. Failure modes
 
-- A clip that fails to load returns source 0. The zone is treated as having
-  no playing source and retries on later frames, as 3D_E-0738 does for
-  auto-play. This retries a missing file every frame; the loader's own warning
-  is the signal.
+- A clip that fails to load returns source 0. The zone retries once a
+  second (§4.3); the loader's own warning is the signal.
 - More zones above weight 0 than the source pool holds: beds play at
   `SoundPriority::Low`, so the pool evicts them before anything else, and they
   restart when a source frees.
