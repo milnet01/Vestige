@@ -87,7 +87,7 @@ void buildMainMenuImpl(UICanvas& canvas, const UITheme& theme,
     // Top chrome — caption + version + hairline rule.
     canvas.addElement(makeLabel("VESTIGE  3D ENGINE",
                                   {96, 56}, 0.22f, theme.textSecondary, textRenderer));
-    canvas.addElement(makeLabel("v 0.6.2  OPENGL 4.5  MIT",
+    canvas.addElement(makeLabel(std::string("v ") + VESTIGE_ENGINE_VERSION + "  OPENGL 4.5  MIT",
                                   {1920 - 96 - 280, 56}, 0.22f, theme.textSecondary, textRenderer));
     canvas.addElement(makePanel({96, 86}, {1920 - 192, 1}, theme.rule));
 
@@ -140,17 +140,11 @@ void buildMainMenuImpl(UICanvas& canvas, const UITheme& theme,
         y += btnHeight + btnGap;
     }
 
-    // Right column — continue card placeholder (320 × 220 panel).
-    canvas.addElement(makePanel({1920 - 96 - 540, 220}, {540, 240}, theme.panelBg));
-    canvas.addElement(makeLabel("LAST SESSION",
-                                  {1920 - 96 - 512, 248}, 0.22f, theme.textSecondary, textRenderer));
-    canvas.addElement(makeLabel("The Tabernacle",
-                                  {1920 - 96 - 512, 296}, 0.6f, theme.textPrimary, textRenderer));
-    canvas.addElement(makeLabel("Outer Court  Pillar 07 of 20",
-                                  {1920 - 96 - 512, 348}, 0.24f, theme.textSecondary, textRenderer));
+    // 3D_E-0744: the design's "last session" card showed made-up data
+    // (scene, pillar). It returns when a save system records a real session.
 
     // Footer keyboard hints.
-    canvas.addElement(makeLabel("(c) 2026 ANTHONY SCHEMEL  BUILD 0.6.2-a14f  MIT",
+    canvas.addElement(makeLabel("(c) 2026 ANTHONY SCHEMEL  MIT",
                                   {96, 1080 - 56}, 0.20f, theme.textSecondary, textRenderer));
     canvas.addElement(makeLabel("UP DOWN NAVIGATE     ENTER SELECT     ESC QUIT",
                                   {1920 - 96 - 600, 1080 - 56}, 0.20f, theme.textSecondary, textRenderer));
@@ -172,7 +166,7 @@ void buildPauseMenuImpl(UICanvas& canvas, const UITheme& theme,
     canvas.addElement(makeLabel("PAUSED",
                                   {(1920.0f - 200.0f) * 0.5f, 160.0f},
                                   0.28f, glm::vec3(theme.accent), textRenderer));
-    canvas.addElement(makeLabel("INPUT SUSPENDED  WORLD TIME 14:22:08",
+    canvas.addElement(makeLabel("INPUT SUSPENDED",
                                   {(1920.0f - 480.0f) * 0.5f, 200.0f},
                                   0.22f, theme.textSecondary, textRenderer));
 
@@ -205,9 +199,6 @@ void buildPauseMenuImpl(UICanvas& canvas, const UITheme& theme,
     canvas.addElement(makeLabel("The walk is held.",
                                   {panelX + panelW * 0.5f - 220.0f, panelY + 80.0f},
                                   1.0f, theme.textPrimary, textRenderer));
-    canvas.addElement(makeLabel("TABERNACLE  OUTER COURT  PILLAR 07",
-                                  {panelX + panelW * 0.5f - 220.0f, panelY + 140.0f},
-                                  0.22f, theme.textSecondary, textRenderer));
 
     // Buttons.
     struct PauseItem
@@ -249,13 +240,8 @@ void buildPauseMenuImpl(UICanvas& canvas, const UITheme& theme,
         by += btnH + btnGap;
     }
 
-    // Footer line in panel.
-    canvas.addElement(makeLabel("AUTOSAVE  14:19:42",
-                                  {panelX + 56.0f, panelY + panelH - 36.0f},
-                                  0.20f, theme.textSecondary, textRenderer));
-    canvas.addElement(makeLabel("SLOT 03",
-                                  {panelX + panelW - 56.0f - 80.0f, panelY + panelH - 36.0f},
-                                  0.20f, theme.textSecondary, textRenderer));
+    // 3D_E-0744: the design's location line and autosave / slot footer showed
+    // made-up data; they return when a save system supplies the real values.
 }
 
 void buildSettingsMenuImpl(UICanvas& canvas, const UITheme& theme,

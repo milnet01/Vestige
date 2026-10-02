@@ -9,7 +9,11 @@
 
 #include "ui/menu_prefabs.h"
 #include "ui/ui_canvas.h"
+#include "ui/ui_label.h"
 #include "ui/ui_theme.h"
+
+#include <string>
+#include <vector>
 
 using namespace Vestige;
 
@@ -92,4 +96,51 @@ TEST(MenuPrefabs, AllPrefabsAreSafeWithoutTextRenderer)
     buildPauseMenu(pause, theme, nullptr);
     buildSettingsMenu(settings, theme, nullptr);
     SUCCEED();
+}
+
+// -- 3D_E-0744: no made-up data on the menus --
+
+namespace
+{
+
+std::vector<std::string> labelTexts(const UICanvas& canvas)
+{
+    std::vector<std::string> out;
+    for (size_t i = 0; i < canvas.getElementCount(); ++i)
+    {
+        if (const auto* label = dynamic_cast<const UILabel*>(canvas.getElementAt(i)))
+        {
+            out.push_back(label->text);
+        }
+    }
+    return out;
+}
+
+}  // namespace
+
+TEST(MenuPrefabs, MenusShowTheRealVersionAndNoPlaceholderData)
+{
+    UITheme theme = UITheme::defaultTheme();
+    UICanvas main;
+    buildMainMenu(main, theme, nullptr);
+    UICanvas pause;
+    buildPauseMenu(pause, theme, nullptr);
+
+    bool versionShown = false;
+    for (const UICanvas* canvas : {&main, &pause})
+    {
+        for (const std::string& text : labelTexts(*canvas))
+        {
+            if (text.find(VESTIGE_ENGINE_VERSION) != std::string::npos)
+            {
+                versionShown = true;
+            }
+            for (const char* fake : {"0.6.2", "14:22", "14:19", "Pillar 07", "PILLAR 07", "SLOT 03"})
+            {
+                EXPECT_EQ(text.find(fake), std::string::npos)
+                    << "menu label shows placeholder data: " << text;
+            }
+        }
+    }
+    EXPECT_TRUE(versionShown) << "the main menu does not show the engine's version";
 }
