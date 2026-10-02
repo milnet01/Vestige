@@ -15,6 +15,12 @@ UICheckbox::UICheckbox()
     m_accessible.role = UIAccessibleRole::Checkbox;
 }
 
+void UICheckbox::activate()
+{
+    checked = !checked;
+    onClick.emit();
+}
+
 namespace
 {
 void drawBorder(SpriteBatchRenderer& batch, const glm::vec2& pos,

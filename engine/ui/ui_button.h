@@ -55,6 +55,9 @@ public:
     void render(SpriteBatchRenderer& batch, const glm::vec2& parentOffset,
                 int screenWidth, int screenHeight) override;
 
+    /// @brief A disabled button ignores keyboard and mouse activation.
+    bool isEnabled() const override { return !disabled; }
+
     /// @brief Button label text.
     std::string label;
 

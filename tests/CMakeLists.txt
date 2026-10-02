@@ -161,6 +161,7 @@ add_executable(vestige_tests
     test_cloth_cpu_gpu_parity.cpp
     test_ui_widgets.cpp
     test_ui_system_input.cpp
+    test_ui_overlay_gl_state.cpp
     test_ui_world_projection.cpp
     test_ui_design_widgets.cpp
     test_ui_theme_accessibility.cpp

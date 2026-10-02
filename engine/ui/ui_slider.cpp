@@ -25,6 +25,33 @@ float UISlider::ratio() const
     return std::clamp((value - minValue) / (maxValue - minValue), 0.0f, 1.0f);
 }
 
+namespace
+{
+constexpr float kValueColumnWidth = 72.0f;
+constexpr float kTrackGap         = 24.0f;
+}
+
+float UISlider::trackWidth() const
+{
+    return std::max(size.x - kValueColumnWidth - kTrackGap, 1.0f);
+}
+
+void UISlider::pointerPress(const glm::vec2& local)
+{
+    pointerDrag(local);
+}
+
+void UISlider::pointerDrag(const glm::vec2& local)
+{
+    const float r = std::clamp(local.x / trackWidth(), 0.0f, 1.0f);
+    const float next = minValue + r * (maxValue - minValue);
+    if (next != value)
+    {
+        value = next;
+        onValueChanged.emit(value);
+    }
+}
+
 void UISlider::render(SpriteBatchRenderer& batch,
                       const glm::vec2& parentOffset,
                       int screenWidth, int screenHeight)
@@ -32,12 +59,9 @@ void UISlider::render(SpriteBatchRenderer& batch,
     if (!visible || theme == nullptr) return;
 
     const glm::vec2 absPos = computeAbsolutePosition(parentOffset, screenWidth, screenHeight);
-    const float valueColumnWidth = 72.0f;
-    const float trackGap         = 24.0f;
-
     const float trackY = absPos.y + size.y * 0.5f - theme->sliderTrackHeight * 0.5f;
     const float trackX = absPos.x;
-    const float trackW = size.x - valueColumnWidth - trackGap;
+    const float trackW = trackWidth();
     const float r = ratio();
 
     // Track background.

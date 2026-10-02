@@ -27,6 +27,9 @@ public:
     void render(SpriteBatchRenderer& batch, const glm::vec2& parentOffset,
                 int screenWidth, int screenHeight) override;
 
+    /// @brief Toggles `checked`, then fires `onClick` (3D_E-0746).
+    void activate() override;
+
     bool        checked = false;
     bool        hovered = false;   ///< Drive externally from input handler.
     std::string label;

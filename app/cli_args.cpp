@@ -30,6 +30,10 @@ void printUsage(const char* argv0)
         << "                          first-person walkthrough directly.\n"
         << "                          Inside the engine, Esc toggles back\n"
         << "                          to editor mode.\n"
+        << "  --player                Play as a shipped game would: like\n"
+        << "                          --play, but Esc opens the pause menu\n"
+        << "                          (Resume / Settings / Quit) instead of\n"
+        << "                          the editor.\n"
         << "  --scene PATH            Load a .scene file on startup,\n"
         << "                          replacing the built-in demo. PATH\n"
         << "                          is resolved against the current\n"
@@ -104,6 +108,11 @@ bool parseArgs(int argc, char* argv[], EngineConfig& config, int& exitCode)
         else if (std::strcmp(arg, "--play") == 0)
         {
             config.startInPlayMode = true;
+        }
+        else if (std::strcmp(arg, "--player") == 0)
+        {
+            config.startInPlayMode   = true;
+            config.enableGameScreens = true;
         }
         else if (std::strcmp(arg, "--scene") == 0)
         {

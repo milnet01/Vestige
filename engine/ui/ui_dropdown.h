@@ -47,6 +47,28 @@ public:
 
     /// @brief Returns the currently selected option's label, or "" if out of range.
     const std::string& currentLabel() const;
+
+    /// @brief The option row under @a local (relative to the box's top-left)
+    ///        in the open list, or -1. Rows the list is too short to show
+    ///        are not hit (3D_E-0746).
+    int optionAt(const glm::vec2& local) const;
+
+    /// @brief Closes the list; selects @a index and fires
+    ///        `onSelectionChanged` when it names an option.
+    void choose(int index);
+
+    /// @brief Keyboard activation opens or closes the list.
+    void activate() override;
+
+    /// @brief A press opens a closed list. On an open list it picks the row
+    ///        under the press, or closes the list when no row is there.
+    void pointerPress(const glm::vec2& local) override;
+
+    /// @brief Fired with the chosen index when the user picks an option.
+    Signal<int> onSelectionChanged;
+
+private:
+    float visibleMenuHeight() const;
 };
 
 } // namespace Vestige

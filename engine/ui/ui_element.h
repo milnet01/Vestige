@@ -113,6 +113,29 @@ public:
     /// their own state.
     virtual void collectAccessible(std::vector<UIAccessibilitySnapshot>& out) const;
 
+    /// @brief False when the element ignores activation (a disabled button).
+    ///        Keyboard and mouse both consult it (3D_E-0746).
+    virtual bool isEnabled() const { return true; }
+
+    /// @brief Keyboard (Enter / Space) or mouse activation. Fires `onClick`;
+    ///        a checkbox toggles first.
+    virtual void activate() { onClick.emit(); }
+
+    /// @brief A mouse press landed on this element. @a local is the press
+    ///        point relative to the element's top-left. Default activates.
+    virtual void pointerPress(const glm::vec2& local);
+
+    /// @brief The mouse moved while this element holds the press (a slider
+    ///        drag). Default ignores it.
+    virtual void pointerDrag(const glm::vec2& local);
+
+    /// @brief The topmost visible, interactive element under @a point in this
+    ///        subtree, or null. Later children draw over earlier ones, so they
+    ///        are tried first. @a outAbsPos receives the hit element's top-left.
+    UIElement* findInteractiveAt(const glm::vec2& point, const glm::vec2& parentOffset,
+                                 int screenWidth, int screenHeight,
+                                 glm::vec2& outAbsPos);
+
     // -- Properties --
     glm::vec2 position = {0.0f, 0.0f};  ///< Position relative to anchor
     glm::vec2 size = {100.0f, 30.0f};   ///< Width and height in pixels

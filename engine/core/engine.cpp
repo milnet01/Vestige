@@ -809,6 +809,33 @@ bool Engine::initialize(const EngineConfig& config)
         }
     });
 
+    // 3D_E-0746 — the mouse half of the menu routing below: a left press on
+    // a menu screen goes to the widget under the cursor, and a held press
+    // drags (a slider).
+    m_eventBus.subscribe<MouseButtonPressedEvent>([this](const MouseButtonPressedEvent& event)
+    {
+        if (event.button == GLFW_MOUSE_BUTTON_LEFT && isMenuScreenActive())
+        {
+            m_uiSystem->handleMousePress(m_inputManager->getMousePosition(),
+                                         m_window->getWidth(), m_window->getHeight());
+        }
+    });
+    m_eventBus.subscribe<MouseButtonReleasedEvent>([this](const MouseButtonReleasedEvent& event)
+    {
+        if (event.button == GLFW_MOUSE_BUTTON_LEFT && m_uiSystem)
+        {
+            m_uiSystem->handleMouseRelease();
+        }
+    });
+    m_eventBus.subscribe<MouseMovedEvent>([this](const MouseMovedEvent& event)
+    {
+        if (isMenuScreenActive())
+        {
+            m_uiSystem->handleMouseMove({static_cast<float>(event.xPosition),
+                                         static_cast<float>(event.yPosition)});
+        }
+    });
+
     // Subscribe to key events for engine controls
     m_eventBus.subscribe<KeyPressedEvent>([this](const KeyPressedEvent& event)
     {
@@ -820,18 +847,9 @@ bool Engine::initialize(const EngineConfig& config)
         // consumed the key; unhandled keys (letters, F-keys, etc.)
         // continue to the switch below as before. Repeats are allowed
         // here so a held arrow auto-scrolls the focused row.
-        if (m_enableGameScreens && m_uiSystem)
+        if (isMenuScreenActive() && m_uiSystem->handleKey(event.keyCode, event.mods))
         {
-            const GameScreen current = m_uiSystem->getCurrentScreen();
-            const bool inMenu =
-                current == GameScreen::MainMenu ||
-                current == GameScreen::Paused   ||
-                current == GameScreen::Settings ||
-                m_uiSystem->getTopModalScreen() != GameScreen::None;
-            if (inMenu && m_uiSystem->handleKey(event.keyCode, event.mods))
-            {
-                return;
-            }
+            return;
         }
 
         if (event.isRepeat)
@@ -1319,9 +1337,25 @@ bool Engine::initialize(const EngineConfig& config)
     // Slice 12.2 — cold-start screen for headless game builds. The editor's
     // own EDIT/PLAY mode is orthogonal; when the editor is present we leave
     // the root screen at None so the editor-viewport path owns the frame.
-    if (m_enableGameScreens && m_uiSystem && !m_editor)
+    if (m_enableGameScreens && m_uiSystem)
     {
-        m_uiSystem->setRootScreen(GameScreen::MainMenu);
+        // 3D_E-0746 — the cursor follows the screen: free in menus, captured
+        // in play.
+        m_uiSystem->onRootScreenChanged.connect([this](GameScreen) { syncCursorToGameScreen(); });
+        m_uiSystem->onModalPushed.connect([this](GameScreen) { syncCursorToGameScreen(); });
+        m_uiSystem->onModalPopped.connect([this](GameScreen) { syncCursorToGameScreen(); });
+
+        if (!m_editor)
+        {
+            m_uiSystem->setRootScreen(GameScreen::MainMenu);
+        }
+        else if (config.startInPlayMode)
+        {
+            // `--player`: the editor stays in PLAY mode and the game's own
+            // screens own ESC, as in a shipped game.
+            m_uiSystem->setRootScreen(GameScreen::Playing);
+            Logger::info("Game screens on (--player): Esc opens the pause menu");
+        }
     }
 
     m_isRunning = true;
@@ -1330,6 +1364,32 @@ bool Engine::initialize(const EngineConfig& config)
     Logger::info("Editor camera: Alt+LMB=orbit, MMB=pan, Scroll=zoom, F=focus, Numpad 1/3/7=front/right/top");
     Logger::info("Gamepad: Left stick=move, Right stick=look, LB=sprint, Triggers=up/down");
     return true;
+}
+
+bool Engine::isMenuScreenActive() const
+{
+    if (!m_enableGameScreens || m_uiSystem == nullptr)
+    {
+        return false;
+    }
+    const GameScreen current = m_uiSystem->getCurrentScreen();
+    return current == GameScreen::MainMenu ||
+           current == GameScreen::Paused   ||
+           current == GameScreen::Settings ||
+           m_uiSystem->getTopModalScreen() != GameScreen::None;
+}
+
+void Engine::syncCursorToGameScreen()
+{
+    if (!m_enableGameScreens || m_uiSystem == nullptr ||
+        m_uiSystem->getCurrentScreen() == GameScreen::None)
+    {
+        return;
+    }
+    const bool menu = suppressesWorldInput(m_uiSystem->getCurrentScreen());
+    m_isCursorCaptured = !menu;
+    m_window->setCursorEnabled(menu);
+    m_controller->setEnabled(!menu);
 }
 
 bool Engine::bakeActiveSceneAcoustics()

@@ -25,6 +25,7 @@ namespace Vestige
 {
 
 class TextRenderer;
+class UIDropdown;
 
 /// @brief Manages in-game UI rendering (separate from ImGui editor).
 ///
@@ -235,6 +236,9 @@ public:
     /// retain it.
     UIElement* getFocusedElement() const { return m_focusedElement; }
 
+    /// @brief The element holding the current mouse press, or null (3D_E-0746).
+    UIElement* getPressedElement() const { return m_pressedElement; }
+
     /// @brief Sets keyboard focus explicitly.
     ///
     /// Clears the previous focused element's `focused` flag and sets
@@ -272,6 +276,22 @@ public:
     /// input handler skips its own binding for that key). Keys the
     /// UI doesn't care about (letters, F-keys, etc.) return false.
     bool handleKey(int key, int mods);
+
+    /// @brief 3D_E-0746 — a left mouse press at @a cursor (screen pixels).
+    ///
+    /// An open dropdown list takes the press first: a press on one of its
+    /// rows picks it, a press anywhere else only closes it. Otherwise the
+    /// topmost interactive element under the cursor takes it — from the
+    /// modal canvas while a modal is open, never the root canvas under it.
+    /// The element becomes the keyboard focus; a disabled one does nothing
+    /// else. Returns true iff the UI consumed the press.
+    bool handleMousePress(const glm::vec2& cursor, int screenWidth, int screenHeight);
+
+    /// @brief The mouse moved: continues a drag on the pressed element.
+    void handleMouseMove(const glm::vec2& cursor);
+
+    /// @brief The left button was released: ends any drag.
+    void handleMouseRelease();
 
     // -- Phase 10 slice 12.4: notification queue --
 
@@ -337,6 +357,20 @@ private:
     // Phase 10.9 Slice 3 S4 — currently keyboard-focused element.
     // Non-owning; points into m_canvas / m_modalCanvas.
     UIElement* m_focusedElement = nullptr;
+
+    // 3D_E-0746 — the element holding the mouse press (a slider being
+    // dragged) and the dropdown whose list is open. Non-owning, like
+    // m_focusedElement, and dropped with it whenever a canvas is cleared.
+    UIElement*  m_pressedElement = nullptr;
+    glm::vec2   m_pressedAbsPos{0.0f};
+    UIDropdown* m_openDropdown   = nullptr;
+    glm::vec2   m_openDropdownAbsPos{0.0f};
+    // Bumped by dropInputTargets(): a click whose handler changed screens
+    // has destroyed the element it was dispatched to.
+    std::uint32_t m_inputGeneration = 0;
+
+    /// @brief Forgets every pointer into the canvases; called before a clear.
+    void dropInputTargets();
 
     // 3D_E-0024 — set by markTextStale(), consumed by update().
     bool          m_textStale   = false;

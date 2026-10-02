@@ -212,6 +212,7 @@ tree:
 ```bash
 ./build/bin/vestige-editor          # editor, meadow demo scene (default)
 ./build/bin/vestige-editor --play   # first-person walkthrough
+./build/bin/vestige-editor --player # walkthrough as a game: Esc opens the pause menu
 ./build/bin/vestige-editor --scene path/to/my.scene
 ./build/bin/vestige-editor --material-demo     # the older material-test scene
 ./build/bin/vestige-editor --profile-log=run.csv  # log per-pass timings once a second

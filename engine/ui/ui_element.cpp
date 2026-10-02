@@ -73,6 +73,52 @@ bool UIElement::hitTest(const glm::vec2& point, const glm::vec2& parentOffset,
            point.y >= absPos.y && point.y <= absPos.y + size.y;
 }
 
+void UIElement::pointerPress(const glm::vec2& /*local*/)
+{
+    activate();
+}
+
+void UIElement::pointerDrag(const glm::vec2& /*local*/)
+{
+}
+
+UIElement* UIElement::findInteractiveAt(const glm::vec2& point,
+                                        const glm::vec2& parentOffset,
+                                        int screenWidth, int screenHeight,
+                                        glm::vec2& outAbsPos)
+{
+    if (!visible)
+    {
+        return nullptr;
+    }
+
+    const glm::vec2 absPos =
+        computeAbsolutePosition(parentOffset, screenWidth, screenHeight);
+
+    for (auto it = m_children.rbegin(); it != m_children.rend(); ++it)
+    {
+        if (*it == nullptr)
+        {
+            continue;
+        }
+        UIElement* hit = (*it)->findInteractiveAt(point, absPos, screenWidth,
+                                                  screenHeight, outAbsPos);
+        if (hit != nullptr)
+        {
+            return hit;
+        }
+    }
+
+    if (interactive &&
+        point.x >= absPos.x && point.x <= absPos.x + size.x &&
+        point.y >= absPos.y && point.y <= absPos.y + size.y)
+    {
+        outAbsPos = absPos;
+        return this;
+    }
+    return nullptr;
+}
+
 void UIElement::addChild(std::unique_ptr<UIElement> child)
 {
     m_children.push_back(std::move(child));

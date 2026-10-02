@@ -50,6 +50,17 @@ public:
 
     /// @brief Returns the normalised fill ratio in [0, 1].
     float ratio() const;
+
+    /// @brief Width of the draggable track; the value readout takes the rest.
+    float trackWidth() const;
+
+    /// @brief A press or drag at @a local sets `value` from the x position
+    ///        along the track and fires `onValueChanged` (3D_E-0746).
+    void pointerPress(const glm::vec2& local) override;
+    void pointerDrag(const glm::vec2& local) override;
+
+    /// @brief Fired with the new value when the user moves the slider.
+    Signal<float> onValueChanged;
 };
 
 } // namespace Vestige

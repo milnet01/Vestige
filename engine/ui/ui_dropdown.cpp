@@ -6,6 +6,7 @@
 #include "ui/sprite_batch_renderer.h"
 
 #include <algorithm>
+#include <cstddef>
 
 namespace Vestige
 {
@@ -15,6 +16,61 @@ UIDropdown::UIDropdown()
     interactive = true;
     size = {220.0f, 40.0f};
     m_accessible.role = UIAccessibleRole::Dropdown;
+}
+
+namespace
+{
+constexpr float kItemHeight = 36.0f;  ///< Height of one row in the open list.
+constexpr float kMenuGap    = 4.0f;   ///< Gap between the box and the list.
+}
+
+float UIDropdown::visibleMenuHeight() const
+{
+    const float full = kItemHeight * static_cast<float>(options.size());
+    return theme != nullptr ? std::min(theme->dropdownMenuMaxHeight, full) : full;
+}
+
+int UIDropdown::optionAt(const glm::vec2& local) const
+{
+    const float top = size.y + kMenuGap;
+    if (local.x < 0.0f || local.x > size.x || local.y < top)
+    {
+        return -1;
+    }
+    const auto row = static_cast<std::size_t>((local.y - top) / kItemHeight);
+    const float rowBottom = static_cast<float>(row + 1) * kItemHeight;
+    if (row >= options.size() || rowBottom > visibleMenuHeight())
+    {
+        return -1;
+    }
+    return static_cast<int>(row);
+}
+
+void UIDropdown::choose(int index)
+{
+    open = false;
+    if (index < 0 || static_cast<std::size_t>(index) >= options.size())
+    {
+        return;
+    }
+    selectedIndex = index;
+    onSelectionChanged.emit(index);
+}
+
+void UIDropdown::activate()
+{
+    open = !open;
+}
+
+void UIDropdown::pointerPress(const glm::vec2& local)
+{
+    if (!open)
+    {
+        open = true;
+        return;
+    }
+    // Open: a press on a row picks it; anywhere else closes the list.
+    choose(optionAt(local));
 }
 
 namespace
@@ -89,11 +145,9 @@ void UIDropdown::render(SpriteBatchRenderer& batch,
     // element list since the SpriteBatch doesn't reorder draws by z).
     if (open && !options.empty() && textRenderer != nullptr)
     {
-        const float itemH       = 36.0f;
-        const float menuMaxH    = theme->dropdownMenuMaxHeight;
-        const float menuH       = std::min(menuMaxH,
-                                            itemH * static_cast<float>(options.size()));
-        const glm::vec2 menuPos{absPos.x, absPos.y + size.y + 4.0f};
+        const float itemH       = kItemHeight;
+        const float menuH       = visibleMenuHeight();
+        const glm::vec2 menuPos{absPos.x, absPos.y + size.y + kMenuGap};
         const glm::vec2 menuSize{size.x, menuH};
 
         batch.drawQuad(menuPos, menuSize, theme->bgRaised);

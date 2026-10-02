@@ -11,6 +11,8 @@
 #include "renderer/text_renderer.h"
 #include "ui/menu_prefabs.h"
 #include "ui/subtitle_renderer.h"
+#include "ui/ui_dropdown.h"
+#include "ui/ui_overlay_gl_state.h"
 
 #include <GLFW/glfw3.h>
 #include <glad/gl.h>
@@ -109,7 +111,7 @@ void UISystem::update(float deltaTime)
 
 void UISystem::rebuildOpenScreens()
 {
-    m_focusedElement = nullptr;  // the elements it may point at are rebuilt
+    dropInputTargets();  // the elements they may point at are rebuilt
     m_canvas.clear();
     if (m_rootScreen != GameScreen::None)
     {
@@ -193,16 +195,7 @@ void UISystem::renderUI(int screenWidth, int screenHeight)
         return;
     }
 
-    // Save GL state
-    GLboolean depthWasEnabled;
-    glGetBooleanv(GL_DEPTH_TEST, &depthWasEnabled);
-    GLboolean blendWasEnabled;
-    glGetBooleanv(GL_BLEND, &blendWasEnabled);
-
-    // Set up 2D overlay state
-    glDisable(GL_DEPTH_TEST);
-    glEnable(GL_BLEND);
-    glBlendFunc(GL_SRC_ALPHA, GL_ONE_MINUS_SRC_ALPHA);
+    const UIOverlayGlState overlayState;
 
     // Render root canvas first, then modal overlay on top. Both share the
     // same sprite-batch pass so draw order is strictly back-to-front.
@@ -259,9 +252,6 @@ void UISystem::renderUI(int screenWidth, int screenHeight)
         textPtrForBatch->endBatch2D();
     }
 
-    // Restore GL state
-    if (depthWasEnabled) glEnable(GL_DEPTH_TEST); else glDisable(GL_DEPTH_TEST);
-    if (blendWasEnabled) glEnable(GL_BLEND); else glDisable(GL_BLEND);
 }
 
 // -- Phase 10 slice 12.2: screen-stack machinery ----------------------------
@@ -344,7 +334,7 @@ void UISystem::setRootScreen(GameScreen screen)
 {
     // Clear any modals and the root canvas before rebuilding. Modal capture
     // is dropped — the caller can re-raise a modal by pushing one.
-    m_focusedElement = nullptr;  // 3D_E-0745: the canvases it points into go
+    dropInputTargets();  // 3D_E-0745: the canvases they point into go
     m_modalStack.clear();
     m_modalCanvas.clear();
     m_canvas.clear();
@@ -366,7 +356,7 @@ void UISystem::pushModalScreen(GameScreen screen)
     // The modal-stack model is single-slot in slice 12.2 — the existing
     // canvas gets rebuilt for each push/pop. Deeper stacks arrive in a
     // later slice if a design calls for nested dialogs.
-    m_focusedElement = nullptr;  // 3D_E-0745: may point into the old modal
+    dropInputTargets();  // 3D_E-0745: may point into the old modal
     m_modalCanvas.clear();
     m_modalStack.push_back(screen);
     if (auto builder = resolveBuilder(screen))
@@ -385,7 +375,7 @@ void UISystem::popModalScreen()
     }
     const GameScreen popped = m_modalStack.back();
     m_modalStack.pop_back();
-    m_focusedElement = nullptr;  // 3D_E-0745: may point into the popped modal
+    dropInputTargets();  // 3D_E-0745: may point into the popped modal
     m_modalCanvas.clear();
 
     if (m_modalStack.empty())
@@ -408,6 +398,8 @@ void UISystem::applyIntent(GameScreenIntent intent)
     {
         return;  // Invalid intent for this screen — pure function is total.
     }
+    Logger::info(std::string("[UISystem] ") + gameScreenIntentLabel(intent) + ": "
+                 + gameScreenLabel(current) + " -> " + gameScreenLabel(next));
 
     // Modal close: pop (do not touch the root). The pure function maps
     // Settings + CloseSettings → MainMenu, but the real "return to
@@ -511,7 +503,11 @@ bool UISystem::handleKey(int key, int mods)
         case GLFW_KEY_SPACE:
             if (m_focusedElement != nullptr)
             {
-                m_focusedElement->onClick.emit();
+                // 3D_E-0746: a disabled element swallows the key and does nothing.
+                if (m_focusedElement->isEnabled())
+                {
+                    m_focusedElement->activate();
+                }
                 return true;
             }
             // No focused element: the key was not consumed — lets game
@@ -520,6 +516,72 @@ bool UISystem::handleKey(int key, int mods)
         default:
             return false;
     }
+}
+
+void UISystem::dropInputTargets()
+{
+    m_focusedElement = nullptr;
+    m_pressedElement = nullptr;
+    m_openDropdown   = nullptr;
+    ++m_inputGeneration;
+}
+
+bool UISystem::handleMousePress(const glm::vec2& cursor, int screenWidth, int screenHeight)
+{
+    m_pressedElement = nullptr;
+
+    if (m_openDropdown != nullptr)
+    {
+        UIDropdown* dropdown = m_openDropdown;
+        m_openDropdown = nullptr;
+        dropdown->pointerPress(cursor - m_openDropdownAbsPos);  // pick a row, or close
+        return true;
+    }
+
+    UICanvas& target = (m_modalCanvas.getElementCount() > 0) ? m_modalCanvas : m_canvas;
+    glm::vec2 absPos(0.0f);
+    UIElement* hit = target.findInteractiveAt(cursor, screenWidth, screenHeight, absPos);
+    if (hit == nullptr)
+    {
+        return false;
+    }
+
+    setFocusedElement(hit);
+    if (!hit->isEnabled())
+    {
+        return true;
+    }
+
+    // Read before the press: the press may change screens and destroy `hit`.
+    auto* dropdown = dynamic_cast<UIDropdown*>(hit);
+    const std::uint32_t generation = m_inputGeneration;
+    hit->pointerPress(cursor - absPos);
+    if (generation != m_inputGeneration)
+    {
+        return true;
+    }
+
+    m_pressedElement = hit;
+    m_pressedAbsPos  = absPos;
+    if (dropdown != nullptr && dropdown->open)
+    {
+        m_openDropdown       = dropdown;
+        m_openDropdownAbsPos = absPos;
+    }
+    return true;
+}
+
+void UISystem::handleMouseMove(const glm::vec2& cursor)
+{
+    if (m_pressedElement != nullptr)
+    {
+        m_pressedElement->pointerDrag(cursor - m_pressedAbsPos);
+    }
+}
+
+void UISystem::handleMouseRelease()
+{
+    m_pressedElement = nullptr;
 }
 
 } // namespace Vestige

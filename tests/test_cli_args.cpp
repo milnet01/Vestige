@@ -111,6 +111,16 @@ TEST(CliArgs, PlayFlagSetsPlayMode)
     auto r = run({"--play"});
     EXPECT_TRUE(r.ok);
     EXPECT_TRUE(r.config.startInPlayMode);
+    EXPECT_FALSE(r.config.enableGameScreens);
+}
+
+TEST(CliArgs, PlayerFlagPlaysWithTheGameScreens)
+{
+    // 3D_E-0746 — the only way to reach the player menus from this binary.
+    auto r = run({"--player"});
+    EXPECT_TRUE(r.ok);
+    EXPECT_TRUE(r.config.startInPlayMode);
+    EXPECT_TRUE(r.config.enableGameScreens);
 }
 
 TEST(CliArgs, SceneFlagTakesPathValue)

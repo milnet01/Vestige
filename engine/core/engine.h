@@ -94,7 +94,8 @@ struct EngineConfig
     /// headless game builds) and routes ESC through `UISystem::applyIntent`
     /// so buttons, pause, and settings operate on the pure state machine.
     /// Defaults to false so the editor / `--play` flow is unchanged; game
-    /// projects opt in explicitly.
+    /// projects opt in explicitly. With the editor present (CLI `--player`)
+    /// the root screen starts at `Playing`, so ESC opens the pause menu.
     bool enableGameScreens = false;
 
     /// @brief Opt-in to the Tabernacle built-in demo (CLI: --biblical-demo).
@@ -167,6 +168,16 @@ public:
     void shutdown();
 
 private:
+    /// @brief True while a game menu takes the keyboard and mouse: the root
+    ///        screen is a menu (MainMenu / Paused / Settings) or a modal is open.
+    bool isMenuScreenActive() const;
+
+    /// @brief 3D_E-0746 — under game screens, shows the cursor and stops the
+    ///        movement controller while a menu screen is up, and captures the
+    ///        cursor again on Playing. Leaves the cursor alone at `None`,
+    ///        where the editor owns it.
+    void syncCursorToGameScreen();
+
     void setupDemoScene();          ///< Default: natural meadow benchmark scene (3D_E-0027).
     /// @brief Reshapes the terrain into rolling meadow hills + carves the pond.
     ///        Split out of setupDemoScene() because the terrain heightmap is only

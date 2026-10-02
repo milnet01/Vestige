@@ -44,6 +44,22 @@ bool UICanvas::hitTest(const glm::vec2& point, int screenWidth, int screenHeight
     return false;
 }
 
+UIElement* UICanvas::findInteractiveAt(const glm::vec2& point, int screenWidth,
+                                       int screenHeight, glm::vec2& outAbsPos)
+{
+    const glm::vec2 rootOffset(0.0f);
+    for (auto it = m_elements.rbegin(); it != m_elements.rend(); ++it)
+    {
+        UIElement* hit = (*it)->findInteractiveAt(point, rootOffset, screenWidth,
+                                                  screenHeight, outAbsPos);
+        if (hit != nullptr)
+        {
+            return hit;
+        }
+    }
+    return nullptr;
+}
+
 UIElement* UICanvas::getElementAt(size_t index)
 {
     if (index >= m_elements.size()) return nullptr;

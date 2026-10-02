@@ -48,6 +48,12 @@ public:
     /// @return True if an interactive element is hit.
     bool hitTest(const glm::vec2& point, int screenWidth, int screenHeight) const;
 
+    /// @brief The topmost interactive element under @a point, or null. Later
+    ///        root elements draw over earlier ones, so they are tried first.
+    ///        @a outAbsPos receives the element's top-left (3D_E-0746).
+    UIElement* findInteractiveAt(const glm::vec2& point, int screenWidth,
+                                 int screenHeight, glm::vec2& outAbsPos);
+
     /// @brief Non-owning access to the N-th root element (for the editor
     /// layout inspector). Returns nullptr if @a index is out of range.
     UIElement*       getElementAt(size_t index);
