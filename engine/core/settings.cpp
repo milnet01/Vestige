@@ -4,6 +4,7 @@
 /// @file settings.cpp
 /// @brief Phase 10 — persistent, user-editable engine settings.
 #include "core/settings.h"
+#include "localization/supported_languages.h"
 
 #include "core/logger.h"
 #include "core/settings_migration.h"
@@ -548,12 +549,12 @@ bool isValidColorVisionFilter(const std::string& s)
     return s == "none" || s == "protanopia" || s == "deuteranopia" || s == "tritanopia";
 }
 
-// The four languages bundled in `assets/localization/` (Phase 10 L5).
-// A hand-edited file naming any other code falls back to the reference
-// "en" so the LocalizationService never opens a missing table.
+// The languages bundled in `assets/localization/` (3D_E-0024: one list in
+// supported_languages.h). A hand-edited file naming any other code falls back
+// to the reference "en" so the LocalizationService never opens a missing table.
 bool isValidLanguageCode(const std::string& s)
 {
-    return s == "en" || s == "he" || s == "el" || s == "la";
+    return isSupportedLanguage(s);
 }
 
 } // namespace  (close anon — validate() is public, declared in settings.h)

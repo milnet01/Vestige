@@ -4,6 +4,7 @@
 /// @file settings_editor_panel.cpp
 /// @brief Phase 10 slice 13.5b — ImGui editor panel implementation.
 #include "editor/panels/settings_editor_panel.h"
+#include "localization/supported_languages.h"
 
 #include "core/logger.h"
 #include "core/settings_apply.h"   // extractInputBindings
@@ -769,26 +770,35 @@ void SettingsEditorPanel::drawLocalizationTab()
     ImGui::TextDisabled("Language");
     ImGui::Separator();
 
-    // The four bundled languages (assets/localization/<code>.json),
-    // labelled with their English name + native endonym. Index order
-    // is the wire-code array below; the two stay in lockstep.
-    const char* codes[]  = {"en", "he", "el", "la"};
-    const char* labels[] = {
-        "English",
-        "Hebrew  \xD7\xA2\xD6\xB4\xD7\x91\xD6\xB0\xD7\xA8\xD6\xB4\xD7\x99\xD7\xAA",  // עִבְרִית
-        "Greek  \xCE\x95\xCE\xBB\xCE\xBB\xCE\xB7\xCE\xBD\xCE\xB9\xCE\xBA\xCE\xAC",   // Ελληνικά
-        "Latin  Latina",
-    };
-    constexpr int kNumLangs = 4;
+    // The bundled languages (assets/localization/<code>.json), from the one
+    // list in supported_languages.h (3D_E-0024), labelled with their English
+    // name + native name.
+    std::vector<std::string> labelText;
+    std::vector<const char*> labels;
+    for (const SupportedLanguage& lang : kSupportedLanguages)
+    {
+        const std::string english = lang.englishName;
+        const std::string native  = lang.nativeName;
+        labelText.push_back(english == native ? english : english + "  " + native);
+    }
+    for (const std::string& t : labelText)
+    {
+        labels.push_back(t.c_str());
+    }
+    const int kNumLangs = static_cast<int>(kSupportedLanguages.size());
 
     int idx = 0;
     for (int i = 0; i < kNumLangs; ++i)
     {
-        if (p.localization.language == codes[i]) { idx = i; break; }
+        if (p.localization.language == kSupportedLanguages[static_cast<std::size_t>(i)].code)
+        {
+            idx = i;
+            break;
+        }
     }
-    if (ImGui::Combo("UI language", &idx, labels, kNumLangs))
+    if (ImGui::Combo("UI language", &idx, labels.data(), kNumLangs))
     {
-        const std::string chosen = codes[idx];
+        const std::string chosen = kSupportedLanguages[static_cast<std::size_t>(idx)].code;
         m_editor->mutate([chosen](Settings& s)
         {
             s.localization.language = chosen;

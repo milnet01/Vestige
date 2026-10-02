@@ -15,6 +15,7 @@
 
 #include <glm/glm.hpp>
 
+#include <cstdint>
 #include <functional>
 #include <string>
 #include <unordered_map>
@@ -242,6 +243,14 @@ public:
     /// or `getModalCanvas()` — no reachability check is performed.
     void setFocusedElement(UIElement* el);
 
+    /// @brief 3D_E-0024 — marks the open screens' text stale; the next
+    ///        `update` rebuilds the root screen and the top modal with their
+    ///        current builders, emitting no screen-change signal. Called by the
+    ///        `LanguageChangedEvent` handler, which is published synchronously
+    ///        inside `setLanguage` — rebuilding there could clear a canvas a
+    ///        click callback is iterating.
+    void markTextStale() { m_textStale = true; }
+
     /// @brief Consumes a GLFW key event for keyboard UI navigation.
     ///
     /// Routing (desktop convention):
@@ -290,6 +299,9 @@ private:
     ///        falls back cleanly.
     static ScreenBuilder defaultBuilderFor(GameScreen screen);
 
+    /// @brief Rebuilds the root canvas and the top modal in place (3D_E-0024).
+    void rebuildOpenScreens();
+
 private:
     /// @brief Recomputes `m_theme` from `m_baseTheme` with the current
     ///        scale preset, high-contrast, and reduced-motion flags
@@ -325,6 +337,10 @@ private:
     // Phase 10.9 Slice 3 S4 — currently keyboard-focused element.
     // Non-owning; points into m_canvas / m_modalCanvas.
     UIElement* m_focusedElement = nullptr;
+
+    // 3D_E-0024 — set by markTextStale(), consumed by update().
+    bool          m_textStale   = false;
+    std::uint32_t m_languageSub = 0;  ///< LanguageChangedEvent subscription (0 = none).
 };
 
 } // namespace Vestige

@@ -23,6 +23,16 @@ may change any interface without notice.
 
 ## [Unreleased]
 
+### 2026-10-02 Added — The interface comes in French, German, Spanish, Italian and Brazilian Portuguese (3D_E-0024)
+
+The main, pause and settings menus, the on-screen prompts, the frame
+counter, sliders and the framing of captions now follow the chosen
+language, and changing the language updates the screen that is open.
+Five languages are new and Greek, Hebrew and Latin are complete.
+Accented letters (é, ü, ñ, ç, ã) and dashes now display instead of a
+question mark. The translations were written by Claude and are listed
+in docs/localization/review.md for a native speaker to check.
+
 ### 2026-10-02 Fixed — Switching menu screens no longer leaves the keyboard on a vanished button (3D_E-0745)
 
 After moving through a menu with the keyboard and switching screens,

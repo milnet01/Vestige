@@ -6,6 +6,7 @@
 #include "systems/ui_system.h"
 #include "core/engine.h"
 #include "core/logger.h"
+#include "core/system_events.h"
 #include "renderer/renderer.h"
 #include "renderer/text_renderer.h"
 #include "ui/menu_prefabs.h"
@@ -66,12 +67,22 @@ bool UISystem::initialize(Engine& engine)
                         "— in-game UI will be unavailable");
     }
 
+    // 3D_E-0024 — a language switch re-builds the open screens' text on the
+    // next update, never inside the synchronous publish.
+    m_languageSub = engine.getEventBus().subscribe<LanguageChangedEvent>(
+        [this](const LanguageChangedEvent&) { markTextStale(); });
+
     Logger::info("[UISystem] Initialized");
     return true;
 }
 
 void UISystem::shutdown()
 {
+    if (m_engine != nullptr && m_languageSub != 0)
+    {
+        m_engine->getEventBus().unsubscribe(m_languageSub);
+        m_languageSub = 0;
+    }
     m_canvas.clear();
     m_spriteBatch.shutdown();
     m_engine = nullptr;
@@ -88,6 +99,33 @@ void UISystem::update(float deltaTime)
     // and fade out automatically. The active theme's `transitionDuration`
     // drives the envelope; reduced-motion collapses it to a rectangle.
     m_notifications.advance(deltaTime, m_theme.transitionDuration);
+
+    if (m_textStale)
+    {
+        m_textStale = false;
+        rebuildOpenScreens();
+    }
+}
+
+void UISystem::rebuildOpenScreens()
+{
+    m_focusedElement = nullptr;  // the elements it may point at are rebuilt
+    m_canvas.clear();
+    if (m_rootScreen != GameScreen::None)
+    {
+        if (auto builder = resolveBuilder(m_rootScreen))
+        {
+            builder(m_canvas, m_theme, m_textRenderer, *this);
+        }
+    }
+    if (!m_modalStack.empty())
+    {
+        m_modalCanvas.clear();
+        if (auto builder = resolveBuilder(m_modalStack.back()))
+        {
+            builder(m_modalCanvas, m_theme, m_textRenderer, *this);
+        }
+    }
 }
 
 void UISystem::setBaseTheme(const UITheme& base)

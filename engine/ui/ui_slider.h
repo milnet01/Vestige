@@ -30,6 +30,10 @@ public:
     void render(SpriteBatchRenderer& batch, const glm::vec2& parentOffset,
                 int screenWidth, int screenHeight) override;
 
+    /// @brief The default readout for `percent`, from the `ui.slider.percent`
+    ///        pattern (3D_E-0024). Used when no `formatter` is set.
+    static std::string composePercentText(int percent);
+
     float minValue = 0.0f;
     float maxValue = 100.0f;
     float value    = 50.0f;

@@ -15,6 +15,11 @@ namespace
 // resolve the registered service (design § 5.6). One LocalizationService lives
 // per engine, so a single static handle is sufficient.
 Engine* s_localizationEngine = nullptr;
+
+#ifdef VESTIGE_TEST_HOOKS
+// ScopedStringTableOverride's table, consulted before the service (3D_E-0024).
+const StringTable* s_overrideTable = nullptr;
+#endif
 } // namespace
 
 LocalizationService::~LocalizationService()
@@ -116,6 +121,12 @@ std::string LocalizationService::filePathFor(const std::string& code) const
 
 std::string_view tr(std::string_view key)
 {
+#ifdef VESTIGE_TEST_HOOKS
+    if (s_overrideTable != nullptr && s_overrideTable->contains(key))
+    {
+        return s_overrideTable->get(key);
+    }
+#endif
     if (s_localizationEngine != nullptr)
     {
         if (auto* svc = s_localizationEngine->getSystemRegistry()
@@ -126,5 +137,65 @@ std::string_view tr(std::string_view key)
     }
     return key;
 }
+
+std::string substituteTrArgs(std::string_view pattern, std::initializer_list<TrArg> args)
+{
+    std::string out;
+    out.reserve(pattern.size());
+    for (std::size_t i = 0; i < pattern.size(); ++i)
+    {
+        const char c = pattern[i];
+        const bool doubled = i + 1 < pattern.size() && pattern[i + 1] == c;
+        if ((c == '{' || c == '}') && doubled)
+        {
+            out.push_back(c);  // "{{" / "}}" write one brace
+            ++i;
+            continue;
+        }
+        if (c == '{')
+        {
+            const std::size_t close = pattern.find('}', i + 1);
+            if (close != std::string_view::npos)
+            {
+                const std::string_view name = pattern.substr(i + 1, close - i - 1);
+                const TrArg* match = nullptr;
+                for (const TrArg& a : args)
+                {
+                    if (a.name == name)
+                    {
+                        match = &a;
+                        break;
+                    }
+                }
+                if (match != nullptr)
+                {
+                    out += match->value;
+                    i = close;
+                    continue;
+                }
+            }
+        }
+        out.push_back(c);
+    }
+    return out;
+}
+
+std::string trf(std::string_view key, std::initializer_list<TrArg> args)
+{
+    return substituteTrArgs(tr(key), args);
+}
+
+#ifdef VESTIGE_TEST_HOOKS
+ScopedStringTableOverride::ScopedStringTableOverride(const StringTable& table)
+    : m_previous(s_overrideTable)
+{
+    s_overrideTable = &table;
+}
+
+ScopedStringTableOverride::~ScopedStringTableOverride()
+{
+    s_overrideTable = m_previous;
+}
+#endif
 
 } // namespace Vestige

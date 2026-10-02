@@ -8,6 +8,7 @@
 
 #include "ui/ui_world_projection.h"
 #include "ui/ui_interaction_prompt.h"
+#include "localization_test_helpers.h"
 
 #include <glm/gtc/matrix_transform.hpp>
 
@@ -80,9 +81,11 @@ TEST(UIWorldProjection, ZeroSizeViewportYieldsZeroPixelCoords)
 
 TEST(UIInteractionPrompt, ComposedTextFormat)
 {
+    TestLocalization::EnglishStrings english;  // the pattern comes from en.json
+    ASSERT_TRUE(english.loaded());
     UIInteractionPrompt p;
     p.keyLabel = "F";
-    p.actionVerb = "open door";
+    p.actionVerb = "open door";  // a plain word, not a key: shown as written
     EXPECT_EQ(p.composedText(), "Press [F] to open door");
 }
 

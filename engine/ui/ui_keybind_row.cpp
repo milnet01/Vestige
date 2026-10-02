@@ -65,7 +65,7 @@ void UIKeybindRow::render(SpriteBatchRenderer& batch,
     if (textRenderer != nullptr)
     {
         const std::string keyLabel = listening
-            ? "PRESS KEY..."
+            ? std::string(tr("ui.keybind.press_key"))
             : (keyText.empty() ? "—" : keyText);
         const glm::vec3 keyColor = (listening || hovered)
             ? glm::vec3(theme->accent)

@@ -2,6 +2,7 @@
 // SPDX-License-Identifier: MIT
 
 #include "ui/ui_fps_counter.h"
+#include "localization/localization_service.h"
 #include "renderer/text_renderer.h"
 
 #include <algorithm>
@@ -34,11 +35,15 @@ void UIFpsCounter::render(SpriteBatchRenderer& /*batch*/,
 
     const glm::vec2 absPos = computeAbsolutePosition(parentOffset, screenWidth, screenHeight);
 
-    char buf[32];
-    std::snprintf(buf, sizeof(buf), "%.0f FPS", static_cast<double>(m_smoothedFps));
-
-    textRenderer->renderText2D(buf, absPos.x, absPos.y, scale, color,
+    textRenderer->renderText2D(composeText(m_smoothedFps), absPos.x, absPos.y, scale, color,
                                 screenWidth, screenHeight);
+}
+
+std::string UIFpsCounter::composeText(float fps)
+{
+    char buf[32];
+    std::snprintf(buf, sizeof(buf), "%.0f", static_cast<double>(fps));
+    return trf("ui.hud.fps", {{"fps", buf}});
 }
 
 } // namespace Vestige

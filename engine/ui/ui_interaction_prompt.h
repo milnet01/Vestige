@@ -33,8 +33,10 @@ public:
     /// @brief Key binding to display, e.g. "E", "F", "LMB".
     std::string keyLabel = "E";
 
-    /// @brief Action verb, e.g. "open", "use", "pick up".
-    std::string actionVerb = "use";
+    /// @brief Action verb as a string-table key (3D_E-0024), e.g.
+    ///        "ui.prompt.verb.use"; resolved with `tr` each time the text is
+    ///        built. A plain word ("open") shows as written, untranslated.
+    std::string actionVerb = "ui.prompt.verb.use";
 
     /// @brief Below this distance the prompt is fully opaque.
     float fadeNear = 2.5f;

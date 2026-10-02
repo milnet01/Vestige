@@ -30,6 +30,19 @@ TextRenderer::~TextRenderer()
     }
 }
 
+const std::vector<CodepointRange>& primaryUiGlyphRanges()
+{
+    static const std::vector<CodepointRange> ranges = {
+        {0x0020, 0x007E},  // printable ASCII (Latin)
+        {0x00A0, 0x00FF},  // Latin-1 Supplement — é ü ñ ç ã (3D_E-0024)
+        {0x0100, 0x017F},  // Latin Extended-A — œ, Latin macrons
+        {0x0370, 0x03FF},  // basic Greek
+        {0x1F00, 0x1FFF},  // Greek Extended (polytonic) — loaded if the face has it
+        {0x2010, 0x2027},  // General Punctuation — dashes, quotes, ellipsis
+    };
+    return ranges;
+}
+
 bool TextRenderer::initialize(const std::string& fontPath, const std::string& shaderPath,
                                 int pixelSize)
 {
@@ -38,11 +51,7 @@ bool TextRenderer::initialize(const std::string& fontPath, const std::string& sh
     // the bundled Frank Ruhl Libre Hebrew serif, loaded with the Hebrew range.
     // Pure-script strings hit a single font (and atlas), so the common HUD
     // path keeps its single bind+draw (see drawRuns / the MRU cache).
-    const std::vector<CodepointRange> latinGreek = {
-        {0x0020, 0x007E},  // printable ASCII (Latin)
-        {0x0370, 0x03FF},  // basic Greek
-        {0x1F00, 0x1FFF},  // Greek Extended (polytonic) — loaded if the face has it
-    };
+    const std::vector<CodepointRange>& latinGreek = primaryUiGlyphRanges();
 
     auto primary = std::make_shared<Font>();
     if (!primary->loadFromFile(fontPath, pixelSize, latinGreek))

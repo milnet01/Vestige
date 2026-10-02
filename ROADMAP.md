@@ -1032,8 +1032,20 @@ Full spatial audio pipeline with dynamic mixing, occlusion, and adaptive music. 
   SHIPPED 2026-06-11 — slice L5 (commit bef6601): language picker in the settings editor panel's own Language tab, backed by schema v2→v3 + the LocalizationServiceApplySink live-apply path.
   Kind: implement.
 
-- 📋 [3D_E-0024] **Expand interface language coverage — route remaining UI/HUD/editor strings through `tr()` and add modern locales beyond the seed set.**
+- ✅ [3D_E-0024] **Expand interface language coverage — route remaining UI/HUD/editor strings through `tr()` and add modern locales beyond the seed set.**
   The L1–L6 bundle shipped the localization *machinery* (UTF-8, FontStack for Latin/Greek/Hebrew, RTL reorder, StringTable + LocalizationService + tr(), the Settings Language picker, and the localization_audit.py CI gate). What is still thin is the *content*: only main-menu buttons are routed through tr() (en.json holds ~6 keys), and the seed locale set is en/el/he/la with Hebrew already missing keys. Two-part scope: (1) prerequisite — sweep the remaining hardcoded UI/HUD/editor strings behind tr() keys so they become translatable (the localization_audit.py gate already flags un-keyed strings); (2) author full string tables for additional locales. Suggested first modern set: fr, de, es, it, pt-BR (community-standard UI languages, all Latin-script so no new FontStack work); el/he/la stay the biblical-scholarship set and get completed to full key coverage in the same pass. New non-Latin scripts (e.g. Arabic, CJK) are a later, separate item — each needs a FontStack glyph-range + shaping review. Prefer a translation-management workflow over hand-editing JSON as the key count grows.
+  Resolved 2026-10-02: built to docs/specs/3D_E-0024-interface-languages.md
+  (accepted at its review cap). Correction to this item: Latin-script
+  languages DID need font work — the UI face loaded ASCII only, so
+  accented letters rendered as "?"; Latin-1, Latin Extended-A and General
+  Punctuation are now loaded. 38 keys in nine tables; trf patterns with
+  named slots; menus keyed; UISystem rebuilds open screens on a language
+  change; one language list (supported_languages.h). Tests
+  LocalizationFormat.*, LocalizationTables.*, MarkTextStale..., and the
+  two new WILL_FAIL audit ctests, each seen red.
+  DECISIONS FOR THE USER: translations are Claude-written, unreviewed
+  (docs/localization/review.md); editor text and input key/action names
+  stay English (spec §3). Owed: the in-app check in spec §7.
   **Layman:** Make more of the on-screen text translatable and ship translations for more languages so people can use the app in their own language.
   Kind: feature.
   Source: user-request-2026-07-04.

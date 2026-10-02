@@ -9,6 +9,8 @@
 
 #include <glm/glm.hpp>
 
+#include <string>
+
 namespace Vestige
 {
 
@@ -27,6 +29,9 @@ public:
 
     void render(SpriteBatchRenderer& batch, const glm::vec2& parentOffset,
                 int screenWidth, int screenHeight) override;
+
+    /// @brief The readout for `fps`, from the `ui.hud.fps` pattern (3D_E-0024).
+    static std::string composeText(float fps);
 
     /// @brief Feeds a frame's delta-time into the smoothed FPS estimate.
     /// Safe to call with deltaSeconds == 0 (no-op).

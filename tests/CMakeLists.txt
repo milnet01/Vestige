@@ -108,6 +108,8 @@ add_executable(vestige_tests
     test_ambient_system.cpp
     test_audio_bus_activity.cpp
     test_audio_channel_formats.cpp
+    test_localization_format.cpp
+    test_localization_tables.cpp
     test_physics_character_controller.cpp
     test_physics_constraint.cpp
     test_cloth_simulator.cpp
@@ -445,6 +447,26 @@ if(Python3_FOUND)
     )
     set_tests_properties(LocalizationAuditCatchesHardcoded
                          PROPERTIES WILL_FAIL TRUE)
+
+    # 3D_E-0024 INV-6 — one fixture per new check, each with a single defect:
+    # a key held in a table that en.json lacks, and a literal passed to the
+    # menu builders' makeLabel.
+    foreach(_l10n_case keys menu)
+        if(_l10n_case STREQUAL "keys")
+            set(_l10n_name LocalizationAuditCatchesMissingTableKey)
+        else()
+            set(_l10n_name LocalizationAuditCatchesMenuLiteral)
+        endif()
+        add_test(
+            NAME ${_l10n_name}
+            COMMAND Python3::Interpreter
+                    ${CMAKE_SOURCE_DIR}/tools/localization_audit.py --strict
+                    --root ${CMAKE_CURRENT_SOURCE_DIR}/fixtures/localization_audit_${_l10n_case}
+                    --reference ${CMAKE_CURRENT_SOURCE_DIR}/fixtures/localization_audit_${_l10n_case}/en.json
+                    --secondary ${CMAKE_CURRENT_SOURCE_DIR}/fixtures/localization_audit_${_l10n_case}/en.json
+        )
+        set_tests_properties(${_l10n_name} PROPERTIES WILL_FAIL TRUE)
+    endforeach()
 
     # --- 3D_E-0628 — input-poll audit (input spec § 12) ------------------------
     # "No raw key poll is reachable from gameplay code." The spec defines the

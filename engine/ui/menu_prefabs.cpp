@@ -85,20 +85,20 @@ void buildMainMenuImpl(UICanvas& canvas, const UITheme& theme,
     canvas.addElement(makePanel({0, 0}, {1920, 1080}, theme.bgBase));
 
     // Top chrome — caption + version + hairline rule.
-    canvas.addElement(makeLabel("VESTIGE  3D ENGINE",
+    canvas.addElement(makeLabel("VESTIGE  3D ENGINE",  // i18n-exempt: product name
                                   {96, 56}, 0.22f, theme.textSecondary, textRenderer));
     canvas.addElement(makeLabel(std::string("v ") + VESTIGE_ENGINE_VERSION + "  OPENGL 4.5  MIT",
                                   {1920 - 96 - 280, 56}, 0.22f, theme.textSecondary, textRenderer));
     canvas.addElement(makePanel({96, 86}, {1920 - 192, 1}, theme.rule));
 
     // Left column — wordmark + chapter caption.
-    canvas.addElement(makeLabel("EXPLORATION ENGINE",
+    canvas.addElement(makeLabel(std::string(Vestige::tr("ui.menu.tagline")),
                                   {96, 220}, 0.22f, theme.textSecondary, textRenderer));
-    auto wordmark = makeLabel("Vestige",
+    auto wordmark = makeLabel("Vestige",  // i18n-exempt: product name
                                 {96, 244}, 1.4f, theme.textPrimary, textRenderer);
     wordmark->size = {720, 168};
     canvas.addElement(std::move(wordmark));
-    canvas.addElement(makeLabel("CHAPTER I  THE TABERNACLE",
+    canvas.addElement(makeLabel(std::string(Vestige::tr("ui.menu.chapter")),
                                   {96, 420}, 0.22f, glm::vec3(theme.accent), textRenderer));
 
     // Menu buttons — vertical stack at left:96, top:520. Each item carries an
@@ -144,9 +144,9 @@ void buildMainMenuImpl(UICanvas& canvas, const UITheme& theme,
     // (scene, pillar). It returns when a save system records a real session.
 
     // Footer keyboard hints.
-    canvas.addElement(makeLabel("(c) 2026 ANTHONY SCHEMEL  MIT",
+    canvas.addElement(makeLabel("(c) 2026 ANTHONY SCHEMEL  MIT",  // i18n-exempt: copyright
                                   {96, 1080 - 56}, 0.20f, theme.textSecondary, textRenderer));
-    canvas.addElement(makeLabel("UP DOWN NAVIGATE     ENTER SELECT     ESC QUIT",
+    canvas.addElement(makeLabel(std::string(Vestige::tr("ui.menu.hints")),
                                   {1920 - 96 - 600, 1080 - 56}, 0.20f, theme.textSecondary, textRenderer));
 }
 
@@ -163,10 +163,10 @@ void buildPauseMenuImpl(UICanvas& canvas, const UITheme& theme,
                                   {0.039f, 0.031f, 0.024f, 0.72f}));
 
     // "PAUSED" caption above the panel.
-    canvas.addElement(makeLabel("PAUSED",
+    canvas.addElement(makeLabel(std::string(Vestige::tr("ui.pause.title")),
                                   {(1920.0f - 200.0f) * 0.5f, 160.0f},
                                   0.28f, glm::vec3(theme.accent), textRenderer));
-    canvas.addElement(makeLabel("INPUT SUSPENDED",
+    canvas.addElement(makeLabel(std::string(Vestige::tr("ui.pause.subtitle")),
                                   {(1920.0f - 480.0f) * 0.5f, 200.0f},
                                   0.22f, theme.textSecondary, textRenderer));
 
@@ -196,27 +196,27 @@ void buildPauseMenuImpl(UICanvas& canvas, const UITheme& theme,
     cornerStripeV(panelX + panelW - bracketThick, panelY + panelH - bracketLen);
 
     // Headline + caption inside panel.
-    canvas.addElement(makeLabel("The walk is held.",
+    canvas.addElement(makeLabel(std::string(Vestige::tr("ui.pause.headline")),
                                   {panelX + panelW * 0.5f - 220.0f, panelY + 80.0f},
                                   1.0f, theme.textPrimary, textRenderer));
 
     // Buttons.
     struct PauseItem
     {
-        const char*      label;
+        const char*      key;         // string-table key (3D_E-0024)
         UIButtonStyle    style;
         const char*      shortcut;    // nullable
         GameScreenIntent intent;
         bool             hasIntent;   // Save / Save As / Load stay inert.
     };
     const PauseItem items[] = {
-        {"Resume",            UIButtonStyle::PRIMARY, "ESC", GameScreenIntent::Resume,        true},
-        {"Save",              UIButtonStyle::DEFAULT, "F5",  GameScreenIntent::OpenMainMenu,  false},
-        {"Save As...",        UIButtonStyle::DEFAULT, nullptr, GameScreenIntent::OpenMainMenu, false},
-        {"Load",              UIButtonStyle::DEFAULT, nullptr, GameScreenIntent::OpenMainMenu, false},
-        {"Settings",          UIButtonStyle::DEFAULT, nullptr, GameScreenIntent::OpenSettings, true},
-        {"Quit to Main Menu", UIButtonStyle::DEFAULT, nullptr, GameScreenIntent::QuitToMain,   true},
-        {"Quit to Desktop",   UIButtonStyle::DANGER,  nullptr, GameScreenIntent::QuitToDesktop, true},
+        {"ui.pause.resume",         UIButtonStyle::PRIMARY, "ESC", GameScreenIntent::Resume,        true},
+        {"ui.pause.save",           UIButtonStyle::DEFAULT, "F5",  GameScreenIntent::OpenMainMenu,  false},
+        {"ui.pause.save_as",        UIButtonStyle::DEFAULT, nullptr, GameScreenIntent::OpenMainMenu, false},
+        {"ui.pause.load",           UIButtonStyle::DEFAULT, nullptr, GameScreenIntent::OpenMainMenu, false},
+        {"ui.pause.settings",       UIButtonStyle::DEFAULT, nullptr, GameScreenIntent::OpenSettings, true},
+        {"ui.pause.quit_to_main",   UIButtonStyle::DEFAULT, nullptr, GameScreenIntent::QuitToMain,   true},
+        {"ui.pause.quit_to_desktop", UIButtonStyle::DANGER,  nullptr, GameScreenIntent::QuitToDesktop, true},
     };
     constexpr float btnH = 52.0f;
     constexpr float btnGap = 4.0f;
@@ -224,7 +224,7 @@ void buildPauseMenuImpl(UICanvas& canvas, const UITheme& theme,
     float by = panelY + 220.0f;
     for (const auto& it : items)
     {
-        auto b = makeButton(it.label, {panelX + 56.0f, by}, {btnW, btnH},
+        auto b = makeButton(std::string(Vestige::tr(it.key)), {panelX + 56.0f, by}, {btnW, btnH},
                              it.style, theme, textRenderer);
         b->small = true;  // 40 px-class button-text size; fits 52 px height with padding.
         if (it.shortcut)
@@ -259,13 +259,13 @@ void buildSettingsMenuImpl(UICanvas& canvas, const UITheme& theme,
     canvas.addElement(makePanel({modalX, modalY}, {modalW, modalH}, theme.panelBg));
 
     // Header — "Settings" title + ESC close button.
-    canvas.addElement(makeLabel("VESTIGE  CONFIGURATION",
+    canvas.addElement(makeLabel(std::string(Vestige::tr("ui.settings.caption")),
                                   {modalX + 48.0f, modalY + 28.0f},
                                   0.22f, theme.textSecondary, textRenderer));
-    canvas.addElement(makeLabel("Settings",
+    canvas.addElement(makeLabel(std::string(Vestige::tr("ui.settings.title")),
                                   {modalX + 48.0f, modalY + 60.0f},
                                   0.95f, theme.textPrimary, textRenderer));
-    auto closeBtn = makeButton("ESC  CLOSE",
+    auto closeBtn = makeButton(std::string(Vestige::tr("ui.settings.close")),
                                 {modalX + modalW - 200.0f, modalY + 32.0f},
                                 {160.0f, 40.0f},
                                 UIButtonStyle::GHOST, theme, textRenderer);
@@ -284,12 +284,14 @@ void buildSettingsMenuImpl(UICanvas& canvas, const UITheme& theme,
     canvas.addElement(makePanel({sidebarX + sidebarW, sidebarY},
                                   {1, modalH - 160.0f}, theme.ruleStrong));
 
+    // String-table keys (3D_E-0024); the "01  " number prefix is not text
+    // to translate and is joined in code below.
     const char* categories[] = {
-        "01  Display",
-        "02  Audio",
-        "03  Controls",
-        "04  Gameplay",
-        "05  Accessibility",
+        "ui.settings.category.display",
+        "ui.settings.category.audio",
+        "ui.settings.category.controls",
+        "ui.settings.category.gameplay",
+        "ui.settings.category.accessibility",
     };
     for (size_t i = 0; i < std::size(categories); ++i)
     {
@@ -305,7 +307,9 @@ void buildSettingsMenuImpl(UICanvas& canvas, const UITheme& theme,
         const glm::vec3 col = (i == 0)
             ? glm::vec3(theme.accent)
             : theme.textPrimary;
-        canvas.addElement(makeLabel(categories[i],
+        const std::string categoryLabel = "0" + std::to_string(i + 1) + "  "
+                                        + std::string(Vestige::tr(categories[i]));
+        canvas.addElement(makeLabel(categoryLabel,
                                       {sidebarX + 48.0f, catY + 18.0f},
                                       0.34f, col, textRenderer));
     }
@@ -314,18 +318,18 @@ void buildSettingsMenuImpl(UICanvas& canvas, const UITheme& theme,
     const float footerY = modalY + modalH - 70.0f;
     canvas.addElement(makePanel({modalX + 48.0f, footerY - 16.0f},
                                   {modalW - 96.0f, 1}, theme.ruleStrong));
-    canvas.addElement(makeLabel("ALL CHANGES SAVED",
+    canvas.addElement(makeLabel(std::string(Vestige::tr("ui.settings.saved")),
                                   {modalX + 48.0f, footerY + 18.0f},
                                   0.22f, theme.textSecondary, textRenderer));
 
-    auto defaultsBtn = makeButton("RESTORE DEFAULTS",
+    auto defaultsBtn = makeButton(std::string(Vestige::tr("ui.settings.restore_defaults")),
                                     {modalX + modalW - 600.0f, footerY},
                                     {200.0f, 40.0f},
                                     UIButtonStyle::GHOST, theme, textRenderer);
     defaultsBtn->small = true;
     canvas.addElement(std::move(defaultsBtn));
 
-    auto revertBtn = makeButton("REVERT",
+    auto revertBtn = makeButton(std::string(Vestige::tr("ui.settings.revert")),
                                   {modalX + modalW - 380.0f, footerY},
                                   {120.0f, 40.0f},
                                   UIButtonStyle::DEFAULT, theme, textRenderer);
@@ -333,7 +337,7 @@ void buildSettingsMenuImpl(UICanvas& canvas, const UITheme& theme,
     revertBtn->disabled = true;
     canvas.addElement(std::move(revertBtn));
 
-    auto applyBtn = makeButton("APPLY",
+    auto applyBtn = makeButton(std::string(Vestige::tr("ui.settings.apply")),
                                  {modalX + modalW - 240.0f, footerY},
                                  {120.0f, 40.0f},
                                  UIButtonStyle::PRIMARY, theme, textRenderer);

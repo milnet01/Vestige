@@ -2,6 +2,7 @@
 // SPDX-License-Identifier: MIT
 
 #include "ui/ui_slider.h"
+#include "localization/localization_service.h"
 #include "renderer/text_renderer.h"
 #include "ui/sprite_batch_renderer.h"
 
@@ -87,9 +88,7 @@ void UISlider::render(SpriteBatchRenderer& batch,
         }
         else
         {
-            char buf[32];
-            std::snprintf(buf, sizeof(buf), "%d %%", static_cast<int>(value + 0.5f));
-            formatted = buf;
+            formatted = composePercentText(static_cast<int>(value + 0.5f));
         }
         // Right-align by approximate string width — TextRenderer doesn't expose
         // measure-text yet; use a per-char heuristic (mono = ~9 px at scale 0.32).
@@ -101,6 +100,11 @@ void UISlider::render(SpriteBatchRenderer& batch,
                                     theme->textSecondary,
                                     screenWidth, screenHeight);
     }
+}
+
+std::string UISlider::composePercentText(int percent)
+{
+    return trf("ui.slider.percent", {{"value", std::to_string(percent)}});
 }
 
 } // namespace Vestige

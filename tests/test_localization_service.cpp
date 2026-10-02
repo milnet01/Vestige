@@ -14,6 +14,8 @@
 #include "core/system_events.h"
 #include "localization/localization_service.h"
 
+#include <filesystem>
+#include <fstream>
 #include <string>
 #include <vector>
 
@@ -34,6 +36,26 @@ LocalizationService makeService(Engine& engine)
     EXPECT_TRUE(svc.initialize(engine));
     return svc;
 }
+
+// 3D_E-0024 — the shipped tables are complete, so a language with gaps is a
+// fixture: en carries three keys, "he" translates one of them.
+std::filesystem::path writePartialTables()
+{
+    const auto dir = std::filesystem::temp_directory_path() / "vestige_partial_l10n";
+    std::filesystem::create_directories(dir);
+    std::ofstream(dir / "en.json")
+        << R"({"ui.menu.quit": "Quit", "ui.menu.settings": "Settings", "ui.menu.templates": "Templates"})";
+    std::ofstream(dir / "he.json") << R"({"ui.menu.settings": "הגדרות"})";
+    return dir;
+}
+
+LocalizationService makePartialService(Engine& engine)
+{
+    LocalizationService svc;
+    svc.setLocalizationDir(writePartialTables().string());
+    EXPECT_TRUE(svc.initialize(engine));
+    return svc;
+}
 } // namespace
 
 // Test 16 — active "he" lacks "ui.menu.quit"; tr() falls back to the English
@@ -41,7 +63,7 @@ LocalizationService makeService(Engine& engine)
 TEST(LocalizationService, FallbackToEnglish)
 {
     Engine engine;
-    LocalizationService svc = makeService(engine);
+    LocalizationService svc = makePartialService(engine);
 
     ASSERT_TRUE(svc.setLanguage("he"));
     EXPECT_EQ(svc.languageCode(), "he");
@@ -113,13 +135,13 @@ TEST(LocalizationService, LiveApplyHotSwapsTable)
     EXPECT_EQ(svc.tr("ui.menu.settings"), "הגדרות");
 }
 
-// Test 22 — the editor "missing keys" overlay worklist: en.json carries 5
-// keys, he.json 3, so two keys (templates, quit) render the English fallback
-// and must surface as missing. Sorted output.
+// Test 22 — the editor "missing keys" overlay worklist: the fixture's en
+// carries 3 keys and its "he" 1, so two keys (templates, quit) render the
+// English fallback and must surface as missing. Sorted output.
 TEST(LocalizationService, MissingKeysReport)
 {
     Engine engine;
-    LocalizationService svc = makeService(engine);
+    LocalizationService svc = makePartialService(engine);
 
     // Reference is "en"; active "en" → nothing missing.
     EXPECT_TRUE(svc.missingKeys().empty());

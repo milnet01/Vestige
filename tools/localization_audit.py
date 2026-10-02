@@ -14,7 +14,7 @@ STRICT by default (reviewer decision 4). Fails the build (exit non-zero) on:
 REPORTS ONLY (never fails the build):
 
   3. Keys present in the reference but missing from a secondary language
-     (he / el / la). Runtime English-fallback (decision 1) makes a
+     (every other table in assets/localization). Runtime English-fallback (decision 1) makes a
      not-yet-translated secondary string a non-bug, so gating it would block
      incremental translation.
 
@@ -49,6 +49,8 @@ _SINK_PATTERNS = [
     re.compile(r"""\brenderText2DOblique\s*\(\s*\""""),      # renderText2DOblique("...")
     re.compile(r"""\brenderText3D\s*\(\s*\""""),             # renderText3D("...")
     re.compile(r"""\b(?:UILabel|UIWorldLabel)\s*\(\s*\""""), # UILabel("...")
+    re.compile(r"""\bmakeLabel\s*\(\s*\""""),              # menu_prefabs makeLabel("...")
+    re.compile(r"""\bmakeButton\s*\(\s*\""""),             # menu_prefabs makeButton("...")
 ]
 
 # An empty string literal ("") is not user-visible text — skip it.
@@ -58,6 +60,11 @@ _EXEMPT = "// i18n-exempt"
 
 # --- Check 2: tr("...") literal keys -----------------------------------------
 _TR_KEY = re.compile(r"""\btr\s*\(\s*"([^"]*)"\s*\)""")
+
+# 3D_E-0024 — any literal shaped like a string-table key, wherever it sits (a
+# menu table, a trf call), must exist in the reference too. tr("...") alone
+# misses keys held in tables.
+_KEY_LITERAL = re.compile(r'"((?:ui|subtitle|input)\.[A-Za-z0-9_.]+)"')
 
 
 def load_keys(path: Path) -> set[str]:
@@ -87,6 +94,8 @@ def scan_sources(roots: list[Path]) -> tuple[list[str], list[tuple[str, str]]]:
             for n, line in enumerate(lines, start=1):
                 loc = f"{path}:{n}"
                 for m in _TR_KEY.finditer(line):
+                    tr_uses.append((m.group(1), loc))
+                for m in _KEY_LITERAL.finditer(line):
                     tr_uses.append((m.group(1), loc))
                 if _EXEMPT in line or "tr(" in line:
                     continue
@@ -121,8 +130,11 @@ def main(argv: list[str] | None = None) -> int:
     if args.secondary is not None:
         secondaries = [Path(p) for p in args.secondary]
     else:
+        # 3D_E-0024 — every table present except the reference; the shipped
+        # list itself lives in C++ (supported_languages.h).
         loc_dir = repo / "assets" / "localization"
-        secondaries = [loc_dir / f"{c}.json" for c in ("he", "el", "la")]
+        secondaries = sorted(p for p in loc_dir.glob("*.json")
+                             if p.name != reference.name)
 
     if not reference.is_file():
         print(f"localization_audit: reference not found: {reference}", file=sys.stderr)

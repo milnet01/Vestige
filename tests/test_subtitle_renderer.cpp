@@ -10,6 +10,7 @@
 #include "ui/subtitle.h"
 #include "ui/subtitle_renderer.h"
 #include "subtitle_test_helpers.h"
+#include "localization_test_helpers.h"
 
 using namespace Vestige;
 using Vestige::Testing::makeLine;
@@ -74,6 +75,8 @@ TEST(SubtitleRendererLayout, EmptyQueueProducesEmptyLayout)
 
 TEST(SubtitleRendererLayout, SingleDialogueLineComposesSpeakerPrefix)
 {
+    TestLocalization::EnglishStrings english;  // the pattern comes from en.json
+    ASSERT_TRUE(english.loaded());
     SubtitleQueue queue;
     queue.enqueue(makeLine("Draw near the mountain.", 3.0f,
                            SubtitleCategory::Dialogue, "Moses"));
@@ -86,6 +89,8 @@ TEST(SubtitleRendererLayout, SingleDialogueLineComposesSpeakerPrefix)
 
 TEST(SubtitleRendererLayout, SoundCueWrapsTextInBrackets)
 {
+    TestLocalization::EnglishStrings english;
+    ASSERT_TRUE(english.loaded());
     SubtitleQueue queue;
     queue.enqueue(makeLine("wind howls", 3.0f, SubtitleCategory::SoundCue));
     SubtitleLayoutParams params;

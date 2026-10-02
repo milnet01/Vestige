@@ -392,3 +392,40 @@ TEST_F(MenuPrefabsTest, LegacyOverloadConnectsNoSignals)
         }
     }
 }
+
+// ---------------------------------------------------------------------------
+// 3D_E-0024 INV-3 — a language change rebuilds the open screens on the next
+// update, not in the handler, and fires no screen-change signal.
+// ---------------------------------------------------------------------------
+
+TEST_F(UISystemScreenStackTest, MarkTextStaleRebuildsOpenScreensOnNextUpdate)
+{
+    int rootBuilds  = 0;
+    int modalBuilds = 0;
+    sys.setScreenBuilder(GameScreen::MainMenu,
+        [&](UICanvas&, const UITheme&, TextRenderer*, UISystem&) { ++rootBuilds; });
+    sys.setScreenBuilder(GameScreen::Settings,
+        [&](UICanvas&, const UITheme&, TextRenderer*, UISystem&) { ++modalBuilds; });
+    sys.setRootScreen(GameScreen::MainMenu);
+    sys.pushModalScreen(GameScreen::Settings);
+    ASSERT_EQ(rootBuilds, 1);
+    ASSERT_EQ(modalBuilds, 1);
+
+    int signals = 0;
+    sys.onRootScreenChanged.connect([&](GameScreen) { ++signals; });
+    sys.onModalPushed.connect([&](GameScreen) { ++signals; });
+    sys.onModalPopped.connect([&](GameScreen) { ++signals; });
+
+    sys.markTextStale();
+    EXPECT_EQ(rootBuilds, 1) << "the handler rebuilt synchronously";
+    EXPECT_EQ(modalBuilds, 1);
+
+    sys.update(0.016f);
+    EXPECT_EQ(rootBuilds, 2);
+    EXPECT_EQ(modalBuilds, 2);
+    EXPECT_EQ(signals, 0) << "a language rebuild emitted a screen-change signal";
+    EXPECT_EQ(sys.getRootScreen(), GameScreen::MainMenu);
+
+    sys.update(0.016f);
+    EXPECT_EQ(rootBuilds, 2) << "the rebuild repeated without a new language change";
+}

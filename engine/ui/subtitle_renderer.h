@@ -99,6 +99,11 @@ struct SubtitleLineLayout
     bool italic = false;
 };
 
+/// @brief The text shown for one subtitle (3D_E-0024): a dialogue line with a
+///        speaker from the `subtitle.speaker_line` pattern, a sound cue from
+///        `subtitle.sound_cue`, anything else as written.
+std::string composeSubtitleText(const Subtitle& s);
+
 /// @brief Pure layout pass. Produces one `SubtitleLineLayout` per
 ///        caption returned by `queue.activeSubtitles()`, stacked from
 ///        the bottom of the viewport upward (newest caption at bottom).

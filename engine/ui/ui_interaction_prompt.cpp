@@ -2,6 +2,7 @@
 // SPDX-License-Identifier: MIT
 
 #include "ui/ui_interaction_prompt.h"
+#include "localization/localization_service.h"
 #include "renderer/camera.h"
 #include "renderer/text_renderer.h"
 #include "ui/ui_world_projection.h"
@@ -30,7 +31,8 @@ float UIInteractionPrompt::computeFadeAlpha(float distanceToCamera) const
 
 std::string UIInteractionPrompt::composedText() const
 {
-    return "Press [" + keyLabel + "] to " + actionVerb;
+    return trf("ui.prompt.interact",
+               {{"key", keyLabel}, {"action", std::string(tr(actionVerb))}});
 }
 
 void UIInteractionPrompt::render(SpriteBatchRenderer& /*batch*/,

@@ -4,6 +4,7 @@
 /// @file subtitle_renderer.cpp
 /// @brief Phase 10.7 slice B2 — SubtitleRenderer implementation.
 #include "ui/subtitle_renderer.h"
+#include "localization/localization_service.h"
 
 #include "renderer/text_renderer.h"
 #include "ui/sprite_batch_renderer.h"
@@ -61,30 +62,23 @@ SubtitleStyle styleFor(SubtitleCategory category,
     return style;
 }
 
-namespace
-{
-
-/// @brief Composes the string that appears on screen for a subtitle,
-///        applying category-specific formatting.
-std::string composeText(const Subtitle& s)
+std::string composeSubtitleText(const Subtitle& s)
 {
     switch (s.category)
     {
         case SubtitleCategory::Dialogue:
             if (!s.speaker.empty())
             {
-                return s.speaker + ": " + s.text;
+                return trf("subtitle.speaker_line", {{"speaker", s.speaker}, {"text", s.text}});
             }
             return s.text;
         case SubtitleCategory::SoundCue:
-            return "[" + s.text + "]";
+            return trf("subtitle.sound_cue", {{"text", s.text}});
         case SubtitleCategory::Narrator:
             break;
     }
     return s.text;
 }
-
-} // namespace
 
 std::vector<SubtitleLineLayout> computeSubtitleLayout(
     const SubtitleQueue& queue,
@@ -138,7 +132,7 @@ std::vector<SubtitleLineLayout> computeSubtitleLayout(
         const SubtitleStyle style = styleFor(sub.category, queue.narratorStyle());
 
         SubtitleLineLayout line;
-        line.fullText      = composeText(sub);
+        line.fullText      = composeSubtitleText(sub);
         line.wrappedLines  = wrapSubtitleText(line.fullText);
         line.category      = sub.category;
         line.textColor     = style.textColor;

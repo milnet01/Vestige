@@ -9,6 +9,7 @@
 #include "core/i_system.h"
 #include "localization/string_table.h"
 
+#include <initializer_list>
 #include <string>
 #include <string_view>
 #include <vector>
@@ -86,5 +87,39 @@ private:
 /// Returns the key itself when no service is registered (safe in unit tests
 /// that don't spin up the registry). Materialise the result at the call site.
 std::string_view tr(std::string_view key);
+
+/// @brief One named value for `trf` (3D_E-0024).
+struct TrArg
+{
+    std::string_view name;
+    std::string      value;
+};
+
+/// @brief Replaces each `{name}` in `pattern` with the value of the argument
+///        of that name. A placeholder with no argument stays as written;
+///        `{{` and `}}` write a single brace. Pure, so it is testable alone.
+std::string substituteTrArgs(std::string_view pattern, std::initializer_list<TrArg> args);
+
+/// @brief `tr(key)` with its `{name}` slots filled from `args` — for text
+///        whose word order differs between languages ("Press [{key}] to
+///        {action}"). Same fallback as `tr`.
+std::string trf(std::string_view key, std::initializer_list<TrArg> args);
+
+#ifdef VESTIGE_TEST_HOOKS
+/// @brief Test hook: while alive, `tr` and `trf` look a key up in `table`
+///        first, before any registered service. One at a time; not for
+///        production code.
+class ScopedStringTableOverride
+{
+public:
+    explicit ScopedStringTableOverride(const StringTable& table);
+    ~ScopedStringTableOverride();
+    ScopedStringTableOverride(const ScopedStringTableOverride&) = delete;
+    ScopedStringTableOverride& operator=(const ScopedStringTableOverride&) = delete;
+
+private:
+    const StringTable* m_previous = nullptr;
+};
+#endif
 
 } // namespace Vestige

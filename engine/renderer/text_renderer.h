@@ -19,6 +19,12 @@
 namespace Vestige
 {
 
+/// @brief Codepoint ranges loaded from the primary UI face: ASCII, Latin-1
+///        Supplement and Latin Extended-A (accented Latin, 3D_E-0024), Greek
+///        and General Punctuation. Ranges the face lacks are skipped glyph by
+///        glyph at load.
+const std::vector<CodepointRange>& primaryUiGlyphRanges();
+
 /// @brief Oblique (italic) shear helpers (Phase 10.9 P6).
 ///
 /// `renderText2DOblique` approximates italic rendering by shearing each
