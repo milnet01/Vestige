@@ -6,6 +6,16 @@ All notable changes to the Formula Workbench are documented in this file.
 
 ### Added
 
+- **Cross-formula fit target in the reference harness (FW W9,
+  3D_E-S0004).** A reference case may name `reference_formula`. The
+  harness then builds its synthetic data from that formula's curve,
+  using its library defaults with `canonical_coefficients` applied on
+  top, and fits `formula_name` to it. This covers fitting a cheap
+  formula to an expensive one. A missing reference formula, or a
+  variable that neither the sweep nor the coefficients define, is now
+  reported as a case failure instead of an exception escaping the
+  harness.
+
 - **`bloom_knee_quadratic` template.** The quadratic soft-knee bloom extract
   weight, `max(clamp(peak - t + k, 0, 2k)^2 / (4k + 1e-4), peak - t) /
   max(peak, 1e-4)`, as the DOOM_Ants bloom extract passes compute it.

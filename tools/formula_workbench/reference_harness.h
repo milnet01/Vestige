@@ -30,6 +30,11 @@
 ///      self-comparison. When ``evaluation_points`` is present it wins;
 ///      the fit path (input_sweep / canonical_coefficients) is skipped.
 ///
+/// A fit-regression case may also name ``reference_formula`` (FW W9).
+/// The dataset is then synthesized from that formula's curve, so the
+/// fit measures how well ``formula_name`` approximates a different
+/// function rather than whether it recovers its own coefficients.
+///
 /// This is the audit-tool's ``tests/audit_fixtures/<rule-id>/``
 /// mechanism ported to numerical code. The fixture is the spec;
 /// the regression is the fitter; the assertion is the envelope.
@@ -114,6 +119,14 @@ struct EvaluationPoint
 struct ReferenceCase
 {
     std::string formula_name;
+    /// Optional cross-formula fit target (FW W9). When set, the
+    /// synthetic dataset comes from THIS formula's FULL-tier curve —
+    /// its library-default coefficients overridden by
+    /// ``canonical_coefficients`` — and ``formula_name`` is fitted to
+    /// it. This is the "fit a cheap formula to an expensive reference"
+    /// case. Empty means self-recovery: the dataset comes from
+    /// ``formula_name`` itself.
+    std::string reference_formula;
     std::map<std::string, float> canonical_coefficients;
     std::map<std::string, InputSweep> input_sweep;
     /// Evaluation-regression golden points (mode 2). When non-empty,
@@ -162,7 +175,9 @@ loadReferenceCase(const std::string& path, std::string& errorOut);
 ///
 /// Exposed so tests can inspect the data shape independently of the
 /// fitter path. The formula is evaluated with the canonical coeffs
-/// substituted; no numerical noise is added.
+/// substituted; no numerical noise is added. When ``reference_formula``
+/// is set, that formula is evaluated instead, on top of its own library
+/// defaults. Throws if the expression reads a variable nothing defines.
 std::vector<DataPoint>
 synthesizeDataset(const ReferenceCase& c, const FormulaLibrary& library);
 

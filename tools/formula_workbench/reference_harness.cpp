@@ -94,6 +94,7 @@ loadReferenceCase(const std::string& path, std::string& errorOut)
         return std::nullopt;
     }
     c.notes = j.value("notes", "");
+    c.reference_formula = j.value("reference_formula", "");
 
     if (j.contains("canonical_coefficients") &&
         j["canonical_coefficients"].is_object())
@@ -220,10 +221,15 @@ std::vector<DataPoint>
 synthesizeDataset(const ReferenceCase& c, const FormulaLibrary& library)
 {
     std::vector<DataPoint> out;
-    const FormulaDefinition* formula = library.findByName(c.formula_name);
-    if (!formula) return out;
+    // FW W9: a cross-formula case sources its targets from the
+    // reference formula, seeded with that formula's own defaults so a
+    // case need only name the coefficients it changes.
+    const bool cross = !c.reference_formula.empty();
+    const FormulaDefinition* source =
+        library.findByName(cross ? c.reference_formula : c.formula_name);
+    if (!source) return out;
 
-    const ExprNode* expr = formula->getExpression(QualityTier::FULL);
+    const ExprNode* expr = source->getExpression(QualityTier::FULL);
     if (!expr) return out;
 
     // Stable iteration order for sweep unrolling.
@@ -241,6 +247,10 @@ synthesizeDataset(const ReferenceCase& c, const FormulaLibrary& library)
         // evaluator treats variables and coefficients identically.
         ExpressionEvaluator::VariableMap vars;
         for (const auto& [k, v] : combo) vars[k] = v;
+        if (cross)
+        {
+            for (const auto& [k, v] : source->coefficients) vars[k] = v;
+        }
         for (const auto& [k, v] : c.canonical_coefficients) vars[k] = v;
 
         DataPoint dp;
@@ -326,7 +336,25 @@ executeReferenceCase(const ReferenceCase& c, const FormulaLibrary& library)
         return r;
     }
 
-    const auto data = synthesizeDataset(c, library);
+    if (!c.reference_formula.empty() && !library.findByName(c.reference_formula))
+    {
+        r.failures.push_back("reference formula not found in library: "
+                             + c.reference_formula);
+        return r;
+    }
+
+    // The evaluator throws on a variable neither the sweep nor the
+    // coefficients define — a spec bug, reported like any other.
+    std::vector<DataPoint> data;
+    try
+    {
+        data = synthesizeDataset(c, library);
+    }
+    catch (const std::exception& e)
+    {
+        r.failures.push_back(std::string("cannot synthesize dataset: ") + e.what());
+        return r;
+    }
     r.n_points = static_cast<int>(data.size());
     if (data.empty())
     {

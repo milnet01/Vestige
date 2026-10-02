@@ -17,6 +17,8 @@
 
 #include "reference_harness.h"
 
+#include "formula/expression.h"
+#include "formula/formula.h"
 #include "formula/formula_library.h"
 
 #include "test_helpers.h"
@@ -501,5 +503,139 @@ TEST(ReferenceCaseLoad, EvaluationPointsParseFromJson)
     EXPECT_FLOAT_EQ(c->evaluation_points[0].tolerance, 0.001f);
     // Second point omits tolerance → struct default of 1e-4.
     EXPECT_FLOAT_EQ(c->evaluation_points[1].tolerance, 1e-4f);
+    std::filesystem::remove(path);
+}
+
+// ---------------------------------------------------------------------------
+// FW W9 — cross-formula fit target (reference_formula)
+// ---------------------------------------------------------------------------
+
+namespace
+{
+
+/// A reference formula distinct from `exponential_fog`, with its own
+/// coefficient name: exp(-k * distance), library default k = 0.5.
+/// Its coefficient is named `k` rather than `density` so a pass proves
+/// the dataset came from THIS formula, not from the fitted one.
+FormulaDefinition makeDecayReference()
+{
+    FormulaDefinition def;
+    def.name = "w9_decay_reference";
+    def.category = "lighting";
+    def.inputs = {{"distance", FormulaValueType::FLOAT, "m", 0.0f}};
+    def.coefficients = {{"k", 0.5f}};
+    def.expressions[QualityTier::FULL] =
+        ExprNode::unaryOp("exp",
+            ExprNode::unaryOp("negate",
+                ExprNode::binaryOp("*", ExprNode::variable("k"),
+                                        ExprNode::variable("distance"))));
+    return def;
+}
+
+} // namespace
+
+TEST(ReferenceCaseCross, FitsFormulaToADifferentReferenceCurve)
+{
+    // exponential_fog fitted to exp(-0.02 * distance) must recover
+    // density = 0.02. Self-recovery would synthesize from
+    // exponential_fog itself, which has no canonical `density` here, so
+    // it cannot land on 0.02.
+    FormulaLibrary library;
+    library.registerBuiltinTemplates();
+    library.registerFormula(makeDecayReference());
+
+    ReferenceCase c;
+    c.formula_name = "exponential_fog";
+    c.reference_formula = "w9_decay_reference";
+    c.canonical_coefficients["k"] = 0.02f;
+    InputSweep s;
+    s.min = 0.0f;
+    s.max = 200.0f;
+    s.count = 41;
+    c.input_sweep["distance"] = s;
+    c.r_squared_min = 0.999f;
+    c.must_converge = true;
+    c.coefficient_bounds["density"] = {0.02f, std::nullopt, 0.01f};
+
+    const auto r = executeReferenceCase(c, library);
+    EXPECT_TRUE(r.passed) << (r.failures.empty() ? "" : r.failures.front());
+    EXPECT_EQ(r.n_points, 41);
+}
+
+TEST(ReferenceCaseCross, ReferenceUsesItsLibraryDefaultsWhenNoCanonicalGiven)
+{
+    // With no canonical override the reference's own default (k = 0.5)
+    // sets the curve, so the dataset at distance = 2 is exp(-1).
+    FormulaLibrary library;
+    library.registerBuiltinTemplates();
+    library.registerFormula(makeDecayReference());
+
+    ReferenceCase c;
+    c.formula_name = "exponential_fog";
+    c.reference_formula = "w9_decay_reference";
+    InputSweep s;
+    s.values = {2.0f};
+    c.input_sweep["distance"] = s;
+
+    const auto data = synthesizeDataset(c, library);
+    ASSERT_EQ(data.size(), 1u);
+    EXPECT_NEAR(data[0].observed, std::exp(-1.0f), 1e-6f);
+}
+
+TEST(ReferenceCaseCross, UnknownReferenceFormulaFailsNamingIt)
+{
+    FormulaLibrary library;
+    library.registerBuiltinTemplates();
+
+    ReferenceCase c;
+    c.formula_name = "exponential_fog";
+    c.reference_formula = "no_such_reference";
+    InputSweep s;
+    s.min = 0.0f;
+    s.max = 10.0f;
+    s.count = 5;
+    c.input_sweep["distance"] = s;
+
+    const auto r = executeReferenceCase(c, library);
+    EXPECT_FALSE(r.passed);
+    ASSERT_FALSE(r.failures.empty());
+    EXPECT_NE(r.failures[0].find("no_such_reference"), std::string::npos);
+}
+
+TEST(ReferenceCaseCross, UndefinedVariableIsAFailureNotAThrow)
+{
+    // The sweep names `x`, but the reference reads `distance`. The
+    // evaluator throws on that; executeReferenceCase must report it.
+    FormulaLibrary library;
+    library.registerBuiltinTemplates();
+    library.registerFormula(makeDecayReference());
+
+    ReferenceCase c;
+    c.formula_name = "exponential_fog";
+    c.reference_formula = "w9_decay_reference";
+    InputSweep s;
+    s.values = {1.0f, 2.0f};
+    c.input_sweep["x"] = s;
+
+    ReferenceResult r;
+    ASSERT_NO_THROW(r = executeReferenceCase(c, library));
+    EXPECT_FALSE(r.passed);
+    ASSERT_FALSE(r.failures.empty());
+    EXPECT_NE(r.failures[0].find("distance"), std::string::npos);
+}
+
+TEST(ReferenceCaseLoad, ReferenceFormulaParsesFromJson)
+{
+    const auto path = std::filesystem::temp_directory_path()
+                    / ("cross_ref_" + Testing::vestigeTestStamp() + ".json");
+    std::ofstream(path) << R"({
+        "formula_name": "exponential_fog",
+        "reference_formula": "w9_decay_reference"
+    })";
+
+    std::string err;
+    const auto c = loadReferenceCase(path.string(), err);
+    ASSERT_TRUE(c.has_value()) << err;
+    EXPECT_EQ(c->reference_formula, "w9_decay_reference");
     std::filesystem::remove(path);
 }

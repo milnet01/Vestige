@@ -23,6 +23,15 @@ may change any interface without notice.
 
 ## [Unreleased]
 
+### 2026-10-02 Added — Formula Workbench: fit a cheap formula to a different, expensive one (3D_E-S0004)
+
+The Workbench's reference tests could only check that a formula
+recovers its own constants. A test may now name a second formula as
+the curve to match, so a fast approximation can be fitted against
+the exact formula it replaces and its error checked. A test that
+names a formula the library lacks, or a variable nothing sets, now
+reports a failure instead of stopping the run with an error.
+
 ### 2026-10-01 Fixed — The engine is told when a scene opens or is replaced (3D_E-0730)
 
 Opening a scene, starting a new one, applying a template or loading the demo never told the engine's systems that the scene had changed. So 2D physics never gave anything a body in the running app, and nothing tidied up after the old scene. Every way of replacing a scene now sends a notice before the old contents go and another once the new ones are in place, and each system reacts to both. The old rule that switched systems off when a scene lacked certain objects is gone, so every system keeps running whatever the scene holds.
