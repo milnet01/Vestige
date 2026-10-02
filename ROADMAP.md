@@ -3136,7 +3136,7 @@ Resolves CPU↔GPU cloth divergences that make CLAUDE.md Rule 7 parity-test impo
 - ✅ [3D_E-S0266] **Cl8. `ClothConfig` validation rejects NaN / ±inf on `particleMass`, `spacing`, `gravity`, `damping` (not just `<= 0`). NaN currently passes the guard and poisons every inverse mass. Shipped 2026-04-27. `ClothSimulator::initialize` (`engine/physics/cloth_simulator.cpp`) gained a defensive `std::isfinite` block immediately after the existing `particleMass <= 0` check. The new block rejects non-finite `particleMass`, `spacing`, or `damping`, plus non-finite components in `gravity.{x,y,z}`, plus `spacing <= 0` (zero-spacing collapses every particle onto the same point — undefined normals, zero-area triangles, useless physics). Pre-Cl8 NaN passed every `<=` comparison silently (any NaN comparison returns false) and poisoned every inverse mass via `1.0f / NaN = NaN`, propagating to velocity, position, and the mesh upload until the cloth panel rendered as a single floating-point garbage pile or disappeared entirely. 6 new `ClothSimulator.*_Cl8` tests in `tests/test_cloth_simulator.cpp` cover NaN/Inf mass, NaN/zero spacing, NaN damping, NaN/Inf gravity components.**
   Kind: implement.
 
-- 📋 [Cl9] **GPU cloth constraint convergence accelerator (Chebyshev/SOR) — close the CPU↔GPU drape parity gap.**
+- ✅ [Cl9] **GPU cloth constraint convergence accelerator (Chebyshev/SOR) — close the CPU↔GPU drape parity gap.**
   Surfaced by the Cl1 parity harness. The GPU's coloured-parallel Gauss-Seidel constraint sweep is a far weaker smoother than the CPU's sequential sweep: a 4-corner-pinned rigid 12x12 cloth settles to ~0.18m sag on the CPU but ~0.67m on the GPU (post-Cl1 damping fix; ~1.44m pre-fix). Extra sweeps converge only logarithmically (still ~22% of diagonal at 16 sweeps/substep) — too slow for the 60 FPS budget. The design doc already calls for "multiple Gauss-Seidel sweeps" but the impl does one. Fix: a convergence accelerator — Chebyshev semi-iterative (Wang 2015) or Jacobi + SOR over-relaxation. Needs a design doc + cold-eyes review + 60 FPS profiling (CLAUDE.md Rule 1). Unblocks flipping tests/test_cloth_cpu_gpu_parity.cpp Cl1_StiffDrapeParity_PendingConvergenceFix from SKIP to an EXPECT_LT(haus, 0.05*diagonal) assertion.
   Kind: perf.
   Source: in-session-2026-06-03 Cl1 parity harness.
@@ -3169,6 +3169,15 @@ Resolves CPU↔GPU cloth divergences that make CLAUDE.md Rule 7 parity-test impo
   dispatch with its own cost and its own parity test, which project rule
   1 wants designed first. User decided 2026-09-21 to record it here on
   the grounds that doing it inside Cl9 is cheaper than doing it twice.
+  Recorded 2026-10-02: shipped 2026-06-06 in 5676d9b and never flipped.
+  GPU SOR over-relaxation (omega 1.8, opt-in via setConvergenceMode(SOR)
+  and 16 solver iterations) closed the gap; Cl1_StiffDrapeParity is a
+  strict 5 %-Hausdorff EXPECT_LT and passed today with the other four
+  ClothCpuGpuParityTest cases. Not built: the true Chebyshev blend (the
+  enum routes through SOR) and a Workbench fit of omega. The missing GPU
+  velocity recovery noted above now belongs to Cl10's rest-pose and sleep
+  ports, which need it.
+  Layman: The graphics-card cloth now hangs like the reference cloth on the processor, within 5 %.
 
 - 📋 [Cl10] **GPU cloth backend lacks three CPU-spec polish features — decide port-vs-document for parity.**
   Surfaced by the Cl1 parity harness. The GPU runs the core XPBD loop without three features the CPU ClothSimulator has: (1) adaptive damping (cloth_simulator.cpp:254-272), (2) rest-pose blending toward the authored pose in calm wind for LRA/pinned cloth (cloth_simulator.cpp:373-391), (3) sleep detection — a settled CPU cloth freezes; the GPU always simulates (cloth_simulator.cpp:408-434). For each, decide whether to port to the GPU dispatch (true parity) or document as an intentional CPU-only behaviour on IClothSolverBackend. Rule 7 parity gate. (Damping convention was the fourth gap and is already fixed; constraint convergence is Cl9.)
