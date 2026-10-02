@@ -188,8 +188,9 @@ others — see [`THIRD_PARTY_NOTICES.md`](THIRD_PARTY_NOTICES.md)). Plan
 for several minutes on a cold build; warm builds are incremental.
 
 The engine ships with a small set of CC0 demo assets in `assets/`
-(Poly Haven 2K textures, glTF sample models, Arimo font) — no extra
-asset download is required for the demo scene. A larger separate
+(Kenney Nature Kit models and a 1K Poly Haven sky for the meadow, Poly
+Haven 2K textures, glTF sample models, fonts) — no extra asset download
+is required for the demo scenes. `ASSET_LICENSES.md` lists each one. A larger separate
 pack of 4K CC0 textures and blend files will land in a sibling repo
 (`milnet01/VestigeAssets`) closer to the v1.0.0 release, once every
 asset has been re-audited for full redistributability. Until then
@@ -209,9 +210,11 @@ first-person runtime. After a build, run it directly from the build
 tree:
 
 ```bash
-./build/bin/vestige-editor          # editor, demo scene (default)
+./build/bin/vestige-editor          # editor, meadow demo scene (default)
 ./build/bin/vestige-editor --play   # first-person walkthrough
 ./build/bin/vestige-editor --scene path/to/my.scene
+./build/bin/vestige-editor --material-demo     # the older material-test scene
+./build/bin/vestige-editor --profile-log=run.csv  # log per-pass timings once a second
 ./build/bin/vestige-editor --help   # full CLI reference
 ```
 

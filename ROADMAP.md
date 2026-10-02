@@ -1127,8 +1127,15 @@ Full spatial audio pipeline with dynamic mixing, occlusion, and adaptive music. 
   Marked complete 2026-06-20 (implemented 2026-06-19): Phase 10 Rendering slices R1 (geometry-pass MRT motion, overlay deleted — commit e606dd1) + R2 (animated skinned/morph motion + prev-normal buffer + V_mask — commits 446a7b6..6bdaf29). Design-of-record §4/§9; CHANGELOG recorded. ROADMAP status was stale.
   Kind: implement.
 
-- 📋 [3D_E-0027] **Meadow demo & profiling-benchmark scene — replace the material-test-cube default demo with a natural meadow (rolling terrain, dense grass, reflective pond, CC0 low-poly props + 1K HDRI) that doubles as a load-bearing profiling fixture; add a profiler→CSV logger and preserve the old cubes behind --material-demo.**
+- ✅ [3D_E-0027] **Meadow demo & profiling-benchmark scene — replace the material-test-cube default demo with a natural meadow (rolling terrain, dense grass, reflective pond, CC0 low-poly props + 1K HDRI) that doubles as a load-bearing profiling fixture; add a profiler→CSV logger and preserve the old cubes behind --material-demo.**
   Design: docs/phases/phase_10_meadow_benchmark_scene_design.md (cold-eyes reviewed). Reuses existing terrain/foliage/water/skybox/profiler subsystems — no new render tech. Profiler CSV log (--profile-log + panel toggle) so bottlenecks can be analysed off-panel. Stylised low-poly now (Kenney CC0), photoreal trees via a git-ignored nature_local/ override later.
+  Resolved 2026-10-02: design slices 1-6 had shipped (meadow default scene,
+  Kenney + HDRI assets, terrain and pond, grass, props, --profile-log);
+  slice 7's README drift is fixed (assets sentence, --material-demo and
+  --profile-log in the run list). Slice 7's "post-phase audit" is
+  superseded by project CLAUDE.md rule 4, which runs the full audit before
+  each minor release, so it happens at the 0.2.0 cut. The last open realism
+  item, 3D_E-0034, stays open on its own.
   **Layman:** Turn the boring test-cube demo into a proper outdoor meadow that also stress-tests the engine so we can find and fix what makes it slow.
   Kind: feature.
   Source: in-session-2026-07-11.
