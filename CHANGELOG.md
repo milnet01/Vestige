@@ -23,6 +23,14 @@ may change any interface without notice.
 
 ## [Unreleased]
 
+### 2026-10-02 Fixed — Auto-play sounds play once, and background sounds set to loop do loop (3D_E-0738)
+
+A sound set to play automatically when a scene opens restarted every
+time it finished, for as long as the scene was open. It now plays
+once. Unticking and re-ticking Auto Play in the editor plays it
+again. A non-positional sound set to loop played only once; it now
+loops.
+
 ### 2026-10-02 Added — Formula Workbench: fit a cheap formula to a different, expensive one (3D_E-S0004)
 
 The Workbench's reference tests could only check that a formula

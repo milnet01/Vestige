@@ -278,10 +278,13 @@ public:
     /// @param bus Mixer bus (defaults to `Ui` — 2D sounds are most
     ///            commonly UI clicks / menu accents).
     /// @param priority Phase 10.9 P7 eviction tier — see `playSound`.
+    /// @param loop Whether the sound loops. A looping caller must keep the
+    ///             returned handle and `stopSound` it (see below).
     /// @returns Acquired OpenAL source ID, or 0 on failure.
     unsigned int playSound2D(const std::string& filePath, float volume = 1.0f,
                              AudioBus bus = AudioBus::Ui,
-                             SoundPriority priority = SoundPriority::Normal);
+                             SoundPriority priority = SoundPriority::Normal,
+                             bool loop = false);
 
     /// @brief Phase 10.9 Slice 15 Au1 — stops a previously-acquired source
     ///        and returns it to the pool.

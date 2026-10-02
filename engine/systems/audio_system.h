@@ -9,6 +9,7 @@
 #include "audio/audio_engine.h"
 #include "audio/audio_ducking.h"
 #include "audio/audio_lod.h"
+#include "audio/audio_source_tracker.h"
 
 #include <array>
 #include <cstdint>
@@ -63,23 +64,22 @@ public:
     ///        active-source map. Tests use this to verify the
     ///        auto-play + source-tracking pipeline without touching AL.
     const std::unordered_map<std::uint32_t, unsigned int>&
-    activeSources() const { return m_activeSources; }
+    activeSources() const { return m_sourceTracker.active(); }
 
 private:
     static inline const std::string m_name = "Audio";
     AudioEngine m_audioEngine;
     Engine* m_engine = nullptr;
 
-    /// @brief Phase 10.9 P2 — maps entity ID → OpenAL source ID for
-    ///        every `AudioSourceComponent` that has been acquired by
-    ///        this system (auto-play or explicit trigger). Cleared
-    ///        when the component is removed or the source stops
-    ///        (reaped in the per-frame update).
-    std::unordered_map<std::uint32_t, unsigned int> m_activeSources;
+    /// @brief Phase 10.9 P2 — entity ID → OpenAL source for every
+    ///        auto-played `AudioSourceComponent`, and when to start one
+    ///        (3D_E-0738). Entries are reaped when the source stops or the
+    ///        entity leaves the scene.
+    AudioSourceTracker m_sourceTracker;
 
     /// @brief AX5 — per-entity LOD tier from the previous frame, the
     ///        `previousTier` input to `audioLodTier` (hysteresis). Reaped
-    ///        alongside `m_activeSources`. The tuning config stays at its
+    ///        alongside `m_sourceTracker`. The tuning config stays at its
     ///        defaults; only the master enable is user-facing (read each
     ///        frame from the AudioEngine).
     std::unordered_map<std::uint32_t, AudioLodTier> m_lodTiers;

@@ -13,6 +13,7 @@
 #include <nlohmann/json.hpp>
 
 #include <fstream>
+#include <iterator>
 #include "scene/entity.h"
 #include "scene/scene.h"
 #include "scene/scene_manager.h"
@@ -205,14 +206,16 @@ void AudioSystem::update(float deltaTime)
             }
         };
 
-        auto it = m_activeSources.find(entityId);
-        if (it == m_activeSources.end())
+        m_sourceTracker.observe(entityId, comp->autoPlay);
+        const unsigned int* tracked = m_sourceTracker.find(entityId);
+        if (tracked == nullptr)
         {
             // Not yet playing. Auto-acquire when authored. Explicit
             // triggers (script graphs, gameplay code) call playSound*
             // directly — those stay untracked-by-entity because the
             // caller owns the lifetime decision.
-            if (!comp->autoPlay || comp->clipPath.empty())
+            if (!m_sourceTracker.shouldStart(entityId, comp->autoPlay,
+                                             !comp->clipPath.empty()))
             {
                 return;
             }
@@ -230,15 +233,16 @@ void AudioSystem::update(float deltaTime)
             else
             {
                 source = m_audioEngine.playSound2D(
-                    comp->clipPath, comp->volume, comp->bus, comp->priority);
+                    comp->clipPath, comp->volume, comp->bus, comp->priority,
+                    comp->loop);
             }
             // Record even a 0 source ID — it marks "we've attempted
             // autoplay for this entity so don't retry every frame".
-            // A 0 entry is purged in the reap pass below along with
-            // entities whose sources have stopped, which lets the
-            // entity pick up again if the component changes
-            // (e.g. autoPlay re-toggled).
-            m_activeSources[entityId] = source;
+            // A 0 entry is purged in the reap pass below so a later
+            // frame retries. A source that stops is reaped too, but the
+            // tracker remembers it fired, so a finished one-shot is not
+            // restarted until autoPlay is unticked and ticked again.
+            m_sourceTracker.started(entityId, source);
             if (source != 0)
             {
                 // Push the full composed state immediately so pitch
@@ -256,7 +260,7 @@ void AudioSystem::update(float deltaTime)
         }
 
         // Tracked — push the per-frame state.
-        const unsigned int source = it->second;
+        const unsigned int source = *tracked;
         if (source == 0)
         {
             // Autoplay attempted but no source acquired (pool
@@ -278,21 +282,14 @@ void AudioSystem::update(float deltaTime)
     // disappeared. Snapshot-safe iteration: the scene traversal
     // above doesn't mutate the map, so a simple forward walk
     // suffices.
-    for (auto it = m_activeSources.begin(); it != m_activeSources.end(); )
+    m_sourceTracker.reap(
+        [scene](std::uint32_t id) { return scene->findEntityById(id) == nullptr; },
+        [this](unsigned int source) { return m_audioEngine.isSourcePlaying(source); });
+    for (auto it = m_lodTiers.begin(); it != m_lodTiers.end(); )
     {
-        const bool entityGone = scene->findEntityById(it->first) == nullptr;
-        const bool sourceDead =
-            it->second == 0 ||
-            !m_audioEngine.isSourcePlaying(it->second);
-        if (entityGone || sourceDead)
-        {
-            m_lodTiers.erase(it->first);  // AX5 — keep the tier map in step
-            it = m_activeSources.erase(it);
-        }
-        else
-        {
-            ++it;
-        }
+        // AX5 — keep the tier map in step with the tracked sources.
+        it = m_sourceTracker.find(it->first) == nullptr ? m_lodTiers.erase(it)
+                                                        : std::next(it);
     }
 
     // AX13 — hand this frame's activity to next frame's router pass.

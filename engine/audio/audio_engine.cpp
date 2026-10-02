@@ -857,7 +857,8 @@ unsigned int AudioEngine::playSoundSpatial(const std::string& filePath,
 
 unsigned int AudioEngine::playSound2D(const std::string& filePath, float volume,
                                        AudioBus bus,
-                                       SoundPriority priority)
+                                       SoundPriority priority,
+                                       bool loop)
 {
     // Phase 10.9 P4 — see playSound() above for rationale.
     if (m_captionAnnouncer)
@@ -895,7 +896,7 @@ unsigned int AudioEngine::playSound2D(const std::string& filePath, float volume,
     alSourcei(source, AL_BUFFER, static_cast<ALint>(buffer));
     alSource3f(source, AL_POSITION, 0.0f, 0.0f, 0.0f);
     alSourcef(source, AL_GAIN, initialGain);
-    alSourcei(source, AL_LOOPING, AL_FALSE);
+    alSourcei(source, AL_LOOPING, loop ? AL_TRUE : AL_FALSE);
     alSourcei(source, AL_SOURCE_RELATIVE, AL_TRUE);  // Relative to listener (2D)
     alSourcePlay(source);
     return source;

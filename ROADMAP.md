@@ -494,7 +494,7 @@ against the published standards (correct, and cheap enough at runtime) rather
 than fitted/exported through the Workbench. These concern the Workbench /
 `engine/formula/` subsystem only, not the engine audio runtime.
 
-- 📋 [3D_E-0022] **FW (GAP/MEDIUM): add an `audio` formula-template category for audio-DSP curves.**
+- ✅ [3D_E-0022] **FW (GAP/MEDIUM): add an `audio` formula-template category for audio-DSP curves.**
   Give the Workbench first-class audio templates so audio numeric design goes through the fit/validate/export pipeline like every other domain (project Rule 6), and so the runtime can swap heavier closed forms for Workbench-fit cheap approximations (the legitimate optimization path Rule 6 calls out). Seed templates from the curves the audio bundle already ships hand-coded: **ISO 9613-1 atmospheric absorption** `α(f, T, h)` at the ~4 kHz HF anchor → dB/m → linear HF gain (AX6 `engine/audio/audio_air_absorption.cpp` carries a `TODO: revisit via Formula Workbench` for exactly the fitted cheap-polynomial version, target ≤0.5 dB abs error over T∈[-20,50]°C, h∈[10,100]%); and the **ITU-R BS.1770 K-weighting biquad** coefficients used by AX9 loudness (the design flagged the K-weighting filter as a Workbench candidate). Candidate follow-ups: occlusion material low-pass curves and the distance→HF rolloff anchor. Each ships as a `FormulaDefinition` in the `audio` category with reference datasets + reference-harness regression locks, exportable to C++/GLSL like the rest. Pairs with the parity-test discipline (Rule 7) so a fitted approximation is pinned against the exact-standard CPU reference before it replaces it.
   Kind: feature.
   Source: in-session-2026-06-29 (Vestige audio quick-wins bundle; user request).
@@ -504,6 +504,15 @@ than fitted/exported through the Workbench. These concern the Workbench /
   (pinned by `AudioCurvesParity`). Runtime intent delivered; kept planned as the
   tracking bullet for the deferred K-weighting biquad + air-absorption fitted
   polynomial follow-ups named above.
+  Resolved 2026-10-02: closed on the headline, which shipped 2026-07-01.
+  The two follow-ups were not built, each for want of a consumer.
+  K-weighting: AX9 loudness measures through libebur128, which applies
+  the BS.1770 K-weighting filter itself, so a Workbench template would
+  have no caller. Air absorption: audio_air_absorption.cpp no longer
+  carries a Workbench TODO, and the exact ISO 9613-1 form costs a few
+  pow/exp calls per voice per update with no perf pressure. If one is
+  wanted later, 3D_E-S0004's reference_formula can fit the cheap
+  polynomial against the exact form.
 
 #### Phase 9: Domain-Driven System Architecture
 **Goal:** Evolve the engine toward a domain-driven system model where each natural domain (vegetation, water, cloth, terrain, etc.) is owned by a dedicated system that encapsulates ALL behavior for that domain — rendering, physics, animation, audio, defaults, and editor integration. Scenes compose by pulling in only the systems they need.
@@ -5018,6 +5027,30 @@ shipped that have no invocation path at all.
   Kind: fix.
   Source: in-session-2026-10-01 (pre-push gate rejected 3D_E-0730's push).
   Lanes: tests, renderer.
+
+- ✅ [3D_E-0738] **An auto-play sound that does not loop replays forever, and a non-spatial sound set to loop does not loop.**
+  Found by reading AudioSystem::update while preparing 3D_E-S0016.
+  AudioSourceComponent::autoPlay is documented "plays automatically on
+  scene load". AudioSystem acquires a source for every autoPlay
+  component it is not tracking, and its reap pass erases any entry whose
+  source has stopped. A finished one-shot is therefore untracked on the
+  next frame and started again, for as long as the scene lives.
+  Separately, the non-spatial branch calls AudioEngine::playSound2D,
+  which takes no loop flag, so `loop` is ignored when `spatial` is false.
+  Fix: remember that an entity's autoplay has fired so a finished
+  one-shot is not restarted, while a failed acquire (source 0) still
+  retries; and give playSound2D a loop parameter that the 2D branch
+  passes.
+  Resolved 2026-10-02: AudioSystem's bookkeeping moved into
+  AudioSourceTracker (engine/audio/audio_source_tracker.h), which
+  remembers fired entities; playSound2D gained a loop flag the 2D
+  branch passes. AudioSourceTracker tests: the finished-one-shot test
+  seen red on the old logic, then green with the other five. The loop
+  pass-through has no automated test: no test opens an audio device.
+  **Layman:** A sound set to play once when a scene opens keeps restarting every time it ends, and background sounds set to repeat stop after one play.
+  Kind: fix.
+  Source: in-session-2026-10-02.
+  Lanes: audio.
 
 ## 0.3.0 — An editor a builder can use
 
