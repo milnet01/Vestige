@@ -23,6 +23,13 @@ may change any interface without notice.
 
 ## [Unreleased]
 
+### 2026-10-02 Changed — Meadow sky has clouds, and the sun matches it (3D_E-0034)
+
+The meadow's clear, hazy sky photo is replaced with Poly Haven's
+Kloofendal 48d Partly Cloudy (CC0). The sun now points where the sun
+is in the photo, so shadows agree with the sky. Colour grading and
+water tuning are still to come.
+
 ### 2026-10-02 Added — The interface comes in French, German, Spanish, Italian and Brazilian Portuguese (3D_E-0024)
 
 The main, pause and settings menus, the on-screen prompts, the frame

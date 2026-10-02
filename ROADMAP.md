@@ -1230,8 +1230,13 @@ Full spatial audio pipeline with dynamic mixing, occlusion, and adaptive music. 
   Follow-on 3D_E-0040 filed: procedural vegetation generator, so future
   plants need neither a download nor a licence row.
 
-- 📋 [3D_E-0034] **Meadow realism D — sky, water & colour polish.**
+- 🚧 [3D_E-0034] **Meadow realism D — sky, water & colour polish.**
   A committed CC0 partly-cloudy day HDRI (blue sky + white clouds), a colour-grade pass for vivid natural greens, and water reflection/refraction tuning so the pond convincingly mirrors the treeline. Mood + reflections to match the reference photos. Phase D — final polish once A–C land.
+  Progress (2026-10-02, 87626d2): sky swapped to Kloofendal 48d Partly
+  Cloudy (CC0) and the sun aimed at the photo's own sun (47.9 deg). Before
+  and after stills checked. Left for the user: colour grade and water
+  tuning need the reference photos, which were never saved. Recommend:
+  the user picks two or three photos, then a session tunes against them.
   **Layman:** Add clouds, richer colour, and better water reflections to finish the look.
   Kind: enhancement.
   Source: user-request-2026-07-11 (realism overhaul; fixture 3D_E-0027).
