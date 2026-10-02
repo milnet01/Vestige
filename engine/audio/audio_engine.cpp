@@ -88,6 +88,7 @@ bool AudioEngine::initialize()
     // Preallocate source pool
     m_sourcePool.resize(MAX_SOURCES);
     m_sourceInUse.assign(MAX_SOURCES, 0u);
+    m_sourceTicket.assign(MAX_SOURCES, 0u);
     alGenSources(MAX_SOURCES, m_sourcePool.data());
 
     ALenum err = alGetError();
@@ -96,6 +97,7 @@ bool AudioEngine::initialize()
         Logger::warning("[AudioEngine] Failed to allocate source pool");
         m_sourcePool.clear();
         m_sourceInUse.clear();
+        m_sourceTicket.clear();
     }
 
     // Set default distance model. Keep in sync with m_distanceModel so
@@ -343,6 +345,7 @@ void AudioEngine::shutdown()
     }
     m_sourcePool.clear();
     m_sourceInUse.clear();
+    m_sourceTicket.clear();
 
     // Delete all cached buffers (W8: also clears the recency list).
     for (auto& [path, buffer] : m_bufferCache)
@@ -639,6 +642,7 @@ unsigned int AudioEngine::acquireSource(SoundPriority incomingPriority)
         if (!m_sourceInUse[i])
         {
             m_sourceInUse[i] = true;
+            m_sourceTicket[i] = m_nextTicket++;
             return m_sourcePool[i];
         }
     }
@@ -650,6 +654,7 @@ unsigned int AudioEngine::acquireSource(SoundPriority incomingPriority)
         if (!m_sourceInUse[i])
         {
             m_sourceInUse[i] = true;
+            m_sourceTicket[i] = m_nextTicket++;
             return m_sourcePool[i];
         }
     }
@@ -685,6 +690,7 @@ unsigned int AudioEngine::acquireSource(SoundPriority incomingPriority)
             if (!m_sourceInUse[i])
             {
                 m_sourceInUse[i] = true;
+                m_sourceTicket[i] = m_nextTicket++;
                 return m_sourcePool[i];
             }
         }
@@ -707,10 +713,23 @@ void AudioEngine::releaseSource(unsigned int source)
             alSourceStop(source);
             alSourcei(source, AL_BUFFER, 0);
             m_sourceInUse[i] = false;
+            m_sourceTicket[i] = 0;
             m_livePlaybacks.erase(source);
             return;
         }
     }
+}
+
+std::uint64_t AudioEngine::playbackTicket(unsigned int source) const
+{
+    for (size_t i = 0; i < m_sourcePool.size(); ++i)
+    {
+        if (m_sourcePool[i] == source && m_sourceInUse[i])
+        {
+            return m_sourceTicket[i];
+        }
+    }
+    return 0;
 }
 
 unsigned int AudioEngine::playSound(const std::string& filePath, const glm::vec3& position,
@@ -1048,6 +1067,7 @@ void AudioEngine::stopAll()
             alSourceStop(m_sourcePool[i]);
             alSourcei(m_sourcePool[i], AL_BUFFER, 0);
             m_sourceInUse[i] = false;
+            m_sourceTicket[i] = 0;
         }
         m_livePlaybacks.erase(m_sourcePool[i]);
     }
@@ -1540,6 +1560,7 @@ void AudioEngine::reclaimFinishedSources()
             {
                 alSourcei(m_sourcePool[i], AL_BUFFER, 0);
                 m_sourceInUse[i] = false;
+                m_sourceTicket[i] = 0;
                 m_livePlaybacks.erase(m_sourcePool[i]);
             }
         }

@@ -63,7 +63,7 @@ public:
     /// @brief Phase 10.9 P2 — read-only access to the per-entity
     ///        active-source map. Tests use this to verify the
     ///        auto-play + source-tracking pipeline without touching AL.
-    const std::unordered_map<std::uint32_t, unsigned int>&
+    const std::unordered_map<std::uint32_t, AudioSourceTracker::TrackedSource>&
     activeSources() const { return m_sourceTracker.active(); }
 
 private:

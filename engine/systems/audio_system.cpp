@@ -158,8 +158,18 @@ void AudioSystem::update(float deltaTime)
     std::array<bool, AudioBusCount> busActiveCurr{};
     constexpr float kBusActiveVolume = 0.01f;
 
+    // 3D_E-0739 — a tracked playback is ours only while it still plays and
+    // its source still carries the ticket we stored: eviction hands the
+    // victim's source name to the new sound.
+    auto ownsPlayback = [this](const AudioSourceTracker::TrackedSource& t)
+    {
+        return t.ticket != 0
+            && m_audioEngine.playbackTicket(t.source) == t.ticket
+            && m_audioEngine.isSourcePlaying(t.source);
+    };
+
     scene->forEachEntity([this, &mixer, duck, &listenerPos, &air, &lod,
-                          &routerDuck, &busActiveCurr,
+                          &routerDuck, &busActiveCurr, &ownsPlayback,
                           kBusActiveVolume](Entity& entity)
     {
         auto* comp = entity.getComponent<AudioSourceComponent>();
@@ -206,7 +216,8 @@ void AudioSystem::update(float deltaTime)
         };
 
         m_sourceTracker.observe(entityId, comp->autoPlay);
-        const unsigned int* tracked = m_sourceTracker.find(entityId);
+        const AudioSourceTracker::TrackedSource* tracked =
+            m_sourceTracker.find(entityId);
         if (tracked == nullptr)
         {
             // Not yet playing. Auto-acquire when authored. Explicit
@@ -241,7 +252,9 @@ void AudioSystem::update(float deltaTime)
             // frame retries. A source that stops is reaped too, but the
             // tracker remembers it fired, so a finished one-shot is not
             // restarted until autoPlay is unticked and ticked again.
-            m_sourceTracker.started(entityId, source);
+            m_sourceTracker.started(entityId, source,
+                                    m_audioEngine.playbackTicket(source),
+                                    comp->loop);
             if (source != 0)
             {
                 // Push the full composed state immediately so pitch
@@ -259,13 +272,14 @@ void AudioSystem::update(float deltaTime)
         }
 
         // Tracked — push the per-frame state.
-        const unsigned int source = *tracked;
-        if (source == 0)
+        const unsigned int source = tracked->source;
+        if (source == 0 || !ownsPlayback(*tracked))
         {
             // Autoplay attempted but no source acquired (pool
-            // exhausted, file missing, or no hardware). Skip this
-            // frame; the reap pass below will prune the entry so
-            // a future tick can retry.
+            // exhausted, file missing, or no hardware), or the
+            // playback ended or was evicted and its source now belongs
+            // to another sound. Skip this frame; the reap pass below
+            // prunes the entry.
             return;
         }
         markBusActive();
@@ -283,7 +297,7 @@ void AudioSystem::update(float deltaTime)
     // suffices.
     m_sourceTracker.reap(
         [scene](std::uint32_t id) { return scene->findEntityById(id) == nullptr; },
-        [this](unsigned int source) { return m_audioEngine.isSourcePlaying(source); });
+        ownsPlayback);
     for (auto it = m_lodTiers.begin(); it != m_lodTiers.end(); )
     {
         // AX5 — keep the tier map in step with the tracked sources.

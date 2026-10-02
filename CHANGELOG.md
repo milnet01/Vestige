@@ -23,6 +23,16 @@ may change any interface without notice.
 
 ## [Unreleased]
 
+### 2026-10-02 Fixed — A sound cut off to make room no longer takes over the sound that replaced it (3D_E-0739)
+
+When too many sounds played at once, the engine stopped a quieter one
+and gave its playback channel to the new sound. A scene's auto-play
+sound that was cut off this way kept steering that channel, moving
+the new sound to its own position and setting its volume. Each
+playback now carries a ticket that never repeats, and a sound only
+steers a channel whose ticket is still its own. A looping auto-play
+sound that is cut off starts again when a channel frees up.
+
 ### 2026-10-02 Fixed — Auto-play sounds play once, and background sounds set to loop do loop (3D_E-0738)
 
 A sound set to play automatically when a scene opens restarted every

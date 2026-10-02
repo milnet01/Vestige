@@ -23,6 +23,7 @@
 
 #include <atomic>
 #include <chrono>
+#include <cstdint>
 #include <filesystem>
 #include <functional>
 #include <mutex>
@@ -343,6 +344,14 @@ public:
     ///        per-entity tracking map. Returns false when the engine
     ///        is unavailable or the source ID is 0.
     bool isSourcePlaying(unsigned int source) const;
+
+    /// @brief 3D_E-0739 — the ticket of the playback now holding `source`,
+    ///        or 0 when the source is free or unknown. Every grant of a
+    ///        pool slot gets a new ticket that never repeats, so a caller
+    ///        that keeps a source across frames stores the ticket and
+    ///        treats the source as its own only while they match:
+    ///        eviction hands the victim's source name to the new sound.
+    std::uint64_t playbackTicket(unsigned int source) const;
 
     /// @brief Caption-routing callback (Phase 10.9 P4).
     ///
@@ -832,6 +841,10 @@ private:
     // in libstdc++ stl_bvector.h.
     std::vector<unsigned int> m_sourcePool;
     std::vector<uint8_t> m_sourceInUse;
+    /// 3D_E-0739 — ticket of the grant holding each slot (0 = free),
+    /// parallel to m_sourcePool. m_nextTicket never repeats a value.
+    std::vector<std::uint64_t> m_sourceTicket;
+    std::uint64_t m_nextTicket = 1;
 
     // Phase 10.7 slice A2 / Phase 10.9 P7 — per-source mixer metadata.
     // Keyed by OpenAL source ID, populated by every `playSound*` that

@@ -5052,6 +5052,45 @@ shipped that have no invocation path at all.
   Source: in-session-2026-10-02.
   Lanes: audio.
 
+- ✅ [3D_E-0739] **An evicted auto-play sound's source id is reused, and AudioSystem goes on steering the new sound with the old one's state.**
+  Found while building the review packet for the 3D_E-S0016 spec.
+  AudioEngine::acquireSource evicts a lower-priority voice with
+  releaseSource and hands back the first free pool slot, which is the
+  victim's own OpenAL source name. AudioSystem keeps the evicted
+  entity's source id in AudioSourceTracker; isSourcePlaying(id) is true
+  for the new sound, so the reap pass keeps the entry and
+  applySourceState pushes the old component's position, gain and pitch
+  onto the new sound every frame.
+  Fix: AudioEngine stamps each acquisition with a playback ticket that
+  never repeats; callers that keep a source across frames store the
+  ticket and treat the source as theirs only while the ticket matches.
+  Resolved 2026-10-02: AudioEngine::playbackTicket; AudioSourceTracker
+  stores source + ticket + loop, and AudioSystem steers a tracked source
+  only while the ticket matches and it plays. An evicted loop is
+  re-armed; an evicted one-shot is not. Tests: AudioSourceTracker
+  (8) and AudioEnginePlaybackTicket (OpenAL null device, POSIX), all
+  four target tests seen red under mutation.
+  **Layman:** When too many sounds play at once and a quiet one is cut off, the engine can end up moving or changing the volume of the wrong sound.
+  Kind: fix.
+  Source: in-session-2026-10-02.
+  Lanes: audio.
+
+- 📋 [3D_E-0740] **Can a music layer that underruns lose its source to another sound while the music player still uses it?**
+  Seen while fixing 3D_E-0739; not reproduced. AudioMusicPlayer::playLayer
+  takes a pool source with acquireSource and keeps it for the layer's
+  life. AudioEngine::reclaimFinishedSources, run by updateGains every
+  frame, frees any in-use pool slot whose state is AL_STOPPED. A
+  streaming source that underruns reads AL_STOPPED until the music
+  player's update re-queues and calls alSourcePlay. If AudioSystem's
+  updateGains runs in that gap, the slot is marked free and the next
+  playSound may take it while the music player still queues buffers on
+  it. To settle: check the update order of MusicSystem against
+  AudioSystem, then force an underrun.
+  **Layman:** Check whether background music that briefly runs dry can end up sharing its playback channel with a sound effect.
+  Kind: investigate.
+  Source: in-session-2026-10-02.
+  Lanes: audio.
+
 ## 0.3.0 — An editor a builder can use
 
 Breaks: the scene format. Editor work changes what a scene stores.
