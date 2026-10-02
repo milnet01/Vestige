@@ -152,10 +152,11 @@ void AudioSystem::update(float deltaTime)
     AudioLodConfig lod = m_lodConfig;
     lod.enabled        = m_audioEngine.isLodEnabled();
 
-    // AX13 — accumulate THIS frame's per-bus activity for next frame's
-    // router pass. A bus is "active" if a live source on it is authored
-    // above a small volume floor (read pre-duck to avoid feedback).
-    std::array<bool, AudioBusCount> busActiveCurr{};
+    // AX13 — a bus is "active" for next frame's router pass if a live
+    // playback on it is above a small volume floor (read pre-duck to avoid
+    // feedback). 3D_E-0742: read from the engine's live playbacks at the end
+    // of this update, so sounds played by script nodes, stingers and
+    // AmbientSystem count as well as scene audio sources.
     constexpr float kBusActiveVolume = 0.01f;
 
     // 3D_E-0739 — a tracked playback is ours only while it still plays and
@@ -169,8 +170,7 @@ void AudioSystem::update(float deltaTime)
     };
 
     scene->forEachEntity([this, &mixer, duck, &listenerPos, &air, &lod,
-                          &routerDuck, &busActiveCurr, &ownsPlayback,
-                          kBusActiveVolume](Entity& entity)
+                          &routerDuck, &ownsPlayback](Entity& entity)
     {
         auto* comp = entity.getComponent<AudioSourceComponent>();
         if (comp == nullptr)
@@ -203,17 +203,9 @@ void AudioSystem::update(float deltaTime)
             return tier;
         };
 
-        // AX13 — effective per-source duck = global manual × router[bus],
-        // and mark this bus active for next frame's router pass.
+        // AX13 — effective per-source duck = global manual × router[bus].
         const std::size_t busIdx = static_cast<std::size_t>(comp->bus);
         const float effDuck = duck * routerDuck[busIdx];
-        auto markBusActive = [&]()
-        {
-            if (comp->volume > kBusActiveVolume)
-            {
-                busActiveCurr[busIdx] = true;
-            }
-        };
 
         m_sourceTracker.observe(entityId, comp->autoPlay);
         const AudioSourceTracker::TrackedSource* tracked =
@@ -260,7 +252,6 @@ void AudioSystem::update(float deltaTime)
                 // Push the full composed state immediately so pitch
                 // / occlusion overrides on the component are heard on
                 // frame 1 rather than frame 2.
-                markBusActive();
                 const AudioSourceAlState state =
                     composeAudioSourceAlState(*comp, position, mixer, effDuck,
                                               listenerPos, air, pickTier(),
@@ -282,7 +273,6 @@ void AudioSystem::update(float deltaTime)
             // prunes the entry.
             return;
         }
-        markBusActive();
         const AudioSourceAlState alState =
             composeAudioSourceAlState(*comp, position, mixer, effDuck,
                                       listenerPos, air, pickTier(),
@@ -313,7 +303,7 @@ void AudioSystem::update(float deltaTime)
     }
 
     // AX13 — hand this frame's activity to next frame's router pass.
-    m_busActivePrev = busActiveCurr;
+    m_busActivePrev = m_audioEngine.busesWithLivePlayback(kBusActiveVolume);
 }
 
 } // namespace Vestige

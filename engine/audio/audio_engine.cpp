@@ -741,6 +741,19 @@ void AudioEngine::setSourceVolume(unsigned int source, float volume)
     }
 }
 
+std::array<bool, AudioBusCount> AudioEngine::busesWithLivePlayback(float minVolume) const
+{
+    std::array<bool, AudioBusCount> active{};
+    for (const auto& [source, mix] : m_livePlaybacks)
+    {
+        if (mix.sourceVolume > minVolume && isSourcePlaying(source))
+        {
+            active[static_cast<std::size_t>(mix.bus)] = true;
+        }
+    }
+    return active;
+}
+
 unsigned int AudioEngine::playSound(const std::string& filePath, const glm::vec3& position,
                                      float volume, bool loop, AudioBus bus,
                                      SoundPriority priority)

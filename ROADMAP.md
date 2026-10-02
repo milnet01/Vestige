@@ -5120,6 +5120,25 @@ shipped that have no invocation path at all.
   Source: in-session-2026-10-02.
   Lanes: audio.
 
+- ✅ [3D_E-0742] **Music is not ducked under a voice line played directly; bus activity counts only scene audio-source components.**
+  Found while adding the PlayDialogue node (3D_E-S0021). The AX13 ducking
+  router dips Music while the Voice bus is active, and AudioSystem::update
+  builds the per-bus activity flags only inside its AudioSourceComponent
+  loop. A sound played through AudioEngine::playSound* by a script node,
+  a stinger or AmbientSystem never marks its bus active, so a dialogue
+  line never ducks the music. Fix: take the flags from the engine's live
+  playbacks, which every playSound* path records, component sources
+  included.
+  Resolved 2026-10-02: AudioEngine::busesWithLivePlayback(minVolume)
+  reports per-bus activity from m_livePlaybacks; AudioSystem hands that
+  to the ducking router instead of its component-only flags. Test
+  AudioBusActivity.DirectPlaybackMarksItsBusActive (null device, a
+  generated WAV) red with Voice ignored, green with the fix.
+  **Layman:** When a narration line plays from a script, the background music should get quieter so the words are clear; it did not.
+  Kind: fix.
+  Source: in-session-2026-10-02.
+  Lanes: audio.
+
 ## 0.3.0 — An editor a builder can use
 
 Breaks: the scene format. Editor work changes what a scene stores.
@@ -9470,3 +9489,20 @@ record, and a real clearance before commercial release needs counsel.
   Kind: fix.
   Source: user-request-2026-09-28 (two red CI runs).
   Lanes: ci.
+
+- 💭 [3D_E-0741] **Talking characters: activate lip sync and facial animation from engine/experimental.**
+  DECISION FOR THE USER. Split from 3D_E-S0021 on 2026-10-02, when the
+  voice-line half was built (PlayDialogue node). LipSyncPlayer,
+  FacialAnimator, AudioAnalyzer and VisemeMap compile and pass their
+  tests in engine/experimental/animation/, but nothing calls them. Their
+  README estimates activation as a multi-week push: it needs an
+  authored phoneme (viseme) track pipeline, a rigged head with morph
+  targets, and a production caller plus integration test.
+  Recommendation: schedule it for the release that first ships a
+  talking character, not 0.2.0 — no scene or asset in the tree has a
+  face rig, and the 1.0 Tabernacle walkthrough needs narration (now
+  possible) rather than lip-synced characters.
+  **Layman:** Make a character's mouth and face move in time with the words it speaks.
+  Kind: feature.
+  Source: in-session-2026-10-02 (split from 3D_E-S0021).
+  Lanes: animation, audio.

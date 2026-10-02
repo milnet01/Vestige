@@ -21,6 +21,7 @@
 
 #include <glm/glm.hpp>
 
+#include <array>
 #include <atomic>
 #include <chrono>
 #include <cstdint>
@@ -363,6 +364,11 @@ public:
     ///        clip's loudness makeup again. An unknown or released source is
     ///        ignored.
     void setSourceVolume(unsigned int source, float volume);
+
+    /// @brief 3D_E-0742 — per bus, whether any playing playback on it has a
+    ///        stored volume above `minVolume`. Every `playSound*` path
+    ///        records a playback, so this covers sounds from any caller.
+    std::array<bool, AudioBusCount> busesWithLivePlayback(float minVolume) const;
 
     /// @brief Caption-routing callback (Phase 10.9 P4).
     ///

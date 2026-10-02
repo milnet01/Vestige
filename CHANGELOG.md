@@ -23,6 +23,13 @@ may change any interface without notice.
 
 ## [Unreleased]
 
+### 2026-10-02 Fixed — Music ducks under every voice line, not only under scene sound sources (3D_E-0742)
+
+The music dips while someone speaks, but the engine only noticed
+speech coming from sound sources placed in the scene. A line played by
+a script, and any other sound started directly, left the music at full
+volume. The engine now checks every sound that is playing.
+
 ### 2026-10-02 Added — Scripts can drive the adaptive music (3D_E-S0018)
 
 The layered music could already blend from calm to combat, but nothing
