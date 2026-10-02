@@ -5292,23 +5292,32 @@ shipped that have no invocation path at all.
   Source: in-session-2026-10-02.
   Lanes: ui, renderer.
 
-- 📋 [3D_E-0748] **Menu button labels sit below their boxes, and the shortcut key-caps are empty.**
+- ✅ [3D_E-0748] **Menu button labels sit below their boxes, and the shortcut key-caps are empty.**
   Seen in the --player pause menu once 3D_E-0747 made it visible. Each
   UIButton draws its label baseline at or below the box's bottom edge,
   so "Resume" crosses the border. The shortcut key-cap boxes (ESC, F5)
   draw with no visible text in the pause menu. Screenshots taken with
   demoreel shot --gpu -s 1920x1080 -- vestige --player, Esc.
+  Resolved 2026-10-02 (5d555e8): renderText2D's y is the top of the line,
+  not the baseline. TextRenderer::topForCenteredCaps centres capitals on a
+  line; button, dropdown, checkbox, slider and key-binding row use it.
+  Primary-button key-caps take the label ink for contrast. GL test
+  TextCenteringTest red with the ascender term removed (19 px low).
   **Layman:** Words on the menu buttons hang off the bottom of each button, and the small key hints are blank.
   Kind: fix.
   Source: in-session-2026-10-02.
   Lanes: ui.
 
-- 📋 [3D_E-0749] **Text of the screen under a modal draws on top of the modal's panels.**
+- ✅ [3D_E-0749] **Text of the screen under a modal draws on top of the modal's panels.**
   Seen with Settings open over the pause menu. UISystem::renderUI draws
   all sprite quads first and flushes every text draw in one batch at the
   end (Phase 10.9 Pe1), so the pause menu's labels land on top of the
   Settings panel. Fix: flush text per canvas, root then modal, or give
   the modal an opaque layer that text respects.
+  Resolved 2026-10-02 (db7a556): renderUICanvasLayers draws root then
+  modal, each as sprites then text. GL test UICanvasLayersTest red with one
+  shared text batch. Settings panel stays 94% opaque by design; the
+  high-contrast theme makes it solid.
   **Layman:** When the Settings window opens over the pause menu, the pause menu's words show through it.
   Kind: fix.
   Source: in-session-2026-10-02.

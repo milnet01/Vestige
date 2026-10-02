@@ -23,6 +23,14 @@ may change any interface without notice.
 
 ## [Unreleased]
 
+### 2026-10-02 Fixed — Menu text sits where it belongs (3D_E-0748, 3D_E-0749)
+
+Words on buttons, dropdowns, checkboxes, sliders and key-binding rows
+are now centred in their boxes instead of hanging off the bottom, and
+the small key hints (Esc, F5) are readable, including on the gold
+button. When Settings opens over the pause menu, the pause menu's
+words no longer show on top of it.
+
 ### 2026-10-02 Fixed — The game's menus show, and work with the mouse (3D_E-0746, 3D_E-0747)
 
 The in-game menus and heads-up display were never drawn: the graphics
