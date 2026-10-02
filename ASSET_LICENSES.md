@@ -86,7 +86,7 @@ CC0 row above, this one is a licence condition, not a courtesy.
 
 | File | Source | License | Attribution required |
 |------|--------|---------|----------------------|
-| `syferfontein_0d_clear_1k.hdr` | [Poly Haven](https://polyhaven.com/a/syferfontein_0d_clear) — 1K equirectangular | **CC0 1.0** | None |
+| `kloofendal_48d_partly_cloudy_puresky_1k.hdr` | [Poly Haven](https://polyhaven.com/a/kloofendal_48d_partly_cloudy_puresky) — 1K equirectangular, partly cloudy midday, sky only | **CC0 1.0** | None |
 
 The repo's **first committed HDRI**, added for the meadow benchmark
 scene's image-based lighting + pond reflections. `AtmosphereSystem`

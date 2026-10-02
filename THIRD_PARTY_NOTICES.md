@@ -187,12 +187,13 @@ Source: <https://sketchfab.com/galaxyabundant>
 
 ### HDRIs — `assets/hdri/`
 
-Source: <https://polyhaven.com/a/syferfontein_0d_clear>
+Source: <https://polyhaven.com/a/kloofendal_48d_partly_cloudy_puresky>
 
-- **`syferfontein_0d_clear_1k.hdr`** — 1K equirectangular sky HDRI from
-  Poly Haven. Licensed under **CC0 1.0 Universal** — no attribution
-  required. Provides image-based lighting and pond reflections for the
-  meadow benchmark scene.
+- **`kloofendal_48d_partly_cloudy_puresky_1k.hdr`** — 1K equirectangular
+  partly cloudy sky HDRI from Poly Haven (Greg Zaal; sky edits by Jarod
+  Guest). Licensed under **CC0 1.0 Universal** — no attribution required.
+  Provides the sky, image-based lighting and pond reflections for the
+  meadow benchmark scene (3D_E-0034).
 
 ### Fonts — `assets/fonts/`
 

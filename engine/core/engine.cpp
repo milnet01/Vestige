@@ -2677,9 +2677,10 @@ void Engine::setupDemoScene()
     m_renderer->setBloomIntensity(0.10f);
     m_renderer->setSsaoEnabled(true);
 
-    // CC0 1K HDRI (Poly Haven, clear midday — §6). Committed to the public repo;
-    // resolved relative to the working dir like the other demo assets.
-    m_renderer->loadSkyboxHDRI("assets/hdri/syferfontein_0d_clear_1k.hdr");
+    // CC0 1K HDRI (Poly Haven, partly cloudy midday, sky only — 3D_E-0034).
+    // Committed to the public repo; resolved relative to the working dir like
+    // the other demo assets.
+    m_renderer->loadSkyboxHDRI("assets/hdri/kloofendal_48d_partly_cloudy_puresky_1k.hdr");
 
     Scene* scene = m_sceneManager->createScene("Meadow");
     // 3D_E-0730: createScene returns the existing scene when this runs again
@@ -2688,11 +2689,14 @@ void Engine::setupDemoScene()
     Scene::Replacement replacement(*scene);
 
     // --- Sun -----------------------------------------------------------------
-    // One shadow-casting directional light approximating the HDRI's midday sun
-    // (CSM is already active). Warm-white, high angle.
+    // One shadow-casting directional light from where the HDRI's sun is, so
+    // shadows agree with the sky (CSM is already active). The direction to the
+    // sun is the luminance-weighted centroid of the HDRI's brightest 0.05 %,
+    // mapped through Skybox's equirect convention: (0.554, 0.742, 0.378),
+    // 47.9 deg up, which the file name's "48d" confirms. Warm-white.
     Entity* sun = scene->createEntity("Sun");
     auto* dirLight = sun->addComponent<DirectionalLightComponent>();
-    dirLight->light.direction = glm::vec3(-0.35f, -0.88f, -0.32f);
+    dirLight->light.direction = glm::vec3(-0.554f, -0.742f, -0.378f);
     dirLight->light.ambient = glm::vec3(0.20f, 0.22f, 0.26f);
     dirLight->light.diffuse = glm::vec3(1.15f, 1.10f, 1.00f);  // toned down — 1.9 blew out the grass + sand
     dirLight->light.specular = glm::vec3(0.6f);
