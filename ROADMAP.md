@@ -3181,6 +3181,17 @@ Resolves CPU↔GPU cloth divergences that make CLAUDE.md Rule 7 parity-test impo
 
 - 📋 [Cl10] **GPU cloth backend lacks three CPU-spec polish features — decide port-vs-document for parity.**
   Surfaced by the Cl1 parity harness. The GPU runs the core XPBD loop without three features the CPU ClothSimulator has: (1) adaptive damping (cloth_simulator.cpp:254-272), (2) rest-pose blending toward the authored pose in calm wind for LRA/pinned cloth (cloth_simulator.cpp:373-391), (3) sleep detection — a settled CPU cloth freezes; the GPU always simulates (cloth_simulator.cpp:408-434). For each, decide whether to port to the GPU dispatch (true parity) or document as an intentional CPU-only behaviour on IClothSolverBackend. Rule 7 parity gate. (Damping convention was the fourth gap and is already fixed; constraint convergence is Cl9.)
+  Next step decided 2026-10-02: build GPU velocity recovery without a
+  new spec (one subsystem, textbook XPBD, guarded by the Cl1 parity
+  tests). Add a pass at substep end, after LRA, mirroring the CPU's step
+  7: v = (pos - prevPos) / dtSub, then v *= (1 - damping), zero for
+  pinned. Move damping out of cloth_integrate.comp.glsl into that pass.
+  The collision shader writes velocities too; the recovery overwrites
+  them, as the CPU does. Then re-attempt rest-pose (#2) and sleep (#3)
+  against the 5 % Hausdorff gate. Finding and the reverted 11.5 % port:
+  docs/phases/phase_10_9_cloth_gpu_parity_design.md, "Implementation
+  finding: GPU velocity-recovery model".
+  Layman: Make the graphics-card cloth work out its speed the same way the processor cloth does, then add its two missing settle-down features.
   Kind: implement.
   Source: in-session-2026-06-03 Cl1 parity harness.
 
@@ -4697,6 +4708,13 @@ shipped that have no invocation path at all.
   2026-09-29: KEEP unused public engine API (future-game toolkit);
   remove only internal helpers that are truly dead. Remaining: read
   ranked.txt's internal (non-public) hits and delete the dead ones.
+  Re-run 2026-10-02 (the 09-29 scratch was gone): one -O0 flavour, no
+  sanitizers, GNU ld, tests off, at /mnt/Emulators/vestige-gc-scan/O0
+  (build.log holds the --print-gc-sections lines; rc holds the exit code;
+  cc-job name vestige-gcscan). Next: grep "removing unused section" from
+  build.log, demangle, keep Vestige:: non-template names absent from
+  tests/ and tools/, read each internal one, delete the truly dead. Delete
+  the scratch dir when done.
   **Layman:** Ask the linker which functions nothing ever calls, then remove the dead ones or fix the bug that made them dead.
   Kind: chore.
   Source: peer-doom-ants-2026-09-26 message 41.
