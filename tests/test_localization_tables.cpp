@@ -7,11 +7,15 @@
 #include "core/settings.h"
 #include "localization/supported_languages.h"
 #include "renderer/text_renderer.h"
+#include "ui/graphics_settings_page.h"
+
+#include <nlohmann/json.hpp>
 
 #include <gtest/gtest.h>
 
 #include <cstdint>
 #include <filesystem>
+#include <fstream>
 #include <string>
 
 using namespace Vestige;
@@ -30,6 +34,26 @@ TEST(LocalizationTables, EveryShippedLanguageIsAcceptedAndHasATable)
             std::filesystem::path(VESTIGE_LOCALIZATION_DIR) / (std::string(lang.code) + ".json");
         EXPECT_TRUE(std::filesystem::is_regular_file(table))
             << lang.code << " is shipped without " << table;
+    }
+}
+
+// 3D_E-0035 INV-10: LocalizationAuditStrict checks English only, so this is
+// what keeps the Settings page translated in every shipped language.
+TEST(LocalizationTables, SettingsPageKeysInEveryTable)
+{
+    const auto keys = settingsPageKeys();
+    ASSERT_FALSE(keys.empty());
+    for (const SupportedLanguage& lang : kSupportedLanguages)
+    {
+        std::ifstream in(std::filesystem::path(VESTIGE_LOCALIZATION_DIR)
+                         / (std::string(lang.code) + ".json"));
+        ASSERT_TRUE(in.good()) << lang.code;
+        const nlohmann::json table = nlohmann::json::parse(in);
+        for (std::string_view key : keys)
+        {
+            EXPECT_TRUE(table.contains(std::string(key)))
+                << lang.code << ".json lacks " << key;
+        }
     }
 }
 

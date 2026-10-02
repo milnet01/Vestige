@@ -123,6 +123,7 @@ void UIDropdown::render(SpriteBatchRenderer& batch,
     if (size.x < theme->dropdownMinWidth) size.x = theme->dropdownMinWidth;
 
     const glm::vec2 absPos = computeAbsolutePosition(parentOffset, screenWidth, screenHeight);
+    m_lastAbsPos = absPos;
 
     // Background — hover brightens.
     if (hovered || open)
@@ -155,11 +156,14 @@ void UIDropdown::render(SpriteBatchRenderer& batch,
                                     scale, theme->textSecondary,
                                     screenWidth, screenHeight);
     }
+}
 
-    // Popup menu (drawn LAST so it sits over neighbouring elements; the
-    // canvas should still order this dropdown after its peers in the
-    // element list since the SpriteBatch doesn't reorder draws by z).
-    if (open && !options.empty() && textRenderer != nullptr)
+void UIDropdown::renderOpenList(SpriteBatchRenderer& batch, int screenWidth, int screenHeight)
+{
+    // Drawn by UISystem after every canvas, so no later sibling covers the
+    // open list (3D_E-0035). Uses where render() last put the box.
+    const glm::vec2 absPos = m_lastAbsPos;
+    if (open && !options.empty() && textRenderer != nullptr && theme != nullptr)
     {
         const float itemH       = kItemHeight;
         const float menuH       = visibleMenuHeight();

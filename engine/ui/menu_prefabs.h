@@ -20,6 +20,8 @@
 #include "ui/ui_canvas.h"
 #include "ui/ui_theme.h"
 
+#include <functional>
+
 namespace Vestige
 {
 
@@ -92,6 +94,24 @@ void buildSettingsMenu(UICanvas& canvas,
                         const UITheme& theme,
                         TextRenderer* textRenderer,
                         UISystem& uiSystem);
+
+/// @brief 3D_E-0035 — what the Settings footer buttons do.
+struct SettingsMenuActions
+{
+    std::function<void()> apply;            ///< Save the pending settings.
+    std::function<void()> revert;           ///< Drop the unsaved changes.
+    std::function<void()> restoreDefaults;  ///< Reset the page's options.
+    std::function<bool()> isDirty;          ///< True while there are unsaved changes.
+};
+
+/// @brief 3D_E-0035 overload: the chrome with working footer buttons. Apply
+///        and Revert are enabled, and the status reads `ui.settings.unsaved`,
+///        only while `actions.isDirty()` is true; this updates each frame.
+void buildSettingsMenu(UICanvas& canvas,
+                        const UITheme& theme,
+                        TextRenderer* textRenderer,
+                        UISystem& uiSystem,
+                        const SettingsMenuActions& actions);
 
 /// @brief Phase 10 slice 12.4 — builds the default HUD composition for
 ///        first-person walkthrough gameplay.

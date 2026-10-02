@@ -205,7 +205,7 @@ foliage / water rows that differentiate them are Tier-2 setters; until those lan
   `applyDisplay` / `applyRendererAccessibility` are dispatched). A runtime preset change therefore
   re-runs the apply immediately; the toggle setters take effect next frame, and the new
   `renderScale` takes effect on the next play-mode resize (next frame).
-- **`Custom` transition:** `Custom` applies nothing (the player's individual toggles stand).
+- **`Custom` transition** — superseded by `docs/specs/3D_E-0035-graphics-settings-menu.md` §4.2 (2026-10-02): Custom now applies its saved values. **`Custom` transition:** `Custom` applies nothing (the player's individual toggles stand).
   Selecting a **named** preset in the settings panel applies that row *and* stores
   `qualityPreset = <that preset>`. Conversely, hand-editing any individual knob (AA / SSAO /
   bloom / renderScale) sets `qualityPreset = Custom`, so a later re-apply on load never silently

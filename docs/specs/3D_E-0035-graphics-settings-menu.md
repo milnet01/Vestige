@@ -91,7 +91,9 @@ struct DisplaySettings
 ```
 
 An unknown string on disk falls back to the field's default, the policy
-`qualityPresetFromString` already follows. `kCurrentSchemaVersion` goes
+`qualityPresetFromString` already follows. `AntiAliasMode` moves from
+`renderer/taa.h` to its own `renderer/anti_alias_mode.h`, which
+`settings.h` includes without OpenGL headers. `kCurrentSchemaVersion` goes
 from 6 to 7, with `migrate_v6_to_v7` in `engine/core/settings_migration.cpp`
 (§14). The four subsystem tier enums (`TerrainGroundQuality`,
 `FoliageQuality`, `GrassQuality`, `TreeQuality`) each map from
@@ -99,13 +101,15 @@ from 6 to 7, with `migrate_v6_to_v7` in `engine/core/settings_migration.cpp`
 
 ### 4.2 Presets and apply
 
-`engine/core/settings_apply.{h,cpp}` replaces `applyQualityPreset` with
-three functions:
+`applyQualityPreset` is replaced by three functions. The first two live
+in `engine/core/settings.{h,cpp}`, because loading and the migration call
+them and must not depend on renderer headers; `applyGraphics` lives in
+`engine/core/settings_apply.{h,cpp}`:
 
 ```cpp
 struct QualityRow { float renderScale; GraphicsSettings graphics; };
 
-/// The Low / Medium / High / Ultra rows. Custom has no row.
+/// The Low / Medium / High / Ultra rows. Custom has none and returns High's.
 QualityRow qualityRowFor(QualityPreset preset);
 
 /// Sets preset, renderScale and every graphics field from the preset's row.
@@ -142,9 +146,13 @@ New `engine/ui/graphics_settings_page.{h,cpp}`:
 /// Adds the graphics controls to the Settings content area, bound to
 /// `editor`. Every change goes through SettingsEditor::mutate, so it
 /// previews live.
-void buildGraphicsSettingsPage(UICanvas& canvas, const UITheme& theme,
-                               TextRenderer* text, SettingsEditor& editor);
+GraphicsSettingsPage buildGraphicsSettingsPage(UICanvas& canvas, const UITheme& theme,
+                                               TextRenderer* text, SettingsEditor& editor);
 ```
+
+`GraphicsSettingsPage` holds pointers to the twelve controls, for tests.
+An open dropdown list is drawn by `UISystem` after every canvas
+(`UIDropdown::renderOpenList`), so the controls below it never cover it.
 
 The controls sit in one container element. Before drawing its children
 each frame, it copies their shown state from `editor.pending()`, so the

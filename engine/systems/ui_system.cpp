@@ -209,6 +209,28 @@ void UISystem::renderUI(int screenWidth, int screenHeight)
                           modalHasElements ? &m_modalCanvas : nullptr},
                          m_spriteBatch, textPtrForBatch, screenWidth, screenHeight);
 
+    // 3D_E-0035: an open dropdown list is its own layer over both canvases,
+    // so the widgets below its box never cover it.
+    if (m_openDropdown != nullptr && !m_openDropdown->open)
+    {
+        m_openDropdown = nullptr;
+    }
+    if (m_openDropdown != nullptr)
+    {
+        const bool batchText = textPtrForBatch != nullptr && textPtrForBatch->isInitialized();
+        if (batchText)
+        {
+            textPtrForBatch->beginBatch2D(screenWidth, screenHeight);
+        }
+        m_spriteBatch.begin(screenWidth, screenHeight);
+        m_openDropdown->renderOpenList(m_spriteBatch, screenWidth, screenHeight);
+        m_spriteBatch.end();
+        if (batchText && textPtrForBatch->isBatching())
+        {
+            textPtrForBatch->endBatch2D();
+        }
+    }
+
     // Subtitles last so they sit on top of modal UI. Layout is computed
     // against the text renderer's actual font pixel size so plate
     // width matches rendered glyph width byte-for-byte.
@@ -517,7 +539,17 @@ bool UISystem::handleKey(int key, int mods)
                 // 3D_E-0746: a disabled element swallows the key and does nothing.
                 if (m_focusedElement->isEnabled())
                 {
+                    // Read before activating: activation may change screens.
+                    auto* dropdown = dynamic_cast<UIDropdown*>(m_focusedElement);
+                    const std::uint32_t generation = m_inputGeneration;
                     m_focusedElement->activate();
+                    if (dropdown != nullptr && generation == m_inputGeneration)
+                    {
+                        // 3D_E-0035: a list opened from the keyboard is drawn
+                        // and takes the next mouse press, like a clicked one.
+                        m_openDropdown = dropdown->open ? dropdown : nullptr;
+                        m_openDropdownAbsPos = dropdown->lastAbsolutePosition();
+                    }
                 }
                 return true;
             }
@@ -541,7 +573,7 @@ bool UISystem::handleMousePress(const glm::vec2& cursor, int screenWidth, int sc
 {
     m_pressedElement = nullptr;
 
-    if (m_openDropdown != nullptr)
+    if (m_openDropdown != nullptr && m_openDropdown->open)
     {
         UIDropdown* dropdown = m_openDropdown;
         m_openDropdown = nullptr;

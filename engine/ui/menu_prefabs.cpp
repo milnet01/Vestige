@@ -6,6 +6,7 @@
 #include "systems/ui_system.h"
 #include "ui/ui_button.h"
 #include "ui/ui_crosshair.h"
+#include "ui/ui_frame_hook.h"
 #include "ui/ui_fps_counter.h"
 #include "ui/ui_label.h"
 #include "ui/ui_notification_toast.h"
@@ -245,7 +246,8 @@ void buildPauseMenuImpl(UICanvas& canvas, const UITheme& theme,
 }
 
 void buildSettingsMenuImpl(UICanvas& canvas, const UITheme& theme,
-                            TextRenderer* textRenderer, UISystem* uiSystem)
+                            TextRenderer* textRenderer, UISystem* uiSystem,
+                            const SettingsMenuActions* actions = nullptr)
 {
     // Darkened backdrop.
     canvas.addElement(makePanel({0, 0}, {1920, 1080},
@@ -318,16 +320,15 @@ void buildSettingsMenuImpl(UICanvas& canvas, const UITheme& theme,
     const float footerY = modalY + modalH - 70.0f;
     canvas.addElement(makePanel({modalX + 48.0f, footerY - 16.0f},
                                   {modalW - 96.0f, 1}, theme.ruleStrong));
-    canvas.addElement(makeLabel(std::string(Vestige::tr("ui.settings.saved")),
-                                  {modalX + 48.0f, footerY + 18.0f},
-                                  0.22f, theme.textSecondary, textRenderer));
+    auto status = makeLabel(std::string(Vestige::tr("ui.settings.saved")),
+                            {modalX + 48.0f, footerY + 18.0f},
+                            0.22f, theme.textSecondary, textRenderer);
 
     auto defaultsBtn = makeButton(std::string(Vestige::tr("ui.settings.restore_defaults")),
                                     {modalX + modalW - 600.0f, footerY},
                                     {200.0f, 40.0f},
                                     UIButtonStyle::GHOST, theme, textRenderer);
     defaultsBtn->small = true;
-    canvas.addElement(std::move(defaultsBtn));
 
     auto revertBtn = makeButton(std::string(Vestige::tr("ui.settings.revert")),
                                   {modalX + modalW - 380.0f, footerY},
@@ -335,7 +336,6 @@ void buildSettingsMenuImpl(UICanvas& canvas, const UITheme& theme,
                                   UIButtonStyle::DEFAULT, theme, textRenderer);
     revertBtn->small = true;
     revertBtn->disabled = true;
-    canvas.addElement(std::move(revertBtn));
 
     auto applyBtn = makeButton(std::string(Vestige::tr("ui.settings.apply")),
                                  {modalX + modalW - 240.0f, footerY},
@@ -343,6 +343,31 @@ void buildSettingsMenuImpl(UICanvas& canvas, const UITheme& theme,
                                  UIButtonStyle::PRIMARY, theme, textRenderer);
     applyBtn->small = true;
     applyBtn->disabled = true;
+
+    // 3D_E-0035: with actions, the footer buttons work, and Apply / Revert
+    // and the status line follow isDirty() each frame.
+    if (actions != nullptr)
+    {
+        if (actions->restoreDefaults) defaultsBtn->onClick.connect(actions->restoreDefaults);
+        if (actions->revert)          revertBtn->onClick.connect(actions->revert);
+        if (actions->apply)           applyBtn->onClick.connect(actions->apply);
+        UIButton* revert = revertBtn.get();
+        UIButton* apply  = applyBtn.get();
+        UILabel*  label  = status.get();
+        canvas.addElement(std::make_unique<UIFrameHook>(
+            [revert, apply, label, isDirty = actions->isDirty]()
+            {
+                const bool dirty = isDirty && isDirty();
+                revert->disabled = !dirty;
+                apply->disabled  = !dirty;
+                label->text = std::string(Vestige::tr(dirty ? "ui.settings.unsaved"
+                                                            : "ui.settings.saved"));
+            }));
+    }
+
+    canvas.addElement(std::move(status));
+    canvas.addElement(std::move(defaultsBtn));
+    canvas.addElement(std::move(revertBtn));
     canvas.addElement(std::move(applyBtn));
 }
 
@@ -386,6 +411,13 @@ void buildSettingsMenu(UICanvas& canvas, const UITheme& theme,
                         TextRenderer* textRenderer, UISystem& uiSystem)
 {
     buildSettingsMenuImpl(canvas, theme, textRenderer, &uiSystem);
+}
+
+void buildSettingsMenu(UICanvas& canvas, const UITheme& theme,
+                        TextRenderer* textRenderer, UISystem& uiSystem,
+                        const SettingsMenuActions& actions)
+{
+    buildSettingsMenuImpl(canvas, theme, textRenderer, &uiSystem, &actions);
 }
 
 // -- Phase 10 slice 12.4: default HUD prefab --------------------------------

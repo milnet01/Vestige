@@ -32,6 +32,7 @@
 #include "audio/audio_music_player.h"
 #include "systems/ui_system.h"
 #include "ui/game_screen.h"
+#include "ui/graphics_settings_page.h"
 #include "systems/navigation_system.h"
 #include "systems/sprite_system.h"
 #include "systems/physics2d_system.h"
@@ -1344,6 +1345,13 @@ bool Engine::initialize(const EngineConfig& config)
         m_uiSystem->onRootScreenChanged.connect([this](GameScreen) { syncCursorToGameScreen(); });
         m_uiSystem->onModalPushed.connect([this](GameScreen) { syncCursorToGameScreen(); });
         m_uiSystem->onModalPopped.connect([this](GameScreen) { syncCursorToGameScreen(); });
+
+        // 3D_E-0035: the player's Settings screen gets its graphics page and
+        // working Apply / Revert / Restore Defaults.
+        if (m_settingsEditor)
+        {
+            wireSettingsScreen(*m_uiSystem, *m_settingsEditor, Settings::defaultPath());
+        }
 
         if (!m_editor)
         {

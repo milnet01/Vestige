@@ -72,8 +72,17 @@ public:
     /// @brief Fired with the chosen index when the user picks an option.
     Signal<int> onSelectionChanged;
 
+    /// @brief Draws the open list below the box. `render` does not, so that
+    ///        UISystem can draw it after every canvas and no later widget
+    ///        covers it (3D_E-0035).
+    void renderOpenList(SpriteBatchRenderer& batch, int screenWidth, int screenHeight);
+
+    /// @brief Top-left of the box as `render` last drew it.
+    const glm::vec2& lastAbsolutePosition() const { return m_lastAbsPos; }
+
 private:
     float visibleMenuHeight() const;
+    glm::vec2 m_lastAbsPos{0.0f};  ///< Where render() last drew the box.
 };
 
 } // namespace Vestige
