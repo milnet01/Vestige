@@ -254,8 +254,11 @@ TEST(Settings, RoundTripsThroughJson)
     original.display.windowWidth   = 2560;
     original.display.windowHeight  = 1440;
     original.display.vsync         = false;
-    original.display.qualityPreset = QualityPreset::Ultra;
+    // Custom: a named preset would re-derive its row on load (3D_E-0035).
+    original.display.qualityPreset = QualityPreset::Custom;
     original.display.renderScale   = 0.75f;
+    original.display.graphics.antiAlias   = AntiAliasMode::SMAA;
+    original.display.graphics.grassDetail = DetailTier::Medium;
 
     original.audio.busGains[1] = 0.5f;   // Music
     original.audio.hrtfEnabled = false;
@@ -386,6 +389,7 @@ TEST(Settings, QualityPresetFromUnknownFallsBack)
 TEST(Settings, ValidationClampsNegativeRenderScale)
 {
     Settings s;
+    s.display.qualityPreset = QualityPreset::Custom;  // keeps the stored scale
     s.display.renderScale = -1.0f;
     json j = s.toJson();
 
@@ -397,6 +401,7 @@ TEST(Settings, ValidationClampsNegativeRenderScale)
 TEST(Settings, ValidationClampsHighRenderScale)
 {
     Settings s;
+    s.display.qualityPreset = QualityPreset::Custom;  // keeps the stored scale
     s.display.renderScale = 5.0f;
     json j = s.toJson();
 
@@ -588,6 +593,7 @@ TEST(SettingsDisk, SaveAndReloadIsEqual)
     fs::path path = tmp.path() / "settings.json";
 
     Settings original;
+    original.display.qualityPreset   = QualityPreset::Custom;  // keeps the stored scale
     original.display.renderScale     = 0.5f;
     original.audio.busGains[3]       = 0.4f;   // sfx
     original.accessibility.highContrast = true;
@@ -1375,15 +1381,25 @@ TEST(SettingsApply, RendererAccessibilityForwardsPostProcessWireFieldsVerbatim)
 }
 
 // ================================================================
-// Tier 1 — quality-preset apply (design §4.1 / §6 items 3–4)
+// Tier 1 — quality-preset apply (design §4.1 / §6 items 3–4), as
+// selectQualityPreset + applyGraphics since 3D_E-0035
 // ================================================================
+
+namespace
+{
+void selectAndApply(QualityPreset p, DisplaySettings& d, RendererQualitySink& sink)
+{
+    selectQualityPreset(d, p);
+    applyGraphics(d, sink);
+}
+} // namespace
 
 TEST(SettingsApply, QualityPresetLowUsesFxaaHalfScaleAndDropsHeavyPost)
 {
     DisplaySettings d;
     d.renderScale = 999.0f;  // sentinel: must be overwritten
     RecordingRendererQualitySink sink;
-    applyQualityPreset(QualityPreset::Low, d, sink);
+    selectAndApply(QualityPreset::Low, d, sink);
 
     EXPECT_FLOAT_EQ(d.renderScale, 0.66f);
     EXPECT_EQ(sink.aa, AntiAliasMode::FXAA);
@@ -1401,7 +1417,7 @@ TEST(SettingsApply, QualityPresetMediumKeepsSsaoBloomButStillFxaaAndNoHeavyPost)
 {
     DisplaySettings d;
     RecordingRendererQualitySink sink;
-    applyQualityPreset(QualityPreset::Medium, d, sink);
+    selectAndApply(QualityPreset::Medium, d, sink);
 
     EXPECT_FLOAT_EQ(d.renderScale, 0.75f);
     EXPECT_EQ(sink.aa, AntiAliasMode::FXAA);
@@ -1420,7 +1436,7 @@ TEST(SettingsApply, QualityPresetHighAndUltraRenderIdenticallyInWave1)
     {
         DisplaySettings d;
         RecordingRendererQualitySink sink;
-        applyQualityPreset(p, d, sink);
+        selectAndApply(p, d, sink);
 
         EXPECT_FLOAT_EQ(d.renderScale, 1.0f) << "preset " << qualityPresetLabel(p);
         EXPECT_EQ(sink.aa, AntiAliasMode::TAA) << "preset " << qualityPresetLabel(p);
@@ -1438,15 +1454,152 @@ TEST(SettingsApply, QualityPresetHighAndUltraRenderIdenticallyInWave1)
     }
 }
 
-TEST(SettingsApply, QualityPresetCustomAppliesNothing)
+TEST(SettingsApply, QualityPresetCustomKeepsAndPushesSavedValues)
 {
+    // 3D_E-0035 replaced "Custom applies nothing": Custom's saved values
+    // are what the renderers receive.
     DisplaySettings d;
     d.renderScale = 0.42f;  // a hand-tuned value that must survive
+    d.graphics.antiAlias = AntiAliasMode::SMAA;
+    d.graphics.bloom = false;
+    d.graphics.grassDetail = DetailTier::Low;
     RecordingRendererQualitySink sink;
-    applyQualityPreset(QualityPreset::Custom, d, sink);
+    selectAndApply(QualityPreset::Custom, d, sink);
 
-    EXPECT_FLOAT_EQ(d.renderScale, 0.42f);  // untouched
-    EXPECT_EQ(sink.calls, 0);               // no renderer pushes
+    EXPECT_EQ(d.qualityPreset, QualityPreset::Custom);
+    EXPECT_FLOAT_EQ(d.renderScale, 0.42f);
+    EXPECT_EQ(sink.aa, AntiAliasMode::SMAA);
+    EXPECT_FALSE(sink.bloom);
+    EXPECT_EQ(sink.grass, GrassQuality::Low);
+    EXPECT_EQ(sink.calls, 8);
+}
+
+// --- 3D_E-0035 graphics settings --------------------------------------------
+
+// INV-1
+TEST(GraphicsSettings, SelectingPresetRewritesEveryField)
+{
+    for (QualityPreset p : {QualityPreset::Low, QualityPreset::Medium,
+                            QualityPreset::High, QualityPreset::Ultra})
+    {
+        DisplaySettings d;
+        d.renderScale = 0.3f;
+        d.graphics.antiAlias = AntiAliasMode::MSAA_4X;
+        d.graphics.ambientOcclusion = !qualityRowFor(p).graphics.ambientOcclusion;
+        d.graphics.bloom = !qualityRowFor(p).graphics.bloom;
+        d.graphics.volumetrics = !qualityRowFor(p).graphics.volumetrics;
+        d.graphics.terrainDetail = DetailTier::Medium;
+        d.graphics.foliageDetail = DetailTier::Low;
+        d.graphics.grassDetail = DetailTier::Medium;
+        d.graphics.treeDetail = DetailTier::Low;
+
+        selectQualityPreset(d, p);
+        EXPECT_EQ(d.qualityPreset, p);
+        EXPECT_FLOAT_EQ(d.renderScale, qualityRowFor(p).renderScale) << qualityPresetLabel(p);
+        EXPECT_EQ(d.graphics, qualityRowFor(p).graphics) << qualityPresetLabel(p);
+    }
+}
+
+// INV-3
+TEST(GraphicsSettings, ApplyPushesStoredValues)
+{
+    // The label says High but the stored options say otherwise: apply
+    // must push what is stored, never the label's row.
+    DisplaySettings d;
+    d.qualityPreset = QualityPreset::High;
+    d.graphics.antiAlias = AntiAliasMode::NONE;
+    d.graphics.ambientOcclusion = false;
+    d.graphics.bloom = false;
+    d.graphics.volumetrics = false;
+    d.graphics.terrainDetail = DetailTier::Low;
+    d.graphics.foliageDetail = DetailTier::Medium;
+    d.graphics.grassDetail = DetailTier::Low;
+    d.graphics.treeDetail = DetailTier::Medium;
+    RecordingRendererQualitySink sink;
+    applyGraphics(d, sink);
+
+    EXPECT_EQ(sink.calls, 8);
+    EXPECT_EQ(sink.aa, AntiAliasMode::NONE);
+    EXPECT_FALSE(sink.ssao);
+    EXPECT_FALSE(sink.bloom);
+    EXPECT_FALSE(sink.heavyPost);
+    EXPECT_EQ(sink.ground, TerrainGroundQuality::Low);
+    EXPECT_EQ(sink.foliage, FoliageQuality::Medium);
+    EXPECT_EQ(sink.grass, GrassQuality::Low);
+    EXPECT_EQ(sink.tree, TreeQuality::Medium);
+}
+
+// INV-4
+TEST(GraphicsSettings, RoundTripKeepsCustomValues)
+{
+    Settings s;
+    s.display.qualityPreset = QualityPreset::Custom;
+    s.display.renderScale = 0.8f;
+    s.display.graphics.antiAlias = AntiAliasMode::SMAA;
+    s.display.graphics.volumetrics = false;
+    s.display.graphics.treeDetail = DetailTier::Medium;
+
+    Settings back;
+    ASSERT_TRUE(back.fromJson(s.toJson()));
+    EXPECT_EQ(back.display, s.display);
+}
+
+TEST(GraphicsSettings, RoundTripReDerivesANamedPreset)
+{
+    Settings s;
+    s.display.qualityPreset = QualityPreset::Medium;
+    s.display.graphics.antiAlias = AntiAliasMode::TAA;   // not Medium's row
+    s.display.graphics.grassDetail = DetailTier::High;
+
+    Settings back;
+    ASSERT_TRUE(back.fromJson(s.toJson()));
+    EXPECT_EQ(back.display.qualityPreset, QualityPreset::Medium);
+    EXPECT_EQ(back.display.graphics, qualityRowFor(QualityPreset::Medium).graphics);
+    EXPECT_FLOAT_EQ(back.display.renderScale, qualityRowFor(QualityPreset::Medium).renderScale);
+}
+
+TEST(GraphicsSettings, UnknownStringsKeepTheFieldDefault)
+{
+    Settings base;
+    base.display.qualityPreset = QualityPreset::Custom;
+    nlohmann::json j = base.toJson();
+    j["display"]["graphics"]["antiAlias"] = "supersample-9000";
+    j["display"]["graphics"]["treeDetail"] = "epic";
+
+    Settings back;
+    ASSERT_TRUE(back.fromJson(j));
+    EXPECT_EQ(back.display.graphics.antiAlias, GraphicsSettings{}.antiAlias);
+    EXPECT_EQ(back.display.graphics.treeDetail, GraphicsSettings{}.treeDetail);
+}
+
+// INV-5
+TEST(SettingsMigration, V6ToV7CustomGetsHighOptionsAndKeepsItsScale)
+{
+    nlohmann::json j = Settings{}.toJson();
+    j["schemaVersion"] = 6;
+    j["display"].erase("graphics");
+    j["display"]["qualityPreset"] = "custom";
+    j["display"]["renderScale"] = 0.55;
+
+    Settings back;
+    ASSERT_TRUE(back.fromJson(j));
+    EXPECT_EQ(back.schemaVersion, 7);
+    EXPECT_EQ(back.display.qualityPreset, QualityPreset::Custom);
+    EXPECT_FLOAT_EQ(back.display.renderScale, 0.55f);
+    EXPECT_EQ(back.display.graphics, qualityRowFor(QualityPreset::High).graphics);
+}
+
+TEST(SettingsMigration, V6ToV7NamedPresetGetsItsRow)
+{
+    nlohmann::json j = Settings{}.toJson();
+    j["schemaVersion"] = 6;
+    j["display"].erase("graphics");
+    j["display"]["qualityPreset"] = "low";
+
+    ASSERT_TRUE(migrate(j));
+    Settings back;
+    ASSERT_TRUE(back.fromJson(j));
+    EXPECT_EQ(back.display.graphics, qualityRowFor(QualityPreset::Low).graphics);
 }
 
 // INV-A11Y (design §4.3 / §6 item 4): a preset whose quality side wants
@@ -1460,7 +1613,7 @@ TEST(SettingsApply, QualityPresetCannotReEnableAccessibilityDisabledHeavyPost)
     // Quality side: Ultra wants fog + GI on.
     DisplaySettings d;
     RecordingRendererQualitySink qualitySink;
-    applyQualityPreset(QualityPreset::Ultra, d, qualitySink);
+    selectAndApply(QualityPreset::Ultra, d, qualitySink);
     EXPECT_TRUE(qualitySink.heavyPost);
 
     // Accessibility side: user disabled volumetric fog + dynamic GI.
@@ -2157,6 +2310,23 @@ public:
 
 } // namespace
 
+// INV-9 (3D_E-0035): pushing to the sinks never writes the pending state,
+// so a fresh editor stays clean even when its label and values disagree.
+TEST(SettingsEditor, LoadIsNotDirty)
+{
+    Settings s;
+    s.display.qualityPreset = QualityPreset::Low;
+    s.display.renderScale = 1.0f;  // not Low's row; the old push rewrote it
+    RecordingRendererQualitySink sink;
+    SettingsEditor::ApplyTargets targets{};
+    targets.rendererQuality = &sink;
+    SettingsEditor editor(s, targets);
+    editor.forceLiveApply();
+
+    EXPECT_FALSE(editor.isDirty());
+    EXPECT_EQ(sink.calls, 8);
+}
+
 TEST(SettingsEditor, InitialStateMatchesAppliedAndIsNotDirty)
 {
     Settings s;
@@ -2215,7 +2385,13 @@ TEST(SettingsEditor, ApplyCommitsPendingToAppliedAndPersists)
 
     Settings initial;
     SettingsEditor editor(initial, {});
-    editor.mutate([](Settings& p) { p.display.renderScale = 1.5f; });
+    // A hand-set scale is Custom; a named preset re-derives its row on load
+    // (3D_E-0035), as every editing path in the UI does.
+    editor.mutate([](Settings& p)
+    {
+        p.display.renderScale   = 1.5f;
+        p.display.qualityPreset = QualityPreset::Custom;
+    });
     ASSERT_TRUE(editor.isDirty());
 
     SaveStatus s = editor.apply(path);

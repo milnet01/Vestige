@@ -61,7 +61,128 @@ std::string qualityPresetToString(QualityPreset q)
     return "medium";
 }
 
+// ====== Graphics option strings (3D_E-0035) ====================
+
+namespace
+{
+
+const char* antiAliasToString(AntiAliasMode m)
+{
+    switch (m)
+    {
+        case AntiAliasMode::NONE:    return "off";
+        case AntiAliasMode::MSAA_4X: return "msaa4x";
+        case AntiAliasMode::TAA:     return "taa";
+        case AntiAliasMode::SMAA:    return "smaa";
+        case AntiAliasMode::FXAA:    return "fxaa";
+    }
+    return "taa";
+}
+
+AntiAliasMode antiAliasFromString(const std::string& s, AntiAliasMode fallback)
+{
+    if (s == "off")    return AntiAliasMode::NONE;
+    if (s == "msaa4x") return AntiAliasMode::MSAA_4X;
+    if (s == "taa")    return AntiAliasMode::TAA;
+    if (s == "smaa")   return AntiAliasMode::SMAA;
+    if (s == "fxaa")   return AntiAliasMode::FXAA;
+    return fallback;
+}
+
+const char* detailTierToString(DetailTier t)
+{
+    switch (t)
+    {
+        case DetailTier::Low:    return "low";
+        case DetailTier::Medium: return "medium";
+        case DetailTier::High:   return "high";
+    }
+    return "high";
+}
+
+DetailTier detailTierFromString(const std::string& s, DetailTier fallback)
+{
+    if (s == "low")    return DetailTier::Low;
+    if (s == "medium") return DetailTier::Medium;
+    if (s == "high")   return DetailTier::High;
+    return fallback;
+}
+
+} // namespace
+
+// ====== Quality rows (3D_E-0035) ===============================
+
+QualityRow qualityRowFor(QualityPreset preset)
+{
+    // The phase-10 Tier-1 preset table. Ultra renders as High until a
+    // Tier-2 setter separates them; Custom has no row and reads as High.
+    auto row = [](float scale, AntiAliasMode aa, bool ao, bool bloom,
+                  bool volumetrics, DetailTier tier)
+    {
+        QualityRow r{scale, {}};
+        r.graphics.antiAlias        = aa;
+        r.graphics.ambientOcclusion = ao;
+        r.graphics.bloom            = bloom;
+        r.graphics.volumetrics      = volumetrics;
+        r.graphics.terrainDetail    = tier;
+        r.graphics.foliageDetail    = tier;
+        r.graphics.grassDetail      = tier;
+        r.graphics.treeDetail       = tier;
+        return r;
+    };
+    switch (preset)
+    {
+        case QualityPreset::Low:
+            return row(0.66f, AntiAliasMode::FXAA, false, false, false, DetailTier::Low);
+        case QualityPreset::Medium:
+            return row(0.75f, AntiAliasMode::FXAA, true, true, false, DetailTier::Medium);
+        case QualityPreset::High:
+        case QualityPreset::Ultra:
+        case QualityPreset::Custom:
+            break;
+    }
+    return row(1.0f, AntiAliasMode::TAA, true, true, true, DetailTier::High);
+}
+
+void selectQualityPreset(DisplaySettings& display, QualityPreset preset)
+{
+    display.qualityPreset = preset;
+    if (preset == QualityPreset::Custom)
+    {
+        return;
+    }
+    const QualityRow row = qualityRowFor(preset);
+    display.renderScale = row.renderScale;
+    display.graphics    = row.graphics;
+}
+
 // ====== Section equality operators ============================
+
+bool GraphicsSettings::operator==(const GraphicsSettings& o) const
+{
+    return antiAlias        == o.antiAlias
+        && ambientOcclusion == o.ambientOcclusion
+        && bloom            == o.bloom
+        && volumetrics      == o.volumetrics
+        && terrainDetail    == o.terrainDetail
+        && foliageDetail    == o.foliageDetail
+        && grassDetail      == o.grassDetail
+        && treeDetail       == o.treeDetail;
+}
+
+void graphicsToJson(const GraphicsSettings& g, json& out)
+{
+    out = json{
+        {"antiAlias",        antiAliasToString(g.antiAlias)},
+        {"ambientOcclusion", g.ambientOcclusion},
+        {"bloom",            g.bloom},
+        {"volumetrics",      g.volumetrics},
+        {"terrainDetail",    detailTierToString(g.terrainDetail)},
+        {"foliageDetail",    detailTierToString(g.foliageDetail)},
+        {"grassDetail",      detailTierToString(g.grassDetail)},
+        {"treeDetail",       detailTierToString(g.treeDetail)},
+    };
+}
 
 bool DisplaySettings::operator==(const DisplaySettings& o) const
 {
@@ -70,7 +191,8 @@ bool DisplaySettings::operator==(const DisplaySettings& o) const
         && fullscreen    == o.fullscreen
         && vsync         == o.vsync
         && qualityPreset == o.qualityPreset
-        && renderScale   == o.renderScale;
+        && renderScale   == o.renderScale
+        && graphics      == o.graphics;
 }
 
 bool AudioSettings::operator==(const AudioSettings& o) const
@@ -232,8 +354,28 @@ namespace
 
 // --- Display ---
 
+void graphicsFromJson(const json& j, GraphicsSettings& g)
+{
+    // An unknown string keeps the field's current value, as qualityPreset does.
+    g.antiAlias = antiAliasFromString(
+        j.value("antiAlias", std::string(antiAliasToString(g.antiAlias))), g.antiAlias);
+    g.ambientOcclusion = j.value("ambientOcclusion", g.ambientOcclusion);
+    g.bloom            = j.value("bloom",            g.bloom);
+    g.volumetrics      = j.value("volumetrics",      g.volumetrics);
+    auto tier = [&j](const char* key, DetailTier& t)
+    {
+        t = detailTierFromString(j.value(key, std::string(detailTierToString(t))), t);
+    };
+    tier("terrainDetail", g.terrainDetail);
+    tier("foliageDetail", g.foliageDetail);
+    tier("grassDetail",   g.grassDetail);
+    tier("treeDetail",    g.treeDetail);
+}
+
 json displayToJson(const DisplaySettings& d)
 {
+    json graphics;
+    graphicsToJson(d.graphics, graphics);
     return json{
         {"windowWidth",   d.windowWidth},
         {"windowHeight",  d.windowHeight},
@@ -241,6 +383,7 @@ json displayToJson(const DisplaySettings& d)
         {"vsync",         d.vsync},
         {"qualityPreset", qualityPresetToString(d.qualityPreset)},
         {"renderScale",   d.renderScale},
+        {"graphics",      graphics},
     };
 }
 
@@ -255,6 +398,10 @@ void displayFromJson(const json& j, DisplaySettings& d)
         j.value("qualityPreset", qualityPresetToString(d.qualityPreset)),
         d.qualityPreset);
     d.renderScale   = j.value("renderScale", d.renderScale);
+    if (j.contains("graphics") && j["graphics"].is_object())
+    {
+        graphicsFromJson(j["graphics"], d.graphics);
+    }
 }
 
 // --- Audio ---
@@ -797,6 +944,13 @@ bool Settings::fromJson(const json& jIn)
 
     // Validate always runs — clamps out-of-range values silently.
     validate(*this);
+
+    // 3D_E-0035: a named preset is a label for its row, so its values come
+    // from the row, never from what the file stored.
+    if (display.qualityPreset != QualityPreset::Custom)
+    {
+        selectQualityPreset(display, display.qualityPreset);
+    }
     return true;
 }
 

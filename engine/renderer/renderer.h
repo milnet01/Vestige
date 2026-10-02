@@ -756,7 +756,7 @@ private:
     // performance, independently of the accessibility gate above. The
     // runtime test is the AND of both (INV-A11Y) — a preset lowers cost
     // but can never re-enable an accessibility-disabled pass. Driven by
-    // applyQualityPreset via setHeavyPostEnabled.
+    // applyGraphics via setHeavyPostEnabled.
     bool m_qualityHeavyPostEnabled = true;
 
     // Phase 10.7 slice C1 — photosensitive safe-mode state, pushed

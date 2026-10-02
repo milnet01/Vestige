@@ -71,6 +71,18 @@ void SettingsEditor::restoreDisplayDefaults()
     pushPendingToSinks();
 }
 
+void SettingsEditor::restoreGraphicsDefaults()
+{
+    const DisplaySettings defaults{};
+    DisplaySettings& d = m_pending.display;
+    d.qualityPreset = defaults.qualityPreset;
+    d.renderScale   = defaults.renderScale;
+    d.graphics      = defaults.graphics;
+    d.vsync         = defaults.vsync;
+    d.fullscreen    = defaults.fullscreen;
+    pushPendingToSinks();
+}
+
 void SettingsEditor::restoreAudioDefaults()
 {
     m_pending.audio = AudioSettings{};
@@ -190,13 +202,10 @@ void SettingsEditor::pushPendingToSinks()
     }
     if (m_targets.rendererQuality)
     {
-        // Tier-1: maps the quality preset onto the renderer toggles
-        // (AA/SSAO/bloom/heavy-post) and reconciles renderScale into the
-        // pending DisplaySettings. Idempotent for a consistent preset; a
-        // no-op for Custom (the player's hand-tuned knobs stand). The
-        // engine reads pending().display.renderScale per-frame.
-        applyQualityPreset(m_pending.display.qualityPreset,
-                           m_pending.display, *m_targets.rendererQuality);
+        // 3D_E-0035: pushes the saved options and never writes m_pending,
+        // so loading leaves the editor clean. The engine reads
+        // pending().display.renderScale per frame.
+        applyGraphics(m_pending.display, *m_targets.rendererQuality);
     }
     if (m_targets.subtitle)
     {

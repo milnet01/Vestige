@@ -492,12 +492,21 @@ bool UISystem::handleKey(int key, int mods)
         case GLFW_KEY_TAB:
             advance(shift ? -1 : +1);
             return true;
-        case GLFW_KEY_DOWN:
         case GLFW_KEY_RIGHT:
+        case GLFW_KEY_LEFT:
+        {
+            // 3D_E-0035: a focused slider or dropdown takes Left / Right.
+            const int direction = (key == GLFW_KEY_RIGHT) ? +1 : -1;
+            if (m_focusedElement == nullptr || !m_focusedElement->adjust(direction))
+            {
+                advance(direction);
+            }
+            return true;
+        }
+        case GLFW_KEY_DOWN:
             advance(+1);
             return true;
         case GLFW_KEY_UP:
-        case GLFW_KEY_LEFT:
             advance(-1);
             return true;
         case GLFW_KEY_ENTER:

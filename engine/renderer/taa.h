@@ -5,6 +5,7 @@
 /// @brief Temporal Anti-Aliasing with Halton jitter, motion vectors, and history clamping.
 #pragma once
 
+#include "renderer/anti_alias_mode.h"
 #include "renderer/framebuffer.h"
 #include "renderer/shader.h"
 
@@ -14,17 +15,6 @@
 
 namespace Vestige
 {
-
-/// @brief Anti-aliasing mode selection.
-enum class AntiAliasMode
-{
-    NONE,
-    MSAA_4X,
-    TAA,
-    SMAA,
-    FXAA    ///< Tier-1 budget post-process AA (Lottes FXAA 3.11). Appended
-            ///< last so existing serialized AA-mode ints stay stable.
-};
 
 /// @brief Manages TAA state: jitter, history buffer, motion vectors, resolve.
 class Taa

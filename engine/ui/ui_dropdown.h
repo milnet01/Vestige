@@ -60,6 +60,11 @@ public:
     /// @brief Keyboard activation opens or closes the list.
     void activate() override;
 
+    /// @brief Moves the selection one option toward @a direction, clamped,
+    ///        and fires `onSelectionChanged` when it changed. Always returns
+    ///        true (3D_E-0035).
+    bool adjust(int direction) override;
+
     /// @brief A press opens a closed list. On an open list it picks the row
     ///        under the press, or closes the list when no row is there.
     void pointerPress(const glm::vec2& local) override;

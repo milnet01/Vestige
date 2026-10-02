@@ -262,3 +262,75 @@ TEST(UISystemMouse, ScreenChangeDropsTheDragAndTheOpenList)
     // The list's dropdown is gone; a press on empty space is not consumed.
     EXPECT_FALSE(sys.handleMousePress({150.0f, 120.0f}, kW, kH));
 }
+
+// -- 3D_E-0035: Left / Right adjust a focused slider or dropdown --------------
+
+TEST(UISystemKeys, RightAndLeftStepAFocusedSlider)
+{
+    UISystem sys;
+    auto* slider = place(sys.getCanvas(), std::make_unique<UISlider>(),
+                         {100.0f, 100.0f}, {296.0f, 44.0f});
+    place(sys.getCanvas(), std::make_unique<UIButton>(), {100.0f, 200.0f}, {200.0f, 50.0f});
+    slider->minValue = 0.5f;
+    slider->maxValue = 1.0f;
+    slider->value = 0.75f;
+    slider->keyStep = 0.05f;
+    sys.setFocusedElement(slider);
+
+    EXPECT_TRUE(sys.handleKey(GLFW_KEY_RIGHT, 0));
+    EXPECT_FLOAT_EQ(slider->value, 0.80f);
+    EXPECT_TRUE(sys.handleKey(GLFW_KEY_LEFT, 0));
+    EXPECT_TRUE(sys.handleKey(GLFW_KEY_LEFT, 0));
+    EXPECT_FLOAT_EQ(slider->value, 0.70f);
+    EXPECT_EQ(sys.getFocusedElement(), slider);
+}
+
+TEST(UISystemKeys, ClampedSliderKeepsFocus)
+{
+    UISystem sys;
+    auto* slider = place(sys.getCanvas(), std::make_unique<UISlider>(),
+                         {100.0f, 100.0f}, {296.0f, 44.0f});
+    place(sys.getCanvas(), std::make_unique<UIButton>(), {100.0f, 200.0f}, {200.0f, 50.0f});
+    slider->value = slider->maxValue;
+    sys.setFocusedElement(slider);
+
+    EXPECT_TRUE(sys.handleKey(GLFW_KEY_RIGHT, 0));
+    EXPECT_FLOAT_EQ(slider->value, slider->maxValue);
+    EXPECT_EQ(sys.getFocusedElement(), slider);
+}
+
+TEST(UISystemKeys, DropdownStepsAndClampsAtTheEnds)
+{
+    UISystem sys;
+    auto* dd = place(sys.getCanvas(), std::make_unique<UIDropdown>(),
+                     {100.0f, 100.0f}, {220.0f, 40.0f});
+    dd->options = {{"a", "A"}, {"b", "B"}, {"c", "C"}};
+    int picked = -1;
+    dd->onSelectionChanged.connect([&picked](int i) { picked = i; });
+    sys.setFocusedElement(dd);
+
+    sys.handleKey(GLFW_KEY_RIGHT, 0);
+    EXPECT_EQ(dd->selectedIndex, 1);
+    EXPECT_EQ(picked, 1);
+    sys.handleKey(GLFW_KEY_RIGHT, 0);
+    sys.handleKey(GLFW_KEY_RIGHT, 0);
+    EXPECT_EQ(dd->selectedIndex, 2);
+    sys.handleKey(GLFW_KEY_LEFT, 0);
+    sys.handleKey(GLFW_KEY_LEFT, 0);
+    sys.handleKey(GLFW_KEY_LEFT, 0);
+    EXPECT_EQ(dd->selectedIndex, 0);
+    EXPECT_EQ(sys.getFocusedElement(), dd);
+}
+
+TEST(UISystemKeys, RightOnAButtonMovesFocus)
+{
+    UISystem sys;
+    auto* first = place(sys.getCanvas(), std::make_unique<UIButton>(),
+                        {100.0f, 100.0f}, {200.0f, 50.0f});
+    auto* second = place(sys.getCanvas(), std::make_unique<UIButton>(),
+                         {100.0f, 200.0f}, {200.0f, 50.0f});
+    sys.setFocusedElement(first);
+
+    sys.handleKey(GLFW_KEY_RIGHT, 0);
+    EXPECT_EQ(sys.getFocusedElement(), second);
+}

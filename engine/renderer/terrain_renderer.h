@@ -26,7 +26,7 @@ class CascadedShadowMap;
 /// @brief Ground-texture quality tier for the PBR terrain path (3D_E-0031 A5).
 ///
 /// Driven by the global graphics-quality `Setting` (design §6), mapped from
-/// `QualityPreset` in `applyQualityPreset`. Each tier drops shader features:
+/// the saved `DetailTier` in `applyGraphics`. Each tier drops shader features:
 ///  - **High**   — all layers, distance-tiling break-up, detail normals,
 ///                 depth-aware height blend, triplanar textures on slopes.
 ///  - **Medium** — drops the distance-tiling far albedo sample; keeps detail
@@ -117,7 +117,7 @@ public:
     bool hasGroundMaterials() const { return m_groundMaterials.isValid(); }
 
     /// @brief Sets the ground-texture quality tier (3D_E-0031 A5). Fed by the
-    /// graphics-quality `Setting` through `applyQualityPreset`. Default High.
+    /// graphics-quality `Setting` through `applyGraphics`. Default High.
     void setGroundQuality(TerrainGroundQuality quality) { m_groundQuality = quality; }
 
     /// @brief Gets the number of draw calls from the last frame.

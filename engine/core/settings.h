@@ -50,6 +50,7 @@
 #include <nlohmann/json_fwd.hpp>
 
 #include "input/input_bindings_wire.h"
+#include "renderer/anti_alias_mode.h"
 
 namespace Vestige
 {
@@ -74,7 +75,7 @@ namespace Vestige
 ///  - v5 (AX2 R4) — adds the audio reverb settings.
 ///  - v6 (3D_E-0729) — adds `updates`: whether the editor checks for a new
 ///    release on startup, and a version the user chose to skip.
-inline constexpr int kCurrentSchemaVersion = 6;
+inline constexpr int kCurrentSchemaVersion = 7;
 
 // --------------------------------------------------------------
 // Display section — resolution, vsync, fullscreen, quality.
@@ -95,6 +96,36 @@ const char* qualityPresetLabel(QualityPreset q);
 QualityPreset qualityPresetFromString(const std::string& s, QualityPreset fallback = QualityPreset::Medium);
 std::string qualityPresetToString(QualityPreset q);
 
+/// @brief A subsystem's detail tier, as the graphics page sets it
+///        (3D_E-0035). On disk "low" / "medium" / "high".
+enum class DetailTier
+{
+    Low,
+    Medium,
+    High,
+};
+
+/// @brief The per-option graphics settings a quality preset sets
+///        (3D_E-0035). Saved, so a Custom choice survives a restart.
+///        Defaults equal the High preset's row.
+struct GraphicsSettings
+{
+    AntiAliasMode antiAlias        = AntiAliasMode::TAA;  ///< "off" "fxaa" "smaa" "taa" "msaa4x"
+    bool          ambientOcclusion = true;                ///< SSAO
+    bool          bloom            = true;
+    bool          volumetrics      = true;   ///< Volumetric fog + dynamic GI (heavy-post gate).
+    DetailTier    terrainDetail    = DetailTier::High;
+    DetailTier    foliageDetail    = DetailTier::High;
+    DetailTier    grassDetail      = DetailTier::High;
+    DetailTier    treeDetail       = DetailTier::High;
+
+    bool operator==(const GraphicsSettings& o) const;
+    bool operator!=(const GraphicsSettings& o) const { return !(*this == o); }
+};
+
+/// @brief Writes @a g as the `display.graphics` JSON object into @a out.
+void graphicsToJson(const GraphicsSettings& g, nlohmann::json& out);
+
 struct DisplaySettings
 {
     int  windowWidth   = 1920;
@@ -108,9 +139,26 @@ struct DisplaySettings
     /// Clamped to [0.25, 2.0] at load.
     float renderScale  = 1.0f;
 
+    GraphicsSettings graphics;   ///< 3D_E-0035.
+
     bool operator==(const DisplaySettings& o) const;
     bool operator!=(const DisplaySettings& o) const { return !(*this == o); }
 };
+
+/// @brief One preset's values: its render scale and graphics options.
+struct QualityRow
+{
+    float            renderScale;
+    GraphicsSettings graphics;
+};
+
+/// @brief The Low / Medium / High / Ultra rows (3D_E-0035). Custom has no
+///        row of its own and returns High's.
+QualityRow qualityRowFor(QualityPreset preset);
+
+/// @brief Sets the preset and, for a named preset, `renderScale` and every
+///        `graphics` field from its row. Custom only sets the label.
+void selectQualityPreset(DisplaySettings& display, QualityPreset preset);
 
 // --------------------------------------------------------------
 // Audio section — mixer bus gains + HRTF toggle.

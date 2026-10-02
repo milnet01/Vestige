@@ -99,4 +99,8 @@ void migrate_v4_to_v5(nlohmann::json& j);
 /// @brief v5 → v6 (3D_E-0729): adds the `updates` block, mode "ask".
 void migrate_v5_to_v6(nlohmann::json& j);
 
+/// @brief v6 → v7: add `display.graphics` (3D_E-0035). A named preset gets
+///        its row; Custom gets High's row and keeps its own `renderScale`.
+void migrate_v6_to_v7(nlohmann::json& j);
+
 } // namespace Vestige

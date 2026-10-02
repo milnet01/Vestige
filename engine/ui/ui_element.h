@@ -129,6 +129,12 @@ public:
     ///        drag). Default ignores it.
     virtual void pointerDrag(const glm::vec2& local);
 
+    /// @brief Left (@a direction < 0) or Right (> 0) while focused. Returns
+    ///        true when the element used the key — a slider or dropdown does,
+    ///        even clamped at an end — so focus stays (3D_E-0035). Default
+    ///        false: the key moves focus.
+    virtual bool adjust(int direction) { (void)direction; return false; }
+
     /// @brief The topmost visible, interactive element under @a point in this
     ///        subtree, or null. Later children draw over earlier ones, so they
     ///        are tried first. @a outAbsPos receives the hit element's top-left.

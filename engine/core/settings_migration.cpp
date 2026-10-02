@@ -44,6 +44,7 @@ bool migrate(nlohmann::json& j)
             case 3: migrate_v3_to_v4(j); break;
             case 4: migrate_v4_to_v5(j); break;
             case 5: migrate_v5_to_v6(j); break;
+            case 6: migrate_v6_to_v7(j); break;
             default:
                 Logger::warning(
                     "Settings migration: no migration function registered for "
@@ -181,6 +182,23 @@ void migrate_v5_to_v6(nlohmann::json& j)
         j["updates"] = nlohmann::json{{"mode", "ask"}, {"skippedVersion", ""}};
     }
     j["schemaVersion"] = 6;
+}
+
+void migrate_v6_to_v7(nlohmann::json& j)
+{
+    // 3D_E-0035 — per-option graphics settings. Before v7 only the preset
+    // and render scale were saved, so a Custom player's options were lost;
+    // High's row is the nearest to what the renderers defaulted to.
+    if (j.contains("display") && j["display"].is_object()
+        && !j["display"].contains("graphics"))
+    {
+        const QualityPreset preset = qualityPresetFromString(
+            j["display"].value("qualityPreset", std::string("high")), QualityPreset::High);
+        nlohmann::json graphics;
+        graphicsToJson(qualityRowFor(preset).graphics, graphics);
+        j["display"]["graphics"] = graphics;
+    }
+    j["schemaVersion"] = 7;
 }
 
 } // namespace Vestige

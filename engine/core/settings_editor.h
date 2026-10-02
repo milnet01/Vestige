@@ -132,6 +132,10 @@ public:
     /// @brief Reset one category of `m_pending` to struct defaults.
     ///        Live-applies the change through the affected sinks.
     void restoreDisplayDefaults();
+    /// @brief Resets the player graphics page's fields — preset, render
+    ///        scale, graphics options, vsync, window mode — and keeps the
+    ///        window size, which that page does not show (3D_E-0035).
+    void restoreGraphicsDefaults();
     void restoreAudioDefaults();
     void restoreControlsDefaults();
     void restoreGameplayDefaults();

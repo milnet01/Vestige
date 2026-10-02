@@ -240,16 +240,17 @@ void SettingsEditorPanel::drawDisplayTab()
         const std::string chosen = presets[idx];
         m_editor->mutate([chosen](Settings& s)
         {
-            s.display.qualityPreset = qualityPresetFromString(chosen);
+            // 3D_E-0035: a named preset rewrites every option from its row.
+            selectQualityPreset(s.display, qualityPresetFromString(chosen));
         });
     }
 
     float scale = p.display.renderScale;
     if (ImGui::SliderFloat("Render scale", &scale, 0.25f, 2.0f, "%.2f"))
     {
-        // Hand-editing render scale drops the tier to Custom so the next
-        // applyQualityPreset (on load / any settings push) doesn't silently
-        // clobber the manual value back to the named preset's (design §4.1).
+        // Hand-editing render scale drops the tier to Custom, so the next load
+        // keeps the manual value instead of re-deriving the named preset's
+        // row (3D_E-0035).
         m_editor->mutate([scale](Settings& s)
         {
             s.display.renderScale  = scale;

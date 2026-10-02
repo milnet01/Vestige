@@ -97,9 +97,8 @@ private:
 ///                a test mock.
 ///
 /// @note Intentionally does **not** touch the quality preset or render
-///       scale. Those are handled by `applyQualityPreset` (below): the
-///       preset maps onto the renderer AA/SSAO/bloom/heavy-post toggles,
-///       and `renderScale` is an engine-owned value the play-mode resize
+///       scale. The saved graphics options go through `applyGraphics`
+///       (below), and `renderScale` is an engine-owned value the play-mode resize
 ///       reads per-frame (not a renderer setter) — see the Tier-1 design.
 void applyDisplay(const DisplaySettings& display, DisplayApplySink& sink);
 
@@ -114,9 +113,8 @@ void applyDisplay(const DisplaySettings& display, DisplayApplySink& sink);
 ///
 /// @note `renderScale` is intentionally NOT on this sink. It is not
 ///       renderer state — it is a persisted `DisplaySettings` field the
-///       engine's play-mode resize reads per frame (design §4.1). So
-///       `applyQualityPreset` writes it into the `DisplaySettings`
-///       object and pushes only the four renderer toggles here.
+///       engine's play-mode resize reads per frame (design §4.1), and
+///       `selectQualityPreset` writes it into the `DisplaySettings`.
 class RendererQualitySink
 {
 public:
@@ -170,17 +168,11 @@ private:
     TreeRenderer* m_tree;     ///< Optional — nullptr in scenes with no trees.
 };
 
-/// @brief Applies a quality preset (design §4.1). Writes the preset's
-///        render-scale value into `display.renderScale` and pushes the
-///        anti-alias mode + SSAO + bloom + heavy-post toggles onto
-///        `sink`. `Custom` applies **nothing** — the player's individual
-///        hand-tuned knobs stand (design §4.1 "Custom transition").
-///
-/// The preset does NOT set `display.qualityPreset` — the caller (the
-/// settings panel / load path) owns that field, so hand-editing a knob
-/// can flip it to `Custom` without this function clobbering it back.
-void applyQualityPreset(QualityPreset preset, DisplaySettings& display,
-                        RendererQualitySink& sink);
+/// @brief Pushes the saved graphics options onto `sink` (3D_E-0035). Never
+///        reads the preset: picking one already wrote its row into
+///        `display.graphics` (`selectQualityPreset`), and Custom's values
+///        are the saved ones. `renderScale` is read per frame by the engine.
+void applyGraphics(const DisplaySettings& display, RendererQualitySink& sink);
 
 // ================================================================
 // Slice 13.3 — Audio apply path

@@ -57,6 +57,22 @@ void UIDropdown::choose(int index)
     onSelectionChanged.emit(index);
 }
 
+bool UIDropdown::adjust(int direction)
+{
+    if (options.empty())
+    {
+        return true;
+    }
+    const int last = static_cast<int>(options.size()) - 1;
+    const int next = std::clamp(selectedIndex + ((direction < 0) ? -1 : 1), 0, last);
+    if (next != selectedIndex)
+    {
+        selectedIndex = next;
+        onSelectionChanged.emit(next);
+    }
+    return true;
+}
+
 void UIDropdown::activate()
 {
     open = !open;

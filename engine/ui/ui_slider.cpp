@@ -36,6 +36,19 @@ float UISlider::trackWidth() const
     return std::max(size.x - kValueColumnWidth - kTrackGap, 1.0f);
 }
 
+bool UISlider::adjust(int direction)
+{
+    const float step = (keyStep > 0.0f) ? keyStep : (maxValue - minValue) / 20.0f;
+    const float sign = (direction < 0) ? -1.0f : 1.0f;
+    const float next = std::clamp(value + sign * step, minValue, maxValue);
+    if (next != value)
+    {
+        value = next;
+        onValueChanged.emit(value);
+    }
+    return true;
+}
+
 void UISlider::pointerPress(const glm::vec2& local)
 {
     pointerDrag(local);

@@ -59,6 +59,13 @@ public:
     void pointerPress(const glm::vec2& local) override;
     void pointerDrag(const glm::vec2& local) override;
 
+    /// @brief Moves `value` by `keyStep` toward @a direction, clamped, and
+    ///        fires `onValueChanged` when it changed. Always returns true.
+    bool adjust(int direction) override;
+
+    /// @brief Step for Left / Right; 0 means a twentieth of the range.
+    float keyStep = 0.0f;
+
     /// @brief Fired with the new value when the user moves the slider.
     Signal<float> onValueChanged;
 };

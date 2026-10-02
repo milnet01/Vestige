@@ -48,7 +48,6 @@
 #include "renderer/shader.h"
 
 #include "core/settings.h"
-#include "core/settings_apply.h"
 
 #include "gl_test_fixture.h"
 #include "lsan_guard.h"
@@ -193,37 +192,20 @@ bool usesTierGodRayBudget(QualityPreset q)
     return q == QualityPreset::Low || q == QualityPreset::Medium;
 }
 
-// A sink that discards every renderer-side knob. applyQualityPreset writes the
-// render scale to the DisplaySettings and everything else here; only the scale
-// is wanted.
-class NullQualitySink final : public RendererQualitySink
-{
-public:
-    void setAntiAliasMode(AntiAliasMode) override {}
-    void setSsaoEnabled(bool) override {}
-    void setBloomEnabled(bool) override {}
-    void setHeavyPostEnabled(bool) override {}
-    void setTerrainGroundQuality(TerrainGroundQuality) override {}
-    void setFoliageQuality(FoliageQuality) override {}
-    void setGrassQuality(GrassQuality) override {}
-    void setTreeQuality(TreeQuality) override {}
-};
-
 // The internal-resolution factor this preset renders at, read back from the
-// SHIPPED applyQualityPreset instead of copied out of the Tier-1 design § 4.1
+// SHIPPED preset rows (selectQualityPreset) instead of copied out of the Tier-1 design § 4.1
 // table. A benchmark that copied it would be a fourth place the preset table
 // lives, and would silently keep timing the old resolution after a preset
 // change -- the two-copy drift shape 3D_E-0617 was filed for.
 //
-// Custom returns from applyQualityPreset without writing a scale, leaving
+// Custom returns from selectQualityPreset without writing a scale, leaving
 // DisplaySettings' 1.0 default -- which is what design § 8's selection table
 // specifies for it, so that the median it reports stays comparable with the
 // 0.69 ms and 3.1 ms figures this project sets its budgets from.
 float tierRenderScale(QualityPreset q)
 {
     DisplaySettings display;
-    NullQualitySink sink;
-    applyQualityPreset(q, display, sink);
+    selectQualityPreset(display, q);
     return display.renderScale;
 }
 

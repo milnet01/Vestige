@@ -109,64 +109,28 @@ void RendererQualityApplySinkImpl::setTreeQuality(TreeQuality quality)
     }
 }
 
-void applyQualityPreset(QualityPreset preset, DisplaySettings& display,
-                        RendererQualitySink& sink)
+void applyGraphics(const DisplaySettings& display, RendererQualitySink& sink)
 {
-    // One row of the design-doc §4.1 preset table. renderScale lands on
-    // the DisplaySettings object (the engine reads it per-frame); the four
-    // toggles go to the renderer sink. Cheap tiers use FXAA + reduced
-    // render-scale; High/Ultra render identically in wave 1 (the rows that
-    // differentiate them are Tier-2 setters).
-    struct Row
-    {
-        float                renderScale;
-        AntiAliasMode        aa;
-        bool                 ssao;
-        bool                 bloom;
-        bool                 heavyPost;   // volumetric fog + dynamic GI perf-gate
-        TerrainGroundQuality ground;      // PBR terrain ground-texture tier (A5)
-        FoliageQuality       foliage;     // grass distance + shadow tier (B3)
-        GrassQuality         grass;       // GPU-grass LOD distance tier (G5)
-        TreeQuality          tree;        // Tree LOD switch-distance tier (T7)
-    };
-
-    // Zero-init so the compiler sees a defined value on every path — a
-    // hypothetical out-of-range enum then falls through to a safe (clamped)
-    // default rather than tripping -Werror=maybe-uninitialized under -O3.
-    Row row{};
-    switch (preset)
-    {
-    case QualityPreset::Low:
-        row = {0.66f, AntiAliasMode::FXAA, false, false, false,
-               TerrainGroundQuality::Low, FoliageQuality::Low, GrassQuality::Low,
-               TreeQuality::Low};
-        break;
-    case QualityPreset::Medium:
-        row = {0.75f, AntiAliasMode::FXAA, true, true, false,
-               TerrainGroundQuality::Medium, FoliageQuality::Medium, GrassQuality::Medium,
-               TreeQuality::Medium};
-        break;
-    case QualityPreset::High:
-    case QualityPreset::Ultra:
-        // Ultra renders identically to High in wave 1 (design §6), terrain + grass included.
-        row = {1.0f, AntiAliasMode::TAA, true, true, true,
-               TerrainGroundQuality::High, FoliageQuality::High, GrassQuality::High,
-               TreeQuality::High};
-        break;
-    case QualityPreset::Custom:
-        // Custom applies nothing — the player's hand-tuned knobs stand.
-        return;
-    }
-
-    display.renderScale = row.renderScale;
-    sink.setAntiAliasMode(row.aa);
-    sink.setSsaoEnabled(row.ssao);
-    sink.setBloomEnabled(row.bloom);
-    sink.setHeavyPostEnabled(row.heavyPost);
-    sink.setTerrainGroundQuality(row.ground);
-    sink.setFoliageQuality(row.foliage);
-    sink.setGrassQuality(row.grass);
-    sink.setTreeQuality(row.tree);
+    // DetailTier and the four subsystem tier enums share Low / Medium / High.
+    static_assert(static_cast<int>(DetailTier::Medium) == static_cast<int>(TerrainGroundQuality::Medium)
+               && static_cast<int>(DetailTier::Medium) == static_cast<int>(FoliageQuality::Medium)
+               && static_cast<int>(DetailTier::Medium) == static_cast<int>(GrassQuality::Medium)
+               && static_cast<int>(DetailTier::Medium) == static_cast<int>(TreeQuality::Medium)
+               && static_cast<int>(DetailTier::High)   == static_cast<int>(TerrainGroundQuality::High)
+               && static_cast<int>(DetailTier::High)   == static_cast<int>(FoliageQuality::High)
+               && static_cast<int>(DetailTier::High)   == static_cast<int>(GrassQuality::High)
+               && static_cast<int>(DetailTier::High)   == static_cast<int>(TreeQuality::High),
+                  "DetailTier must map onto every subsystem tier by value");
+    auto tier = [](DetailTier t) { return static_cast<int>(t); };
+    const GraphicsSettings& g = display.graphics;
+    sink.setAntiAliasMode(g.antiAlias);
+    sink.setSsaoEnabled(g.ambientOcclusion);
+    sink.setBloomEnabled(g.bloom);
+    sink.setHeavyPostEnabled(g.volumetrics);
+    sink.setTerrainGroundQuality(static_cast<TerrainGroundQuality>(tier(g.terrainDetail)));
+    sink.setFoliageQuality(static_cast<FoliageQuality>(tier(g.foliageDetail)));
+    sink.setGrassQuality(static_cast<GrassQuality>(tier(g.grassDetail)));
+    sink.setTreeQuality(static_cast<TreeQuality>(tier(g.treeDetail)));
 }
 
 // ================================================================
