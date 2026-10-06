@@ -7110,6 +7110,44 @@ Outdoor landscapes surrounding the Temple complex — hills, valleys, and the Ki
   Source: in-session-2026-09-26 (video stutter investigation).
   Lanes: renderer, perf.
 
+- 📋 [3D_E-0750] **Point-light shadows have no filter, so their edges show texel stairs.**
+  Now: scene.frag.glsl calcPointShadow does one hard compare per
+  fragment (samplePointShadow0/1 on u_pointShadowMaps). No filter,
+  so a slanted edge shows the shadow-map texel grid.
+
+  Candidate fix: Castano's optimised PCF (ludicon.com/castano/blog/
+  ?p=901; MJP's shadows sample has full code): 9 hardware 2x2
+  compare fetches weighted into a 5x5 tent, each compared at the
+  receiver plane's depth. UT_Ants shipped it for UTA-0307 (their
+  src/urender/shaders/shadows.glsl softShadowOf, commit 163e2d6).
+
+  Their measurements (their engine, not ours): slanted-edge wobble
+  at 64-texel faces 7.3 px with one fetch, 2.4 with a 3x3 box, 1.8
+  with the 5x5 tent. Cost on RX 6600, their heaviest map: +1.0 ms
+  at 1080p, +4.2 ms at 4K; 4 fetches cost nearly as much as 9.
+
+  Gotcha they hit: clamp each fetch's reference depth to <= 1.0, or
+  a grazed wall's extrapolated depth passes the far plane and the
+  wall shadows itself.
+
+  Unverified for us: UT_Ants samples cube faces laid out as 2D
+  tiles; Vestige uses real samplerCube maps compared by hand. The
+  tent needs adapting to cube lookups (samplerCubeShadow for the
+  hardware compare), and edge fetches near a face seam need care.
+
+  CPU / GPU placement (project rule 7): GPU, fragment shader. The
+  filter runs per shaded pixel and reads the shadow cubemap; there
+  is no CPU path for it.
+
+  Done when: a slanted point-light shadow edge shows no texel stairs
+  in the Tabernacle scene, and the 60 FPS floor still holds per
+  CLAUDE.md § Performance (--demo-flythrough + tools/fps_floor.py,
+  Release build).
+  **Layman:** Shadows cast by lamps and torches have jagged, stepped edges; this item smooths them.
+  Kind: enhancement.
+  Source: peer-ut-ants-2026-10-06.
+  Lanes: renderer.
+
 ## 0.5.0 — Interactivity
 
 Breaks: visual scripting graphs. 3D_E-S0042 switches scripting on, so the
