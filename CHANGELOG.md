@@ -23,6 +23,17 @@ may change any interface without notice.
 
 ## [Unreleased]
 
+### 2026-10-08 Fixed — Graphics-card cloth hangs and falls like the processor cloth (Cl10, 3D_E-0752)
+
+The GPU cloth carried its velocity forward instead of working it out
+from how far each point moved, so gravity the constraints should have
+cancelled kept pulling it down: a draped cloth sagged about 0.67 m where
+the CPU cloth sags 0.18 m, and released cloth dropped too fast.
+
+- **New end-of-substep velocity pass (cloth_velocity.comp.glsl) recovers velocity as the CPU does; the two now agree within 0.5 % of the cloth's size.** (Cl10)
+
+- **Pinning or unpinning GPU cloth on the SIMPLE or APPROXIMATE wind tier no longer snaps it back to an older shape.** (3D_E-0752)
+
 ### 2026-10-02 Added — Graphics settings for players (3D_E-0035)
 
 The game's Settings screen now has graphics options: a quality preset

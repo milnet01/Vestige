@@ -86,8 +86,9 @@ void main()
     float lambda    = -C / (wSum + alphaTilde);
 
     // Cl9 SOR: over-relax the positional correction (ω ∈ [1, 2)). ω = 1 is plain
-    // Gauss-Seidel (unchanged). The converged state C == 0 makes dp == 0, so ω
-    // never shifts the fixed point — only the convergence rate.
+    // Gauss-Seidel (unchanged). Lambda resets each iteration and compliance is
+    // non-zero, so ω > 1 stiffens the settled cloth rather than only speeding
+    // convergence (Cl10 measurement; see GpuClothSimulator::simulate).
     vec3 dp = (u_omega * lambda) * n;
 
     positions[c.i0].xyz = p0v.xyz + w0 * dp;

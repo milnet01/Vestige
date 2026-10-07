@@ -29,12 +29,11 @@
 ///      ~`substeps`× less and diverging by metres in a 2 s free-fall. The
 ///      GPU now matches the CPU's per-substep convention. The free-fall
 ///      gate below pins this.
-///   2. *Constraint under-convergence* (filed as a follow-up — see the
-///      skip-gated drape test below). The GPU's coloured-parallel
-///      Gauss-Seidel is a far weaker smoother than the CPU's sequential
-///      sweep, so a stiff pinned cloth settles ~8× too soft on the GPU.
-///      Closing it needs a convergence accelerator (Chebyshev/SOR); see
-///      ROADMAP "Phase 10.9 … Slice 17".
+///   2. *A drape ~8× too soft on the GPU*, first read as constraint
+///      under-convergence (Cl9 added SOR for it). The cause was the GPU
+///      carrying velocity forward instead of recovering it from the solve;
+///      Cl10 fixed that, and the drape test below now runs both backends on
+///      their default settings.
 ///
 /// Both backends build a byte-identical grid (same `idx = z*W + x`
 /// ordering, same centred position formula, same index winding — see
@@ -182,24 +181,20 @@ TEST_F(ClothCpuGpuParityTest, Cl1_FreeFallCoreSolverParityWithinHausdorffBound)
 }
 
 // =============================================================================
-// Cl1 — stiff drape parity (Cl9: closed by the SOR convergence accelerator)
+// Cl1 — stiff drape parity, both backends on their default solver settings
 // =============================================================================
-// A taut four-corner-pinned cloth settling under gravity stresses the
-// distance-constraint solver hard. The CPU's sequential Gauss-Seidel converges
-// to a near-rigid ~0.18 m sag; the GPU's coloured-parallel sweep under-converged
-// and settled ~8× softer (~0.67 m) at one sweep/substep — a genuine solver-
-// quality gap, not a tolerance choice.
+// A taut four-corner-pinned cloth settling under gravity. The CPU settles to a
+// ~0.18 m sag. The GPU once settled ~8× softer (~0.67 m), which was read as
+// coloured Gauss-Seidel under-converging; Cl9 answered it with SOR
+// over-relaxation. Cl10 found the real cause: the GPU carried an explicit
+// velocity forward instead of recovering it from the solve, so gravity it
+// should have lost to the constraints kept pulling the cloth down. With
+// velocity recovery the default GPU (1 iteration, no accelerator — what the
+// engine runs) matches the CPU to ~0.1 % of the diagonal.
 //
-// Cl9 closes it: the GPU runs the distance-constraint solve with SOR
-// over-relaxation (mode `SOR`, ω = 1.8) for `setSolverIterations(16)` outer
-// iterations per substep. Over-relaxation leaves the converged solution
-// (C == 0) unchanged, so the GPU settles to the SAME equilibrium the CPU does —
-// just reached fast enough to be affordable. The drape now matches the CPU
-// reference to ~3% Hausdorff (was ~43%), under the 5%-of-diagonal gate.
-//
-// The CPU stays on its default 1-iteration sequential sweep (it already
-// converges over the 2 s settle); only the GPU opts into the accelerator, so
-// this also exercises the Cl9 API surface.
+// Both solvers reset lambda every iteration, so extra iterations stiffen the
+// cloth: with recovery, SOR × 16 now settles too stiff (~8 %). The
+// accelerator stays available; its API is pinned in test_cloth_solver_backend.
 TEST_F(ClothCpuGpuParityTest, Cl1_StiffDrapeParity)
 {
     const ClothConfig cfg = parityConfig();
@@ -209,12 +204,6 @@ TEST_F(ClothCpuGpuParityTest, Cl1_StiffDrapeParity)
     buildPair(cfg, cpu, gpu, gpuReady);
     if (!gpuReady)
         GTEST_SKIP() << "GPU cloth compute pipeline not available in this environment";
-
-    // Cl9: opt the GPU into the SOR convergence accelerator.
-    gpu.setConvergenceMode(ClothConvergenceMode::SOR);
-    gpu.setSolverIterations(16);
-    ASSERT_EQ(gpu.getSolverIterations(), 16);
-    ASSERT_EQ(gpu.getConvergenceMode(), ClothConvergenceMode::SOR);
 
     const uint32_t pc = cpu.getParticleCount();
     pinCorners(cpu);
@@ -247,15 +236,70 @@ TEST_F(ClothCpuGpuParityTest, Cl1_StiffDrapeParity)
     EXPECT_LT(cMinY, -0.01f) << "CPU cloth did not sag under gravity";
     EXPECT_LT(gMinY, -0.01f) << "GPU cloth did not sag under gravity";
 
-    // (4) Cl9 strict positional parity: the SOR-accelerated GPU drape matches
-    //     the CPU reference within 5% of the cloth diagonal (Hausdorff).
+    // (4) strict positional parity: the GPU drape matches the CPU reference
+    //     within 5% of the cloth diagonal (Hausdorff).
     const float diagonal = clothDiagonal();
     const float haus = hausdorff(c, g, pc);
     EXPECT_LT(haus, 0.05f * diagonal)
         << "stiff-drape Hausdorff " << haus << " m = " << (100.0f * haus / diagonal)
         << "% of the " << diagonal << " m diagonal exceeds 5% (CPU sag " << cMinY
-        << " m vs GPU sag " << gMinY << " m) — the SOR convergence accelerator "
-           "(Cl9) has regressed or under-converged.";
+        << " m vs GPU sag " << gMinY << " m) — the solve or velocity recovery "
+           "has drifted between the backends.";
+}
+
+// =============================================================================
+// Cl10 — velocity recovery: a settled cloth released from its pins
+// =============================================================================
+// The CPU recovers velocity from the net position change each substep
+// (`v = (pos - prevPos) / dtSub`, after the solve), so a particle the
+// constraints hold still has zero velocity. A backend that instead carries an
+// explicit velocity forward keeps adding gravity while the constraints pull the
+// particle back, and stores a hidden downward speed — about g·dtSub·(1-d)/d
+// ≈ 1.6 m/s at this config's damping. Releasing the pins exposes it: the CPU
+// cloth starts falling from rest, the other one drops at that speed. On the
+// pre-Cl10 velocity model (default settings) this measured 47.3 % of the
+// diagonal (2026-10-08); with recovery it is ~0.5 %.
+TEST_F(ClothCpuGpuParityTest, Cl10_ReleasedDrapeStartsFromRest)
+{
+    const ClothConfig cfg = parityConfig();
+    ClothSimulator cpu;
+    GpuClothSimulator gpu;
+    bool gpuReady = false;
+    buildPair(cfg, cpu, gpu, gpuReady);
+    if (!gpuReady)
+        GTEST_SKIP() << "GPU cloth compute pipeline not available in this environment";
+
+    pinCorners(cpu);
+    pinCorners(gpu);
+    run(cpu, FRAMES_2S);  // Settle: both drapes at rest.
+    run(gpu, FRAMES_2S);
+
+    const uint32_t corners[4] = {0, W - 1, (H - 1) * W, (H - 1) * W + (W - 1)};
+    for (uint32_t idx : corners)
+    {
+        cpu.unpinParticle(idx);
+        gpu.unpinParticle(idx);
+    }
+
+    constexpr int FRAMES_QUARTER_S = 15;  // 0.25 s @ 60 Hz of free fall.
+    run(cpu, FRAMES_QUARTER_S);
+    run(gpu, FRAMES_QUARTER_S);
+
+    const uint32_t pc = cpu.getParticleCount();
+    const glm::vec3* c = cpu.getPositions();
+    const glm::vec3* g = gpu.getPositions();
+    for (uint32_t i = 0; i < pc; ++i)
+    {
+        ASSERT_TRUE(std::isfinite(c[i].y)) << "CPU produced non-finite position";
+        ASSERT_TRUE(std::isfinite(g[i].y)) << "GPU produced non-finite position";
+    }
+
+    const float diagonal = clothDiagonal();
+    const float haus = hausdorff(c, g, pc);
+    EXPECT_LT(haus, 0.05f * diagonal)
+        << "released-drape Hausdorff " << haus << " m = " << (100.0f * haus / diagonal)
+        << "% of the " << diagonal << " m diagonal exceeds 5% — the GPU's "
+           "velocity no longer follows the net position change of the solve.";
 }
 
 // =============================================================================

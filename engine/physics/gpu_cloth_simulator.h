@@ -347,6 +347,7 @@ private:
     Shader m_collisionShader;
     Shader m_normalsShader;
     Shader m_lraShader;
+    Shader m_velocityShader;  ///< Phase 10.9 Cl10 — substep-end velocity recovery.
     bool m_shadersLoaded = false;
     std::string m_shaderPath;
 

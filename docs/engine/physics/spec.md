@@ -391,12 +391,14 @@ class PhysicsDebugDraw {
 
 Identical XPBD math, dispatched as a chain of compute shaders per substep:
 1. `cloth_wind.comp` (force accumulation).
-2. `cloth_integrate.comp` (Verlet predict + damping; respects `invMass = 0` for pins).
+2. `cloth_integrate.comp` (predict `pos += vel * dtSub`, snapshot `prevPos`; respects `invMass = 0` for pins).
 3. `cloth_constraints.comp` — one dispatch per colour group from greedy graph colouring (no two constraints in a colour share a particle → no atomics).
 4. `cloth_dihedral.comp` — one dispatch per dihedral colour group.
-5. `cloth_lra.comp` — single dispatch (each LRA writes only its own particle).
-6. `cloth_collision.comp` (spheres + planes + ground; cylinder / box / mesh CPU-only).
-7. `cloth_normals.comp` (recompute per-vertex normals).
+5. `cloth_collision.comp` (spheres + planes + ground; cylinder / box / mesh CPU-only).
+6. `cloth_lra.comp` — single dispatch (each LRA writes only its own particle).
+7. `cloth_velocity.comp` — `vel = (pos - prevPos) / dtSub * (1 - damping)`, zero for pins (the CPU's velocity update).
+
+Once per frame, after the substeps: `cloth_normals.comp` (recompute per-vertex normals).
 
 `getPositions()` / `getNormals()` lazily refresh CPU mirror via `glGetNamedBufferSubData` when called between simulate steps; the renderer reads the SSBOs directly once Phase 9B Step 8 lands (see Open Q3).
 

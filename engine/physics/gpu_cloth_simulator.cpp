@@ -271,9 +271,14 @@ void GpuClothSimulator::addBoxCollider(const glm::vec3& /*mn*/, const glm::vec3&
 
 void GpuClothSimulator::clearBoxColliders() {}
 
+// Pin edits write the CPU mirror, and the next simulate() re-uploads the whole
+// positions buffer from it (uploadPinsIfDirty). Each edit therefore refreshes
+// the mirror from the GPU first; otherwise a mirror nobody has read since the
+// last simulate() snaps the cloth back to its last-read shape (3D_E-0752).
 bool GpuClothSimulator::pinParticle(uint32_t index, const glm::vec3& worldPos)
 {
     if (index >= m_particleCount) return false;
+    readbackPositionsIfDirty();
     m_positionMirror[index] = worldPos;
     if (m_invMassMirror[index] != 0.0f)
     {
@@ -289,6 +294,7 @@ void GpuClothSimulator::unpinParticle(uint32_t index)
     if (index >= m_particleCount) return;
     if (m_invMassMirror[index] == 0.0f)
     {
+        readbackPositionsIfDirty();
         m_invMassMirror[index] = freeInverseMass(m_config);
         m_pinIndices.erase(
             std::remove(m_pinIndices.begin(), m_pinIndices.end(), index),
@@ -301,6 +307,7 @@ void GpuClothSimulator::setPinPosition(uint32_t index, const glm::vec3& worldPos
 {
     if (index >= m_particleCount) return;
     if (m_invMassMirror[index] != 0.0f) return;  // Not pinned: silently ignore.
+    readbackPositionsIfDirty();
     m_positionMirror[index] = worldPos;
     m_pinsDirty = true;
 }
@@ -524,6 +531,13 @@ void GpuClothSimulator::loadShadersIfNeeded()
     if (!m_windFbmShader.loadComputeShader(windFbmPath))
     {
         Logger::error("[GpuClothSimulator] Failed to load " + windFbmPath);
+        return;
+    }
+    // Phase 10.9 Cl10 — substep-end velocity recovery + damping.
+    const std::string velocityPath = m_shaderPath + "/cloth_velocity.comp.glsl";
+    if (!m_velocityShader.loadComputeShader(velocityPath))
+    {
+        Logger::error("[GpuClothSimulator] Failed to load " + velocityPath);
         return;
     }
     m_shadersLoaded = true;
@@ -806,14 +820,13 @@ void GpuClothSimulator::simulate(float deltaTime)
             }
         }
 
-        // 2. Symplectic Euler integration → updates positions + prev positions.
+        // 2. Position prediction → updates positions + prev positions.
         m_integrateShader.use();
         glBindBufferBase(GL_SHADER_STORAGE_BUFFER, BIND_POSITIONS,      m_positionsSSBO);
         glBindBufferBase(GL_SHADER_STORAGE_BUFFER, BIND_PREV_POSITIONS, m_prevPositionsSSBO);
         glBindBufferBase(GL_SHADER_STORAGE_BUFFER, BIND_VELOCITIES,     m_velocitiesSSBO);
         m_integrateShader.setUInt("u_particleCount", m_particleCount);
         m_integrateShader.setFloat("u_deltaTime",    dtSub);
-        m_integrateShader.setFloat("u_damping",      dampingPerSub);
         glDispatchCompute(particleGroups, 1, 1);
         glMemoryBarrier(GL_SHADER_STORAGE_BARRIER_BIT);
 
@@ -822,10 +835,11 @@ void GpuClothSimulator::simulate(float deltaTime)
         // drape under-converges versus the CPU's sequential sweep. Run the
         // distance + dihedral solve `m_solverIterations` times per substep
         // (default 1 = pre-Cl9 behaviour), and over-relax the distance
-        // correction by `solverOmega` for SOR/Chebyshev modes. Over-relaxation
-        // leaves the converged solution (C == 0) unchanged — at the fixed point
-        // the correction is zero — so it only speeds convergence, never shifts
-        // the equilibrium the CPU settles to.
+        // correction by `solverOmega` for SOR/Chebyshev modes. Lambda is reset
+        // every iteration and compliance is non-zero, so more iterations and
+        // over-relaxation both STIFFEN the settled cloth — it does not keep the
+        // CPU's equilibrium (Cl10 measured SOR x 16 ~8 % stiffer than the CPU,
+        // while the default 1 iteration matches to ~0.1 %). Opt-in only.
         //
         // NOTE (Cl9 follow-up): `Chebyshev` currently routes through the SOR
         // over-relaxation path. The true Chebyshev semi-iterative combine (the
@@ -909,6 +923,21 @@ void GpuClothSimulator::simulate(float deltaTime)
             glDispatchCompute(lraGroups, 1, 1);
             glMemoryBarrier(GL_SHADER_STORAGE_BARRIER_BIT);
         }
+
+        // 7. Velocity recovery (Phase 10.9 Cl10) — v = (pos - prevPos) / dtSub,
+        //    then damping, mirroring the CPU's step 7. Runs last so the
+        //    constraint, collision and LRA corrections all reach the velocity:
+        //    a particle the solve holds still is left at rest. This overwrites
+        //    the velocity the collision pass wrote, as the CPU does.
+        m_velocityShader.use();
+        glBindBufferBase(GL_SHADER_STORAGE_BUFFER, BIND_POSITIONS,      m_positionsSSBO);
+        glBindBufferBase(GL_SHADER_STORAGE_BUFFER, BIND_PREV_POSITIONS, m_prevPositionsSSBO);
+        glBindBufferBase(GL_SHADER_STORAGE_BUFFER, BIND_VELOCITIES,     m_velocitiesSSBO);
+        m_velocityShader.setUInt("u_particleCount", m_particleCount);
+        m_velocityShader.setFloat("u_deltaTime",    dtSub);
+        m_velocityShader.setFloat("u_damping",      dampingPerSub);
+        glDispatchCompute(particleGroups, 1, 1);
+        glMemoryBarrier(GL_SHADER_STORAGE_BARRIER_BIT);
     }
 
     // 6. Normal recomputation — runs once per frame (not per substep) since

@@ -25,6 +25,7 @@
 #include "physics/cloth_solver_backend.h"
 #include "physics/gpu_cloth_simulator.h"
 
+#include <algorithm>
 #include <filesystem>
 #include <fstream>
 #include <memory>
@@ -1059,4 +1060,61 @@ TEST_F(WindDragParityTest, Sh4b_TierGating_SimpleIgnoresWind_FullAppliesIt)
     //     SIMPLE-vs-zero noise floor (< 1e-3) — a clean "wind applied" signal.
     EXPECT_GT(peakMeanFullVsSimple, 0.005f)
         << "FULL tier must move the cloth via wind after a gust";
+}
+
+// =============================================================================
+// Pin edits after simulate() keep the simulated shape (3D_E-0752)
+// =============================================================================
+// pinParticle / unpinParticle / setPinPosition edit the CPU position mirror,
+// and the next simulate() re-uploads the whole positions buffer from it. The
+// mirror is refreshed only when someone reads positions back, so a pin edit
+// made after simulate() with no read in between re-uploaded a stale mirror and
+// snapped the cloth back to its last-read shape — here, the flat start grid.
+// The FULL wind tier reads back every step, so only SIMPLE and APPROXIMATE
+// cloth snapped: by one frame in game (the renderer reads each frame), all the
+// way when stepped headless.
+class GpuClothPinEditTest : public ::Vestige::Test::GLTestFixture {};
+
+TEST_F(GpuClothPinEditTest, UnpinAfterSimulateKeepsTheDrapedShape)
+{
+    ClothConfig cfg;
+    cfg.width = 12;
+    cfg.height = 12;
+    cfg.spacing = 0.1f;
+    cfg.particleMass = 1.0f;
+    cfg.substeps = 10;
+    cfg.stretchCompliance = 0.0f;
+    cfg.shearCompliance = 0.0001f;
+    cfg.bendCompliance = 0.01f;
+    cfg.damping = 0.01f;
+
+    GpuClothSimulator sim;
+    sim.setShaderPath(VESTIGE_SHADER_DIR);
+    sim.initialize(cfg, /*seed=*/0);
+    if (!sim.isInitialized() || !sim.hasShaders())
+        GTEST_SKIP() << "GPU cloth compute pipeline not available in this environment";
+    // FULL wind reads positions back every simulate(), which refreshes the
+    // mirror and hides the defect; SIMPLE and APPROXIMATE do not.
+    sim.setWindQuality(ClothWindQuality::SIMPLE);
+
+    const glm::vec3* p = sim.getPositions();
+    const uint32_t corners[4] = {0, 11, 132, 143};
+    for (uint32_t idx : corners)
+        sim.pinParticle(idx, p[idx]);
+
+    for (int f = 0; f < 120; ++f)  // 2 s: settle into a ~0.18 m drape.
+        sim.simulate(1.0f / 60.0f);
+
+    // No getPositions() here — that read is what used to hide the bug.
+    sim.unpinParticle(0);
+    sim.simulate(1.0f / 60.0f);
+
+    const glm::vec3* q = sim.getPositions();
+    float minY = 0.0f;
+    for (uint32_t i = 0; i < sim.getParticleCount(); ++i)
+        minY = std::min(minY, q[i].y);
+    EXPECT_LT(minY, -0.1f)
+        << "after unpinning, the cloth's lowest point is " << minY
+        << " m: it snapped back toward the flat start grid instead of keeping "
+           "its ~0.18 m drape.";
 }

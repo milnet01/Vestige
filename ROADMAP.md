@@ -3144,6 +3144,11 @@ Resolves CPU↔GPU cloth divergences that make CLAUDE.md Rule 7 parity-test impo
   velocity recovery noted above now belongs to Cl10's rest-pose and sleep
   ports, which need it.
   Layman: The graphics-card cloth now hangs like the reference cloth on the processor, within 5 %.
+  Correction (2026-10-08, Cl10): the drape gap SOR closed was mostly the
+  GPU's missing velocity recovery. With recovery, SOR x 16 settles ~8 %
+  TOO STIFF (lambda resets each iteration, so iterations and omega both
+  stiffen), while the default 1 iteration matches the CPU to 0.1 %. SOR
+  stays as an opt-in API; the parity gate no longer uses it.
 
 - 📋 [Cl10] **GPU cloth backend lacks three CPU-spec polish features — decide port-vs-document for parity.**
   Surfaced by the Cl1 parity harness. The GPU runs the core XPBD loop without three features the CPU ClothSimulator has: (1) adaptive damping (cloth_simulator.cpp:254-272), (2) rest-pose blending toward the authored pose in calm wind for LRA/pinned cloth (cloth_simulator.cpp:373-391), (3) sleep detection — a settled CPU cloth freezes; the GPU always simulates (cloth_simulator.cpp:408-434). For each, decide whether to port to the GPU dispatch (true parity) or document as an intentional CPU-only behaviour on IClothSolverBackend. Rule 7 parity gate. (Damping convention was the fourth gap and is already fixed; constraint convergence is Cl9.)
@@ -3158,6 +3163,17 @@ Resolves CPU↔GPU cloth divergences that make CLAUDE.md Rule 7 parity-test impo
   docs/phases/phase_10_9_cloth_gpu_parity_design.md, "Implementation
   finding: GPU velocity-recovery model".
   Layman: Make the graphics-card cloth work out its speed the same way the processor cloth does, then add its two missing settle-down features.
+  Progress (2026-10-08): GPU velocity recovery BUILT. New
+  cloth_velocity.comp.glsl runs last each substep: v = (pos - prevPos)
+  / dtSub * (1 - damping), zero for pins; damping left the integrate
+  shader. Finding: the GPU drape that sagged ~0.67 m (vs CPU 0.18 m) was
+  this missing recovery, not solver convergence. On default settings
+  (1 iteration, no accelerator, what the engine runs) the GPU now matches
+  the CPU to 0.1 % (drape) and 0.5 % (released drape); old model 31.7 %
+  and 47.3 %. Cl1_StiffDrapeParity now runs both backends on defaults;
+  new Cl10_ReleasedDrapeStartsFromRest. Also found and fixed 3D_E-0752.
+  Next: rest-pose (#2) and sleep (#3) ports against the same gate;
+  adaptive damping (#1) still undecided.
   Kind: implement.
   Source: in-session-2026-06-03 Cl1 parity harness.
 
@@ -5391,6 +5407,24 @@ shipped that have no invocation path at all.
   Kind: fix.
   Source: in-session-2026-10-07.
   Lanes: tests.
+
+- ✅ [3D_E-0752] **GPU cloth: a pin edit after simulate() snapped the cloth back to its last-read shape.**
+  pinParticle / unpinParticle / setPinPosition write GpuClothSimulator's
+  CPU position mirror, and uploadPinsIfDirty re-uploads the WHOLE positions
+  buffer from it on the next simulate(). The mirror refreshes only on a
+  read-back, which the FULL wind tier does every step, so FULL hid it. On
+  SIMPLE / APPROXIMATE a pin edit with no read since the last simulate()
+  re-uploaded stale positions: one frame old in game (the renderer reads
+  each frame), the flat start grid when stepped headless. Fix: each pin
+  edit calls readbackPositionsIfDirty() first. Test:
+  GpuClothPinEditTest.UnpinAfterSimulateKeepsTheDrapedShape (red: lowest
+  point -0.0015 m, i.e. snapped flat; expects below -0.1 m).
+  Resolved 2026-10-08: fix + regression test landed with Cl10's velocity
+  recovery; full Debug ASan suite green.
+  **Layman:** Pinning or unpinning a point on graphics-card cloth could make the whole cloth jump back to an older shape.
+  Kind: fix.
+  Source: in-session-2026-10-08 (found during Cl10).
+  Lanes: physics.
 
 ## 0.3.0 — An editor a builder can use
 
