@@ -320,13 +320,6 @@ private:
     std::map<uint32_t, PhysicsConstraint> m_constraints;
     uint32_t m_nextConstraintIndex = 0;
 
-    /// @brief Resolves bodyA for constraint creation. Invalid ID = Body::sFixedToWorld.
-    /// @deprecated Phase 10.9 Ph8 — kept for callers that explicitly want a
-    ///             single-body lookup; constraint creation paths should
-    ///             use `withBodyPair` so the lock spans both bodies for
-    ///             the duration of `settings.Create()`.
-    JPH::Body* resolveBodyA(JPH::BodyID bodyA);
-
     /// @brief Locks @a bodyA and @a bodyB together for write, then invokes
     ///        @a fn with the resolved `Body&` references. If @a bodyA is
     ///        invalid (i.e. constraint anchored to the world), only
@@ -335,7 +328,7 @@ private:
     ///        or an empty handle if the lock did not succeed.
     ///
     ///        Phase 10.9 Slice 7 Ph8: replaces the prior pattern of
-    ///        calling `resolveBodyA` (single-body transient lock) and then
+    ///        locking @a bodyA transiently to fetch its pointer and then
     ///        a separate `BodyLockWrite` on @a bodyB — that pattern leaked
     ///        the `Body*` from the bodyA scope and used it after unlock,
     ///        which is UB under concurrent broadphase update.

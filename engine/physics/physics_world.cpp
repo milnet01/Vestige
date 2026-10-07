@@ -426,30 +426,6 @@ glm::vec3 PhysicsWorld::computeSliderNormalAxis(const glm::vec3& slideAxis)
     return glm::normalize(ortho);
 }
 
-JPH::Body* PhysicsWorld::resolveBodyA(JPH::BodyID bodyA)
-{
-    if (bodyA.IsInvalid())
-    {
-        return &JPH::Body::sFixedToWorld;
-    }
-
-    // Note: the caller must hold its own lock on bodyA, or use this pointer
-    // only within the scope of the caller's lock on bodyB (Jolt allows
-    // locking multiple bodies if done through BodyLockMultiWrite, but for
-    // our use case — constraint creation — we lock bodyA here transiently
-    // just to get its pointer).  Jolt body pointers remain stable as long as
-    // the body is not destroyed, so the pointer is safe to use after unlock
-    // provided the body is still alive.
-    JPH::BodyLockWrite lock(m_physicsSystem->GetBodyLockInterface(), bodyA);
-    if (lock.Succeeded())
-    {
-        return &lock.GetBody();
-    }
-
-    Logger::warning("PhysicsWorld: could not lock bodyA, using world anchor");
-    return &JPH::Body::sFixedToWorld;
-}
-
 ConstraintHandle PhysicsWorld::registerConstraint(JPH::TwoBodyConstraint* constraint,
                                                    ConstraintType type,
                                                    JPH::BodyID bodyA, JPH::BodyID bodyB)

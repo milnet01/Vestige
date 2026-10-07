@@ -157,10 +157,6 @@ public:
     static constexpr int MAX_NODES_PER_CHAIN = 1000;
 
 private:
-    /// @brief Find the connection from a node's output pin to a target input.
-    const ScriptConnection* findOutputConnection(uint32_t nodeId,
-                                                  PinId pinId) const;
-
     /// @brief Find the connection feeding a node's input pin.
     const ScriptConnection* findInputConnection(uint32_t nodeId,
                                                  PinId pinId) const;

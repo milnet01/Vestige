@@ -330,13 +330,6 @@ Entity* ScriptContext::resolveEntity(uint32_t entityId)
 // Internal helpers
 // ---------------------------------------------------------------------------
 
-const ScriptConnection* ScriptContext::findOutputConnection(
-    uint32_t nodeId, PinId pinId) const
-{
-    // Delegates to ScriptInstance's pre-built index (audit H4).
-    return m_instance.findOutputConnection(nodeId, pinId);
-}
-
 const ScriptConnection* ScriptContext::findInputConnection(
     uint32_t nodeId, PinId pinId) const
 {

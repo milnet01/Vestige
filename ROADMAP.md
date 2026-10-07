@@ -513,6 +513,8 @@ than fitted/exported through the Workbench. These concern the Workbench /
   pow/exp calls per voice per update with no perf pressure. If one is
   wanted later, 3D_E-S0004's reference_formula can fit the cheap
   polynomial against the exact form.
+  User decision 2026-10-07: stays closed; K-weighting and the
+  air-absorption fit stay dropped until something needs them.
 
 #### Phase 9: Domain-Driven System Architecture
 **Goal:** Evolve the engine toward a domain-driven system model where each natural domain (vegetation, water, cloth, terrain, etc.) is owned by a dedicated system that encapsulates ALL behavior for that domain — rendering, physics, animation, audio, defaults, and editor integration. Scenes compose by pulling in only the systems they need.
@@ -651,6 +653,8 @@ Foundations shipped via commit `fa0b100` — "Phase 9C: New domain systems — A
   the gizmo and radius sliders, and drawn by the zone overlay toggle.
   Recommendation: drop painting unless a level needs irregular zone
   shapes, which the sphere-with-falloff model cannot express anyway.
+  User decision 2026-10-07: reverb zone painting dropped, as
+  recommended. Zones stay placed with the gizmo and radius sliders.
   Kind: implement.
 
 **Note:** Detailed audio specs are in Phase 10 (Polish and Features). Phase 9C implemented the Audio domain-system wrapper + OpenAL integration + spatial audio; Phase 10 will deliver the full feature set.
@@ -969,19 +973,6 @@ Full spatial audio pipeline with dynamic mixing, occlusion, and adaptive music. 
 - ✅ [3D_E-S0101] **AX9. Loudness normalisation (EBU R128 / ITU-R BS.1770) — measure integrated LUFS across the master bus; auto-trim master to a chosen target (default −23 LUFS for streamer-friendly playback, −16 LUFS for game-loudness norm). `Settings → Audio → Loudness target`. Algorithm is a public standard; reference impl `libebur128` (MIT). Solves the "your game blows my eardrums after a quiet podcast" Twitch / YouTube complaint class for free. Shipped 2026-06-30 (Phase 10 Audio quick-wins bundle, slice 6 — the final slice; design `docs/phases/phase_10_audio_quickwins_design.md` §8). Corrects the bullet's premise: OpenAL Soft exposes no master-bus PCM during live hardware playback, so "measure across the master bus and trim master" is not achievable at runtime without an offline loopback render (wrong for live play). AX9 therefore normalises at the clip-decode boundary instead — correct, testable, dependency-light. New module `engine/audio/audio_loudness.{h,cpp}`: `integratedLoudnessLufs(int16 interleaved, frames, channels, rate)` wrapping libebur128's native `short` ingest (no int16→float whole-clip copy — simpler than the design's int16→float note), plus the pure `loudnessMakeupGain(measured, target, maxBoostDb=12)` (dB delta → linear; clamps the boost direction to +12 dB; a measured loudness at/below the −70 LUFS absolute silence gate, or non-finite, → unity so digital silence is never amplified). `AudioEngine::loadBuffer` measures each decoded clip once (off the frame path) and caches the intrinsic LUFS (not the makeup gain) in a path→LUFS map parallel to the buffer cache, evicted alongside it; `loudnessMakeupForPath` derives the makeup against the *current* target on lookup, so a runtime target change needs no re-measure. The makeup folds into the per-source `volume` at both gain paths — the four `playSound*` functions (one shared `volume *= loudnessMakeupForPath(filePath)` before the stored `SourceMix`, so `updateGains` + eviction reuse it) and the ECS `composeAudioSourceAlState` (a trailing defaulted `loudnessMakeup` param alongside occlusion, so the ~13 pre-AX9 call sites compile unchanged). Ships with the default INVERTED vs this bullet: the player-facing default is −16 LUFS (modern game-loudness norm); −23 LUFS is the selectable streamer / broadcast preset (design §8). Measurement always runs at decode regardless of the toggle, so flipping the feature on applies to already-cached clips with no re-decode. Out of scope (honest boundary): streamed music (`AudioMusicPlayer`) has no single decode boundary to measure, so AX9 covers decoded clips (SFX / voice / ambient one-shots), not the music stream. Dependency: `libebur128` v1.2.6 (MIT, © Jan Kokemüller) via FetchContent — forced static with `WITH_STATIC_PIC ON` (the engine/app/tests compile `-fPIE`; the upstream static target is non-PIC by default and would fail the PIE link) and `CMAKE_POLICY_VERSION_MINIMUM 3.5` (upstream pins `cmake_minimum_required(2.8.12)`); `THIRD_PARTY_NOTICES.md` row + audit NVD-list entry added. Per project Rule 8 the dep add got its own cold-eyes review (fresh subagent, no authoring context) — one HIGH (the non-PIC/PIE link risk) fixed before merge, rest clean. Settings `loudnessEnabled` (default on) + `loudnessTargetLufs` (default −16) ride the same v4 schema (additive `j.value` defaults + self-describing `migrate_v3_to_v4` arms) with `AudioLoudnessApplySink` / `AudioEngineLoudnessApplySink` + `ApplyTargets::audioLoudness` wired through `Engine`, and a checkbox + two-preset "Loudness level" combo in the audio settings panel. 11 new `AudioLoudness.*` tests (pure makeup math incl. boost clamp + silence gate; the real libebur128 measurement path run headless — finite-loudness, −6 dB-amplitude→−6 LUFS monotonicity, measure-then-makeup round-trip, silent/empty gating; engine accessors + unmeasured/disabled→unity). 3610 tests pass (3 Release-gated GPU/HUD perf benchmarks skipped).**
   Kind: implement.
 
-- 📋 [3D_E-S0102] **AX10. Generative / parametric music layer — extend the existing `MusicLayer` system with a tier of *generative* layers: e.g. a "rainfall" bed whose density is a function of weather intensity, or a "tension" layer whose harmonic colour is parametrised by the AI Director's encounter score (Phase 16). Algorithmic generation (Markov chord progression, granular sample re-trigger) keeps a long sequence from sounding looped without ballooning asset count. No copyright-encumbered ML models; classical algorithmic-composition techniques only.**
-  Layman: Music that writes and varies itself as the game plays, so long sessions do not sound looped.
-  DECISION FOR THE USER (checked 2026-10-02). Two halves: a "tension"
-  layer steered by the AI Director's score, which is blocked (no AI
-  Director exists, Phase 16), and a weather-driven generative bed
-  (e.g. rain density from WeatherState::precipitation), which is
-  buildable but needs a design (Markov chords vs granular re-trigger)
-  and source samples the tree does not have, so nothing could be heard
-  or checked yet. Recommendation: move both halves out of 0.2.0 — the
-  first to the AI Director's release, the second to whenever a project
-  needs music beyond the shipped layered player.
-  Kind: implement.
-
 - ✅ [3D_E-S0103] **AX11. Audio device hot-swap + per-output device routing — currently the audio device is opened at `AudioEngine::initialize` and never re-evaluated. Detect device-list changes via `ALC_DEVICE_NOTIFICATIONS_SOFT` extension, surface a "Default device changed (USB headphones connected) — switch?" toast, swap without restart. Allows the user to plug headphones in mid-session and have HRTF auto-enable (Phase 10 HRTF Auto mode already handles the path; just needs the device-change trigger).**
   Resolved (2026-06-30): device hot-swap shipped — ALC_SOFT_reopen_device + ALC_SOFT_system_events reopen the device without a restart (context/sources/buffers preserved) and re-run HRTF Auto so headphones re-detect on connect. Off/Notify/Auto policy in Settings → Audio; event-thread callback only sets an atomic flag + stashes the name, main-thread AudioSystem poll does the swap. New headless module audio_device_hotswap.{h,cpp}; tests/test_audio_device_swap.cpp (10 cases). DEFERRED: "per-output device routing" (a separate physical device per bus) — OpenAL's single-context model can't do it without a multi-context rearchitecture; tracked as a follow-up, not delivered here.
   Kind: implement.
@@ -991,16 +982,6 @@ Full spatial audio pipeline with dynamic mixing, occlusion, and adaptive music. 
   Kind: implement.
 
 - ✅ [3D_E-S0105] **AX13. Side-chain ducking from arbitrary bus — any bus can side-chain duck any other from its own envelope; `assets/audio/mix_graph.json` declares the routing. Shipped 2026-06-29 (slice 4 of the audio quick-wins bundle). New `engine/audio/audio_ducking.{h,cpp}` — `DuckingRoute {source, target, params}` + `DuckingRouter` whose `advance(busActive[], dt)` returns a per-target-bus `array<float, AudioBusCount>` (product of inbound dips), with per-route `DuckingState` (the two dimensions the design flagged as the original sizing bug). Q3 resolved the simple way: the existing global manual duck (`Engine::getDuckingState().triggered` → `updateDucking`) is preserved verbatim as the no-config default (so today's behaviour is reproduced exactly — the parity test pins the slew), and the router carries only the *additive* data-driven routes; the effective per-source duck is `manualGlobal × routerDuck[bus]`. `AudioEngine` grew `setBusDuckSnapshot`/`getBusDuckSnapshot` + a private `effectiveDuck(bus)` folded into every `resolveSourceGain` site; `AudioSystem::update` advances the router from last frame's per-bus activity bitset (one-frame latency, feedback-free — read pre-duck source volume), accumulates this frame's activity in the existing source walk, and threads the effective duck into compose. `AudioMusicPlayer` (the prime target — music dips under dialogue) now folds in the Music-bus router duck on its separate gain path. `parseDuckingRoutes` loads `mix_graph.json`, rejecting `Ui`/`Master` targets and unknown buses with a warning (legal targets: Music/Voice/Sfx/Ambient); absent file ⟹ manual-duck-only. New `audioBusFromString` on the mixer (reused by the parser). 8 new tests (empty-router identity, single-route slew parity with `updateDucking`, two-routes-one-target product, parse accept/reject rules); 3592 pass. No Settings field — routes are config-file-driven.**
-  Kind: implement.
-
-- 📋 [3D_E-S0106] **AX14. AI-Director-aware music transitions — when Phase 16's AI Director changes encounter score (calm → tension → combat), music transitions hit on musical sync points (bar / beat / phrase) rather than crossfading mid-bar. Requires per-clip BPM / beat-grid metadata and the `MusicStingerQueue` already shipped. Cheap, huge perceptual upgrade vs. naïve crossfade.**
-  Layman: Music changes on the beat when the game's mood shifts, instead of crossfading mid-bar.
-  Blocked (checked 2026-10-02): it reacts to the AI Director's encounter
-  score, and no AI Director exists in engine/ (Phase 16). Recommendation
-  for the user: move it to the release that builds the AI Director; the
-  beat-grid part could ship sooner as "stingers and intensity changes
-  wait for the next bar", driven by the SetMusicIntensity node
-  (3D_E-S0018), if that is wanted for 0.2.0.
   Kind: implement.
 
 - ✅ [3D_E-S0107] **Editor integration — `AudioPanel` in `engine/editor/panels/audio_panel.{h,cpp}` ships a four-tab editor surface over the Phase 10 audio pipeline: Mixer (per-bus gains for Master/Music/Voice/Sfx/Ambient/Ui + dialogue-duck trigger + attack/release/floor controls + live current-gain readout), Sources (iterates scene via `Scene::forEachEntity` picking `AudioSourceComponent`, per-entity mute/solo checkboxes + volume/pitch/min-max-distance sliders + attenuation model readout), Zones (reverb-zone add/remove/select with name + center + core radius + falloff band + preset combo; mirror placement surface for ambient zones with clipPath + priority), Debug (audio-availability indicator + distance model + Doppler factor + speed-of-sound + HRTF mode/status/dataset + available-dataset enumeration). Panel exposes `computeEffectiveSourceGain(entityId, bus)` — mute beats solo, solo-exclusive routing when any source soloed, otherwise `master · bus · duckGain` clamped to [0, 1]. Registered via `Engine::initialize` → `Editor::setAudioSystem(m_systemRegistry.getSystem<AudioSystem>())` + drawn each editor frame alongside NavigationPanel. 18 headless unit tests cover defaults, open/close toggle, zone add/remove/selection-shift, mute/solo state, effective-gain routing, and overlay toggle.**
@@ -2599,21 +2580,6 @@ Full spatial audio pipeline with dynamic mixing, occlusion, and adaptive music. 
   Kind: implement.
 
 - ✅ [3D_E-S0128] **Fog accessibility transform (slice 11.9) — pure-function `applyFogAccessibilitySettings(authored, PostProcessAccessibilitySettings) → effective` in `fog.{h,cpp}` now consumes the previously-unwired `fogEnabled` / `fogIntensityScale` / `reduceMotionFog` flags from `PostProcessAccessibilitySettings` and maps them to per-layer adjustments: master disable beats every other flag; intensity scales EXP/EXP2 density linearly, pushes Linear `end` outward (collapsing to `FogMode::None` at scale ≤ 1e-3 to avoid divide-by-zero), scales height-fog `groundDensity` + `maxOpacity` together, and dims the sun-inscatter lobe *colour* (not exponent — the lobe shape stays authored); reduce-motion halves the lobe colour further, matching WCAG 2.2 SC 2.3.3 / Xbox AG 117 photosensitivity guidance. `Renderer` stores `m_postProcessAccessibility` and runs the transform each frame between authored state and GPU uniform upload — authored parameters are never mutated so users can toggle accessibility without losing their scene-authored look. 12 new `FogAccessibility` unit tests pin every flag (master disable, each intensity scale case, sun-inscatter colour vs exponent invariant, reduce-motion vs frame-static layers, end-to-end via `safeDefaults()`, flag-precedence guard).**
-  Kind: implement.
-
-- 🚧 [3D_E-S0129] **Volumetric fog — ray-marched participating media with light scattering**
-  - Froxel-based volume (frustum-aligned 3D texture, typically 160x90x64)
-  - Temporal reprojection for stable, low-cost accumulation across frames
-  - Per-light volumetric contribution (directional sun + point/spot lights)
-  - Fog density noise (3D value-noise FBM; Perlin/Worley deferred to a future cloud feature) for non-uniform, natural-looking fog
-  - Artist controls: density, anisotropy (forward/back scatter), albedo, extinction ^3d_e-0013
-  Progress (2026-06-18): slice 11.6 froxel foundation shipped end-to-end and user-visible. The three compute passes (inject/scatter/integrate) feed the HDR composite, which samples the integrated volume per opaque pixel (C_out = T·C_scene + S, replacing the analytic distance/height term); per-froxel CSM sun shadowing gives free god-ray shafts. Ships on by default at a light-haze density (≈22% extinction at 50 m), 60 FPS gate verified on the RX 6600 (full 160×90×64 dispatch well inside the 2.0 ms fog-stack budget). Slice 11.7 (Workbench-fit Schlick phase) was evaluated and **dropped 2026-06-18** (design §7): fitting Schlick to Henyey-Greenstein can't meet a useful accuracy bound over the needed anisotropy range, there's no perf pressure to replace HG (`pow(x,1.5)`=`x·√x` is cheap, fog stack far inside budget), and it needs a cross-formula Workbench capability that doesn't ship (now tracked as FW W9). Slice 11.8 (value-noise-FBM density noise) shipped 2026-06-18 — the inject pass modulates the froxel medium with a drifting 3-octave integer-hash value-noise field (CPU spec `fogDensityNoise` pinned bit-for-bit to the GLSL by a parity test; reduce-motion freezes the drift), so the haze reads as non-uniform rather than a flat wash; on by default at provisional look constants, 60 FPS gate re-verified with noise on. Slice 11.11 (placeable mist / ground-fog volumes) shipped 2026-06-18 — box/sphere volumes with a soft-edge falloff and optional animated turbulence (reusing the 11.8 value-noise field) feed the inject pass via a 32-cap `std430` SSBO (over-cap dropped + logged); `fogVolumeDensity` CPU spec pinned to the GLSL by a parity test, plumbed through `Renderer::setFogVolumes()` (empty until the editor panel authors them), reduce-motion freezes the turbulence, 60 FPS gate re-verified with a 12-volume heavy scene. Slice 11.5 (screen-space god rays) shipped 2026-06-18 — a half-res Mitchell radial-blur fallback (`god_rays.frag.glsl` + combine) that gathers HDR sky radiance toward the sun's screen position and additively combines it into the pre-bloom HDR scene (so shafts bloom); pure CPU `godRaysSunScreenInfo()` projects the sun + computes an edge fade (unit-tested), per-pixel gather on GPU; gated by a new `godRaysEnabled` flag **and** `!volumetricActive` so it never doubles the free froxel god rays; off under the accessibility safe preset. Slice 11.10 (editor FogPanel) shipped 2026-06-19 — a four-tab ImGui panel (Window → Fog: Distance / Height / Volumetric / Debug) over the renderer's fog state, registered through the Ed5 `PanelRegistry`; it resolves the `TODO 11.10` markers by lifting the previously-inlined volumetric medium + density-noise + god-ray-margin constants into authored `VolumetricFogParams` / `GodRayParams` structs (defaults reproduce the prior literals byte-for-byte, pinned by a parity-guard test) and adds a per-scene god-ray intensity gain. The radial-blur sampling constants + the `fogVolumeDensity` `F_turb`/octave look-constants stay inlined (design §6.2/§12.2 — the latter must, for the bit-exact parity extractor). **The Phase 10 Fog / Volumetric bundle is now complete** (11.6 + 11.8 + 11.11 + 11.5 + 11.10; 11.7 dropped). The remaining sub-item on this bullet — temporal reprojection (and the full froxel-volume upgrade) — is deliberately **Phase 13** scope, not Phase 10 (see the Phase 13 "Volumetric lighting" item), so this box stays open as the cross-phase tracker.
-  Decision for the user (2026-10-02): everything in this item for Phase
-  10 shipped; the only open part, temporal reprojection, is deliberately
-  Phase 13 per the body above. Recommend moving it out of 0.2.0 to the
-  release that carries Phase 13 volumetric lighting, so 0.2.0 does not
-  wait on it.
-  Layman: Realistic fog with light shafts; the part still open, smoother fog over time, is planned for a later release.
   Kind: implement.
 
 - ✅ [3D_E-S0130] **Volumetric god rays / crepuscular rays — visible light shafts from the sun through openings**
@@ -4685,7 +4651,7 @@ shipped that have no invocation path at all.
   Source: in-session-2026-09-28 (found by 3D_E-0707 sharding).
   Lanes: build, formula.
 
-- 📋 [3D_E-0705] **Run a linker dead-code scan and act on what it finds.**
+- ✅ [3D_E-0705] **Run a linker dead-code scan and act on what it finds.**
   Technique from DOOM_Ants (take the method, not code). Build once into a
   scratch dir with -O0 -ffunction-sections -fdata-sections and link with
   -Wl,--gc-sections,--print-gc-sections. The linker lists every function
@@ -4715,6 +4681,16 @@ shipped that have no invocation path at all.
   build.log, demangle, keep Vestige:: non-template names absent from
   tests/ and tools/, read each internal one, delete the truly dead. Delete
   the scratch dir when done.
+  Resolved 2026-10-07: of 13,732 functions gc'd from the vestige link and
+  absent from every binary, the Vestige-owned internal ones were read.
+  Nine anonymous-namespace helpers (volumetric_fog.cpp, ui_theme.cpp)
+  serve kept, tested public functions, so they stay. Of the dead private
+  methods, all but two have live callers inside kept public API. Deleted
+  the two truly dead: PhysicsWorld::resolveBodyA (deprecated, returned a
+  Body* after unlocking; withBodyPair replaced it) and
+  ScriptContext::findOutputConnection (retired by output fan-out;
+  ScriptInstance's lookup stays). Neither hid a live bug. Public unused
+  API kept per the user's 2026-09-29 decision. Scratch dir deleted.
   **Layman:** Ask the linker which functions nothing ever calls, then remove the dead ones or fix the bug that made them dead.
   Kind: chore.
   Source: peer-doom-ants-2026-09-26 message 41.
@@ -5401,6 +5377,20 @@ shipped that have no invocation path at all.
   Kind: fix.
   Source: in-session-2026-10-02.
   Lanes: ui.
+
+- 📋 [3D_E-0751] **Debug test shard 3 sometimes fails on a 128-byte leak from an unloaded library.**
+  Seen 2026-10-07 in the Debug ASan build (build/), full `ctest -j 6`:
+  vestige_tests_shard_3 ran 1021 tests, all passed, then LeakSanitizer
+  reported "Direct leak of 128 byte(s)" allocated from "<unknown module>"
+  (a dlopen'd library unloaded before exit, e.g. a GL or OpenAL backend).
+  Re-running the shard alone passed. Next: reproduce under parallel load
+  with LSAN_OPTIONS=fast_unwind_on_malloc=0 and keep the library loaded
+  (or ASAN symbolize before unload) to name the allocator, then fix the
+  owner or suppress it with a written reason.
+  **Layman:** One group of tests occasionally fails at exit on a small memory leak inside a driver-like library, even though every test in it passed.
+  Kind: fix.
+  Source: in-session-2026-10-07.
+  Lanes: tests.
 
 ## 0.3.0 — An editor a builder can use
 
@@ -7147,6 +7137,24 @@ Outdoor landscapes surrounding the Temple complex — hills, valleys, and the Ki
   Kind: enhancement.
   Source: peer-ut-ants-2026-10-06.
   Lanes: renderer.
+
+- 🚧 [3D_E-S0129] **Volumetric fog — ray-marched participating media with light scattering**
+  - Froxel-based volume (frustum-aligned 3D texture, typically 160x90x64)
+  - Temporal reprojection for stable, low-cost accumulation across frames
+  - Per-light volumetric contribution (directional sun + point/spot lights)
+  - Fog density noise (3D value-noise FBM; Perlin/Worley deferred to a future cloud feature) for non-uniform, natural-looking fog
+  - Artist controls: density, anisotropy (forward/back scatter), albedo, extinction ^3d_e-0013
+  Progress (2026-06-18): slice 11.6 froxel foundation shipped end-to-end and user-visible. The three compute passes (inject/scatter/integrate) feed the HDR composite, which samples the integrated volume per opaque pixel (C_out = T·C_scene + S, replacing the analytic distance/height term); per-froxel CSM sun shadowing gives free god-ray shafts. Ships on by default at a light-haze density (≈22% extinction at 50 m), 60 FPS gate verified on the RX 6600 (full 160×90×64 dispatch well inside the 2.0 ms fog-stack budget). Slice 11.7 (Workbench-fit Schlick phase) was evaluated and **dropped 2026-06-18** (design §7): fitting Schlick to Henyey-Greenstein can't meet a useful accuracy bound over the needed anisotropy range, there's no perf pressure to replace HG (`pow(x,1.5)`=`x·√x` is cheap, fog stack far inside budget), and it needs a cross-formula Workbench capability that doesn't ship (now tracked as FW W9). Slice 11.8 (value-noise-FBM density noise) shipped 2026-06-18 — the inject pass modulates the froxel medium with a drifting 3-octave integer-hash value-noise field (CPU spec `fogDensityNoise` pinned bit-for-bit to the GLSL by a parity test; reduce-motion freezes the drift), so the haze reads as non-uniform rather than a flat wash; on by default at provisional look constants, 60 FPS gate re-verified with noise on. Slice 11.11 (placeable mist / ground-fog volumes) shipped 2026-06-18 — box/sphere volumes with a soft-edge falloff and optional animated turbulence (reusing the 11.8 value-noise field) feed the inject pass via a 32-cap `std430` SSBO (over-cap dropped + logged); `fogVolumeDensity` CPU spec pinned to the GLSL by a parity test, plumbed through `Renderer::setFogVolumes()` (empty until the editor panel authors them), reduce-motion freezes the turbulence, 60 FPS gate re-verified with a 12-volume heavy scene. Slice 11.5 (screen-space god rays) shipped 2026-06-18 — a half-res Mitchell radial-blur fallback (`god_rays.frag.glsl` + combine) that gathers HDR sky radiance toward the sun's screen position and additively combines it into the pre-bloom HDR scene (so shafts bloom); pure CPU `godRaysSunScreenInfo()` projects the sun + computes an edge fade (unit-tested), per-pixel gather on GPU; gated by a new `godRaysEnabled` flag **and** `!volumetricActive` so it never doubles the free froxel god rays; off under the accessibility safe preset. Slice 11.10 (editor FogPanel) shipped 2026-06-19 — a four-tab ImGui panel (Window → Fog: Distance / Height / Volumetric / Debug) over the renderer's fog state, registered through the Ed5 `PanelRegistry`; it resolves the `TODO 11.10` markers by lifting the previously-inlined volumetric medium + density-noise + god-ray-margin constants into authored `VolumetricFogParams` / `GodRayParams` structs (defaults reproduce the prior literals byte-for-byte, pinned by a parity-guard test) and adds a per-scene god-ray intensity gain. The radial-blur sampling constants + the `fogVolumeDensity` `F_turb`/octave look-constants stay inlined (design §6.2/§12.2 — the latter must, for the bit-exact parity extractor). **The Phase 10 Fog / Volumetric bundle is now complete** (11.6 + 11.8 + 11.11 + 11.5 + 11.10; 11.7 dropped). The remaining sub-item on this bullet — temporal reprojection (and the full froxel-volume upgrade) — is deliberately **Phase 13** scope, not Phase 10 (see the Phase 13 "Volumetric lighting" item), so this box stays open as the cross-phase tracker.
+  Decision for the user (2026-10-02): everything in this item for Phase
+  10 shipped; the only open part, temporal reprojection, is deliberately
+  Phase 13 per the body above. Recommend moving it out of 0.2.0 to the
+  release that carries Phase 13 volumetric lighting, so 0.2.0 does not
+  wait on it.
+  Layman: Realistic fog with light shafts; the part still open, smoother fog over time, is planned for a later release.
+  User decision 2026-10-07: moved out of 0.2.0 to 0.4.0, beside the
+  Phase 13 volumetric lighting item (3D_E-S0575) that carries temporal
+  reprojection.
+  Kind: implement.
 
 ## 0.5.0 — Interactivity
 
@@ -9803,7 +9811,36 @@ record, and a real clearance before commercial release needs counsel.
   talking character, not 0.2.0 — no scene or asset in the tree has a
   face rig, and the 1.0 Tabernacle walkthrough needs narration (now
   possible) rather than lip-synced characters.
+  User decision 2026-10-07: schedule with the release that first ships
+  a talking character, as recommended. Stays unscheduled until then.
   **Layman:** Make a character's mouth and face move in time with the words it speaks.
   Kind: feature.
   Source: in-session-2026-10-02 (split from 3D_E-S0021).
   Lanes: animation, audio.
+
+- 📋 [3D_E-S0102] **AX10. Generative / parametric music layer — extend the existing `MusicLayer` system with a tier of *generative* layers: e.g. a "rainfall" bed whose density is a function of weather intensity, or a "tension" layer whose harmonic colour is parametrised by the AI Director's encounter score (Phase 16). Algorithmic generation (Markov chord progression, granular sample re-trigger) keeps a long sequence from sounding looped without ballooning asset count. No copyright-encumbered ML models; classical algorithmic-composition techniques only.**
+  Layman: Music that writes and varies itself as the game plays, so long sessions do not sound looped.
+  DECISION FOR THE USER (checked 2026-10-02). Two halves: a "tension"
+  layer steered by the AI Director's score, which is blocked (no AI
+  Director exists, Phase 16), and a weather-driven generative bed
+  (e.g. rain density from WeatherState::precipitation), which is
+  buildable but needs a design (Markov chords vs granular re-trigger)
+  and source samples the tree does not have, so nothing could be heard
+  or checked yet. Recommendation: move both halves out of 0.2.0 — the
+  first to the AI Director's release, the second to whenever a project
+  needs music beyond the shipped layered player.
+  User decision 2026-10-07: moved out of 0.2.0 to Unscheduled, as
+  recommended. No release yet carries the AI Director.
+  Kind: implement.
+
+- 📋 [3D_E-S0106] **AX14. AI-Director-aware music transitions — when Phase 16's AI Director changes encounter score (calm → tension → combat), music transitions hit on musical sync points (bar / beat / phrase) rather than crossfading mid-bar. Requires per-clip BPM / beat-grid metadata and the `MusicStingerQueue` already shipped. Cheap, huge perceptual upgrade vs. naïve crossfade.**
+  Layman: Music changes on the beat when the game's mood shifts, instead of crossfading mid-bar.
+  Blocked (checked 2026-10-02): it reacts to the AI Director's encounter
+  score, and no AI Director exists in engine/ (Phase 16). Recommendation
+  for the user: move it to the release that builds the AI Director; the
+  beat-grid part could ship sooner as "stingers and intensity changes
+  wait for the next bar", driven by the SetMusicIntensity node
+  (3D_E-S0018), if that is wanted for 0.2.0.
+  User decision 2026-10-07: moved out of 0.2.0 to Unscheduled, as
+  recommended. Schedule it with the release that builds the AI Director.
+  Kind: implement.
