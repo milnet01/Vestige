@@ -3149,6 +3149,8 @@ Resolves CPU↔GPU cloth divergences that make CLAUDE.md Rule 7 parity-test impo
   TOO STIFF (lambda resets each iteration, so iterations and omega both
   stiffen), while the default 1 iteration matches the CPU to 0.1 %. SOR
   stays as an opt-in API; the parity gate no longer uses it.
+  User decision 2026-10-08: keep the SOR option (public API) and
+  document that it stiffens cloth and is off by default.
 
 - 📋 [Cl10] **GPU cloth backend lacks three CPU-spec polish features — decide port-vs-document for parity.**
   Surfaced by the Cl1 parity harness. The GPU runs the core XPBD loop without three features the CPU ClothSimulator has: (1) adaptive damping (cloth_simulator.cpp:254-272), (2) rest-pose blending toward the authored pose in calm wind for LRA/pinned cloth (cloth_simulator.cpp:373-391), (3) sleep detection — a settled CPU cloth freezes; the GPU always simulates (cloth_simulator.cpp:408-434). For each, decide whether to port to the GPU dispatch (true parity) or document as an intentional CPU-only behaviour on IClothSolverBackend. Rule 7 parity gate. (Damping convention was the fourth gap and is already fixed; constraint convergence is Cl9.)
@@ -3174,6 +3176,8 @@ Resolves CPU↔GPU cloth divergences that make CLAUDE.md Rule 7 parity-test impo
   new Cl10_ReleasedDrapeStartsFromRest. Also found and fixed 3D_E-0752.
   Next: rest-pose (#2) and sleep (#3) ports against the same gate;
   adaptive damping (#1) still undecided.
+  User decision 2026-10-08: port adaptive damping (#1) to the GPU too,
+  alongside rest-pose (#2) and sleep (#3).
   Kind: implement.
   Source: in-session-2026-06-03 Cl1 parity harness.
 
