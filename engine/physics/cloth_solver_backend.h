@@ -63,6 +63,10 @@ inline constexpr int MAX_SOLVER_ITERS = 16;
 /// least one accelerated iteration runs.
 inline constexpr int CLOTH_CHEBYSHEV_DELAY = 2;
 
+/// @brief Consecutive calm, low-energy frames before a cloth falls asleep
+/// (Phase 10.9 Cl10). Shared so both backends sleep on the same frame.
+inline constexpr int CLOTH_SLEEP_FRAME_COUNT = 3;
+
 /// @brief Constraint-solver convergence-acceleration mode (Phase 10.9 Cl9).
 ///
 /// The GPU's coloured-parallel Gauss-Seidel sweep propagates a pin clamp only a
@@ -177,17 +181,35 @@ public:
 
     virtual void setSolverIterations(int iterations) = 0;
     virtual int getSolverIterations() const = 0;
+
+    /// @brief Selects the convergence accelerator. Off (`None`) by default, and
+    /// it should stay off for ordinary cloth: both solvers reset lambda every
+    /// iteration and compliance is non-zero, so over-relaxation and extra
+    /// iterations make the settled cloth STIFFER rather than converging it to
+    /// the same shape. Cl10 measured SOR x 16 about 8 % stiffer than the CPU in
+    /// the parity drape, against about 0.1 % at the default. Kept as an opt-in.
     virtual void setConvergenceMode(ClothConvergenceMode mode) = 0;
     virtual ClothConvergenceMode getConvergenceMode() const = 0;
 
-    // -- CPU-only features (NOT part of this interface) --
+    // -- Settle-down behaviour (Phase 10.9 Cl10) --
     //
-    // Cl10: adaptive damping (`ClothSimulator::setAdaptiveDamping`) is an
-    // opt-in, off-by-default stabiliser implemented only on the concrete CPU
-    // `ClothSimulator`. It is intentionally NOT promoted to this backend
-    // interface — the GPU backend does not implement it. Rest-pose blending and
-    // sleep detection, by contrast, ARE ported to both backends (they run
-    // inside `simulate()` and need no extra interface surface).
+    // Both backends run three settle-down features inside `simulate()`:
+    // adaptive damping (opt-in), rest-pose blending (cloth with LRA tethers is
+    // drawn gently toward its captured rest pose while the wind is calm), and
+    // sleep detection (a settled cloth stops simulating until a gust returns).
+
+    /// @brief Adaptive damping: the per-substep damping becomes
+    /// `damping + factor * avgSpeed`, capped at 0.95, where `avgSpeed` is the
+    /// RMS speed of the free particles at the start of the frame. 0 (the
+    /// default) disables it; a negative factor clamps to 0.
+    virtual void setAdaptiveDamping(float factor) = 0;
+    virtual float getAdaptiveDamping() const = 0;
+
+    /// @brief True while the cloth sleeps: its average kinetic energy per free
+    /// particle stayed below `ClothConfig::sleepThreshold` for
+    /// `CLOTH_SLEEP_FRAME_COUNT` frames in calm wind, so `simulate()` skips the
+    /// solve until a gust returns. `reset()` and `initialize()` wake it.
+    virtual bool isSleeping() const = 0;
 
     // -- Wind --
 

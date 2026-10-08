@@ -20,6 +20,14 @@ a future optimisation, not a parity prerequisite. The Formula-Workbench ρ fit
 (verify-step 1) is likewise deferred — ω = 1.8 is a single empirical constant
 with a `TODO: revisit via Formula Workbench` at the call site.
 
+**Cl10 — DONE (2026-10-08).** GPU velocity recovery shipped first (the
+recommended next step below). Then all three features were ported, each pinned
+by its own test in `tests/test_cloth_cpu_gpu_parity.cpp`. #1 (adaptive damping)
+was ported too, by user decision on 2026-10-08, reversing its "Document as
+CPU-only" row in the Cl10 table. It shares the GPU reduction sleep uses
+(placement table: "KE / velocity reductions"). The rest of this section is the
+2026-06-06 record that led there.
+
 **Cl10 — #1 done, #2 + #3 DEFERRED with a finding (2026-06-06).** #1 (adaptive
 damping) is documented CPU-only on `IClothSolverBackend`. #2 (rest-pose) and #3
 (sleep) are **deferred** — implementation uncovered a GPU/CPU **velocity-model

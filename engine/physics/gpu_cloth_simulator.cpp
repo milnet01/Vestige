@@ -105,6 +105,11 @@ void GpuClothSimulator::setParticleMass(float mass)
     m_pinsDirty = true;
 }
 
+void GpuClothSimulator::setAdaptiveDamping(float factor)
+{
+    m_adaptiveDampingFactor = std::max(0.0f, factor);  // Matches ClothSimulator.
+}
+
 void GpuClothSimulator::setStretchCompliance(float compliance)
 {
     m_config.stretchCompliance = compliance;
@@ -450,6 +455,8 @@ void GpuClothSimulator::initialize(const ClothConfig& config, uint32_t seed)
     // Seed the shared wind model's gust state machine (same RNG order as the
     // CPU backend, so a given seed yields identical gust timing on both).
     m_windModel.seedAndInit(seed);
+    m_sleeping    = false;
+    m_sleepFrames = 0;
 
     if (m_particleCount == 0)
     {
@@ -538,6 +545,13 @@ void GpuClothSimulator::loadShadersIfNeeded()
     if (!m_velocityShader.loadComputeShader(velocityPath))
     {
         Logger::error("[GpuClothSimulator] Failed to load " + velocityPath);
+        return;
+    }
+    // Phase 10.9 Cl10 — speed / kinetic-energy sums (adaptive damping, sleep).
+    const std::string velocityStatsPath = m_shaderPath + "/cloth_velocity_stats.comp.glsl";
+    if (!m_velocityStatsShader.loadComputeShader(velocityStatsPath))
+    {
+        Logger::error("[GpuClothSimulator] Failed to load " + velocityStatsPath);
         return;
     }
     m_shadersLoaded = true;
@@ -709,6 +723,24 @@ void GpuClothSimulator::simulate(float deltaTime)
     uploadCollidersIfDirty();
     uploadPinsIfDirty();
 
+    // Phase 10.9 Cl10 — sleep. Advance the gust clock BEFORE the sleep check,
+    // as the CPU does, so a sleeping cloth still sees the gust that wakes it.
+    // The wake gate (0.1) sits above the enter gate (0.05) on purpose: the gap
+    // stops a cloth on the boundary sleeping and waking every frame.
+    m_windModel.advance(deltaTime);
+    if (m_sleeping)
+    {
+        if (m_windModel.gustCurrent() > 0.1f)
+        {
+            m_sleeping    = false;  // Wind returned: wake.
+            m_sleepFrames = 0;
+        }
+        else
+        {
+            return;  // Asleep: no dispatches at all this frame.
+        }
+    }
+
     const GLuint particleGroups = (m_particleCount + 63u) / 64u;
     const float  dtSub          = deltaTime / static_cast<float>(m_substeps);
     const float  dtSubSquared   = dtSub * dtSub;
@@ -724,13 +756,12 @@ void GpuClothSimulator::simulate(float deltaTime)
     const float dampingPerSub = std::min(0.95f, std::max(0.0f, m_damping));
 
     // --- Per-frame wind precompute (Phase 10.9 Sh4b) ------------------------
-    // Advance the gust state machine + recompute the FBM/turbulence caches once
-    // per frame (constant across substeps), exactly like the CPU backend. The
+    // Recompute the FBM/turbulence caches once per frame (constant across
+    // substeps; the gust clock advanced above), exactly like the CPU backend. The
     // FULL tier's per-triangle turbulence needs frame-start positions for its
     // centroids: refresh the CPU mirror first. In the normal render loop the
     // renderer already read positions back this frame (mirror clean), so this
     // is usually a no-op; in headless stepping it costs one readback at FULL.
-    m_windModel.advance(deltaTime);
     const bool windFull = (m_windModel.windQuality() == ClothWindQuality::FULL);
     if (windFull)
     {
@@ -764,6 +795,21 @@ void GpuClothSimulator::simulate(float deltaTime)
                 turb.data());
         }
     }
+
+    // Phase 10.9 Cl10 — adaptive damping. The CPU scales damping by the RMS
+    // speed of the free particles at the start of the frame. Sum it on the GPU;
+    // the velocity pass reads the sums directly, so nothing is read back.
+    if (m_adaptiveDampingFactor > 0.0f)
+    {
+        dispatchVelocityStats();
+    }
+
+    // Phase 10.9 Cl10 — rest-pose blend, the CPU's step 6: cloth with LRA
+    // tethers moves 1.5 % of the way to its rest pose per substep, scaled by
+    // how calm the wind is. Applied inside the velocity pass below.
+    const float calm = 1.0f - m_windModel.gustCurrent();
+    const float restBlendPerSub =
+        (calm > 0.01f && m_lraCount > 0) ? 0.015f * calm : 0.0f;
 
     for (int s = 0; s < m_substeps; ++s)
     {
@@ -924,8 +970,9 @@ void GpuClothSimulator::simulate(float deltaTime)
             glMemoryBarrier(GL_SHADER_STORAGE_BARRIER_BIT);
         }
 
-        // 7. Velocity recovery (Phase 10.9 Cl10) — v = (pos - prevPos) / dtSub,
-        //    then damping, mirroring the CPU's step 7. Runs last so the
+        // 7. Rest-pose blend + velocity recovery (Phase 10.9 Cl10) — the CPU's
+        //    steps 6 and 7: blend toward the rest pose, then v = (pos - prevPos)
+        //    / dtSub and damping (plus adaptive damping). Runs last so the
         //    constraint, collision and LRA corrections all reach the velocity:
         //    a particle the solve holds still is left at rest. This overwrites
         //    the velocity the collision pass wrote, as the CPU does.
@@ -933,9 +980,13 @@ void GpuClothSimulator::simulate(float deltaTime)
         glBindBufferBase(GL_SHADER_STORAGE_BUFFER, BIND_POSITIONS,      m_positionsSSBO);
         glBindBufferBase(GL_SHADER_STORAGE_BUFFER, BIND_PREV_POSITIONS, m_prevPositionsSSBO);
         glBindBufferBase(GL_SHADER_STORAGE_BUFFER, BIND_VELOCITIES,     m_velocitiesSSBO);
-        m_velocityShader.setUInt("u_particleCount", m_particleCount);
-        m_velocityShader.setFloat("u_deltaTime",    dtSub);
-        m_velocityShader.setFloat("u_damping",      dampingPerSub);
+        glBindBufferBase(GL_SHADER_STORAGE_BUFFER, BIND_REST_POSITIONS, m_restPositionsSSBO);
+        glBindBufferBase(GL_SHADER_STORAGE_BUFFER, BIND_VELOCITY_STATS, m_velocityStatsSSBO);
+        m_velocityShader.setUInt("u_particleCount",    m_particleCount);
+        m_velocityShader.setFloat("u_deltaTime",       dtSub);
+        m_velocityShader.setFloat("u_damping",         dampingPerSub);
+        m_velocityShader.setFloat("u_restBlend",       restBlendPerSub);
+        m_velocityShader.setFloat("u_adaptiveFactor",  m_adaptiveDampingFactor);
         glDispatchCompute(particleGroups, 1, 1);
         glMemoryBarrier(GL_SHADER_STORAGE_BARRIER_BIT);
     }
@@ -948,6 +999,61 @@ void GpuClothSimulator::simulate(float deltaTime)
     // CPU mirror is now stale — refreshed lazily on getPositions() / getNormals().
     m_positionsDirty = true;
     m_normalsDirty   = true;
+
+    // Phase 10.9 Cl10 — sleep detection, as at the end of the CPU's
+    // simulate(): the GPU sums kinetic energy, the CPU reads back one vec4 and
+    // decides. A threshold of 0 can never be undercut (KE >= 0), so skip the
+    // read-back there; the state is the same either way.
+    if (m_config.sleepThreshold > 0.0f)
+    {
+        dispatchVelocityStats();
+        glMemoryBarrier(GL_BUFFER_UPDATE_BARRIER_BIT);
+        glm::vec4 stats(0.0f);
+        glGetNamedBufferSubData(m_velocityStatsSSBO, 0, sizeof(glm::vec4), &stats);
+
+        if (stats.z > 0.0f)  // An all-pinned cloth never sleeps, as on the CPU.
+        {
+            const float avgKE = stats.y / stats.z;
+            if (avgKE < m_config.sleepThreshold && m_windModel.gustCurrent() < 0.05f)
+            {
+                if (++m_sleepFrames >= CLOTH_SLEEP_FRAME_COUNT)
+                {
+                    // Zero every velocity for a clean rest state; the next
+                    // frame's early-out is what skips the dispatches.
+                    m_sleeping = true;
+                    glClearNamedBufferData(m_velocitiesSSBO, GL_RGBA32F, GL_RGBA,
+                                           GL_FLOAT, nullptr);
+                }
+            }
+            else
+            {
+                m_sleepFrames = 0;
+            }
+        }
+    }
+}
+
+void GpuClothSimulator::dispatchVelocityStats()
+{
+    m_velocityStatsShader.use();
+    glBindBufferBase(GL_SHADER_STORAGE_BUFFER, BIND_POSITIONS,      m_positionsSSBO);
+    glBindBufferBase(GL_SHADER_STORAGE_BUFFER, BIND_VELOCITIES,     m_velocitiesSSBO);
+    glBindBufferBase(GL_SHADER_STORAGE_BUFFER, BIND_VELOCITY_STATS, m_velocityStatsSSBO);
+    m_velocityStatsShader.setUInt("u_particleCount", m_particleCount);
+    glDispatchCompute(1, 1, 1);  // One workgroup strides over every particle.
+    glMemoryBarrier(GL_SHADER_STORAGE_BARRIER_BIT);
+}
+
+void GpuClothSimulator::uploadRestPositions()
+{
+    if (m_restPositionsSSBO == 0) return;
+    std::vector<glm::vec4> rest(m_particleCount);
+    for (uint32_t i = 0; i < m_particleCount; ++i)
+    {
+        rest[i] = glm::vec4(m_initialPositions[i], 0.0f);
+    }
+    glNamedBufferSubData(m_restPositionsSSBO, 0,
+        static_cast<GLsizeiptr>(m_particleCount * sizeof(glm::vec4)), rest.data());
 }
 
 void GpuClothSimulator::dispatchNormalsShader(GLuint particleGroups)
@@ -1021,6 +1127,10 @@ void GpuClothSimulator::reset()
     // Reset the gust state machine (mirrors ClothSimulator::reset — zero state,
     // preserve the RNG seed so post-reset gust timing is reproducible).
     m_windModel.reset();
+
+    // Clear sleep state, as ClothSimulator::reset does.
+    m_sleeping    = false;
+    m_sleepFrames = 0;
 }
 
 void GpuClothSimulator::captureRestPositions()
@@ -1035,6 +1145,7 @@ void GpuClothSimulator::captureRestPositions()
     if (!m_initialized) return;
     readbackPositionsIfDirty();
     m_initialPositions = m_positionMirror;
+    uploadRestPositions();  // Cl10: the rest-pose blend targets the new pose.
 }
 
 const glm::vec3* GpuClothSimulator::getPositions() const
@@ -1185,6 +1296,17 @@ void GpuClothSimulator::createBuffers()
     glCreateBuffers(1, &m_particleWindFbmSSBO);
     glNamedBufferStorage(m_particleWindFbmSSBO, vec4Bytes, zeroVec4.data(),
                          GL_DYNAMIC_STORAGE_BIT);
+
+    // Phase 10.9 Cl10 — rest pose for the calm-wind blend (refreshed by
+    // captureRestPositions), and the one-vec4 speed / KE sums.
+    glCreateBuffers(1, &m_restPositionsSSBO);
+    glNamedBufferStorage(m_restPositionsSSBO, vec4Bytes, nullptr, GL_DYNAMIC_STORAGE_BIT);
+    uploadRestPositions();
+
+    const glm::vec4 zeroStats(0.0f);
+    glCreateBuffers(1, &m_velocityStatsSSBO);
+    glNamedBufferStorage(m_velocityStatsSSBO, sizeof(glm::vec4), &zeroStats,
+                         GL_DYNAMIC_STORAGE_BIT);
 }
 
 void GpuClothSimulator::destroyBuffers()
@@ -1201,6 +1323,8 @@ void GpuClothSimulator::destroyBuffers()
     if (m_trianglesSSBO)     { glDeleteBuffers(1, &m_trianglesSSBO);     m_trianglesSSBO = 0; }
     if (m_particleWindFbmSSBO) { glDeleteBuffers(1, &m_particleWindFbmSSBO); m_particleWindFbmSSBO = 0; }
     if (m_triangleTurbSSBO)    { glDeleteBuffers(1, &m_triangleTurbSSBO);    m_triangleTurbSSBO = 0; }
+    if (m_restPositionsSSBO)   { glDeleteBuffers(1, &m_restPositionsSSBO);   m_restPositionsSSBO = 0; }
+    if (m_velocityStatsSSBO)   { glDeleteBuffers(1, &m_velocityStatsSSBO);   m_velocityStatsSSBO = 0; }
     m_initialized = false;
     m_particleCount = 0;
     m_gridW = m_gridH = 0;

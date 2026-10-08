@@ -23,6 +23,25 @@ may change any interface without notice.
 
 ## [Unreleased]
 
+### 2026-10-08 Added — GPU cloth settles like CPU cloth (Cl10)
+
+The graphics-card cloth gained the three settle-down features the
+processor cloth already had. Each matches the CPU cloth to well under
+1 % in tests/test_cloth_cpu_gpu_parity.cpp.
+
+- **Rest-pose blending**
+  A cloth hanging from tethers drifts back toward its rest shape in
+  calm air, inside cloth_velocity.comp.glsl.
+
+- **Sleep**
+  A settled cloth goes to sleep and skips all GPU work until the wind
+  returns. The GPU sums the kinetic energy (new
+  cloth_velocity_stats.comp.glsl); the CPU reads back one value and
+  decides.
+
+- **Adaptive damping**
+  Opt-in, as on the CPU. Now on IClothSolverBackend with isSleeping().
+
 ### 2026-10-08 Fixed — Graphics-card cloth hangs and falls like the processor cloth (Cl10, 3D_E-0752)
 
 The GPU cloth carried its velocity forward instead of working it out

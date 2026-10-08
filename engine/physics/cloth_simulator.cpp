@@ -439,7 +439,7 @@ void ClothSimulator::simulate(float deltaTime)
     if (avgKE < m_config.sleepThreshold && m_windModel.gustCurrent() < 0.05f)
     {
         ++m_sleepFrames;
-        if (m_sleepFrames >= SLEEP_FRAME_COUNT)
+        if (m_sleepFrames >= CLOTH_SLEEP_FRAME_COUNT)
         {
             m_sleeping = true;
             // Zero all velocities for a clean rest state

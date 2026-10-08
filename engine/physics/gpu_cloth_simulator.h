@@ -85,6 +85,11 @@ public:
     void setConvergenceMode(ClothConvergenceMode mode) override;
     ClothConvergenceMode getConvergenceMode() const override { return m_convergenceMode; }
 
+    // Settle-down behaviour (Phase 10.9 Cl10), ported from ClothSimulator.
+    void setAdaptiveDamping(float factor) override;
+    float getAdaptiveDamping() const override { return m_adaptiveDampingFactor; }
+    bool isSleeping() const override { return m_sleeping; }
+
     // Wind (IClothSolverBackend). Gust state + FBM/turbulence precompute live in
     // the shared ClothWindModel (Phase 10.9 Sh4b) so this backend produces the
     // same wind inputs as the CPU ClothSimulator from the same seed.
@@ -150,6 +155,8 @@ public:
         BIND_TRIANGLES         = 9,  ///< Phase 10.9 Sh4a — per-triangle wind-drag records.
         BIND_PARTICLE_WIND_FBM = 10, ///< Phase 10.9 Sh4b — per-particle FBM perturbation (FULL).
         BIND_TRIANGLE_TURB     = 11, ///< Phase 10.9 Sh4b — per-triangle turbulence factor (FULL).
+        BIND_REST_POSITIONS    = 12, ///< Phase 10.9 Cl10 — rest pose for the calm-wind blend.
+        BIND_VELOCITY_STATS    = 13, ///< Phase 10.9 Cl10 — free-particle speed² / KE / count sums.
     };
 
     // -- Pin mutators (Step 9) --
@@ -270,6 +277,11 @@ private:
     /// Phase 10.9 Cl2 — dispatch only the cloth_normals compute shader.
     /// Shared by `simulate()` and `syncBuffersOnly()`.
     void dispatchNormalsShader(GLuint particleGroups);
+    /// Phase 10.9 Cl10 — sum speed², kinetic energy and the free-particle
+    /// count into `m_velocityStatsSSBO` (one workgroup, no readback).
+    void dispatchVelocityStats();
+    /// Phase 10.9 Cl10 — copy `m_initialPositions` into the rest-pose SSBO.
+    void uploadRestPositions();
 
     bool m_initialized = false;
     uint32_t m_particleCount = 0;
@@ -348,6 +360,7 @@ private:
     Shader m_normalsShader;
     Shader m_lraShader;
     Shader m_velocityShader;  ///< Phase 10.9 Cl10 — substep-end velocity recovery.
+    Shader m_velocityStatsShader;  ///< Phase 10.9 Cl10 — speed / KE reduction.
     bool m_shadersLoaded = false;
     std::string m_shaderPath;
 
@@ -374,6 +387,15 @@ private:
     // Per-frame parameters (uniforms uploaded inside simulate()).
     glm::vec3 m_gravity      = glm::vec3(0.0f, -9.81f, 0.0f);
     float     m_damping      = 0.01f;
+
+    // Settle-down state (Phase 10.9 Cl10), mirroring ClothSimulator.
+    // Reductions run on the GPU; the sleep decision is a CPU branch on one
+    // read-back vec4 (docs/phases/phase_10_9_cloth_gpu_parity_design.md).
+    GLuint m_restPositionsSSBO     = 0;
+    GLuint m_velocityStatsSSBO     = 0;  ///< One vec4: x = sum speed², y = sum KE, z = free count.
+    float  m_adaptiveDampingFactor = 0.0f;
+    bool   m_sleeping              = false;
+    int    m_sleepFrames           = 0;
 
     // Wind state machine + FBM/turbulence precompute, shared with the CPU
     // backend so both produce identical wind inputs from the same seed (Sh4b).

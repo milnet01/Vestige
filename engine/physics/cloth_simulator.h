@@ -291,18 +291,17 @@ public:
     void setConvergenceMode(ClothConvergenceMode mode) override;
     ClothConvergenceMode getConvergenceMode() const override;
 
-    // --- Adaptive damping ---
-    //
-    // Cl10: CPU-`ClothSimulator`-ONLY feature — opt-in (off by default) and
-    // intentionally NOT promoted to `IClothSolverBackend`; the GPU backend does
-    // not implement it. See the interface header's "CPU-only features" note.
+    // --- Settle-down behaviour (IClothSolverBackend, Phase 10.9 Cl10) ---
 
     /// @brief Sets the adaptive damping factor (scales damping with average particle speed).
     /// Total damping = baseDamping + adaptiveFactor * avgSpeed. Set to 0 to disable.
-    void setAdaptiveDamping(float factor);
+    void setAdaptiveDamping(float factor) override;
 
     /// @brief Returns the adaptive damping factor.
-    float getAdaptiveDamping() const;
+    float getAdaptiveDamping() const override;
+
+    /// @brief True while the cloth sleeps (see `IClothSolverBackend::isSleeping`).
+    bool isSleeping() const override { return m_sleeping; }
 
     // --- Friction ---
 
@@ -445,8 +444,7 @@ private:
 
     // Sleep state: particles freeze when kinetic energy drops below threshold
     bool m_sleeping = false;
-    int m_sleepFrames = 0;           ///< Consecutive frames below threshold
-    static constexpr int SLEEP_FRAME_COUNT = 3;  ///< Frames below threshold before sleeping
+    int m_sleepFrames = 0;           ///< Consecutive frames below threshold (sleeps at CLOTH_SLEEP_FRAME_COUNT)
 
     // Solver internals
     void solveDistanceConstraint(DistanceConstraint& c, float alphaTilde, float dtSub);

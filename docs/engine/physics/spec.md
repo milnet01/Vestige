@@ -383,7 +383,8 @@ class PhysicsDebugDraw {
    5. Solve LRA (Long-Range Attachment) tethers — unilateral; only activates if particle drifts past `maxDistance`.
    6. Solve pins (clamp pinned particles to fixed positions; inverse mass = 0).
    7. Apply collisions: ground plane, planes, spheres, cylinders, boxes, mesh-BVH (Phase 8F), self-collision via spatial hash if enabled.
-   8. Update velocities: `vel = (pos - prevPos) / dtSub * (1 - damping)`.
+   8. Rest-pose blend (cloth with LRA tethers only): move free particles `0.015 × (1 - gust)` of the way to the rest pose.
+   9. Update velocities: `vel = (pos - prevPos) / dtSub * (1 - damping)`, where damping includes adaptive damping when enabled.
 3. `recomputeNormals()` for the renderer.
 4. Sleep check: if avg kinetic energy < `sleepThreshold` for `SLEEP_FRAME_COUNT = 3` consecutive frames, freeze.
 
@@ -396,9 +397,9 @@ Identical XPBD math, dispatched as a chain of compute shaders per substep:
 4. `cloth_dihedral.comp` — one dispatch per dihedral colour group.
 5. `cloth_collision.comp` (spheres + planes + ground; cylinder / box / mesh CPU-only).
 6. `cloth_lra.comp` — single dispatch (each LRA writes only its own particle).
-7. `cloth_velocity.comp` — `vel = (pos - prevPos) / dtSub * (1 - damping)`, zero for pins (the CPU's velocity update).
+7. `cloth_velocity.comp` — the CPU's rest-pose blend, then `vel = (pos - prevPos) / dtSub * (1 - damping)`, zero for pins (the CPU's velocity update, adaptive damping included).
 
-Once per frame, after the substeps: `cloth_normals.comp` (recompute per-vertex normals).
+Once per frame: before the substeps, the wind clock advances and a sleeping cloth either wakes (gust above 0.1) or skips every dispatch; with adaptive damping on, `cloth_velocity_stats.comp` sums the frame-start speeds for step 7. After the substeps: `cloth_normals.comp` (recompute per-vertex normals), then the sleep check — `cloth_velocity_stats.comp` sums the kinetic energy on the GPU and the CPU reads back one `vec4` to decide, as in CPU step 4.
 
 `getPositions()` / `getNormals()` lazily refresh CPU mirror via `glGetNamedBufferSubData` when called between simulate steps; the renderer reads the SSBOs directly once Phase 9B Step 8 lands (see Open Q3).
 

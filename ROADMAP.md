@@ -3152,7 +3152,7 @@ Resolves CPU↔GPU cloth divergences that make CLAUDE.md Rule 7 parity-test impo
   User decision 2026-10-08: keep the SOR option (public API) and
   document that it stiffens cloth and is off by default.
 
-- 📋 [Cl10] **GPU cloth backend lacks three CPU-spec polish features — decide port-vs-document for parity.**
+- ✅ [Cl10] **GPU cloth backend lacks three CPU-spec polish features — decide port-vs-document for parity.**
   Surfaced by the Cl1 parity harness. The GPU runs the core XPBD loop without three features the CPU ClothSimulator has: (1) adaptive damping (cloth_simulator.cpp:254-272), (2) rest-pose blending toward the authored pose in calm wind for LRA/pinned cloth (cloth_simulator.cpp:373-391), (3) sleep detection — a settled CPU cloth freezes; the GPU always simulates (cloth_simulator.cpp:408-434). For each, decide whether to port to the GPU dispatch (true parity) or document as an intentional CPU-only behaviour on IClothSolverBackend. Rule 7 parity gate. (Damping convention was the fourth gap and is already fixed; constraint convergence is Cl9.)
   Next step decided 2026-10-02: build GPU velocity recovery without a
   new spec (one subsystem, textbook XPBD, guarded by the Cl1 parity
@@ -3178,6 +3178,19 @@ Resolves CPU↔GPU cloth divergences that make CLAUDE.md Rule 7 parity-test impo
   adaptive damping (#1) still undecided.
   User decision 2026-10-08: port adaptive damping (#1) to the GPU too,
   alongside rest-pose (#2) and sleep (#3).
+  Resolved (2026-10-08): all three features ported to
+  GpuClothSimulator and added to IClothSolverBackend (setAdaptiveDamping,
+  getAdaptiveDamping, isSleeping). Each was proven red first on the old
+  GPU, then green, by a new test in test_cloth_cpu_gpu_parity.cpp:
+  adaptive damping 169.8 % -> 0.001 %, rest-pose blend 70.7 % -> 0.0001 %,
+  sleep "never slept" -> asleep at frame 55 vs CPU 54, 0.12 %.
+  CPU / GPU placement (rule 7), as the design doc's placement table set:
+  rest-pose blend on the GPU, inside cloth_velocity.comp.glsl; speed and
+  kinetic-energy sums on the GPU, in the new one-workgroup
+  cloth_velocity_stats.comp.glsl; the sleep decision on the CPU, which
+  reads back one vec4 per awake frame. Adaptive damping reads the sums on
+  the GPU, with no read-back. setConvergenceMode's doc now says SOR
+  stiffens cloth and stays off by default.
   Kind: implement.
   Source: in-session-2026-06-03 Cl1 parity harness.
 
@@ -5428,6 +5441,21 @@ shipped that have no invocation path at all.
   **Layman:** Pinning or unpinning a point on graphics-card cloth could make the whole cloth jump back to an older shape.
   Kind: fix.
   Source: in-session-2026-10-08 (found during Cl10).
+  Lanes: physics.
+
+- 📋 [3D_E-0753] **A sleeping cloth ignores pin moves until wind wakes it.**
+  Both backends clear their sleep flag only in initialize(),
+  reset() and on a gust above 0.1 (ClothSimulator::simulate,
+  GpuClothSimulator::simulate). pinParticle, unpinParticle and
+  setPinPosition do not wake the cloth, so a sleeping cloth does not
+  follow a dragged or released pin. Fix on both backends together (wake
+  on any pin edit) and pin it with a parity test: settle until asleep,
+  move a pin, expect the cloth to move on both. Found while porting
+  sleep for Cl10; the GPU copies the CPU behaviour on purpose so the two
+  stay in step until this is fixed.
+  **Layman:** Once a cloth has settled and gone to sleep, dragging one of its pins in the editor moves only that pin; the rest of the cloth stays frozen until a gust arrives.
+  Kind: fix.
+  Source: in-session-2026-10-08 Cl10 port.
   Lanes: physics.
 
 ## 0.3.0 — An editor a builder can use

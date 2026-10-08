@@ -39,9 +39,10 @@
 /// ordering, same centred position formula, same index winding — see
 /// `ClothSimulator::initialize` and `GpuClothSimulator::buildInitialGrid`),
 /// so particle `i` is the same logical vertex on each and a direct
-/// index-correspondent comparison is well-defined. Wind is OFF in both
-/// tests (its own parity is pinned by the Sh4* tests in
-/// test_gpu_cloth_simulator.cpp); sleep is disabled (the GPU never sleeps).
+/// index-correspondent comparison is well-defined. Wind is OFF in every
+/// test (its own parity is pinned by the Sh4* tests in
+/// test_gpu_cloth_simulator.cpp); sleep is disabled except in the Cl10 sleep
+/// test, so the backends step every tick.
 
 #include <gtest/gtest.h>
 
@@ -67,7 +68,7 @@ constexpr float    SPACING = 0.1f;
 constexpr int      FRAMES_2S = 120;  // 2 s @ 60 Hz
 
 /// Baseline parity config: a 12×12 cloth, wind-free, sleep-free so both
-/// backends simulate every tick (the GPU has no sleep path).
+/// backends simulate every tick.
 ClothConfig parityConfig()
 {
     ClothConfig cfg = Testing::clothSmallConfig(W, H);
@@ -300,6 +301,156 @@ TEST_F(ClothCpuGpuParityTest, Cl10_ReleasedDrapeStartsFromRest)
         << "released-drape Hausdorff " << haus << " m = " << (100.0f * haus / diagonal)
         << "% of the " << diagonal << " m diagonal exceeds 5% — the GPU's "
            "velocity no longer follows the net position change of the solve.";
+}
+
+// =============================================================================
+// Cl10 — settle-down features run on both backends
+// =============================================================================
+// The CPU ClothSimulator has three settle-down features the GPU once lacked:
+// adaptive damping, rest-pose blending and sleep. Each test below turns one on
+// for both backends and holds the GPU to the same 5 % Hausdorff gate.
+
+// Adaptive damping scales the per-substep damping with the RMS speed of the
+// free particles, so a falling cloth slows as it speeds up. Free fall makes the
+// speed, and so the effect, large: a backend without the feature falls freely
+// and leaves the other behind.
+TEST_F(ClothCpuGpuParityTest, Cl10_AdaptiveDampingParity)
+{
+    const ClothConfig cfg = parityConfig();
+    ClothSimulator cpu;
+    GpuClothSimulator gpu;
+    bool gpuReady = false;
+    buildPair(cfg, cpu, gpu, gpuReady);
+    if (!gpuReady)
+        GTEST_SKIP() << "GPU cloth compute pipeline not available in this environment";
+
+    cpu.setAdaptiveDamping(0.5f);
+    gpu.setAdaptiveDamping(0.5f);
+    ASSERT_FLOAT_EQ(gpu.getAdaptiveDamping(), 0.5f);
+
+    run(cpu, FRAMES_2S);
+    run(gpu, FRAMES_2S);
+
+    const uint32_t pc = cpu.getParticleCount();
+    const glm::vec3* c = cpu.getPositions();
+    const glm::vec3* g = gpu.getPositions();
+    for (uint32_t i = 0; i < pc; ++i)
+    {
+        ASSERT_TRUE(std::isfinite(c[i].y)) << "CPU produced non-finite position";
+        ASSERT_TRUE(std::isfinite(g[i].y)) << "GPU produced non-finite position";
+    }
+
+    const float diagonal = clothDiagonal();
+    const float haus = hausdorff(c, g, pc);
+    EXPECT_LT(haus, 0.05f * diagonal)
+        << "adaptive-damping Hausdorff " << haus << " m = " << (100.0f * haus / diagonal)
+        << "% of the " << diagonal << " m diagonal exceeds 5% (CPU y " << c[0].y
+        << " m vs GPU y " << g[0].y << " m) — the GPU's adaptive damping no "
+           "longer matches the CPU's.";
+}
+
+// Rest-pose blending draws a cloth that has LRA tethers back toward its rest
+// pose, 1.5 % per substep scaled by how calm the wind is. A cloth pinned along
+// one edge would otherwise hang straight down; the blend holds it up toward the
+// flat grid it was built as. Wind is off here, so the blend runs at full
+// strength on every substep and the two outcomes are far apart.
+TEST_F(ClothCpuGpuParityTest, Cl10_RestPoseBlendParity)
+{
+    const ClothConfig cfg = parityConfig();
+    ClothSimulator cpu;
+    GpuClothSimulator gpu;
+    bool gpuReady = false;
+    buildPair(cfg, cpu, gpu, gpuReady);
+    if (!gpuReady)
+        GTEST_SKIP() << "GPU cloth compute pipeline not available in this environment";
+
+    // Pin the whole z = 0 edge, then build the LRA tethers that switch the
+    // blend on.
+    for (uint32_t x = 0; x < W; ++x)
+    {
+        cpu.pinParticle(x, cpu.getPositions()[x]);
+        gpu.pinParticle(x, gpu.getPositions()[x]);
+    }
+    cpu.rebuildLRA();
+    gpu.rebuildLRA();
+    ASSERT_FALSE(cpu.getLraConstraints().empty()) << "fixture: CPU built no LRA tethers";
+    ASSERT_GT(gpu.getLraCount(), 0u) << "fixture: GPU built no LRA tethers";
+
+    run(cpu, FRAMES_2S);
+    run(gpu, FRAMES_2S);
+
+    const uint32_t pc = cpu.getParticleCount();
+    const glm::vec3* c = cpu.getPositions();
+    const glm::vec3* g = gpu.getPositions();
+    for (uint32_t i = 0; i < pc; ++i)
+    {
+        ASSERT_TRUE(std::isfinite(c[i].y)) << "CPU produced non-finite position";
+        ASSERT_TRUE(std::isfinite(g[i].y)) << "GPU produced non-finite position";
+    }
+
+    const uint32_t farCorner = (H - 1) * W;  // Free edge, furthest from the pins.
+    const float diagonal = clothDiagonal();
+    const float haus = hausdorff(c, g, pc);
+    EXPECT_LT(haus, 0.05f * diagonal)
+        << "rest-pose Hausdorff " << haus << " m = " << (100.0f * haus / diagonal)
+        << "% of the " << diagonal << " m diagonal exceeds 5% (free-edge y: CPU "
+        << c[farCorner].y << " m vs GPU " << g[farCorner].y << " m) — the GPU "
+           "no longer blends toward the rest pose as the CPU does.";
+}
+
+// A settled cloth sleeps: its kinetic energy per free particle stays below
+// `sleepThreshold` in calm wind for CLOTH_SLEEP_FRAME_COUNT frames, and from
+// the next frame `simulate()` skips the solve. Sleep is on here at the default
+// threshold. Both backends must fall asleep, at about the same frame, in the
+// same place, and a sleeping GPU cloth must not move.
+TEST_F(ClothCpuGpuParityTest, Cl10_SettledDrapeSleepsOnBothBackends)
+{
+    ClothConfig cfg = parityConfig();
+    cfg.sleepThreshold = ClothConfig{}.sleepThreshold;
+    ASSERT_GT(cfg.sleepThreshold, 0.0f) << "fixture: default sleepThreshold disables sleep";
+    ClothSimulator cpu;
+    GpuClothSimulator gpu;
+    bool gpuReady = false;
+    buildPair(cfg, cpu, gpu, gpuReady);
+    if (!gpuReady)
+        GTEST_SKIP() << "GPU cloth compute pipeline not available in this environment";
+
+    pinCorners(cpu);
+    pinCorners(gpu);
+
+    int cpuSleptAt = -1;
+    int gpuSleptAt = -1;
+    for (int f = 0; f < FRAMES_2S; ++f)
+    {
+        cpu.simulate(1.0f / 60.0f);
+        gpu.simulate(1.0f / 60.0f);
+        if (cpuSleptAt < 0 && cpu.isSleeping()) cpuSleptAt = f;
+        if (gpuSleptAt < 0 && gpu.isSleeping()) gpuSleptAt = f;
+    }
+    ASSERT_GE(cpuSleptAt, 0) << "fixture: the CPU drape never slept in 2 s";
+    ASSERT_GE(gpuSleptAt, 0) << "the GPU drape never slept in 2 s (the CPU slept at frame "
+                             << cpuSleptAt << ")";
+    // The two kinetic-energy curves match closely but are summed in a
+    // different order, so allow the threshold crossing a few frames of slack.
+    EXPECT_NEAR(gpuSleptAt, cpuSleptAt, 3)
+        << "the GPU fell asleep at frame " << gpuSleptAt << ", the CPU at " << cpuSleptAt;
+
+    const uint32_t pc = cpu.getParticleCount();
+    const float diagonal = clothDiagonal();
+    const float haus = hausdorff(cpu.getPositions(), gpu.getPositions(), pc);
+    EXPECT_LT(haus, 0.05f * diagonal)
+        << "sleeping-drape Hausdorff " << haus << " m = " << (100.0f * haus / diagonal)
+        << "% of the " << diagonal << " m diagonal exceeds 5%";
+
+    // Asleep means no solve: the GPU cloth holds exactly still.
+    const std::vector<glm::vec3> before(gpu.getPositions(), gpu.getPositions() + pc);
+    run(gpu, 10);
+    EXPECT_TRUE(gpu.isSleeping()) << "the GPU cloth woke with no wind";
+    const glm::vec3* after = gpu.getPositions();
+    for (uint32_t i = 0; i < pc; ++i)
+    {
+        ASSERT_EQ(before[i], after[i]) << "sleeping GPU particle " << i << " moved";
+    }
 }
 
 // =============================================================================
