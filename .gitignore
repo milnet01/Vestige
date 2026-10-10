@@ -48,6 +48,8 @@ Thumbs.db
 #   bump.json     — recipe consumed by the user-level /bump skill
 !.claude/settings.json
 !.claude/bump.json
+#   rules/        — path-scoped project rules moved out of CLAUDE.md
+!.claude/rules/
 
 # ImGui layout state
 imgui.ini
