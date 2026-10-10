@@ -381,6 +381,9 @@ private:
     bool m_constraintsSorted = false;
     void sortConstraintsByDepth();
 
+    /// Clears the sleep state; every pin edit calls it (3D_E-0753).
+    void wakeForPinEdit();
+
     // Pin constraints
     struct PinConstraint
     {

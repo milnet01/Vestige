@@ -506,6 +506,7 @@ bool ClothSimulator::pinParticle(uint32_t index, const glm::vec3& worldPos)
     m_positions[index] = worldPos;
     m_prevPositions[index] = worldPos;
     m_velocities[index] = glm::vec3(0.0f);
+    wakeForPinEdit();
 
     // Check if already pinned — update position
     for (auto& pin : m_pinConstraints)
@@ -530,6 +531,7 @@ void ClothSimulator::unpinParticle(uint32_t index)
     }
 
     m_inverseMasses[index] = m_originalInverseMasses[index];
+    wakeForPinEdit();
 
     m_pinConstraints.erase(
         std::remove_if(m_pinConstraints.begin(), m_pinConstraints.end(),
@@ -547,9 +549,18 @@ void ClothSimulator::setPinPosition(uint32_t index, const glm::vec3& worldPos)
         {
             pin.position = worldPos;
             m_positions[index] = worldPos;
+            wakeForPinEdit();
             return;
         }
     }
+}
+
+// A pin edit changes what the rest of the cloth should do, so a sleeping cloth
+// must resume simulating or it ignores the edit until a gust (3D_E-0753).
+void ClothSimulator::wakeForPinEdit()
+{
+    m_sleeping = false;
+    m_sleepFrames = 0;
 }
 
 bool ClothSimulator::isParticlePinned(uint32_t index) const

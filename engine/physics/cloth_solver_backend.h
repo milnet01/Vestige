@@ -196,7 +196,8 @@ public:
     // Both backends run three settle-down features inside `simulate()`:
     // adaptive damping (opt-in), rest-pose blending (cloth with LRA tethers is
     // drawn gently toward its captured rest pose while the wind is calm), and
-    // sleep detection (a settled cloth stops simulating until a gust returns).
+    // sleep detection (a settled cloth stops simulating until a gust or a pin
+    // edit wakes it).
 
     /// @brief Adaptive damping: the per-substep damping becomes
     /// `damping + factor * avgSpeed`, capped at 0.95, where `avgSpeed` is the
@@ -208,7 +209,8 @@ public:
     /// @brief True while the cloth sleeps: its average kinetic energy per free
     /// particle stayed below `ClothConfig::sleepThreshold` for
     /// `CLOTH_SLEEP_FRAME_COUNT` frames in calm wind, so `simulate()` skips the
-    /// solve until a gust returns. `reset()` and `initialize()` wake it.
+    /// solve until a gust returns. `reset()`, `initialize()` and any pin edit
+    /// (`pinParticle`, `unpinParticle`, `setPinPosition`) wake it.
     virtual bool isSleeping() const = 0;
 
     // -- Wind --

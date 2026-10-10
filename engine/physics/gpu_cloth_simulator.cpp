@@ -291,6 +291,7 @@ bool GpuClothSimulator::pinParticle(uint32_t index, const glm::vec3& worldPos)
         m_pinIndices.push_back(index);
     }
     m_pinsDirty = true;
+    wakeForPinEdit();
     return true;
 }
 
@@ -305,6 +306,7 @@ void GpuClothSimulator::unpinParticle(uint32_t index)
             std::remove(m_pinIndices.begin(), m_pinIndices.end(), index),
             m_pinIndices.end());
         m_pinsDirty = true;
+        wakeForPinEdit();
     }
 }
 
@@ -315,6 +317,14 @@ void GpuClothSimulator::setPinPosition(uint32_t index, const glm::vec3& worldPos
     readbackPositionsIfDirty();
     m_positionMirror[index] = worldPos;
     m_pinsDirty = true;
+    wakeForPinEdit();
+}
+
+// As on the CPU: a pin edit wakes a sleeping cloth (3D_E-0753).
+void GpuClothSimulator::wakeForPinEdit()
+{
+    m_sleeping    = false;
+    m_sleepFrames = 0;
 }
 
 bool GpuClothSimulator::isParticlePinned(uint32_t index) const

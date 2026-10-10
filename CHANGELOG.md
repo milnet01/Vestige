@@ -23,6 +23,14 @@ may change any interface without notice.
 
 ## [Unreleased]
 
+### 2026-10-10 Fixed — A sleeping cloth follows its pins (3D_E-0753)
+
+Once a cloth had settled and gone to sleep, moving, adding or removing
+a pin moved only that pin; the rest of the cloth stayed frozen until a
+gust woke it.
+
+- **Any pin edit (pinParticle, unpinParticle, setPinPosition) now wakes the cloth, on both the processor and graphics-card cloth.** Locked by Cl10_PinEditWakesASleepingCloth in tests/test_cloth_cpu_gpu_parity.cpp.
+
 ### 2026-10-08 Added — GPU cloth settles like CPU cloth (Cl10)
 
 The graphics-card cloth gained the three settle-down features the

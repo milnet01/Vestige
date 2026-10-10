@@ -5443,7 +5443,7 @@ shipped that have no invocation path at all.
   Source: in-session-2026-10-08 (found during Cl10).
   Lanes: physics.
 
-- 📋 [3D_E-0753] **A sleeping cloth ignores pin moves until wind wakes it.**
+- ✅ [3D_E-0753] **A sleeping cloth ignores pin moves until wind wakes it.**
   Both backends clear their sleep flag only in initialize(),
   reset() and on a gust above 0.1 (ClothSimulator::simulate,
   GpuClothSimulator::simulate). pinParticle, unpinParticle and
@@ -5453,6 +5453,10 @@ shipped that have no invocation path at all.
   move a pin, expect the cloth to move on both. Found while porting
   sleep for Cl10; the GPU copies the CPU behaviour on purpose so the two
   stay in step until this is fixed.
+  Resolved (2026-10-10): pinParticle, unpinParticle and setPinPosition
+  now wake the cloth on both backends (wakeForPinEdit). Locked by
+  ClothCpuGpuParityTest.Cl10_PinEditWakesASleepingCloth, red before the
+  fix on all six edit/backend cases.
   **Layman:** Once a cloth has settled and gone to sleep, dragging one of its pins in the editor moves only that pin; the rest of the cloth stays frozen until a gust arrives.
   Kind: fix.
   Source: in-session-2026-10-08 Cl10 port.

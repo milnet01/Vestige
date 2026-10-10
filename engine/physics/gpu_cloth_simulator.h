@@ -271,6 +271,8 @@ private:
     void buildAndUploadTriangles(); ///< Phase 10.9 Sh4a — triangle colour-groups for wind drag.
     void uploadCollidersIfDirty();
     void uploadPinsIfDirty();
+    /// Clears the sleep state; every pin edit calls it (3D_E-0753).
+    void wakeForPinEdit();
     void loadShadersIfNeeded();
     void readbackPositionsIfDirty() const;
     void readbackNormalsIfDirty() const;

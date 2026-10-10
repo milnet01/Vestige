@@ -453,6 +453,69 @@ TEST_F(ClothCpuGpuParityTest, Cl10_SettledDrapeSleepsOnBothBackends)
     }
 }
 
+// 3D_E-0753: any pin edit wakes a sleeping cloth. Settle a drape until both
+// backends sleep, then edit one pin in calm wind; the free particle next to
+// the edit must move within ten frames. Before the fix both backends moved
+// only the pin itself and the rest of the cloth stayed frozen until a gust.
+TEST_F(ClothCpuGpuParityTest, Cl10_PinEditWakesASleepingCloth)
+{
+    // static: MSVC will not read a local constexpr from a captureless lambda.
+    static constexpr uint32_t CORNER = 0;               // Pinned by pinCorners.
+    static constexpr uint32_t FAR_CORNER = (H - 1) * W; // Pinned by pinCorners.
+    static constexpr uint32_t CENTRE = (H / 2) * W + W / 2;
+    const glm::vec3 lift(0.0f, 0.2f, 0.0f);
+
+    struct Edit
+    {
+        const char* name;
+        uint32_t    watched;  // Free particle beside the edited pin.
+        void (*apply)(IClothSolverBackend&, const glm::vec3& lift);
+    };
+    const Edit edits[] = {
+        {"setPinPosition", CORNER + 1,
+         [](IClothSolverBackend& s, const glm::vec3& l)
+         { s.setPinPosition(CORNER, s.getPositions()[CORNER] + l); }},
+        {"pinParticle", CENTRE + 1,
+         [](IClothSolverBackend& s, const glm::vec3& l)
+         { s.pinParticle(CENTRE, s.getPositions()[CENTRE] + l); }},
+        {"unpinParticle", FAR_CORNER + 1,
+         [](IClothSolverBackend& s, const glm::vec3&) { s.unpinParticle(FAR_CORNER); }},
+    };
+
+    for (const Edit& edit : edits)
+    {
+        SCOPED_TRACE(edit.name);
+        ClothConfig cfg = parityConfig();
+        cfg.sleepThreshold = ClothConfig{}.sleepThreshold;
+        ClothSimulator cpu;
+        GpuClothSimulator gpu;
+        bool gpuReady = false;
+        buildPair(cfg, cpu, gpu, gpuReady);
+        if (!gpuReady)
+            GTEST_SKIP() << "GPU cloth compute pipeline not available in this environment";
+        pinCorners(cpu);
+        pinCorners(gpu);
+
+        IClothSolverBackend* backends[2] = {&cpu, &gpu};
+        const char* label[2] = {"CPU", "GPU"};
+        for (int b = 0; b < 2; ++b)
+        {
+            IClothSolverBackend& sim = *backends[b];
+            run(sim, FRAMES_2S);
+            ASSERT_TRUE(sim.isSleeping()) << "fixture: the " << label[b]
+                                          << " drape never slept in 2 s";
+
+            const glm::vec3 before = sim.getPositions()[edit.watched];
+            edit.apply(sim, lift);
+            run(sim, 10);
+            const float moved = glm::length(sim.getPositions()[edit.watched] - before);
+            EXPECT_GT(moved, 1e-3f)
+                << "the " << label[b] << " cloth stayed asleep after " << edit.name
+                << ": particle " << edit.watched << " moved " << moved << " m in 10 frames";
+        }
+    }
+}
+
 // =============================================================================
 // Cl1 — the GPU must RESPOND to particleMass (3D_E-0630)
 // =============================================================================
