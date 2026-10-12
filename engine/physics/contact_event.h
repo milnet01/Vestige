@@ -12,7 +12,7 @@
 /// consume them without pulling Jolt into their TU (S10 header split). This
 /// header holds only the `ContactEventListener`, which genuinely needs Jolt.
 ///
-/// Threading contract (Jolt 5.3.0, verified against ContactListener.h:66-116):
+/// Threading contract (Jolt 5.6.0, verified against ContactListener.h's class comment):
 /// the OnContact* callbacks run on multiple Jolt job threads at once and may
 /// only *read* from the bodies — never touch a BodyInterface or any locking
 /// accessor. We therefore read velocity + user-data straight off the

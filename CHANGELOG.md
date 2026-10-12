@@ -25,6 +25,15 @@ may change any interface without notice.
 
 ## [Unreleased]
 
+### 2026-10-12 Changed — Physics library updated to Jolt 5.6.0 (3D_E-0671)
+
+The physics engine Vestige uses moved from version 5.3.0 to 5.6.0.
+Upstream says it is faster and uses less memory. That is not yet
+measured in Vestige.
+
+- **Objects and the walking character may move slightly differently.** Jolt 5.6.0 changed how friction is worked out. It also stops the character speeding up when it slides along a low wall, and it fully respects the character's padding. No test covers sliding or tumbling objects, so the friction change is untested here.
+- **Jolt's new compute backends are switched off.** The engine uses none of them. The graphics ones would add Vulkan and DirectX build requirements.
+
 ## [0.1.76] - 2026-10-12
 
 **Theme:** Menus, sound and a meadow with trees

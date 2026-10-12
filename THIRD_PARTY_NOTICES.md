@@ -32,7 +32,7 @@ publishes no suitable release tag — see "Branch-commit pins" below.
 | tinyexr          | v1.0.13                                         | BSD 3-Clause                                      | <https://github.com/syoyo/tinyexr> |
 | tinygltf         | v2.9.4                                          | MIT                                               | <https://github.com/syoyo/tinygltf> |
 | nlohmann/json    | v3.12.0 (URL tarball; see `external/CMakeLists.txt`)     | MIT                                      | <https://github.com/nlohmann/json> |
-| Jolt Physics     | v5.3.0                                          | MIT                                               | <https://github.com/jrouwe/JoltPhysics> |
+| Jolt Physics     | v5.6.0                                          | MIT                                               | <https://github.com/jrouwe/JoltPhysics> |
 | OpenAL Soft      | 1.25.2                                          | LGPL v2.1 (dynamic linking)                       | <https://github.com/kcat/openal-soft> |
 | libebur128       | v1.2.6                                          | MIT (© Jan Kokemüller; static link)               | <https://github.com/jiixyj/libebur128> |
 | Recast Navigation| v1.6.0                                          | zlib                                              | <https://github.com/recastnavigation/recastnavigation> |

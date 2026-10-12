@@ -411,7 +411,7 @@ research:
       - { name: "OpenAL",         version: "1.25.2" }    # openal-soft
       - { name: "libebur128",     version: "1.2.6" }     # jiixyj/libebur128, AX9 loudness
       - { name: "nlohmann json",  version: "3.12.0" }
-      - { name: "JoltPhysics",    version: "5.3.0" }
+      - { name: "JoltPhysics",    version: "5.6.0" }
       - { name: "Recast",         version: "1.6.0" }     # recastnavigation
       - { name: "tinygltf",       version: "2.9.4" }
       - { name: "googletest",     version: "1.18.0" }

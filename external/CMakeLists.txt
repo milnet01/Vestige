@@ -340,10 +340,18 @@ FetchContent_MakeAvailable(json)
 FetchContent_Declare(
     JoltPhysics
     GIT_REPOSITORY https://github.com/jrouwe/JoltPhysics.git
-    GIT_TAG        v5.3.0
+    GIT_TAG        v5.6.0
     GIT_SHALLOW    TRUE
     SOURCE_SUBDIR  Build
 )
+# v5.6.0 adds compute backends (DX12, Vulkan, Metal and a CPU emulation), all
+# ON by default. The engine uses none of them: the GPU ones would pull in the
+# Vulkan / DirectX toolchains, and the CPU one exports JPH_USE_CPU_COMPUTE to
+# every target linking Jolt. So all four stay off.
+set(JPH_USE_DX12 OFF CACHE BOOL "" FORCE)
+set(JPH_USE_VK OFF CACHE BOOL "" FORCE)
+set(JPH_USE_MTL OFF CACHE BOOL "" FORCE)
+set(JPH_USE_CPU_COMPUTE OFF CACHE BOOL "" FORCE)
 set(TARGET_UNIT_TESTS OFF CACHE BOOL "" FORCE)
 set(TARGET_HELLO_WORLD OFF CACHE BOOL "" FORCE)
 set(TARGET_PERFORMANCE_TEST OFF CACHE BOOL "" FORCE)
