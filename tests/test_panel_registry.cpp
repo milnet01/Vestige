@@ -10,6 +10,7 @@
 /// null-safe, ordered, and surfaces every concrete panel through the
 /// IPanel base pointer so the menu loop is type-blind.
 
+#include "editor/panels/audio_panel.h"
 #include "editor/panels/environment_panel.h"
 #include "editor/panels/hdri_viewer_panel.h"
 #include "editor/panels/i_panel.h"
@@ -155,6 +156,22 @@ TEST(PanelRegistryEd5, RealPanelsExposeDisplayNames)
 
     // Default shortcut() returns nullptr for panels that don't override.
     EXPECT_EQ(envPanel.shortcut(), nullptr);
+}
+
+// 3D_E-0758 — the Audio panel was not an IPanel, so the View menu had no entry
+// for it and nothing could open it. It now opens through the registry like the
+// others. The menu toggle itself needs ImGui and is checked in the editor.
+TEST(PanelRegistryEd5, AudioPanelOpensThroughTheRegistry)
+{
+    AudioPanel audioPanel;
+    PanelRegistry reg;
+    reg.registerPanel(&audioPanel);
+    ASSERT_EQ(reg.panelCount(), 1u);
+    IPanel* base = reg.panelAt(0);
+    EXPECT_STREQ(base->displayName(), "Audio");
+    EXPECT_FALSE(audioPanel.isOpen());
+    base->setOpen(true);
+    EXPECT_TRUE(audioPanel.isOpen());
 }
 
 TEST(PanelRegistryEd5, ScriptEditorPanelSetOpenBridgesOpenClose)

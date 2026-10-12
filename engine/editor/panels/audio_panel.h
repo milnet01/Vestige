@@ -10,6 +10,7 @@
 #include "audio/audio_ambient.h"
 #include "audio/audio_mixer.h"
 #include "audio/audio_reverb.h"
+#include "editor/panels/i_panel.h"
 
 #include <glm/glm.hpp>
 
@@ -53,9 +54,11 @@ class SettingsEditor;
 /// sets, overlay toggles) is exposed through getters so unit tests
 /// can exercise the panel without an ImGui context — matching the
 /// `NavigationPanel` pattern.
-class AudioPanel
+class AudioPanel : public IPanel
 {
 public:
+    const char* displayName() const override { return "Audio"; }
+
     /// @brief Draws the panel inside its own ImGui window. `scene`
     ///        and `audioSystem` may be null — the panel disables
     ///        the matching tab when either is missing.
@@ -63,8 +66,8 @@ public:
 
     // -- Open/close -------------------------------------------------
 
-    bool isOpen() const { return m_open; }
-    void setOpen(bool open) { m_open = open; }
+    bool isOpen() const override { return m_open; }
+    void setOpen(bool open) override { m_open = open; }
     void toggleOpen() { m_open = !m_open; }
 
     /// @brief AX12 — true iff the Debug tab was actually drawn this frame. The

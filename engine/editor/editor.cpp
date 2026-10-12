@@ -168,6 +168,7 @@ bool Editor::initialize(GLFWwindow* window, const std::string& assetPath)
     m_panelRegistry.registerPanel(&m_terrainPanel);
     m_panelRegistry.registerPanel(&m_navigationPanel);
     m_panelRegistry.registerPanel(&m_fogPanel);
+    m_panelRegistry.registerPanel(&m_audioPanel);
     m_panelRegistry.registerPanel(&m_uiLayoutPanel);
     m_panelRegistry.registerPanel(&m_uiRuntimePanel);
     m_panelRegistry.registerPanel(&m_localizationDebugPanel);
@@ -547,6 +548,7 @@ void Editor::drawPanels(Renderer* renderer, Scene* scene, Camera* camera,
                 m_panelRegistry.drawMenuToggle(m_terrainPanel);
                 m_panelRegistry.drawMenuToggle(m_navigationPanel);
                 m_panelRegistry.drawMenuToggle(m_fogPanel);
+                m_panelRegistry.drawMenuToggle(m_audioPanel);
                 m_panelRegistry.drawMenuToggle(m_uiLayoutPanel);
                 m_panelRegistry.drawMenuToggle(m_uiRuntimePanel);
                 ImGui::MenuItem("Console", nullptr, &m_showConsole);

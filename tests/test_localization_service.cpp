@@ -135,6 +135,30 @@ TEST(LocalizationService, LiveApplyHotSwapsTable)
     EXPECT_EQ(svc.tr("ui.menu.settings"), "הגדרות");
 }
 
+// 3D_E-0756 — boot order: Engine::initialize live-applies the saved settings
+// (forceLiveApply) before initializeAll() runs this service's initialize().
+// The saved language must survive that, not fall back to English.
+TEST(LocalizationService, LanguageSetBeforeInitializeSurvivesIt)
+{
+    Engine engine;
+    LocalizationService svc;
+    svc.setLocalizationDir(writePartialTables().string());
+
+    LocalizationServiceApplySink sink(svc);
+    SettingsEditor::ApplyTargets targets{};
+    targets.localization = &sink;
+    Settings saved;
+    saved.localization.language = "he";
+    SettingsEditor editor(saved, targets);
+    editor.forceLiveApply();
+
+    ASSERT_TRUE(svc.initialize(engine));
+    EXPECT_EQ(svc.languageCode(), "he");
+    EXPECT_EQ(svc.tr("ui.menu.settings"), "הגדרות");
+    // English fallback still works: the reference table loaded too.
+    EXPECT_EQ(svc.tr("ui.menu.quit"), "Quit");
+}
+
 // Test 22 — the editor "missing keys" overlay worklist: the fixture's en
 // carries 3 keys and its "he" 1, so two keys (templates, quit) render the
 // English fallback and must surface as missing. Sorted output.

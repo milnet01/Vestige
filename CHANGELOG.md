@@ -25,6 +25,22 @@ may change any interface without notice.
 
 ## [Unreleased]
 
+### 2026-10-12 Fixed — The chosen language survives a restart; the Audio panel opens; the Fog panel's settings hint is true (3D_E-0756, 3D_E-0758, 3D_E-0762)
+
+- **A player's chosen language now stays chosen after a restart.** (3D_E-0756)
+  The saved language was applied at start-up and then reset to English
+  when the language service started. It is now kept. Locked by
+  LanguageSetBeforeInitializeSurvivesIt in tests/test_localization_service.cpp.
+
+- **View > Audio opens the editor's Audio panel.** (3D_E-0758)
+  The panel for the mixer, sound sources and ambient zones existed, but
+  no menu could open it. It is now listed in the View menu under Fog.
+
+- **The Fog panel no longer sends you to switches that are not in Settings.** (3D_E-0762)
+  Its Volumetric tab said the volumetric and god-ray switches were in
+  Settings > Accessibility. No menu sets them; the hint now names the
+  settings.json section that does.
+
 ### 2026-10-12 Changed — Local CI runs its Debug and Release halves side by side when little needs rebuilding (3D_E-0718)
 
 scripts/local-ci.sh now runs Debug + audit and Release + Windows as two

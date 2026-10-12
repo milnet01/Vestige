@@ -5504,7 +5504,7 @@ shipped that have no invocation path at all.
   Source: in-session-2026-10-12 cut-release 0.1.76 Phase 6.
   Lanes: packaging, ci.
 
-- 📋 [3D_E-0756] **The game forgets the player's chosen language on every start.**
+- ✅ [3D_E-0756] **The game forgets the player's chosen language on every start.**
   Engine::initialize runs m_settingsEditor->forceLiveApply() (engine.cpp
   near the SettingsEditor construction) before
   m_systemRegistry.initializeAll(); LocalizationService::initialize then
@@ -5514,6 +5514,13 @@ shipped that have no invocation path at all.
   Engine code is unchanged on main since the tag. Also: the --player
   Settings screen has no Language page, so a player cannot pick one
   there at all (see the sibling item on empty Settings pages).
+  Resolved 2026-10-12: LocalizationService::initialize keeps a language
+  set before it and defaults to English only when none was. Red then
+  green: LanguageSetBeforeInitializeSurvivesIt failed on the old file
+  ("en"), passes now. Checked in the Debug build: --player with
+  settings.json language "de" shows the pause menu in German. The
+  missing Language page in the player Settings is 3D_E-0759's
+  empty-pages work.
   **Layman:** A player who picks German gets English again the next time the game starts.
   Kind: fix.
   Source: in-session-2026-10-12 (trailer filming).
@@ -5532,12 +5539,16 @@ shipped that have no invocation path at all.
   Source: in-session-2026-10-12 (trailer filming).
   Lanes: physics, core.
 
-- 📋 [3D_E-0758] **The editor's Audio panel cannot be opened.**
+- ✅ [3D_E-0758] **The editor's Audio panel cannot be opened.**
   AudioPanel starts with m_open = false (audio_panel.h) and draw()
   returns early while closed; nothing in the editor's menus sets it
   open. Found by code read at v0.1.76, 2026-10-12. Together with no
   audio clips shipping, nothing in the release plays a sound a user
   can hear except footsteps.
+  Resolved 2026-10-12: AudioPanel implements IPanel ("Audio"), is
+  registered, and has a View-menu toggle under Fog. Test
+  AudioPanelOpensThroughTheRegistry; checked in the Debug build that
+  View > Audio opens the panel.
   **Layman:** The editor has a panel for placing sounds, echo zones and background sound, but no menu opens it.
   Kind: fix.
   Source: in-session-2026-10-12 (trailer filming).
@@ -5577,11 +5588,18 @@ shipped that have no invocation path at all.
   Source: in-session-2026-10-12 (trailer filming).
   Lanes: editor, scripting.
 
-- 📋 [3D_E-0762] **The Fog panel points to volumetric switches in Settings > Accessibility that are not there.**
+- ✅ [3D_E-0762] **The Fog panel points to volumetric switches in Settings > Accessibility that are not there.**
   fog_panel.cpp says the volumetric and god-ray master switches are in
   Settings -> Accessibility; that tab has only Fog and a fog-intensity
   slider. The switch is Settings > Display > Volumetric fog and
   lighting in the player menu. Code read at v0.1.76, 2026-10-12.
+  Resolved 2026-10-12: no menu sets
+  accessibility.postProcess.volumetricFogEnabled or godRaysEnabled (the
+  Display page's Volumetrics box drives the separate heavy-post gate,
+  and safeDefaults() has no caller in the app). The hint now reads
+  "(master switches: accessibility.postProcess in settings.json)".
+  Adding the two checkboxes to Settings > Accessibility would be a
+  separate item.
   **Layman:** A help line in the fog tools sends you to a setting that does not exist.
   Kind: doc-fix.
   Source: in-session-2026-10-12 (trailer filming).

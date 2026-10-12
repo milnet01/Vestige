@@ -48,9 +48,15 @@ bool LocalizationService::initialize(Engine& engine)
                         filePathFor(kReferenceCode));
     }
 
-    // Active language defaults to the reference language.
-    m_active = m_reference;
-    m_languageCode = kReferenceCode;
+    // Active language defaults to the reference language, unless one was set
+    // before initialize(): Engine::initialize live-applies the saved settings
+    // ahead of initializeAll(), and resetting here lost the player's choice on
+    // every start (3D_E-0756).
+    if (m_languageCode.empty())
+    {
+        m_active = m_reference;
+        m_languageCode = kReferenceCode;
+    }
     return true;
 }
 
