@@ -5484,7 +5484,7 @@ shipped that have no invocation path at all.
   Source: in-session-2026-10-12 trailer footage.
   Lanes: packaging, assets.
 
-- 📋 [3D_E-0755] **Releases publish with an automatic "Full Changelog" link instead of their CHANGELOG section as the notes.**
+- ✅ [3D_E-0755] **Releases publish with an automatic "Full Changelog" link instead of their CHANGELOG section as the notes.**
   Found 2026-10-12: v0.1.76 published with the body "**Full Changelog**:
   <compare link>" and the title "v0.1.76". release.yml's two
   "Attach to GitHub Release" steps (softprops/action-gh-release) pass no
@@ -5493,6 +5493,12 @@ shipped that have no invocation path at all.
   the tag's annotation (cut-release writes the CHANGELOG section there) and
   the title from its Theme line. The self-updater is unaffected: it reads
   CHANGELOG.md at the tag (engine/update/update_service.cpp).
+  Resolved 2026-10-12: the publish job reads the tag annotation via gh
+  api git/ref + git/tags, strips any signature block, titles the release
+  "X.Y.Z — Theme" and passes --notes-file; both generate_release_notes
+  lines are removed. Checked: the extraction run against v0.1.76 gives
+  that title and notes identical to the hand-fixed live body; actionlint
+  clean. First real run is the next release.
   **Layman:** A new release's notes on its GitHub page show only a link instead of the list of changes.
   Kind: fix.
   Source: in-session-2026-10-12 cut-release 0.1.76 Phase 6.

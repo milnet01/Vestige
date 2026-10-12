@@ -25,6 +25,15 @@ may change any interface without notice.
 
 ## [Unreleased]
 
+### 2026-10-12 Fixed — A release's GitHub page lists its changes (3D_E-0755)
+
+A new release's page showed only GitHub's "Full Changelog" link and a
+bare "vX.Y.Z" title. The publish step in release.yml now takes the notes
+from the release tag's annotation, which holds the CHANGELOG section,
+and names the release "X.Y.Z — Theme" from its Theme line. A tag with
+no annotation or no Theme line now fails the publish, so the release
+stays a private draft.
+
 ### 2026-10-12 Changed — Physics library updated to Jolt 5.6.0 (3D_E-0671)
 
 The physics engine Vestige uses moved from version 5.3.0 to 5.6.0.

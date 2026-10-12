@@ -295,7 +295,6 @@ jobs:
           draft: true
           prerelease: ${{ contains(steps.version.outputs.tag, '-rc') }}
           fail_on_unmatched_files: true
-          generate_release_notes: true
 
   # ─────────────────────────────────────────────────────────────────────
   # Windows x86_64 — ZIP.
@@ -442,7 +441,6 @@ jobs:
           draft: true
           prerelease: ${{ contains(steps.version.outputs.tag, '-rc') }}
           fail_on_unmatched_files: true
-          generate_release_notes: true
 
   # ─────────────────────────────────────────────────────────────────────
   # Publish — make the draft public once every download is attached.
@@ -465,8 +463,26 @@ jobs:
           GH_TOKEN: ${{ github.token }}
           GH_REPO: ${{ github.repository }}
           TAG: ${{ needs.linux-release.outputs.tag }}
+        # The notes are the tag's annotation, which cut-release fills with the
+        # CHANGELOG section; its first line is "**Theme:** <theme>", which
+        # also names the release. A tag with no annotation or no Theme line
+        # fails here, so the release stays a private draft.
         run: |
+          set -euo pipefail
+          if [ "$(gh api "repos/$GH_REPO/git/ref/tags/$TAG" --jq .object.type)" != tag ]; then
+            echo "::error::$TAG is not an annotated tag, so it has no release notes"
+            exit 1
+          fi
+          sha=$(gh api "repos/$GH_REPO/git/ref/tags/$TAG" --jq .object.sha)
+          gh api "repos/$GH_REPO/git/tags/$sha" --jq .message \
+            | sed '/^-----BEGIN [A-Z ]*SIGNATURE-----$/,$d' > notes.md
+          theme=$(sed -n '1s/^\*\*Theme:\*\* *//p' notes.md)
+          if [ -z "$theme" ]; then
+            echo "::error::$TAG's annotation does not start with a **Theme:** line"
+            exit 1
+          fi
+          title="${TAG#v} — $theme"
           case "$TAG" in
-            *-rc*) gh release edit "$TAG" --draft=false --prerelease ;;
-            *)     gh release edit "$TAG" --draft=false --latest ;;
+            *-rc*) gh release edit "$TAG" --draft=false --prerelease --title "$title" --notes-file notes.md ;;
+            *)     gh release edit "$TAG" --draft=false --latest --title "$title" --notes-file notes.md ;;
           esac
