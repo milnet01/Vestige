@@ -1,5 +1,6 @@
 <!-- ants-roadmap-format: 1 -->
 <!-- Generated from the Ants Terminal roadmap store. Edit it with roadmap_log; hand edits are discarded by the next write. -->
+<!-- ants-roadmap-id-high-water: 3D_E=754 3D_E#S=989 -->
 
 # Vestige Engine Roadmap
 
@@ -5461,6 +5462,20 @@ shipped that have no invocation path at all.
   Kind: fix.
   Source: in-session-2026-10-08 Cl10 port.
   Lanes: physics.
+
+- 📋 [3D_E-0754] **The released meadow has no trees or lotus plants: their models are not in git, so release builds never get them.**
+  Found 2026-10-12 running the v0.1.75 Linux download: the log says
+  "Tree renderer: 0 species loaded" and "Meadow prop model missing:
+  gameready/water/lotus_pads.gltf". ASSET_LICENSES.md lists both packs
+  under assets/models/nature_local/ "(not committed)", licensed CC-BY 4.0,
+  so they may ship with the credit line it gives. Decide how release
+  builds get them (commit them, or fetch them in the release job), and
+  check the credit reaches the download. Blocks the website trailer,
+  which waits for the next release (user, 2026-10-12).
+  **Layman:** People who download Vestige see a meadow with no trees, because the tree models never make it into the download.
+  Kind: package.
+  Source: in-session-2026-10-12 trailer footage.
+  Lanes: packaging, assets.
 
 ## 0.3.0 — An editor a builder can use
 
