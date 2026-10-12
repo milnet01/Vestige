@@ -1,6 +1,6 @@
 <!-- ants-roadmap-format: 1 -->
 <!-- Generated from the Ants Terminal roadmap store. Edit it with roadmap_log; hand edits are discarded by the next write. -->
-<!-- ants-roadmap-id-high-water: 3D_E=763 3D_E#S=989 -->
+<!-- ants-roadmap-id-high-water: 3D_E=766 3D_E#S=989 -->
 
 # Vestige Engine Roadmap
 
@@ -5578,6 +5578,42 @@ shipped that have no invocation path at all.
   lighting in the player menu. Code read at v0.1.76, 2026-10-12.
   **Layman:** A help line in the fog tools sends you to a setting that does not exist.
   Kind: doc-fix.
+  Source: in-session-2026-10-12 (trailer filming).
+  Lanes: editor.
+
+- 📋 [3D_E-0764] **Edit > Duplicate (Ctrl+D) lists a copy in History that never appears, and the Inspector loses the selection.**
+  Recorded 2026-10-12 on the v0.1.76 download (demoreel --gpu, 1920x1080):
+  Create > Primitives > Cube, drag its X arrow, Ctrl+D. History shows
+  "Create 'Cube (1)'" but only one cube is drawn, and the Inspector reads
+  "Selected entity not found (ID 1276)" while the cube is ID 1317.
+  Steps: wait, move 276 14, click, move 290 78, move 397 78, click,
+  drag 968 432 1180 432, key ctrl+d.
+  **Layman:** Duplicating an object in the editor looks like it worked, but no copy shows up and the selected object goes blank.
+  Kind: fix.
+  Source: in-session-2026-10-12 (trailer filming).
+  Lanes: editor.
+
+- 📋 [3D_E-0765] **A new point light makes no visible change in the meadow, even beside a cube or with the sun dimmed.**
+  Recorded 2026-10-12 on the v0.1.76 download: Create > Lights > Point
+  Light (spawns at the camera's focus, range 87.9 m), colour 255/90/20.
+  No orange shows on a cube 1.2 m away in daylight, nor on the grass with
+  the Sun recoloured to 50/50/70; only a faint glint on the pond. Clip
+  03 of the trailer footage noted the same. Next: check the light reaches
+  the forward/deferred light list and its intensity against the sun's.
+  **Layman:** Adding a lamp in the editor does not light anything up that you can see.
+  Kind: investigate.
+  Source: in-session-2026-10-12 (trailer filming).
+  Lanes: renderer, editor.
+
+- 📋 [3D_E-0766] **Editing a transform field, or typing in the Save dialog, adds unrelated "Change Material property" steps to History.**
+  Recorded 2026-10-12 on the v0.1.76 download: with a new cube selected,
+  typing three Inspector values (double-click, Ctrl+A, value, Enter)
+  left ten History steps, six of them "Change Material property". Typing a
+  name into File > Save Scene As with the cube selected added three more.
+  Sun colour edits, by contrast, added no History step at all; check
+  whether light colour changes are undoable.
+  **Layman:** The undo list fills with material changes the user never made, so undo steps through invisible edits.
+  Kind: fix.
   Source: in-session-2026-10-12 (trailer filming).
   Lanes: editor.
 
