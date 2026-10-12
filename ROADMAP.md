@@ -1,6 +1,6 @@
 <!-- ants-roadmap-format: 1 -->
 <!-- Generated from the Ants Terminal roadmap store. Edit it with roadmap_log; hand edits are discarded by the next write. -->
-<!-- ants-roadmap-id-high-water: 3D_E=766 3D_E#S=989 -->
+<!-- ants-roadmap-id-high-water: 3D_E=767 3D_E#S=989 -->
 
 # Vestige Engine Roadmap
 
@@ -5648,6 +5648,17 @@ shipped that have no invocation path at all.
   Source: in-session-2026-10-12 (trailer filming).
   Lanes: editor.
 
+- 💭 [3D_E-0767] **Add volumetric-fog and god-ray checkboxes to Settings > Accessibility.**
+  accessibility.postProcess.volumetricFogEnabled and godRaysEnabled have
+  no control anywhere; only settings.json sets them (found fixing
+  3D_E-0762). The editor's Settings > Accessibility tab already has the
+  Fog checkbox beside them (settings_editor_panel.cpp). Recommended to the
+  user 2026-10-12; awaiting their yes before it becomes planned.
+  **Layman:** Let players turn off moving fog and light shafts from the Accessibility settings instead of editing a file.
+  Kind: accessibility.
+  Source: in-session-2026-10-12 (3D_E-0762 follow-up).
+  Lanes: editor, ui.
+
 ## 0.3.0 — An editor a builder can use
 
 Breaks: the scene format. Editor work changes what a scene stores.
@@ -10046,7 +10057,7 @@ record, and a real clearance before commercial release needs counsel.
   Source: claude-config message 163, 2026-09-28 (local-gate.md § 9).
   Lanes: ci.
 
-- 📋 [3D_E-0718] **Run local-ci's Debug and Release lanes in parallel when both trees are warm.**
+- ✅ [3D_E-0718] **Run local-ci's Debug and Release lanes in parallel when both trees are warm.**
   From 3D_E-0710's measurements. Lane A: Debug build+test, then the Tier-1
   audit (it reuses build/). Lane B: Release, Windows MSVC, CMake compat.
   Warm push 2026-09-28: serial 583 s; lanes ~max(223, 346) + gitleaks,
@@ -10054,6 +10065,11 @@ record, and a real clearance before commercial release needs counsel.
   `ninja -n` cost check shows both trees need few compile steps, else
   serial (local-gate.md § 9's cost-check lever). Keep per-lane logs so
   output does not interleave, and keep the summary and exit codes as now.
+  Verified 2026-10-12 on the push of 1bcaadb: "build steps left: Debug
+  9, Release 9, Windows 6", lanes ran side by side, every stage passed.
+  Lane A 281+117 s, lane B 136+231 s, so about 400 s of wall time
+  against 765 s serial. The three pushes before it ran serial because
+  only 11 GB was free (guard 12 GB).
   **Layman:** Run the two halves of the local checks side by side when little needs rebuilding, cutting a typical push check by about a third.
   Kind: perf.
   Source: 3D_E-0710 investigation, 2026-09-28.
