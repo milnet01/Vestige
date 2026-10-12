@@ -1,6 +1,6 @@
 <!-- ants-roadmap-format: 1 -->
 <!-- Generated from the Ants Terminal roadmap store. Edit it with roadmap_log; hand edits are discarded by the next write. -->
-<!-- ants-roadmap-id-high-water: 3D_E=755 3D_E#S=989 -->
+<!-- ants-roadmap-id-high-water: 3D_E=762 3D_E#S=989 -->
 
 # Vestige Engine Roadmap
 
@@ -5497,6 +5497,89 @@ shipped that have no invocation path at all.
   Kind: fix.
   Source: in-session-2026-10-12 cut-release 0.1.76 Phase 6.
   Lanes: packaging, ci.
+
+- 📋 [3D_E-0756] **The game forgets the player's chosen language on every start.**
+  Engine::initialize runs m_settingsEditor->forceLiveApply() (engine.cpp
+  near the SettingsEditor construction) before
+  m_systemRegistry.initializeAll(); LocalizationService::initialize then
+  resets m_languageCode to the reference "en" (localization_service.cpp).
+  Seen 2026-10-12 on the v0.1.76 download: settings.json with
+  localization.language "de" or "el" still shows the English pause menu.
+  Engine code is unchanged on main since the tag. Also: the --player
+  Settings screen has no Language page, so a player cannot pick one
+  there at all (see the sibling item on empty Settings pages).
+  **Layman:** A player who picks German gets English again the next time the game starts.
+  Kind: fix.
+  Source: in-session-2026-10-12 (trailer filming).
+  Lanes: core, localization.
+
+- 📋 [3D_E-0757] **The physics walker falls through the meadow ground: the terrain has no physics collider.**
+  Engine colliders are scene-AABB boxes plus a 500 x 500 ground box
+  with its top at Y 0; the meadow terrain sits metres above it and
+  gets no collider. Recorded 2026-10-12 on the v0.1.76 download:
+  --play, P, hold W: the view sinks into the pond, then shows solid
+  green. Footsteps (FootstepSystem) only fire in this mode, so the
+  meadow has no usable footstep sound. Sibling of 3D_E-0725, which
+  fixed the fly camera only and names the Jolt path as not covered.
+  **Layman:** Turning on the physics walk (the P key) in the meadow drops the player through the ground and under the world.
+  Kind: fix.
+  Source: in-session-2026-10-12 (trailer filming).
+  Lanes: physics, core.
+
+- 📋 [3D_E-0758] **The editor's Audio panel cannot be opened.**
+  AudioPanel starts with m_open = false (audio_panel.h) and draw()
+  returns early while closed; nothing in the editor's menus sets it
+  open. Found by code read at v0.1.76, 2026-10-12. Together with no
+  audio clips shipping, nothing in the release plays a sound a user
+  can hear except footsteps.
+  **Layman:** The editor has a panel for placing sounds, echo zones and background sound, but no menu opens it.
+  Kind: fix.
+  Source: in-session-2026-10-12 (trailer filming).
+  Lanes: editor, audio.
+
+- 📋 [3D_E-0759] **Player Settings: Audio, Controls, Gameplay and Accessibility are names with no pages.**
+  menu_prefabs.cpp builds the five sidebar categories as plain labels;
+  only Display has a page (graphics_settings_page.cpp). Clicking them
+  in the v0.1.76 download does nothing (recorded 2026-10-12). The
+  editor's Help > Settings has those pages, plus Language.
+  **Layman:** In the game's Settings screen only the Display page works; clicking the other four names does nothing.
+  Kind: fix.
+  Source: in-session-2026-10-12 (trailer filming).
+  Lanes: ui.
+
+- 📋 [3D_E-0760] **The pause menu shows through the Settings screen, and the PAUSED labels sit off to one side.**
+  Seen 2026-10-12 in the v0.1.76 download, --player, Esc, Settings:
+  "The walk is held." and the pause buttons are readable through the
+  Settings panel. On the pause menu itself, the PAUSED and INPUT
+  SUSPENDED labels sit up and left of the menu card.
+  Re-take: demoreel shot --gpu --settle 60 -s 1920x1080, steps wait
+  3, key Escape, click 960 724.
+  **Layman:** When Settings opens over the pause menu, the pause menu's title and buttons show faintly behind the settings.
+  Kind: fix.
+  Source: in-session-2026-10-12 (trailer filming).
+  Lanes: ui.
+
+- 📋 [3D_E-0761] **The script editor's node canvas draws broken: a partial grid and no nodes.**
+  Recorded 2026-10-12 on the v0.1.76 download, 1920x1080 headless
+  (demoreel --gpu): View > Script Editor shows the grid only in a
+  strip at the canvas's top-left, and loading Templates > Door Opens
+  draws no nodes. Two recordings, both broken; one still picture of
+  the same steps drew the nodes (tiny). Intermittent; not yet seen on
+  the real desktop.
+  **Layman:** Opening the script editor sometimes shows a broken grey patch instead of the node diagram.
+  Kind: fix.
+  Source: in-session-2026-10-12 (trailer filming).
+  Lanes: editor, scripting.
+
+- 📋 [3D_E-0762] **The Fog panel points to volumetric switches in Settings > Accessibility that are not there.**
+  fog_panel.cpp says the volumetric and god-ray master switches are in
+  Settings -> Accessibility; that tab has only Fog and a fog-intensity
+  slider. The switch is Settings > Display > Volumetric fog and
+  lighting in the player menu. Code read at v0.1.76, 2026-10-12.
+  **Layman:** A help line in the fog tools sends you to a setting that does not exist.
+  Kind: doc-fix.
+  Source: in-session-2026-10-12 (trailer filming).
+  Lanes: editor.
 
 ## 0.3.0 — An editor a builder can use
 
