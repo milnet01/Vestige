@@ -2,6 +2,8 @@
 build/
 build-*/
 logs/
+# ...but not the meadow's fallen-log models (3D_E-0754).
+!assets/models/nature/gameready/logs/
 Testing/
 .cache/
 cmake-build-*/

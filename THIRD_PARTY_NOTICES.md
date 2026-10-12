@@ -144,11 +144,11 @@ Source: <https://kenney.nl/assets/nature-kit> (Nature Kit 2.1)
   required. Created/distributed by Kenney (<https://www.kenney.nl>);
   the credit above is included as a courtesy, not an obligation.
 
-### Realistic trees — `assets/models/nature_local/gameready/` (not committed)
+### Realistic trees — `assets/models/nature/gameready/{pine,fir,maple}/`
 
 Source: <https://sketchfab.com/lolipop_1707>
 
-- **LOLIPOP game-ready tree packs** (pine, fir, maple, birch) — the
+- **LOLIPOP game-ready tree packs** (pine, fir, maple) — the
   realistic meadow treeline (3D_E-0033). Each pack ships the artist's
   LOD0–2 meshes plus a billboard impostor, PBR-textured at a game
   triangle budget. Licensed under **CC-BY 4.0 International**.
@@ -159,13 +159,8 @@ Source: <https://sketchfab.com/lolipop_1707>
 
   Attribution here is a **licence condition**, not a courtesy — this
   line must appear wherever the built application credits its assets.
-  The packs themselves are git-ignored (fetched into the external asset
-  library by `tools/asset_prep/fetch_sketchfab_trees.py` and symlinked
-  into `assets/models/nature_local/`), so this notice is a forward
-  record that takes effect when the trees ship via a release or the
-  assets repo.
 
-### Pond plants — `assets/models/nature_local/gameready/water/` (not committed)
+### Pond plants — `assets/models/nature/gameready/water/`
 
 Source: <https://sketchfab.com/galaxyabundant>
 
@@ -178,12 +173,19 @@ Source: <https://sketchfab.com/galaxyabundant>
   > 3D pond-plant models by **Galaxy Abundant**
   > (sketchfab.com/galaxyabundant), licensed under CC BY 4.0.
 
-  Attribution here is a **licence condition**, not a courtesy. As with the
-  tree packs above, the source archives are git-ignored and this notice is a
-  forward record that takes effect when the assets ship.
+  Attribution here is a **licence condition**, not a courtesy.
 
   Provenance: these are **AI-generated** models (Tripo), not photogrammetry
   scans — noted so the distinction survives in the record.
+
+### Meadow plants, rocks and logs — `assets/models/nature/gameready/{plants,rocks,logs}/`
+
+Source: <https://polyhaven.com/models>
+
+- **Poly Haven models** (dandelion, fern, nettle, shrubs, sorrel, weed,
+  boulder, mossy rocks, dead tree trunk, tree stump) scattered across the
+  meadow. Licensed under **CC0 1.0 Universal** (public domain dedication);
+  no attribution required.
 
 ### HDRIs — `assets/hdri/`
 

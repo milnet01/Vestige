@@ -5463,7 +5463,7 @@ shipped that have no invocation path at all.
   Source: in-session-2026-10-08 Cl10 port.
   Lanes: physics.
 
-- 📋 [3D_E-0754] **The released meadow has no trees or lotus plants: their models are not in git, so release builds never get them.**
+- ✅ [3D_E-0754] **The released meadow has no trees or lotus plants: their models are not in git, so release builds never get them.**
   Found 2026-10-12 running the v0.1.75 Linux download: the log says
   "Tree renderer: 0 species loaded" and "Meadow prop model missing:
   gameready/water/lotus_pads.gltf". ASSET_LICENSES.md lists both packs
@@ -5472,6 +5472,13 @@ shipped that have no invocation path at all.
   builds get them (commit them, or fetch them in the release job), and
   check the credit reaches the download. Blocks the website trailer,
   which waits for the next release (user, 2026-10-12).
+  Resolved 2026-10-12: the meadow's models (the files it loads,
+  plus the _lod2 tier TreeRenderer derives from _lod0) are committed
+  under assets/models/nature/gameready/, which propPath() falls back to
+  when nature_local/ is absent. Credits updated in ASSET_LICENSES.md
+  and THIRD_PARTY_NOTICES.md. Checked with a staged asset tree holding
+  no nature_local/: "Tree renderer: 9 species loaded", 69 trees placed,
+  no missing-model lines (v0.1.75's download logged 0 species).
   **Layman:** People who download Vestige see a meadow with no trees, because the tree models never make it into the download.
   Kind: package.
   Source: in-session-2026-10-12 trailer footage.

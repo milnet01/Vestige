@@ -23,7 +23,7 @@
 #     scope for a pre-1.0 tester build. A SmartScreen warning on first
 #     run is expected and documented in TESTING.md.
 #   - VESTIGE_FETCH_ASSETS=OFF matches CI — the shipped demo assets in
-#     assets/ are CC0 and redistributable; VestigeAssets (the larger 4K
+#     assets/ are redistributable (ASSET_LICENSES.md); VestigeAssets (the larger 4K
 #     pack) stays private until v1.0.0.
 
 name: Release
@@ -162,7 +162,7 @@ jobs:
         #   vestige-<ver>-linux-x86_64/
         #     vestige, vestige-editor           (binary + wrapper)
         #     lib/libopenal.so.1*, ...          (bundled shared libs)
-        #     assets/                           (CC0 demo assets)
+        #     assets/                           (demo assets)
         #     LICENSE, README.md, TESTING.md, THIRD_PARTY_NOTICES.md, ASSET_LICENSES.md
         # rpath on vestige is set to $ORIGIN/lib so the bundled .so's
         # are found without the user touching LD_LIBRARY_PATH.

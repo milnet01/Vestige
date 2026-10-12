@@ -49,17 +49,18 @@ scanners.
 Curated low-poly, vertex-coloured subset (each a few KB, no external
 textures; ~244 KB total) for the meadow benchmark scene
 (`Engine::setupDemoScene()` — see
-`docs/phases/phase_10_meadow_benchmark_scene_design.md`). Photoreal tree
-overrides drop in via the git-ignored `assets/models/nature_local/`
-directory and are never committed.
+`docs/phases/phase_10_meadow_benchmark_scene_design.md`). The realistic
+models in the `gameready/` sections below sit in the same folder. A file
+of the same name under the git-ignored `assets/models/nature_local/`
+overrides any of them on a maintainer's machine.
 
-### Realistic trees — `assets/models/nature_local/gameready/` (not committed)
+### Realistic trees — `assets/models/nature/gameready/{pine,fir,maple}/`
 
 | Files | Source | License | Attribution required |
 |-------|--------|---------|----------------------|
-| `gameready/{pine,fir,maple,birch}/*_{lod0,lod2,billboard}.gltf` — game-ready tree packs with artist LOD0–2 meshes + billboards | LOLIPOP on Sketchfab ([pine](https://sketchfab.com/3d-models/pine-trees-pack-lowpoly-game-ready-lods-e1e9c07b8e2e445c943fec660beefba2), [fir](https://sketchfab.com/3d-models/realistic-fir-trees-pack-lods-gameready-f58e8b6d733e4b0586e5b7db847b89e7), [maple](https://sketchfab.com/3d-models/maple-trees-pack-lowpoly-game-ready-lods-b5d2833c258f4054a01ee2b4ef85adf0), [birch](https://sketchfab.com/3d-models/five-birch-trees-pack-lowpoly-lods-08fe5117138e4fdaa7ca440ef1201e07)) | **CC-BY 4.0** | **Yes** — "3D tree models by LOLIPOP (sketchfab.com/lolipop_1707), licensed under CC BY 4.0." |
+| `gameready/{pine,fir,maple}/*_{lod0,lod2,billboard}.gltf` — game-ready tree packs with artist LOD0–2 meshes + billboards | LOLIPOP on Sketchfab ([pine](https://sketchfab.com/3d-models/pine-trees-pack-lowpoly-game-ready-lods-e1e9c07b8e2e445c943fec660beefba2), [fir](https://sketchfab.com/3d-models/realistic-fir-trees-pack-lods-gameready-f58e8b6d733e4b0586e5b7db847b89e7), [maple](https://sketchfab.com/3d-models/maple-trees-pack-lowpoly-game-ready-lods-b5d2833c258f4054a01ee2b4ef85adf0)) | **CC-BY 4.0** | **Yes** — "3D tree models by LOLIPOP (sketchfab.com/lolipop_1707), licensed under CC BY 4.0." |
 
-### Pond plants — `assets/models/nature_local/gameready/water/` (not committed)
+### Pond plants — `assets/models/nature/gameready/water/`
 
 | Files | Source | License | Attribution required |
 |-------|--------|---------|----------------------|
@@ -72,13 +73,14 @@ commercially-usable CC licence — no photoreal CC-licensed water lily was found
 Recorded here so the distinction is not lost: the CC-BY obligation is unchanged,
 but the assets are not scans of real plants.
 
-**Forward record (3D_E-0033 §6.3).** This file's charter is assets that
-*ship* in the public repo; these packs are git-ignored today (fetched via
-`tools/asset_prep/fetch_sketchfab_trees.py` into the external asset
-library and symlinked into `nature_local/`). The row is recorded here in
-advance so the obligation is already tracked when the trees ship via a
-release or the assets repo. Attribution is **required** — unlike every
-CC0 row above, this one is a licence condition, not a courtesy.
+Attribution for the trees and pond plants is **required**. Unlike every
+CC0 row above, it is a licence condition, not a courtesy.
+
+### Meadow plants, rocks and logs — `assets/models/nature/gameready/{plants,rocks,logs}/`
+
+| Files | Source | License | Attribution required |
+|-------|--------|---------|----------------------|
+| `gameready/plants/{dandelion_01,fern_02,nettle_plant,shrub_02,shrub_03,shrub_sorrel_01,weed_plant_02}*`, `gameready/rocks/{boulder_01,rock_moss_set_01}*`, `gameready/logs/{dead_tree_trunk,tree_stump_01}*` | [Poly Haven](https://polyhaven.com/models) | **CC0 1.0** | None |
 
 ---
 

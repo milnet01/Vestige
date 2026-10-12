@@ -23,6 +23,14 @@ may change any interface without notice.
 
 ## [Unreleased]
 
+### 2026-10-12 Fixed — The downloaded meadow has its trees (3D_E-0754)
+
+The Linux and Windows downloads showed the meadow with no trees, pond
+plants, shrubs, rocks or logs: those models lived only on the
+maintainer's machine, so release builds never got them.
+
+- **The meadow's models now ship in `assets/models/nature/gameready/`.** Pine, fir and maple trees and lotus plants (CC-BY 4.0, credited in `ASSET_LICENSES.md` and `THIRD_PARTY_NOTICES.md`), and Poly Haven plants, rocks and logs (CC0). A run with no local model overrides loads all nine tree species.
+
 ### 2026-10-10 Fixed — A sleeping cloth follows its pins (3D_E-0753)
 
 Once a cloth had settled and gone to sleep, moving, adding or removing
