@@ -8060,7 +8060,7 @@ The rendering research update (Phase 13 "2026-04 Research Update") makes pixels 
   Source: tech-survey-2026-09-02.
   Lanes: physics.
 
-- 📋 [3D_E-0671] **Jolt Physics v5.3.0 to v5.6.0 — the largest free performance win on the list.**
+- ✅ [3D_E-0671] **Jolt Physics v5.3.0 to v5.6.0 — the largest free performance win on the list.**
   Pinned at v5.3.0; upstream latest is v5.6.0 (2026-07-11). Its notes claim
   up to 40% performance improvement and up to 70% memory reduction depending
   on scene, with a new friction model described as 15% faster using 40% less
@@ -8077,6 +8077,11 @@ The rendering research update (Phase 13 "2026-04 Research Update") makes pixels 
 
   Per project rule 8 this upgrade gets a cold-eyes review. Licence unchanged
   (MIT).
+  Resolved (2026-10-12, 6f10885): pinned v5.6.0; all four compute
+  backends forced OFF. Debug ASan and Release builds clean, ctest 20/20.
+  Cold review: no blockers, four fixes applied. The claimed speed-up is
+  NOT measured here yet (GPU was busy); take a Release fps_floor reading
+  on a quiet machine. No test covers friction-dependent motion.
   **Layman:** A physics engine update that claims large speed and memory improvements.
   Kind: perf.
   Source: tech-survey-2026-09-02.

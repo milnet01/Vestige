@@ -28,7 +28,7 @@
 | `PhysicsCharacterController` — Jolt `CharacterVirtual` capsule, slope / step / floor-stick logic, fly-mode toggle | Camera shake, FOV, mouse-look — `engine/core/first_person_controller.h` (FPC drives input + camera; this controller drives translation) |
 | Constraint API — hinge / fixed / distance / point / slider; per-handle breakable threshold; deterministic `std::map` storage with per-slot generation counter | High-level interactables (doors, levers, ragdolls) — those compose constraints from gameplay code or `engine/experimental/physics/` |
 | Object + broadphase layer system — `STATIC` / `DYNAMIC` / `PLAYER_CHARACTER` / `NPC_CHARACTER` / `TRIGGER` object layers, three-broadphase grouping, `BroadPhaseLayerMapping`, `ObjectLayerPairFilter` | Physics-2D — `engine/physics2d/` (separate subsystem; box2d-style top-down) |
-| `ClothSimulator` (CPU XPBD) + `GpuClothSimulator` (GPU compute) sharing `IClothSolverBackend`; `ClothBackendFactory` auto-selection at the 1024-particle threshold | Render-side mesh / shader / material — `engine/renderer/dynamic_mesh.h`, `material.h` (cloth only writes positions + normals into the buffer) |
+| `ClothSimulator` (CPU XPBD) + `GpuClothSimulator` (GPU compute) sharing `IClothSolverBackend`; `chooseClothBackend()` auto-selection at the 1024-particle threshold | Render-side mesh / shader / material — `engine/renderer/dynamic_mesh.h`, `material.h` (cloth only writes positions + normals into the buffer) |
 | `ClothComponent` — entity wrapper that owns a backend + dynamic mesh + cloth preset | Cloth UI panel — `engine/editor/panels/inspector_panel.cpp` |
 | `ClothMeshCollider` + `BVH` — Surface-Area-Heuristic (SAH) Bounding Volume Hierarchy for triangle-mesh proximity queries against cloth | General-purpose mesh BVH for rendering / GI culling — owned by the renderer |
 | `SpatialHash` — Teschner-2003 / Müller counting-sort uniform grid, used for cloth self-collision broad-phase | Broadphase for rigid bodies — Jolt owns that internally |
@@ -374,7 +374,7 @@ class PhysicsDebugDraw {
 
 **Cloth substep (CPU XPBD — `ClothSimulator::simulate`):**
 
-1. `precomputeWind()` — cache per-particle noise + per-triangle turbulence (once per `simulate()`, reused across all substeps).
+1. `m_windModel.precompute()` (`ClothWindModel`) — cache per-particle noise + per-triangle turbulence (once per `simulate()`, reused across all substeps).
 2. For each substep `s` of `clamp(config.substeps, 1, MAX_SUBSTEPS)`:
    1. `applyWind(dtSub)` — read cached values; aerodynamic drag per triangle.
    2. Predict positions (Verlet): `pos += vel * dtSub + gravity * dtSub²; prevPos ← pos`.
@@ -422,7 +422,7 @@ Once per frame: before the substeps, the wind clock advances and a sleeping clot
 
 1. Walk `m_constraints` in sorted-index order; `RemoveConstraint` each, then clear the map.
 2. `BodyInterface::GetBodies` → `RemoveBody` + `DestroyBody` for every survivor.
-3. Reset `physicsSystem`, `jobSystem`, `tempAllocator` unique_ptrs (RAII destruction).
+3. Reset `m_physicsSystem`, `m_jobSystem`, `m_tempAllocator` unique_ptrs (RAII destruction).
 4. `JPH::UnregisterTypes()`; `delete JPH::Factory::sInstance; sInstance = nullptr`.
 5. Mark uninitialised.
 
@@ -504,7 +504,7 @@ Stress harnesses: `tests/test_advanced_physics.cpp` exercises constraint chains;
 | Aspect | Value |
 |--------|-------|
 | Allocation pattern | Heap (RAII via `std::unique_ptr`); Jolt's internal `TempAllocatorImpl` is a 10 MB pre-allocated pool reused across every `PhysicsSystem::Update` call (no per-frame heap traffic on the steady-state path). |
-| Per-frame transient | None. Both backends keep all working buffers across frames. CPU cloth `m_selfCollisionNeighbors` and `m_cachedParticleWind` retain capacity so per-substep work doesn't heap-alloc. GPU cloth retains all SSBOs / UBOs. |
+| Per-frame transient | None. Both backends keep all working buffers across frames. CPU cloth `m_selfCollisionNeighbors` and `ClothWindModel::m_particleWind` retain capacity so per-substep work doesn't heap-alloc. GPU cloth retains all SSBOs / UBOs. |
 | Peak working set | Jolt: ~10 MB temp pool + body table (~256 bytes / body × 4096 max ≈ 1 MB) + broadphase index ≈ **12 MB** for `maxBodies = 4096`. Cloth: 32 × 32 grid ≈ 1024 particles × (3 vec3 + 2 floats + indices) ≈ **80 KB** CPU; SSBOs ≈ 200 KB GPU. BVH: 4 tris/leaf, ~50 bytes/node ≈ **0.5 MB** for a 5k-tri mesh. **Subsystem total: < 20 MB** under the demo scene. |
 | Ownership | `Engine` owns the single `PhysicsWorld` by value (`engine.h:142`). `PhysicsWorld` owns Jolt resources via `unique_ptr`. `RigidBody` (component) holds a non-owning `PhysicsWorld*` + a Jolt `BodyID`. `ClothComponent` owns its `IClothSolverBackend` via `unique_ptr`. `ClothMeshCollider` is referenced by non-owning pointer from `ClothSimulator::m_meshColliders` — caller manages lifetime (CODING_STANDARDS §22 — explicit, documented). |
 | Lifetimes | `PhysicsWorld` is engine-lifetime. Bodies + constraints + character controllers are scene-lifetime (created on scene load, destroyed on scene unload via `RigidBody::destroyBody` and `removeConstraintsForBody`). Cloth components are scene-lifetime. Jolt globals (`Factory::sInstance`, registered types) are engine-lifetime (created in `PhysicsWorld::initialize`, torn down in `shutdown`). |
