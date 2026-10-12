@@ -5564,13 +5564,20 @@ shipped that have no invocation path at all.
   Source: in-session-2026-10-12 (trailer filming).
   Lanes: ui.
 
-- 📋 [3D_E-0760] **The pause menu shows through the Settings screen, and the PAUSED labels sit off to one side.**
+- ✅ [3D_E-0760] **The pause menu shows through the Settings screen, and the PAUSED labels sit off to one side.**
   Seen 2026-10-12 in the v0.1.76 download, --player, Esc, Settings:
   "The walk is held." and the pause buttons are readable through the
   Settings panel. On the pause menu itself, the PAUSED and INPUT
   SUSPENDED labels sit up and left of the menu card.
   Re-take: demoreel shot --gpu --settle 60 -s 1920x1080, steps wait
   3, key Escape, click 960 724.
+  Resolved 2026-10-12: the Settings modal panel is drawn at alpha 1
+  (theme panelBg is 0.94 / 0.92); the two captions and the headline are
+  centred with TextRenderer::measureTextWidth, keeping the old guessed
+  widths when no renderer is given. Red then green: both new tests
+  failed on the old file (captions 63, 203 and 40 px off centre; alpha
+  0.94 and 0.92). Checked in the Debug build with --player, Esc,
+  Settings.
   **Layman:** When Settings opens over the pause menu, the pause menu's title and buttons show faintly behind the settings.
   Kind: fix.
   Source: in-session-2026-10-12 (trailer filming).

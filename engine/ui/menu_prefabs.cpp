@@ -47,6 +47,18 @@ std::unique_ptr<UILabel> makeLabel(const std::string& text,
     return l;
 }
 
+// The x that centres @a text, drawn at @a scale, on @a centreX. Without a text
+// renderer there is nothing to measure, so @a guessWidth (unscaled px) stands
+// in, as it did for every label before 3D_E-0760.
+float centredX(const std::string& text, float scale, float centreX,
+               float guessWidth, const TextRenderer* textRenderer)
+{
+    const float width = textRenderer != nullptr
+        ? textRenderer->measureTextWidth(text) * scale
+        : guessWidth;
+    return centreX - width * 0.5f;
+}
+
 std::unique_ptr<UIButton> makeButton(const std::string& label,
                                       const glm::vec2& pos,
                                       const glm::vec2& sz,
@@ -163,12 +175,14 @@ void buildPauseMenuImpl(UICanvas& canvas, const UITheme& theme,
     canvas.addElement(makePanel({0, 0}, {1920, 1080},
                                   {0.039f, 0.031f, 0.024f, 0.72f}));
 
-    // "PAUSED" caption above the panel.
-    canvas.addElement(makeLabel(std::string(Vestige::tr("ui.pause.title")),
-                                  {(1920.0f - 200.0f) * 0.5f, 160.0f},
+    // "PAUSED" caption above the panel, centred on the screen (3D_E-0760).
+    const std::string title(Vestige::tr("ui.pause.title"));
+    canvas.addElement(makeLabel(title,
+                                  {centredX(title, 0.28f, 960.0f, 200.0f, textRenderer), 160.0f},
                                   0.28f, glm::vec3(theme.accent), textRenderer));
-    canvas.addElement(makeLabel(std::string(Vestige::tr("ui.pause.subtitle")),
-                                  {(1920.0f - 480.0f) * 0.5f, 200.0f},
+    const std::string subtitle(Vestige::tr("ui.pause.subtitle"));
+    canvas.addElement(makeLabel(subtitle,
+                                  {centredX(subtitle, 0.22f, 960.0f, 480.0f, textRenderer), 200.0f},
                                   0.22f, theme.textSecondary, textRenderer));
 
     // Modal panel.
@@ -197,8 +211,10 @@ void buildPauseMenuImpl(UICanvas& canvas, const UITheme& theme,
     cornerStripeV(panelX + panelW - bracketThick, panelY + panelH - bracketLen);
 
     // Headline + caption inside panel.
-    canvas.addElement(makeLabel(std::string(Vestige::tr("ui.pause.headline")),
-                                  {panelX + panelW * 0.5f - 220.0f, panelY + 80.0f},
+    const std::string headline(Vestige::tr("ui.pause.headline"));
+    canvas.addElement(makeLabel(headline,
+                                  {centredX(headline, 1.0f, panelX + panelW * 0.5f, 440.0f, textRenderer),
+                                   panelY + 80.0f},
                                   1.0f, theme.textPrimary, textRenderer));
 
     // Buttons.
@@ -258,7 +274,11 @@ void buildSettingsMenuImpl(UICanvas& canvas, const UITheme& theme,
     constexpr float modalY = 80.0f;
     constexpr float modalW = 1920.0f - 240.0f;
     constexpr float modalH = 1080.0f - 160.0f;
-    canvas.addElement(makePanel({modalX, modalY}, {modalW, modalH}, theme.panelBg));
+    // Opaque, unlike the theme's panel colour: Settings opens over the pause
+    // menu, which showed through a see-through panel (3D_E-0760).
+    glm::vec4 modalBg = theme.panelBg;
+    modalBg.a = 1.0f;
+    canvas.addElement(makePanel({modalX, modalY}, {modalW, modalH}, modalBg));
 
     // Header — "Settings" title + ESC close button.
     canvas.addElement(makeLabel(std::string(Vestige::tr("ui.settings.caption")),

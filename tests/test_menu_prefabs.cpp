@@ -10,6 +10,7 @@
 #include "ui/menu_prefabs.h"
 #include "ui/ui_canvas.h"
 #include "ui/ui_label.h"
+#include "ui/ui_panel.h"
 #include "ui/ui_theme.h"
 
 #include <string>
@@ -83,6 +84,29 @@ TEST(MenuPrefabs, SettingsMenuPopulatesChrome)
     // adding 2 extras) + footer (rule + label + 3 buttons).
     EXPECT_GT(canvas.getElementCount(), 12u);
     EXPECT_LT(canvas.getElementCount(), 30u);
+}
+
+// 3D_E-0760 — Settings opens over the pause menu. A see-through Settings panel
+// let the pause menu's title and buttons show faintly behind it.
+TEST(MenuPrefabs, SettingsModalPanelIsOpaque)
+{
+    for (const UITheme& theme : {UITheme::defaultTheme(), UITheme::plumbline()})
+    {
+        UICanvas canvas;
+        buildSettingsMenu(canvas, theme, nullptr);
+        const UIPanel* modal = nullptr;
+        for (size_t i = 0; i < canvas.getElementCount(); ++i)
+        {
+            const auto* panel = dynamic_cast<const UIPanel*>(canvas.getElementAt(i));
+            if (panel != nullptr && panel->position == glm::vec2(120.0f, 80.0f))
+            {
+                modal = panel;
+                break;
+            }
+        }
+        ASSERT_NE(modal, nullptr) << "no modal panel at (120, 80)";
+        EXPECT_FLOAT_EQ(modal->backgroundColor.a, 1.0f);
+    }
 }
 
 TEST(MenuPrefabs, AllPrefabsAreSafeWithoutTextRenderer)

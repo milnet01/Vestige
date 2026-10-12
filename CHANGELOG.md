@@ -25,6 +25,15 @@ may change any interface without notice.
 
 ## [Unreleased]
 
+### 2026-10-12 Fixed — The pause menu no longer shows through Settings, and its captions are centred (3D_E-0760)
+
+The Settings panel was slightly see-through, so the pause menu's title
+and buttons showed faintly behind it; it is now opaque. The PAUSED and
+INPUT SUSPENDED captions and the pause headline were placed for guessed
+text widths and sat off to the left; they are now centred from the
+measured text. Locked by SettingsModalPanelIsOpaque and
+PauseMenuCaptionsCentreOnTheScreen.
+
 ### 2026-10-12 Fixed — The chosen language survives a restart; the Audio panel opens; the Fog panel's settings hint is true (3D_E-0756, 3D_E-0758, 3D_E-0762)
 
 - **A player's chosen language now stays chosen after a restart.** (3D_E-0756)

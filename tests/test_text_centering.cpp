@@ -11,6 +11,10 @@
 #include "lsan_guard.h"
 
 #include "renderer/text_renderer.h"
+#include "ui/menu_prefabs.h"
+#include "ui/ui_canvas.h"
+#include "ui/ui_label.h"
+#include "ui/ui_theme.h"
 
 #include <glad/gl.h>
 #include <glm/glm.hpp>
@@ -97,4 +101,33 @@ TEST_F(TextCenteringTest, CapitalsCentreOnTheRequestedLine)
             EXPECT_NEAR(lit, centre, 1.5f) << "scale " << scale;
         }
     }
+}
+
+// 3D_E-0760 — the pause menu's PAUSED and INPUT SUSPENDED captions, and the
+// headline inside the panel, are centred on the screen's middle (x 960 on the
+// 1920-wide canvas). They were placed for guessed text widths and sat off to
+// the left.
+TEST_F(TextCenteringTest, PauseMenuCaptionsCentreOnTheScreen)
+{
+    Vestige::TextRenderer tr;
+    ASSERT_TRUE(tr.initialize(std::string(VESTIGE_FONT_DIR) + "/inter_tight.ttf",
+                              std::string(VESTIGE_FONT_DIR) + "/..", 48));
+
+    Vestige::UICanvas canvas;
+    Vestige::buildPauseMenu(canvas, Vestige::UITheme::defaultTheme(), &tr);
+
+    int checked = 0;
+    for (size_t i = 0; i < canvas.getElementCount(); ++i)
+    {
+        const auto* label = dynamic_cast<const Vestige::UILabel*>(canvas.getElementAt(i));
+        if (label == nullptr || label->position.y > 400.0f)
+        {
+            continue;  // the captions and headline are the labels above y 400
+        }
+        const float centre = label->position.x
+                           + tr.measureTextWidth(label->text) * label->scale * 0.5f;
+        EXPECT_NEAR(centre, 960.0f, 1.0f) << "label \"" << label->text << "\"";
+        ++checked;
+    }
+    EXPECT_EQ(checked, 3) << "expected the two captions and the headline";
 }
