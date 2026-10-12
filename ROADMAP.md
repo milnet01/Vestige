@@ -1,6 +1,6 @@
 <!-- ants-roadmap-format: 1 -->
 <!-- Generated from the Ants Terminal roadmap store. Edit it with roadmap_log; hand edits are discarded by the next write. -->
-<!-- ants-roadmap-id-high-water: 3D_E=762 3D_E#S=989 -->
+<!-- ants-roadmap-id-high-water: 3D_E=763 3D_E#S=989 -->
 
 # Vestige Engine Roadmap
 
@@ -8111,6 +8111,34 @@ The rendering research update (Phase 13 "2026-04 Research Update") makes pixels 
 - 📋 [3D_E-S0042] **ScriptComponent (entity attachment) + ScriptingSystem (ISystem with update loop, latent tick, event bridge) — un-ticked 2026-09-21 (3D_E-0627). The classes exist and are unit-tested, but nothing constructs a `ScriptingSystem` at runtime, `ScriptComponent` has zero callers, and `ScriptingSystem::onSceneLoad` is a stub whose own comment lists the four steps nobody wrote. No script can execute in the shipped engine. Switching it on is tracked as its own item.**
   **Layman:** Turn on the node-based scripting system so scripts built in the editor actually run in a scene.
   Kind: implement.
+
+- 📋 [3D_E-0763] **Active body physics: characters that balance, stumble, brace and protect themselves, built from published research.**
+  The benchmark is NaturalMotion's Euphoria (Dynamic Motion Synthesis),
+  now owned through Zynga by Take-Two. Copyright covers their code and
+  assets, not the idea, so an independent build from public research is
+  allowed. Two limits: never use the name "Euphoria" (trademark), and
+  check patents before shipping. Oxford University says a NaturalMotion
+  patent was granted in 2012; its number and claims are not yet known.
+  A patent search (Google Patents, assignee NaturalMotion and the founder
+  Torsten Reil) is step 1, and its findings decide the design. A patent
+  lawyer is the only certain answer; record that this was not one.
+  Starting point already in the tree: engine/experimental/physics/ragdoll.h
+  wraps Jolt's ragdoll with a POWERED state (Jolt
+  Ragdoll::DriveToPoseUsingMotors drives joints toward an animation pose).
+  What is missing is the layer above it: a balance controller (centre of
+  mass over the feet, stepping to recover), then reactive behaviours
+  (brace for a fall, arm out to a wall, stumble, get up) blended with
+  the animation system. Published sources to build from: SIMBICON (Yin,
+  Loken, van de Panne, SIGGRAPH 2007) for balance by foot placement;
+  Geijtenbeek and Pronost's survey of interactive character animation with
+  simulated physics; DeepMimic (Peng et al., 2018) as a later learned
+  option. Needs a spec (three subsystems, real design choices). CPU/GPU
+  placement: CPU, it runs inside the Jolt step per character. Depends on
+  the experimental ragdoll leaving experimental/.
+  **Layman:** Characters that react to being pushed or falling the way a real body does (catching their balance, putting an arm out) instead of going limp or playing a canned animation.
+  Kind: research.
+  Source: user-request-2026-10-12.
+  Lanes: physics, animation.
 
 ## 0.6.0 — Shipping a walkthrough
 
