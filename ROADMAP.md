@@ -1,6 +1,6 @@
 <!-- ants-roadmap-format: 1 -->
 <!-- Generated from the Ants Terminal roadmap store. Edit it with roadmap_log; hand edits are discarded by the next write. -->
-<!-- ants-roadmap-id-high-water: 3D_E=754 3D_E#S=989 -->
+<!-- ants-roadmap-id-high-water: 3D_E=755 3D_E#S=989 -->
 
 # Vestige Engine Roadmap
 
@@ -5483,6 +5483,20 @@ shipped that have no invocation path at all.
   Kind: package.
   Source: in-session-2026-10-12 trailer footage.
   Lanes: packaging, assets.
+
+- 📋 [3D_E-0755] **Releases publish with an automatic "Full Changelog" link instead of their CHANGELOG section as the notes.**
+  Found 2026-10-12: v0.1.76 published with the body "**Full Changelog**:
+  <compare link>" and the title "v0.1.76". release.yml's two
+  "Attach to GitHub Release" steps (softprops/action-gh-release) pass no
+  body, so GitHub writes its own. Fixed by hand for 0.1.76 with
+  `gh release edit --notes-file`. Fix: the publish job sets the notes from
+  the tag's annotation (cut-release writes the CHANGELOG section there) and
+  the title from its Theme line. The self-updater is unaffected: it reads
+  CHANGELOG.md at the tag (engine/update/update_service.cpp).
+  **Layman:** A new release's notes on its GitHub page show only a link instead of the list of changes.
+  Kind: fix.
+  Source: in-session-2026-10-12 cut-release 0.1.76 Phase 6.
+  Lanes: packaging, ci.
 
 ## 0.3.0 — An editor a builder can use
 
