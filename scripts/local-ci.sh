@@ -13,6 +13,10 @@
 #   6. actionlint workflow lint ← workflow-lint     (schema + shellcheck over run: blocks)
 #   7. CMake compat, 3.21.0 and latest ← cmake-compat's two matrix legs     [container]
 #
+# Stages 1+4 and 2+3 run as two lanes side by side when every build tree is
+# nearly up to date and memory is free; otherwise in the order above.
+# VESTIGE_CI_PARALLEL=0 forces that order ("stages 1-4 as two lanes" below).
+#
 # [container] = run in the Ubuntu 24.04 image scripts/ci-container/Containerfile
 # builds: GitHub's runner OS and its compiler, CMake, cppcheck and clang-tidy
 # versions, with ci.yml's own apt packages. This machine's newer toolchain (GCC
@@ -374,28 +378,26 @@ build_and_test_msvc() {
     return $rc
 }
 
-# --- preflight: build/find the CI image, report versions --------------------
-preflight
-
-# --- stage 1: Debug build + test (container tree $CI_DIR/debug) -------------
-build_and_test "Debug build+test" debug Debug || true
-
 # --- stage 2: Release build + test (container tree $CI_DIR/release) ---------
-if [[ $QUICK -eq 0 ]]; then
-    build_and_test "Release build+test" release Release || true
-else
-    record "Release build+test" skip 0
-fi
+stage_release() {
+    if [[ $QUICK -eq 0 ]]; then
+        build_and_test "Release build+test" release Release || true
+    else
+        record "Release build+test" skip 0
+    fi
+}
 
 # --- stage 3: Windows MSVC build + test via msvc-wine (default; --no-windows off) ---
 # Runs by default so a Windows-only break is caught before push. When disabled it is
 # recorded as SKIP so the summary reports PARTIAL (Windows is a real CI gate — a run
 # without it is not push-verified).
-if [[ $WINDOWS -eq 1 ]]; then
-    build_and_test_msvc || true
-else
-    record "Windows MSVC build+test" skip 0
-fi
+stage_windows() {
+    if [[ $WINDOWS -eq 1 ]]; then
+        build_and_test_msvc || true
+    else
+        record "Windows MSVC build+test" skip 0
+    fi
+}
 
 # --- stage 4: Tier-1 static audit -------------------------------------------
 # In the container, on stage 1's Debug tree (audit's internal `cmake --build
@@ -403,21 +405,117 @@ fi
 # Flags match ci.yml: --ci sets the exit
 # code by severity, --no-color keeps logs clean, --no-tests skips the redundant
 # ctest pass (stage 1 already ran it against the same build).
-if [[ $QUICK -eq 0 ]]; then
-    start=$SECONDS
-    banner "Tier-1 audit — cppcheck + clang-tidy + build warnings (Ubuntu 24.04 container)"
-    # Flag a partial mirror in the stage name so a green summary can't be
-    # mistaken for full parity when clang-tidy was unavailable.
-    audit_label="Tier-1 audit"; [[ $CLANG_TIDY_OK -eq 0 ]] && audit_label="Tier-1 audit(no-tidy)"
-    if [[ $CI_IMAGE_OK -eq 0 ]]; then
-        record "$audit_label" skip 0
-    elif in_ci debug "xvfb-run --auto-servernum python3 tools/audit/audit.py -t 1 --ci --no-color --no-tests"; then
-        record "$audit_label" ok $((SECONDS - start))
+stage_audit() {
+    if [[ $QUICK -eq 0 ]]; then
+        local start=$SECONDS audit_label
+        banner "Tier-1 audit — cppcheck + clang-tidy + build warnings (Ubuntu 24.04 container)"
+        # Flag a partial mirror in the stage name so a green summary can't be
+        # mistaken for full parity when clang-tidy was unavailable.
+        audit_label="Tier-1 audit"; [[ $CLANG_TIDY_OK -eq 0 ]] && audit_label="Tier-1 audit(no-tidy)"
+        if [[ $CI_IMAGE_OK -eq 0 ]]; then
+            record "$audit_label" skip 0
+        elif in_ci debug "xvfb-run --auto-servernum python3 tools/audit/audit.py -t 1 --ci --no-color --no-tests"; then
+            record "$audit_label" ok $((SECONDS - start))
+        else
+            record "$audit_label" fail $((SECONDS - start))
+        fi
     else
-        record "$audit_label" fail $((SECONDS - start))
+        record "Tier-1 audit" skip 0
     fi
+}
+
+# --- stages 1-4 as two lanes (3D_E-0718) -------------------------------------
+# Lane A is stage 1 then stage 4, which reuses stage 1's Debug tree. Lane B is
+# stage 2 then stage 3. They share no tree, so they can run side by side.
+# Measured 2026-09-28 (3D_E-0710), before the container: 583 s serial, the lanes
+# about 223 s and 346 s. Two cold builds side by side could exhaust memory, so
+# the lanes run together only when every tree has at most
+# VESTIGE_CI_PARALLEL_MAX_STEPS build steps left and MemAvailable is at least
+# VESTIGE_CI_PARALLEL_MIN_MEM_GB. Both defaults were chosen, not measured.
+# VESTIGE_CI_PARALLEL=0 forces the serial order.
+PAR_MAX_STEPS="${VESTIGE_CI_PARALLEL_MAX_STEPS:-40}"
+PAR_MIN_MEM_GB="${VESTIGE_CI_PARALLEL_MIN_MEM_GB:-12}"
+
+# shellcheck disable=SC2329  # called by name through run_lane
+lane_a() { build_and_test "Debug build+test" debug Debug || true; stage_audit; }
+# shellcheck disable=SC2329  # called by name through run_lane
+lane_b() { stage_release; stage_windows; }
+
+# Build steps a `ninja -n` dry run (on stdin) would run. A tree that cannot be
+# dry-run, or whose CMake would re-run first, counts as cold: the dry run
+# cannot see what the regenerated build will do.
+dry_steps() {
+    local out; out="$(cat)"
+    if [[ -z "$out" ]] || grep -q 'Re-running CMake' <<<"$out"; then
+        echo 999999; return
+    fi
+    grep -c '^\[' <<<"$out"
+}
+
+lanes_parallel_ok() {
+    [[ $QUICK -eq 0 && $CI_IMAGE_OK -eq 1 && "${VESTIGE_CI_PARALLEL:-1}" != 0 ]] || return 1
+    local mem_kb d r m=0
+    mem_kb="$(awk '/^MemAvailable:/ {print $2}' /proc/meminfo)"
+    if (( mem_kb < PAR_MIN_MEM_GB * 1048576 )); then
+        echo "  lanes serial: $((mem_kb / 1048576)) GB free, parallel needs $PAR_MIN_MEM_GB"
+        return 1
+    fi
+    d="$(in_ci debug "ninja -C build -n 2>/dev/null" | dry_steps)"
+    r="$(in_ci release "ninja -C build -n 2>/dev/null" | dry_steps)"
+    if [[ $WINDOWS -eq 1 && -x "$MSVC_WINE_BIN/cl" ]]; then
+        m="$(ninja -C build-msvc -n 2>/dev/null | dry_steps)"
+    fi
+    echo "  build steps left: Debug $d, Release $r, Windows $m (parallel at $PAR_MAX_STEPS or fewer each)"
+    (( d <= PAR_MAX_STEPS && r <= PAR_MAX_STEPS && m <= PAR_MAX_STEPS ))
+}
+
+# Run one lane in a subshell with its output in <log>. record() cannot reach
+# the parent's arrays from there, so the lane writes its results to <tsv>.
+run_lane() {  # run_lane <lane function> <log> <tsv>
+    (
+        local first=${#STAGE_NAMES[@]} i
+        "$1"
+        for (( i = first; i < ${#STAGE_NAMES[@]}; i++ )); do
+            printf '%s\t%s\t%s\n' "${STAGE_NAMES[$i]}" "${STAGE_RESULTS[$i]}" "${STAGE_TIMES[$i]}"
+        done > "$3"
+    ) > "$2" 2>&1
+}
+
+# Print each lane's log whole, then take its results. A lane that died before
+# writing both of its stages is recorded as a FAILED stage, never left out.
+merge_lane() {  # merge_lane <name> <log> <tsv>
+    local n=0 name result secs
+    cat "$2"
+    if [[ -f "$3" ]]; then
+        while IFS=$'\t' read -r name result secs; do
+            record "$name" "$result" "$secs"; n=$((n + 1))
+        done < "$3"
+    fi
+    if [[ $n -lt 2 ]]; then
+        echo "  !! $1 ended early: $n of its 2 stages reported"
+        record "$1 (incomplete)" fail 0
+    fi
+}
+
+# --- preflight: build/find the CI image, report versions --------------------
+preflight
+
+banner "stages 1-4 — Debug + audit, Release + Windows"
+if lanes_parallel_ok; then
+    echo "  running the two lanes side by side; each log prints whole when both end"
+    lane_dir="$(mktemp -d)"
+    run_lane lane_a "$lane_dir/a.log" "$lane_dir/a.tsv" & lane_a_pid=$!
+    run_lane lane_b "$lane_dir/b.log" "$lane_dir/b.tsv" & lane_b_pid=$!
+    wait "$lane_a_pid" "$lane_b_pid"
+    merge_lane "Lane A" "$lane_dir/a.log" "$lane_dir/a.tsv"
+    merge_lane "Lane B" "$lane_dir/b.log" "$lane_dir/b.tsv"
+    rm -rf "$lane_dir"
 else
-    record "Tier-1 audit" skip 0
+    # --- stage 1: Debug build + test (container tree $CI_DIR/debug) ---------
+    build_and_test "Debug build+test" debug Debug || true
+    stage_release
+    stage_windows
+    stage_audit
 fi
 
 # --- stage 5: gitleaks secret scan ------------------------------------------

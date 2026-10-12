@@ -25,6 +25,14 @@ may change any interface without notice.
 
 ## [Unreleased]
 
+### 2026-10-12 Changed — Local CI runs its Debug and Release halves side by side when little needs rebuilding (3D_E-0718)
+
+scripts/local-ci.sh now runs Debug + audit and Release + Windows as two
+lanes at once when a dry run shows every build tree needs at most 40
+steps and at least 12 GB of memory is free. Otherwise it keeps the old
+order. Each lane's log prints whole, and a lane that stops early counts
+as a failed stage. VESTIGE_CI_PARALLEL=0 forces the old order.
+
 ### 2026-10-12 Fixed — A release's GitHub page lists its changes (3D_E-0755)
 
 A new release's page showed only GitHub's "Full Changelog" link and a
