@@ -11,6 +11,8 @@ may change any interface without notice.
 <summary><strong>Table of Contents</strong> (versions)</summary>
 
 - [[Unreleased]](#unreleased)
+- [[0.1.76] - 2026-10-12](#0176---2026-10-12)
+- [[0.1.75] - 2026-09-29](#0175---2026-09-29)
 - [[0.1.70] - 2026-08-19](#0170---2026-08-19)
 - [[0.1.5] - 2026-04-18](#015---2026-04-18)
 - [[0.1.4] - 2026-04-17](#014---2026-04-17)
@@ -22,6 +24,10 @@ may change any interface without notice.
 </details>
 
 ## [Unreleased]
+
+## [0.1.76] - 2026-10-12
+
+**Theme:** Menus, sound and a meadow with trees
 
 ### 2026-10-12 Fixed — The downloaded meadow has its trees (3D_E-0754)
 
@@ -96,7 +102,7 @@ dropdowns open and pick. The cursor shows while a menu is open, and
 disabled buttons stay inert. A new `--player` launch option plays the
 scene as a game would, with Esc opening the pause menu.
 
-### 2026-10-02 Changed — Meadow sky has clouds, and the sun matches it (3D_E-0034)
+### 2026-10-02 Changed — Meadow sky has clouds, and the sun matches it (part of 3D_E-0034)
 
 The meadow's clear, hazy sky photo is replaced with Poly Haven's
 Kloofendal 48d Partly Cloudy (CC0). The sun now points where the sun
@@ -244,7 +250,7 @@ The meadow grass used to stop in a circle a little way back from the pond, leavi
 
 Every engine system (weather and wind, audio following the camera, reverb, music, footsteps, UI toasts and more) had waited for a scene notice that is never sent, so none of them updated outside the tests. They now run from start-up. Measured cost: 0.05 ms a frame.
 
-### 2026-09-29 Added — The editor can update itself and tells you what changed (3D_E-0729)
+### 2026-09-29 Added — The editor can update itself and tells you what changed (part of 3D_E-0729)
 
 After the first-run wizard, the editor asks once whether to check for new versions when it starts. *Help → Check for Updates* works either way, and Settings has an Updates tab. When a newer stable release exists, a window lists every CHANGELOG entry added since your version. Choose *Later*, *Skip this version* or *Update now*. The Linux AppImage and the Windows zip update in place and restart; the Linux tarball opens the download page. Every download is signed in the release pipeline and checked before anything is installed, and unsaved scene changes are offered for saving first. Updates work from the first release built with this change; earlier builds need one manual download.
 
@@ -268,14 +274,14 @@ Nothing called it and no system overrode it; the system registry already times e
 
 - **`--no-vsync` now actually uncaps the frame rate; the saved settings no longer switch vsync back on at startup.** (3D_E-0727)
 
-### 2026-09-29 Fixed — Camera, collision and underwater fixes (3D_E-0724, 3D_E-0725)
+### 2026-09-29 Fixed — Camera, collision and underwater fixes (3D_E-0724; part of 3D_E-0725)
 
-- **The fly-mode camera no longer passes through the ground** (3D_E-0725)
+- **The fly-mode camera no longer passes through the ground** (part of 3D_E-0725)
   It stops 0.15 m above the terrain under it, low enough for a rat's-eye
   view or a dive into the pond. Trees now block the camera (a trunk-sized
   box per tree).
 
-- **Per-object "Blocks Movement" switch in the inspector** (3D_E-0725)
+- **Per-object "Blocks Movement" switch in the inspector** (part of 3D_E-0725)
   Decide which objects the camera and player collide with. The meadow
   turns it off for lily pads, lotus, bushes and shore plants. Not yet
   saved in scene files (same as "Casts Shadow").
@@ -349,7 +355,7 @@ code at the HIGH preset, including diagonal search and corner rounding.
 - **HDR input**
   Edge detection compresses the linear HDR scene to [0,1] and gamma-encodes it first, as the reference requires gamma-space input. The blend itself stays in linear HDR.
 
-### 2026-09-26 Added — Stutter-free demo videos: `--demo-capture` writes every frame at a fixed 1/30 s step (3D_E-0696)
+### 2026-09-26 Added — Stutter-free demo videos: `--demo-capture` writes every frame at a fixed 1/30 s step (part of 3D_E-0696)
 
 The first website video was choppy: about 3.5 new images per second.
 Vestige drew 52-62 fps, but demoreel's screen capture of a GPU-heavy
@@ -369,7 +375,7 @@ knee are inputs, so the exported GLSL takes them as parameters and a
 caller can switch presets at runtime. Checked: the export compiles for
 Vulkan with glslangValidator, included twice.
 
-### 2026-09-26 Added — Hands-free camera fly-through for demo videos (3D_E-0696, first piece)
+### 2026-09-26 Added — Hands-free camera fly-through for demo videos (part of 3D_E-0696)
 
 `--demo-flythrough` flies the meadow camera along a built-in smooth path
 with no input, then quits, so a demo video can be recorded on a virtual
@@ -377,7 +383,7 @@ display. There is no script file yet: the path is built in code next to
 the meadow's visual-test viewpoints. Building it exposed a SplinePath bug,
 fixed below.
 
-- **Added: `--demo-flythrough` CLI flag and `DemoFlythrough` (eye and look-at splines, eased start and stop, ground clearance).** (3D_E-0696)
+- **Added: `--demo-flythrough` CLI flag and `DemoFlythrough` (eye and look-at splines, eased start and stop, ground clearance).** (part of 3D_E-0696)
 
 - **Fixed: SplinePath's first and last segments swung tens of metres off the curve**
   The end segments reuse the end point as their outer neighbour, so the
@@ -431,6 +437,8 @@ The prelude and each generated function now sit in their own `#ifndef`
 guard, so a shader may include `formulas.glsl` twice or mix it with
 single-formula files without redefinition errors. Requested by the
 DOOM_Ants path tracer (DOOM-0407).
+
+## [0.1.75] - 2026-09-29
 
 ### 2026-09-21 Security — tinyexr raised to v1.0.13, taking two upstream memory-safety fixes (3D_E-0669)
 
