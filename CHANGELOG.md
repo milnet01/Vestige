@@ -25,6 +25,13 @@ may change any interface without notice.
 
 ## [Unreleased]
 
+### 2026-10-13 Added — The meadow has sound: wind, birdsong and insects (3D_E-0036)
+
+Three looping CC0 field recordings from Freesound now play across the
+whole meadow as ambient zones: wind in the grass, birdsong and insects.
+Birds fall silent at night; insects play by day and at dusk. Sources and
+licences are in ASSET_LICENSES.md.
+
 ### 2026-10-12 Fixed — The pause menu no longer shows through Settings, and its captions are centred (3D_E-0760)
 
 The Settings panel was slightly see-through, so the pause menu's title

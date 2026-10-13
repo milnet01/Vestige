@@ -26,6 +26,7 @@
 #include "systems/audio_occlusion_system.h"
 #include "systems/reverb_system.h"
 #include "systems/ambient_system.h"
+#include "audio/ambient_zone_component.h"
 #include "audio/acoustic_baker.h"
 #include "systems/audio_system.h"
 #include "systems/music_system.h"
@@ -3438,6 +3439,45 @@ void Engine::finalizeMeadowTerrain()
         m_demoFlythrough.setStartHold(3.0f);
         m_demoFlythrough.setEndHold(2.0f);
         m_demoFlythrough.setSpeed(5.0f);
+    }
+
+    // --- Ambient soundscape (3D_E-0036) --------------------------------------
+    // Three looping beds layered across the whole meadow: wind in the grass,
+    // birdsong and insects. Each zone is centred on the terrain and its core
+    // reaches the corners, so the beds play at full weight anywhere the camera
+    // can go. Equal priorities mix rather than shadow (3D_E-S0016 INV-1). The
+    // clips are CC0 field recordings from Freesound (ASSET_LICENSES.md).
+    {
+        const float extentX = static_cast<float>(W - 1) * tcfg.spacingX;
+        const float extentZ = static_cast<float>(D - 1) * tcfg.spacingZ;
+        const glm::vec2 centreXZ = {tcfg.origin.x + extentX * 0.5f,
+                                    tcfg.origin.z + extentZ * 0.5f};
+        const float coreRadius = 0.5f * std::sqrt(extentX * extentX + extentZ * extentZ);
+        constexpr std::uint8_t DAWN  = 1u << static_cast<int>(TimeOfDayWindow::Dawn);
+        constexpr std::uint8_t DAY   = 1u << static_cast<int>(TimeOfDayWindow::Day);
+        constexpr std::uint8_t DUSK  = 1u << static_cast<int>(TimeOfDayWindow::Dusk);
+
+        // TODO: revisit via Formula Workbench — bed levels are mixed by ear
+        // (no reference data), hand-authored per project Rule 6.
+        const auto addBed = [&](const char* name, const char* clip, float volume,
+                                std::uint8_t windows)
+        {
+            Entity* e = scene->createEntity(name);
+            e->transform.position = glm::vec3(
+                centreXZ.x, terrain.getHeight(centreXZ.x, centreXZ.y), centreXZ.y);
+            auto* amb = e->addComponent<AmbientZoneComponent>();
+            amb->zone.clipPath = clip;
+            amb->zone.coreRadius = coreRadius;
+            amb->zone.falloffBand = 20.0f;
+            amb->zone.maxVolume = volume;
+            amb->windows = windows;
+        };
+        addBed("Ambience: wind", "assets/audio/ambience/meadow_wind_loop.ogg",
+               0.55f, kAllTimeOfDayWindows);
+        addBed("Ambience: birdsong", "assets/audio/ambience/meadow_birds_loop.ogg",
+               0.6f, DAWN | DAY | DUSK);
+        addBed("Ambience: insects", "assets/audio/ambience/meadow_insects_loop.ogg",
+               0.35f, DAY | DUSK);
     }
 
     scene->update(0.0f);

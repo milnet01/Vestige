@@ -197,6 +197,21 @@ Source: <https://polyhaven.com/a/kloofendal_48d_partly_cloudy_puresky>
   Provides the sky, image-based lighting and pond reflections for the
   meadow benchmark scene (3D_E-0034).
 
+### Audio — `assets/audio/ambience/`
+
+Source: <https://freesound.org>
+
+- **`meadow_wind_loop.ogg`** — wind in grass, Tierra del Fuego
+  (felix.blume, <https://freesound.org/s/139337/>).
+- **`meadow_birds_loop.ogg`** — springtime birdsong with soft wind
+  (rubindaniel, <https://freesound.org/s/847380/>).
+- **`meadow_insects_loop.ogg`** — meadow insects on a sunny afternoon
+  (DanGasior, <https://freesound.org/s/164656/>).
+
+Each is licensed under **CC0 1.0 Universal** — no attribution required.
+Trimmed to a seamless 90-second loop. Provides the meadow's ambient
+soundscape (3D_E-0036).
+
 ### Fonts — `assets/fonts/`
 
 All five bundled font files are licensed under the

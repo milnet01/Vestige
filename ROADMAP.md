@@ -1240,7 +1240,7 @@ Full spatial audio pipeline with dynamic mixing, occlusion, and adaptive music. 
   Kind: feature.
   Source: user-request-2026-07-11.
 
-- 📋 [3D_E-0036] **Meadow realism E — ambient soundscape (birdsong, wind, water, insects).**
+- 🚧 [3D_E-0036] **Meadow realism E — ambient soundscape (birdsong, wind, water, insects).**
   Layer a natural ambient audio bed over the meadow using the existing audio subsystem (the AX occlusion / reverb / spatial-audio stack already shipped): a looping ambient base (gentle wind through grass, distant birdsong) **plus** spatialised point emitters — birds chirping from the tree grove, water lapping / trickle at the pond, crickets/insects in the grass, an occasional breeze gust — so the scene *sounds* like a meadow, not just looks like one. Sources: CC0 / free-to-use audio — **Freesound.org** (filter to CC0), **Pixabay** audio, **Kenney** CC0 audio packs, OpenGameArt (CC0). Commit a small curated CC0 set to `assets/audio/ambience/` with ASSET_LICENSES + THIRD_PARTY_NOTICES rows, run through the existing loudness pipeline (default −16 LUFS, AX9). Emitters authored in the meadow scene and hooked into the existing reverb/occlusion so they sit in the space. Generalises to a reusable "ambient audio zone" for future scenes. Needs a short research pass on CC0 audio sources + a design before build. Complements the visual realism program (3D_E-0031..0034).
   Waiting on the user (2026-10-02). The playback side exists (S0016
   AmbientSystem: zones, time-of-day beds, positioned one-shots). Missing:
@@ -1252,6 +1252,17 @@ Full spatial audio pipeline with dynamic mixing, occlusion, and adaptive music. 
   a listener. Recommend: the user picks 4-6 CC0 Freesound clips (wind in
   grass, birdsong, pond water, crickets, a gust) and drops them in the
   handoff folder; a session then adds them, licence rows and the zones.
+  Re-requested (2026-10-13) by the user via ants-projects-hub-website:
+  "Perhaps some wind and bird / insect noises." On ship, tell that
+  session: it will redo the YouTube trailer with the meadow's own sound.
+  Progress (2026-10-13): built. Three beds in Engine::finalizeMeadowTerrain
+  (wind all day, birds dawn-dusk, insects day+dusk), each an ambient zone
+  covering the whole terrain. Clips are CC0 Freesound HQ previews 139337,
+  847380 and 164656, cut to seamless 90 s loops at -20 LUFS. Loaded in a
+  Release run; 26 ambient tests pass; FPS floor unchanged (dips occur with
+  and without sound, see 3D_E-0704). Open: the user listens and names
+  swaps or level changes; then flip to shipped and tell
+  ants-projects-hub-website. Not done: pond water sound, separate gusts.
   **Layman:** Add the sounds of a real meadow — birds chirping, a breeze, water at the pond, insects — using free-to-use audio.
   Kind: feature.
   Source: user-request-2026-07-11.
