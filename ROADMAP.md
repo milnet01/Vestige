@@ -5459,6 +5459,14 @@ shipped that have no invocation path at all.
     it with a written reason.
   Scratch (not in git): /mnt/Games/Scripts/Linux/vestige-0751-scratch/
   (the shims' source and the run logs). Delete it when this item closes.
+  2026-10-15, later: the dlclose-logging shim run (LD_PRELOAD
+  libasan.so.8 + a shim that logs, then really dlcloses) gave 0 leaks in
+  64 shard runs. Without a shim it was 2 in about 32. So either the leak
+  is rarer than those two hits suggest, or the shim changes the timing.
+  ctest's --output-on-failure printed nothing, so the log lines were
+  never captured. Next try: no shim, run gtest directly with output kept
+  (not through ctest), until a leak appears; then compare its frame
+  addresses against /proc/<pid>/maps, or log dlopen addresses to a file.
   **Layman:** One group of tests occasionally fails at exit on a small memory leak inside a driver-like library, even though every test in it passed.
   Kind: fix.
   Source: in-session-2026-10-07.
