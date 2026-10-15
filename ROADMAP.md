@@ -1,6 +1,6 @@
 <!-- ants-roadmap-format: 1 -->
 <!-- Generated from the Ants Terminal roadmap store. Edit it with roadmap_log; hand edits are discarded by the next write. -->
-<!-- ants-roadmap-id-high-water: 3D_E=767 3D_E#S=989 -->
+<!-- ants-roadmap-id-high-water: 3D_E=768 3D_E#S=989 -->
 
 # Vestige Engine Roadmap
 
@@ -5679,6 +5679,24 @@ shipped that have no invocation path at all.
   Kind: accessibility.
   Source: in-session-2026-10-12 (3D_E-0762 follow-up).
   Lanes: editor, ui.
+
+- ✅ [3D_E-0768] **Local CI's Windows tests hang under Wine on xvfb-run's 8-bit default screen.**
+  Seen 2026-10-15: two pushes stalled in the Windows MSVC stage, all
+  four shards at 0 CPU seconds. Both pushes came after the xvfb-run
+  package update of 2026-10-13 15:46; the push at 08:32 that morning
+  passed. Found by tracing: the main thread blocks
+  in user32.RegisterClassExW (dinput8's DllMain, inside glfwInit), and
+  Wine's explorer logs "Failed to create internal root context". On
+  xvfb-run's default 640x480x8 screen, `glxinfo -B` says "couldn't find
+  RGB GLX visual". On a 1280x1024x24 screen the same test passed in 18 s.
+  Fix: GL_WRAP in scripts/local-ci.sh passes -s "-screen 0 1280x1024x24".
+  Ruled out: a corrupt Wine prefix (a fresh one hung too), the DualShock 4
+  controller (hung unplugged), the Mesa shader cache.
+  Follow-up not done: the MSVC stage still has no timeout of its own.
+  **Layman:** The pre-push checks froze on the Windows tests, so nothing could be pushed; the checks' virtual screen now has full colour.
+  Kind: fix.
+  Source: in-session-2026-10-15 (push of cf5e3ff).
+  Lanes: tests, ci.
 
 ## 0.3.0 — An editor a builder can use
 

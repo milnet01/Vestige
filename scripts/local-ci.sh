@@ -134,8 +134,12 @@ export CCACHE_SLOPPINESS=pch_defines,time_macros
 # CI runs headless under xvfb so GL-touching tests have a display. Locally we
 # usually have a real one — wrap with xvfb-run only if it exists, else rely on
 # the live DISPLAY/WAYLAND session, and warn if neither is available.
+# The screen is 24-bit because xvfb-run's default is 640x480x8, which offers no
+# RGB GLX visual: under Wine, the MSVC tests then hang in glfwInit before their
+# first test (seen 2026-10-15; `glxinfo -B` there says "couldn't find RGB GLX
+# visual"). The Linux stages run their own xvfb-run inside the container.
 if command -v xvfb-run >/dev/null 2>&1; then
-    GL_WRAP=(xvfb-run --auto-servernum)
+    GL_WRAP=(xvfb-run --auto-servernum -s "-screen 0 1280x1024x24")
 elif [[ -n "${DISPLAY:-}" || -n "${WAYLAND_DISPLAY:-}" ]]; then
     GL_WRAP=()
 else

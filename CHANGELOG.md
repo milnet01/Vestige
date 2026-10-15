@@ -25,6 +25,13 @@ may change any interface without notice.
 
 ## [Unreleased]
 
+### 2026-10-15 Fixed — Local CI's Windows tests no longer hang under Wine (3D_E-0768)
+
+scripts/local-ci.sh gave its Windows test stage xvfb-run's default
+screen, which is 8-bit and offers no RGB GL visual. Wine then hung while
+GLFW started, before the first test ran, and the push never finished.
+The screen is now 1280x1024 at 24-bit.
+
 ### 2026-10-13 Added — The meadow has sound: wind, birdsong and insects (3D_E-0036)
 
 Three looping CC0 field recordings from Freesound now play across the
