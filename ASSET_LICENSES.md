@@ -112,6 +112,7 @@ point 5).
 The meadow's ambient beds (3D_E-0036). Each is a 90-second cut of
 Freesound's high-quality OGG preview. Its end is crossfaded into its start
 so it loops without a seam. One fixed gain sets it to -20 LUFS.
+`tools/audio/make_ambient_loop.sh` does both.
 
 ---
 

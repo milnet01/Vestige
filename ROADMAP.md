@@ -2497,6 +2497,9 @@ Full spatial audio pipeline with dynamic mixing, occlusion, and adaptive music. 
   Follow-ups filed rather than absorbed: 3D_E-0656 (two other perf gates
   still use the old scheme) and 3D_E-0657 (the section 8 figures this run
   did not re-take).
+  Raw ramp-probe samples (five RX 6600 runs, one GTX 1050 run) and
+  their README are archived at docs/archive/measurements/3d_e-0626/
+  (moved into the repo 2026-10-15 from a folder outside it).
 
 - ✅ [3D_E-0656] **Two more perf gates still time the way 3D_E-0626 proved unreliable.**
   `tests/test_text_renderer_perf.cpp` (HUD pass, GPU) and
