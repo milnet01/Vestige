@@ -5441,6 +5441,24 @@ shipped that have no invocation path at all.
   with LSAN_OPTIONS=fast_unwind_on_malloc=0 and keep the library loaded
   (or ASAN symbolize before unload) to name the allocator, then fix the
   owner or suppress it with a written reason.
+  2026-10-15 diagnosis (Debug ASan build/, all four shards with
+  ctest -j 6 --repeat until-fail, LSAN_OPTIONS=fast_unwind_on_malloc=0):
+  - Reproduced 2 times in about 32 shard runs, in shard 0 and in shard 3.
+    It is not specific to shard 3.
+  - Stack: malloc <- unknown module <- __pthread_once_slow <- unknown
+    module <- start_thread. A thread started by a dlopen'd library
+    allocates 128 bytes in a pthread_once init, and the library is
+    unloaded before exit.
+  - With dlclose made a no-op (LD_PRELOAD shim): 0 leaks in 40 shard
+    runs. So the report exists only because the library unloads while
+    its thread's block is still referenced from the library's own
+    memory.
+  - Next: an LD_PRELOAD shim logs each dlclose's name and load address,
+    so the leaked frames can be matched to a library. Then fix the
+    owner (keep it loaded or shut its thread down first), or suppress
+    it with a written reason.
+  Scratch (not in git): /mnt/Games/Scripts/Linux/vestige-0751-scratch/
+  (the shims' source and the run logs). Delete it when this item closes.
   **Layman:** One group of tests occasionally fails at exit on a small memory leak inside a driver-like library, even though every test in it passed.
   Kind: fix.
   Source: in-session-2026-10-07.
@@ -5675,6 +5693,15 @@ shipped that have no invocation path at all.
   Fog checkbox beside them (settings_editor_panel.cpp). Recommended to the
   user 2026-10-12; awaiting their yes before it becomes planned.
   User said yes (2026-10-15): add both checkboxes.
+  2026-10-15: code written, NOT yet built or committed.
+  settings_editor_panel.cpp adds "Volumetric fog" and "God rays"
+  checkboxes after "Fog intensity", each with a TextDisabled hint. The
+  God rays hint says to untick Volumetric fog at High and Ultra:
+  isGodRaysActive only runs the screen-space fallback when the
+  volumetric pass is off, and qualityRowFor turns volumetrics on at High
+  and Ultra. fog_panel.cpp's hint now points at Help > Settings >
+  Accessibility. The editor stays English (3D_E-0024 spec). No test can
+  draw one tab of the panel, so the check is a screenshot of the tab.
   **Layman:** Let players turn off moving fog and light shafts from the Accessibility settings instead of editing a file.
   Kind: accessibility.
   Source: in-session-2026-10-12 (3D_E-0762 follow-up).
