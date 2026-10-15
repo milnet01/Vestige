@@ -106,7 +106,7 @@ point 5).
 | File | Source | License | Attribution required |
 |------|--------|---------|----------------------|
 | `meadow_wind_loop.ogg` | [Freesound 139337](https://freesound.org/s/139337/) — wind in the grass of a Patagonian plain (felix.blume) | **CC0 1.0** | None |
-| `meadow_birds_loop.ogg` | [Freesound 847380](https://freesound.org/s/847380/) — springtime birdsong with soft wind (rubindaniel) | **CC0 1.0** | None |
+| `meadow_birds_loop.ogg` | [Freesound 416607](https://freesound.org/s/416607/) — song thrush singing (naturenotesuk) | **CC0 1.0** | None |
 | `meadow_insects_loop.ogg` | [Freesound 164656](https://freesound.org/s/164656/) — meadow insects, sunny afternoon (DanGasior) | **CC0 1.0** | None |
 
 The meadow's ambient beds (3D_E-0036). Each is a 90-second cut of

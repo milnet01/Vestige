@@ -1240,7 +1240,7 @@ Full spatial audio pipeline with dynamic mixing, occlusion, and adaptive music. 
   Kind: feature.
   Source: user-request-2026-07-11.
 
-- 🚧 [3D_E-0036] **Meadow realism E — ambient soundscape (birdsong, wind, water, insects).**
+- ✅ [3D_E-0036] **Meadow realism E — ambient soundscape (birdsong, wind, water, insects).**
   Layer a natural ambient audio bed over the meadow using the existing audio subsystem (the AX occlusion / reverb / spatial-audio stack already shipped): a looping ambient base (gentle wind through grass, distant birdsong) **plus** spatialised point emitters — birds chirping from the tree grove, water lapping / trickle at the pond, crickets/insects in the grass, an occasional breeze gust — so the scene *sounds* like a meadow, not just looks like one. Sources: CC0 / free-to-use audio — **Freesound.org** (filter to CC0), **Pixabay** audio, **Kenney** CC0 audio packs, OpenGameArt (CC0). Commit a small curated CC0 set to `assets/audio/ambience/` with ASSET_LICENSES + THIRD_PARTY_NOTICES rows, run through the existing loudness pipeline (default −16 LUFS, AX9). Emitters authored in the meadow scene and hooked into the existing reverb/occlusion so they sit in the space. Generalises to a reusable "ambient audio zone" for future scenes. Needs a short research pass on CC0 audio sources + a design before build. Complements the visual realism program (3D_E-0031..0034).
   Waiting on the user (2026-10-02). The playback side exists (S0016
   AmbientSystem: zones, time-of-day beds, positioned one-shots). Missing:
@@ -1263,6 +1263,12 @@ Full spatial audio pipeline with dynamic mixing, occlusion, and adaptive music. 
   and without sound, see 3D_E-0704). Open: the user listens and names
   swaps or level changes; then flip to shipped and tell
   ants-projects-hub-website. Not done: pond water sound, separate gusts.
+  Resolved (2026-10-15): the user liked the sound but heard a steady hiss
+  with the birds. Clip 847380 measured birds only ~2 dB above its own
+  noise (wind + mic hiss), and filtering did not separate them. Swapped
+  for CC0 Freesound 416607 (song thrush, naturenotesuk): background ~21 dB
+  quieter at the same loudness. The user picked it by ear from three
+  candidates. Loaded in a Release flythrough; 26 ambient tests pass.
   **Layman:** Add the sounds of a real meadow — birds chirping, a breeze, water at the pond, insects — using free-to-use audio.
   Kind: feature.
   Source: user-request-2026-07-11.
@@ -5659,12 +5665,13 @@ shipped that have no invocation path at all.
   Source: in-session-2026-10-12 (trailer filming).
   Lanes: editor.
 
-- 💭 [3D_E-0767] **Add volumetric-fog and god-ray checkboxes to Settings > Accessibility.**
+- 📋 [3D_E-0767] **Add volumetric-fog and god-ray checkboxes to Settings > Accessibility.**
   accessibility.postProcess.volumetricFogEnabled and godRaysEnabled have
   no control anywhere; only settings.json sets them (found fixing
   3D_E-0762). The editor's Settings > Accessibility tab already has the
   Fog checkbox beside them (settings_editor_panel.cpp). Recommended to the
   user 2026-10-12; awaiting their yes before it becomes planned.
+  User said yes (2026-10-15): add both checkboxes.
   **Layman:** Let players turn off moving fog and light shafts from the Accessibility settings instead of editing a file.
   Kind: accessibility.
   Source: in-session-2026-10-12 (3D_E-0762 follow-up).

@@ -203,8 +203,8 @@ Source: <https://freesound.org>
 
 - **`meadow_wind_loop.ogg`** — wind in grass, Tierra del Fuego
   (felix.blume, <https://freesound.org/s/139337/>).
-- **`meadow_birds_loop.ogg`** — springtime birdsong with soft wind
-  (rubindaniel, <https://freesound.org/s/847380/>).
+- **`meadow_birds_loop.ogg`** — song thrush singing
+  (naturenotesuk, <https://freesound.org/s/416607/>).
 - **`meadow_insects_loop.ogg`** — meadow insects on a sunny afternoon
   (DanGasior, <https://freesound.org/s/164656/>).
 
