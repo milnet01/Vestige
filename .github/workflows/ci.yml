@@ -72,7 +72,7 @@ jobs:
       - name: Checkout
         # No submodules in this repo (verified 2026-05-18); `submodules: recursive`
         # was wasted IO — left off intentionally.
-        uses: actions/checkout@9c091bb21b7c1c1d1991bb908d89e4e9dddfe3e0  # v6
+        uses: actions/checkout@3d3c42e5aac5ba805825da76410c181273ba90b1  # v7.0.1
         with:
           # No job here pushes, so the token does not need to outlive the
           # checkout. Leaving it in .git/config exposes it to anything the
@@ -106,7 +106,7 @@ jobs:
         # other). 500 MB ceiling fits within the per-repo cache quota
         # with headroom for the cmake-deps cache. Cache key includes
         # the job name so each job has its own namespace.
-        uses: hendrikmuhs/ccache-action@d62db5f07c26379fc4b4e0916f098a92573c3b03  # v1.2.23
+        uses: hendrikmuhs/ccache-action@f09c25b45002a07be2955cbe52e8cee55643f89d  # v1.2.24
         with:
           key: ${{ github.job }}-${{ matrix.config }}
           max-size: 500M
@@ -150,7 +150,7 @@ jobs:
 
       - name: Upload test logs on failure
         if: failure()
-        uses: actions/upload-artifact@043fb46d1a93c77aae656e7c1c64a875d1fc6a0a  # v7
+        uses: actions/upload-artifact@cf430e030ddbb5b0abf93d22962f4752f3646cd9  # v7.0.2
         with:
           name: ctest-logs-${{ matrix.config }}
           path: |
@@ -169,7 +169,7 @@ jobs:
     timeout-minutes: 60
     steps:
       - name: Checkout
-        uses: actions/checkout@9c091bb21b7c1c1d1991bb908d89e4e9dddfe3e0  # v6
+        uses: actions/checkout@3d3c42e5aac5ba805825da76410c181273ba90b1  # v7.0.1
         with:
           # No job here pushes, so the token does not need to outlive the
           # checkout. Leaving it in .git/config exposes it to anything the
@@ -222,7 +222,7 @@ jobs:
     timeout-minutes: 45
     steps:
       - name: Checkout
-        uses: actions/checkout@9c091bb21b7c1c1d1991bb908d89e4e9dddfe3e0  # v6
+        uses: actions/checkout@3d3c42e5aac5ba805825da76410c181273ba90b1  # v7.0.1
         with:
           # No job here pushes, so the token does not need to outlive the
           # checkout. Leaving it in .git/config exposes it to anything the
@@ -253,7 +253,7 @@ jobs:
         # caches are job-scoped to avoid race-on-save. Per-job key is
         # the safe form; the apt + FetchContent caches already cover
         # the cross-job sharing where it's safe.
-        uses: hendrikmuhs/ccache-action@d62db5f07c26379fc4b4e0916f098a92573c3b03  # v1.2.23
+        uses: hendrikmuhs/ccache-action@f09c25b45002a07be2955cbe52e8cee55643f89d  # v1.2.24
         with:
           key: ${{ github.job }}-Debug
           max-size: 500M
@@ -315,7 +315,7 @@ jobs:
 
       - name: Upload audit reports
         if: always()
-        uses: actions/upload-artifact@043fb46d1a93c77aae656e7c1c64a875d1fc6a0a  # v7
+        uses: actions/upload-artifact@cf430e030ddbb5b0abf93d22962f4752f3646cd9  # v7.0.2
         with:
           name: audit-tier1-report
           path: |
@@ -346,7 +346,7 @@ jobs:
         cmake: ["3.21.0", "latest"]
     steps:
       - name: Checkout
-        uses: actions/checkout@9c091bb21b7c1c1d1991bb908d89e4e9dddfe3e0  # v6
+        uses: actions/checkout@3d3c42e5aac5ba805825da76410c181273ba90b1  # v7.0.1
         with:
           # No job here pushes, so the token does not need to outlive the
           # checkout. Leaving it in .git/config exposes it to anything the
@@ -384,7 +384,7 @@ jobs:
         # FetchContent semantics can produce subtly different compile
         # commands (e.g. -isystem vs -I include flags) and we don't
         # want one to evict the other's hits.
-        uses: hendrikmuhs/ccache-action@d62db5f07c26379fc4b4e0916f098a92573c3b03  # v1.2.23
+        uses: hendrikmuhs/ccache-action@f09c25b45002a07be2955cbe52e8cee55643f89d  # v1.2.24
         with:
           key: ${{ github.job }}-${{ matrix.cmake }}
           max-size: 500M
@@ -432,7 +432,7 @@ jobs:
       ACTIONLINT_SHA256: "8aca8db96f1b94770f1b0d72b6dddcb1ebb8123cb3712530b08cc387b349a3d8"
     steps:
       - name: Checkout
-        uses: actions/checkout@9c091bb21b7c1c1d1991bb908d89e4e9dddfe3e0  # v6
+        uses: actions/checkout@3d3c42e5aac5ba805825da76410c181273ba90b1  # v7.0.1
         with:
           # No job here pushes, so the token does not need to outlive the
           # checkout. Leaving it in .git/config exposes it to anything the
