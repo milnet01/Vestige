@@ -193,14 +193,14 @@ void FogPanel::drawHeightTab(Renderer& renderer)
 void FogPanel::drawVolumetricTab(Renderer& renderer)
 {
     // The master volumetric/god-ray enables are the accessibility post-process
-    // settings, which no menu sets yet (3D_E-0762); surface the current state
-    // read-only so an artist isn't tuning a layer that is switched off without
-    // knowing why.
+    // settings, set in Help > Settings > Accessibility (3D_E-0767); surface the
+    // current state read-only so an artist isn't tuning a layer that is
+    // switched off without knowing why.
     const PostProcessAccessibilitySettings& acc = renderer.getPostProcessAccessibility();
     ImGui::Text("Volumetric: %s   God rays: %s",
                 acc.volumetricFogEnabled ? "on" : "off",
                 acc.godRaysEnabled ? "on" : "off");
-    ImGui::TextDisabled("(master switches: accessibility.postProcess in settings.json)");
+    ImGui::TextDisabled("(master switches: Help > Settings > Accessibility)");
     ImGui::Separator();
 
     // --- Froxel medium + density noise ---

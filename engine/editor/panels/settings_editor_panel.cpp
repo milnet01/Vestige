@@ -712,6 +712,23 @@ void SettingsEditorPanel::drawAccessibilityTab()
         m_editor->mutate([fogScale](Settings& s) { s.accessibility.postProcess.fogIntensityScale = fogScale; });
     }
 
+    // 3D_E-0767. The two light-shaft sources are separate switches
+    // (isGodRaysActive, volumetric_fog.h): "God rays" is only the screen-space
+    // fallback; with graphics.volumetrics on (High, Ultra) the shafts come from
+    // volumetric fog instead.
+    bool volFog = p.accessibility.postProcess.volumetricFogEnabled;
+    if (ImGui::Checkbox("Volumetric fog", &volFog))
+    {
+        m_editor->mutate([volFog](Settings& s) { s.accessibility.postProcess.volumetricFogEnabled = volFog; });
+    }
+    ImGui::TextDisabled("    (moving haze and light shafts, at the High and Ultra presets)");
+    bool godRays = p.accessibility.postProcess.godRaysEnabled;
+    if (ImGui::Checkbox("God rays", &godRays))
+    {
+        m_editor->mutate([godRays](Settings& s) { s.accessibility.postProcess.godRaysEnabled = godRays; });
+    }
+    ImGui::TextDisabled("    (light shafts at Low and Medium; at High and Ultra, untick Volumetric fog)");
+
     // Dynamic GI (Slice R4). A shipping effect — toggling it has an immediate
     // visible result (unlike the DoF/motion-blur scaffolding above). Active only
     // in TAA/SMAA modes. Reduce-motion freezes its froxel cache.
