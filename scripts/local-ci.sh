@@ -318,6 +318,8 @@ xvfb-run --auto-servernum ctest --test-dir build --output-on-failure -j $JOBS -L
 # Real MSVC toolchain (cl.exe + Windows SDK) under Wine via msvc-wine. Override
 # MSVC_WINE_BIN to relocate the install.
 MSVC_WINE_BIN="${MSVC_WINE_BIN:-$HOME/tools/msvc-wine/msvc/bin/x64}"
+# Seconds one Windows test may run under Wine before it is failed (see below).
+MSVC_TEST_TIMEOUT="${VESTIGE_CI_MSVC_TEST_TIMEOUT:-600}"
 
 # Cross-compile the engine with MSVC under Wine and run the compiled gtest suite —
 # mirrors ci.yml's windows-build-test. Ninja + cl (no VS generator on Linux);
@@ -374,7 +376,13 @@ build_and_test_msvc() {
         # one is reported Passed, because the mangled code happens to match its
         # inverted expectation. So a new audit's negative fixtures go green and only
         # its positive cases go red — measured on InputPollAudit, 3 green / 2 red.
+        #
+        # --timeout fails a test that hangs under Wine (3D_E-0768 hung in glfwInit
+        # and blocked a push) instead of stalling the push. A shard takes about a
+        # minute. ctest's kill ends the .exe under Wine too (checked 2026-10-19
+        # with a forced 3 s limit: nothing was left running).
         "${GL_WRAP[@]}" ctest --test-dir build-msvc --output-on-failure -j "$JOBS" -LE perf \
+            --timeout "$MSVC_TEST_TIMEOUT" \
             -E 'LocalizationAudit|ShaderLint|ShaderCompile|PerfGate|InputPollAudit' || exit 1
     )
     local rc=$?
