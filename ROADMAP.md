@@ -1,6 +1,6 @@
 <!-- ants-roadmap-format: 1 -->
 <!-- Generated from the Ants Terminal roadmap store. Edit it with roadmap_log; hand edits are discarded by the next write. -->
-<!-- ants-roadmap-id-high-water: 3D_E=768 3D_E#S=989 -->
+<!-- ants-roadmap-id-high-water: 3D_E=771 3D_E#S=989 -->
 
 # Vestige Engine Roadmap
 
@@ -5467,6 +5467,15 @@ shipped that have no invocation path at all.
   never captured. Next try: no shim, run gtest directly with output kept
   (not through ctest), until a leak appears; then compare its frame
   addresses against /proc/<pid>/maps, or log dlopen addresses to a file.
+  2026-10-19: no shim, gtest run directly (4 shards side by side,
+  LSAN_OPTIONS=fast_unwind_on_malloc=0, LD_DEBUG=files logging each
+  library's load address): 0 leaks in 160 shard runs. Since the two
+  hits on 2026-10-15 that makes 0 in 264 runs across three setups.
+  Those two hits came from a full `ctest -j 6` (every test, more load).
+  Next: repeat exactly that (ctest -j 6 --repeat until-fail, all tests,
+  no shim), once; if it stays clean, add an LSan suppression for the
+  unknown-module pthread_once stack with this history as the reason.
+  Script: vestige-0751-scratch/hunt.sh.
   **Layman:** One group of tests occasionally fails at exit on a small memory leak inside a driver-like library, even though every test in it passed.
   Kind: fix.
   Source: in-session-2026-10-07.
@@ -5710,6 +5719,12 @@ shipped that have no invocation path at all.
   and Ultra. fog_panel.cpp's hint now points at Help > Settings >
   Accessibility. The editor stays English (3D_E-0024 spec). No test can
   draw one tab of the panel, so the check is a screenshot of the tab.
+  2026-10-19: committed. Debug build clean; 169 settings tests pass.
+  Screenshot NOT done: demoreel --gpu reached the open Settings window
+  (Accessibility at about 120,212 on a 1600x1000 screen) but the run that
+  clicked Accessibility showed no Settings window. Software GL never drew
+  (the meadow loads first). Each run needs --settle 150 on the Debug
+  build. Open: one visual check of the tab, then flip to shipped.
   **Layman:** Let players turn off moving fog and light shafts from the Accessibility settings instead of editing a file.
   Kind: accessibility.
   Source: in-session-2026-10-12 (3D_E-0762 follow-up).
@@ -5732,6 +5747,35 @@ shipped that have no invocation path at all.
   Kind: fix.
   Source: in-session-2026-10-15 (push of cf5e3ff).
   Lanes: tests, ci.
+
+- 📋 [3D_E-0769] **Command-line options: --editor does not undo --player, and the --isolate-feature name list has drifted.**
+  Found by the review-readability draft trial, 2026-10-19; each checked
+  by hand.
+  - app/cli_args.cpp: `--player --editor` leaves enableGameScreens on
+    while startInPlayMode goes off. The --editor comment implies it
+    restores the default. Clear it too, or say it does not.
+  - engine/core/engine.h, EngineConfig::isolateFeature's comment lists 4
+    names; engine.cpp's dispatch and warning, and the --help text, list 8.
+    The names live in four places; one table would end the drift.
+  - --scene and --bake-acoustics both write startupScene; the last wins
+    with no warning.
+  - An empty --isolate-feature= is silently ignored, while an empty
+    --profile-log= is an error. Pick one rule.
+  **Layman:** Two launch options don't do quite what their notes say: one leaves the game menus on, and one note lists half the accepted names.
+  Kind: fix.
+  Source: review-readability-trial-2026-10-19.
+  Lanes: app.
+
+- 📋 [3D_E-0771] **The meadow logs thousands of GL_INVALID_OPERATION errors in glDrawElements.**
+  Seen 2026-10-19 in the Debug build on the RX 6600 (demoreel --gpu,
+  editor, meadow): the first error comes right after "TerrainRenderer:
+  created 33x33 grid mesh", then about 3,900 in one ~3-minute run.
+  Noted in July as "on the meadow foliage", pre-existing, never filed.
+  Next: break on the GL debug callback to name the draw call.
+  **Layman:** The graphics driver rejects one of the meadow's drawing calls every frame; it may be hiding a missing effect.
+  Kind: fix.
+  Source: in-session-2026-10-19 (0767 screenshot).
+  Lanes: renderer.
 
 ## 0.3.0 — An editor a builder can use
 
@@ -10223,3 +10267,17 @@ record, and a real clearance before commercial release needs counsel.
   User decision 2026-10-07: moved out of 0.2.0 to Unscheduled, as
   recommended. Schedule it with the release that builds the AI Director.
   Kind: implement.
+
+- 📋 [3D_E-0770] **Tidy the command-line parser: shared value-fetch helper and computed prefix lengths.**
+  Found by the review-readability draft trial, 2026-10-19.
+  - app/cli_args.cpp copies the "option needs a value" check four times;
+    those copies omit the "Run --help" hint the unknown-option branch
+    prints. One helper.
+  - The prefix lengths 18 and 14 for --isolate-feature= and --profile-log=
+    are hand-counted; compute them from the option text.
+  - printUsage and parseArgs list the same options separately with nothing
+    tying them (not raised by the lane; seen by hand).
+  **Layman:** Small clean-ups so the next person adding a launch option can't get it subtly wrong.
+  Kind: refactor.
+  Source: review-readability-trial-2026-10-19.
+  Lanes: app.
