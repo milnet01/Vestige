@@ -5712,7 +5712,7 @@ shipped that have no invocation path at all.
   Source: in-session-2026-10-12 (trailer filming).
   Lanes: editor.
 
-- 📋 [3D_E-0767] **Add volumetric-fog and god-ray checkboxes to Settings > Accessibility.**
+- ✅ [3D_E-0767] **Add volumetric-fog and god-ray checkboxes to Settings > Accessibility.**
   accessibility.postProcess.volumetricFogEnabled and godRaysEnabled have
   no control anywhere; only settings.json sets them (found fixing
   3D_E-0762). The editor's Settings > Accessibility tab already has the
@@ -5734,6 +5734,11 @@ shipped that have no invocation path at all.
   clicked Accessibility showed no Settings window. Software GL never drew
   (the meadow loads first). Each run needs --settle 150 on the Debug
   build. Open: one visual check of the tab, then flip to shipped.
+  2026-10-20: visual check done. demoreel shot --gpu -s 1920x1080 of the
+  Debug editor (Help > Settings, window dragged taller, Accessibility)
+  shows Volumetric fog and God rays after Fog intensity, each with its
+  hint. Clicks need -s 1920x1080: the editor resizes itself to that, so
+  the default 1600x1000 frame crops it.
   **Layman:** Let players turn off moving fog and light shafts from the Accessibility settings instead of editing a file.
   Kind: accessibility.
   Source: in-session-2026-10-12 (3D_E-0762 follow-up).

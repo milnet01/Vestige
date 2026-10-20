@@ -25,6 +25,14 @@ may change any interface without notice.
 
 ## [Unreleased]
 
+### 2026-10-19 Added — Volumetric fog and God rays can be switched off in Settings (3D_E-0767)
+
+Help > Settings > Accessibility has two new checkboxes after Fog
+intensity: Volumetric fog and God rays. Before, only editing
+settings.json could turn them off. The God rays hint says to untick
+Volumetric fog at the High and Ultra presets, because the screen-space
+light shafts run only while the volumetric pass is off.
+
 ### 2026-10-15 Fixed — Local CI's Windows tests no longer hang under Wine (3D_E-0768)
 
 scripts/local-ci.sh gave its Windows test stage xvfb-run's default
