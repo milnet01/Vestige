@@ -5701,6 +5701,19 @@ shipped that have no invocation path at all.
   ImGui::GetContentRegionAvail() inside the child and
   ed::GetCurrentZoom() on the first frames and the fit frame, with
   NodeEditor.json present vs deleted. Contract: none.
+  2026-10-20, later: REPRODUCED and the earlier hypothesis REFUTED.
+  Debug editor, demoreel --gpu -s 1920x1080, View > Script Editor only
+  (no template): the grid draws only in a strip at the canvas's top-left
+  (about 530x100 px of an 880x524 canvas) on every frame, while a
+  temporary readout showed the child's content region 880x524 and
+  ed::GetCurrentZoom() 0.769, both sane, with no fit pending. So the
+  size and zoom are right and the drawing or clip region is wrong. Next:
+  look at what imgui-node-editor's canvas (ImGuiEx::Canvas in
+  build/_deps/imgui_node_editor-src) takes as its view rect and clip
+  rect on the first frames, and whether the saved NodeEditor.json
+  \"visible_rect\" (about 630x370 at zoom 1.37) is what sizes the strip;
+  retry with NodeEditor.json deleted. The readout was a local edit,
+  removed, not committed.
   **Layman:** Opening the script editor sometimes shows a broken grey patch instead of the node diagram.
   Kind: fix.
   Source: in-session-2026-10-12 (trailer filming).
