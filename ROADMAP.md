@@ -1,6 +1,6 @@
 <!-- ants-roadmap-format: 1 -->
 <!-- Generated from the Ants Terminal roadmap store. Edit it with roadmap_log; hand edits are discarded by the next write. -->
-<!-- ants-roadmap-id-high-water: 3D_E=771 3D_E#S=989 -->
+<!-- ants-roadmap-id-high-water: 3D_E=774 3D_E#S=989 -->
 
 # Vestige Engine Roadmap
 
@@ -1212,13 +1212,17 @@ Full spatial audio pipeline with dynamic mixing, occlusion, and adaptive music. 
   Follow-on 3D_E-0040 filed: procedural vegetation generator, so future
   plants need neither a download nor a licence row.
 
-- 🚧 [3D_E-0034] **Meadow realism D — sky, water & colour polish.**
+- ✅ [3D_E-0034] **Meadow realism D — sky, water & colour polish.**
   A committed CC0 partly-cloudy day HDRI (blue sky + white clouds), a colour-grade pass for vivid natural greens, and water reflection/refraction tuning so the pond convincingly mirrors the treeline. Mood + reflections to match the reference photos. Phase D — final polish once A–C land.
   Progress (2026-10-02, 87626d2): sky swapped to Kloofendal 48d Partly
   Cloudy (CC0) and the sun aimed at the photo's own sun (47.9 deg). Before
   and after stills checked. Left for the user: colour grade and water
   tuning need the reference photos, which were never saved. Recommend:
   the user picks two or three photos, then a session tunes against them.
+  2026-10-20: user decision: the photos were already supplied; the scene
+  now differs from them, and the user likes it as it is, so no
+  photo-matching remains. Follow-ups filed: the sky shows no sun, and a
+  sweep for remaining low-poly or unrealistic elements.
   **Layman:** Add clouds, richer colour, and better water reflections to finish the look.
   Kind: enhancement.
   Source: user-request-2026-07-11 (realism overhaul; fixture 3D_E-0027).
@@ -4750,12 +4754,15 @@ shipped that have no invocation path at all.
   Source: peer-doom-ants-2026-09-26 message 41.
   Lanes: tooling.
 
-- 📋 [3D_E-0720] **Write Vestige's discovery note: what it is for and how we would know 1.0 works.**
+- ✅ [3D_E-0720] **Write Vestige's discovery note: what it is for and how we would know 1.0 works.**
   ~/.claude/workflow.md § 1 counts a project as state 1 until something a
   stranger can read says what it is for and how we would know it works.
   Vestige has code, a roadmap and ARCHITECTURE.md, but no such note; the
   nearest is the 1.0.0 heading. Write it with the user (workflow.md § 3,
   discovery), naming the signs of success 1.0 must meet.
+  2026-10-20: docs/discovery.md written from the user's answers and
+  agreed; each never line confirmed on its own. Signs are labelled
+  SIGN-1..SIGN-4. Roadmap coverage of those signs is 3D_E-0774.
   **Layman:** A short page, agreed with the user, saying what the engine is for and what the Tabernacle walkthrough must do to count as working.
   Kind: doc.
   Source: user-request-2026-09-29.
@@ -4916,7 +4923,7 @@ shipped that have no invocation path at all.
   Source: user-report-2026-09-29 (screenshots).
   Lanes: renderer, water.
 
-- 🚧 [3D_E-0725] **Fly-mode camera passes through the terrain: its floor was world Y 0, not the ground.**
+- ✅ [3D_E-0725] **Fly-mode camera passes through the terrain: its floor was world Y 0, not the ground.**
   FirstPersonController fly mode (the default) clamped the eye to
   playerHeight above world Y = 0; the meadow ground sits 3-7 m up.
   Fix: FirstPersonController::flyModeFloorY keeps the eye playerHeight
@@ -4936,6 +4943,8 @@ shipped that have no invocation path at all.
   trunk box per tree (x scale) each frame (legacy AABB controller
   only; Jolt controller path not covered). Tests:
   test_fly_mode_ground_clamp, test_blocks_movement (red-proven).
+  2026-10-20: user confirmed it done. The Jolt walker's fall through the
+  ground stays open as 3D_E-0757.
   **Layman:** Flying the camera down went straight through the ground and showed the world from underneath; now it stops just above the ground.
   Kind: fix.
   Source: user-report-2026-09-29 (screenshots).
@@ -5776,6 +5785,36 @@ shipped that have no invocation path at all.
   Kind: fix.
   Source: in-session-2026-10-19 (0767 screenshot).
   Lanes: renderer.
+
+- 📋 [3D_E-0772] **The meadow sky shows no sun.**
+  Reported by the user 2026-10-20 while closing 3D_E-0034. The sun
+  was aimed at the HDRI's own sun (47.9 deg) on 2026-10-02. Next: check
+  whether a sun disc is drawn at all, and whether the HDRI's sun is
+  clipped or hidden by the sky pass or the clouds.
+  **Layman:** The meadow's sky has clouds and light, but you can't see the sun itself anywhere in it.
+  Kind: fix.
+  Source: user-request-2026-10-20 (3D_E-0034 follow-up).
+  Lanes: renderer.
+
+- 📋 [3D_E-0773] **Find and replace every low-poly or unrealistic element left in the meadow.**
+  User request 2026-10-20 while closing 3D_E-0034: the scene looks
+  fantastic; ensure no low-poly elements remain and everything is
+  realistic. Start with a close-up inventory (rocks, logs, bushes,
+  shore plants, lily pads, trees, terrain edges), one still per element,
+  then file each one that falls short. Trees and vegetation already
+  have a program: 3D_E-0040 and the realism decisions in memory.
+  **Layman:** Go over the meadow piece by piece and replace anything that still looks blocky or fake.
+  Kind: enhancement.
+  Source: user-request-2026-10-20 (3D_E-0034 follow-up).
+  Lanes: renderer, assets.
+
+- 📋 [3D_E-0774] **Give each discovery sign (SIGN-1 to SIGN-4) a roadmap item that claims it.**
+  docs/discovery.md (agreed 2026-10-20) lists four signs. Run
+  check-queue; where a sign has no item citing its label, file one in
+  the 1.0.0 section (3D_E-0691 is the natural home for SIGN-1).
+  **Layman:** Make sure every goal in the new discovery page has planned work behind it.
+  Kind: chore.
+  Source: user-request-2026-10-20 (3D_E-0720 follow-up).
 
 ## 0.3.0 — An editor a builder can use
 
