@@ -25,6 +25,23 @@ may change any interface without notice.
 
 ## [Unreleased]
 
+### 2026-10-20 Added — Player Settings: Audio, Controls and Accessibility pages (3D_E-0759)
+
+The game's Settings screen now switches pages when a category is
+clicked or chosen with the keyboard. Audio has the six volume sliders
+and headphone 3D sound. Controls has mouse sensitivity, invert mouse
+look and the two stick dead zones; changing keys comes later
+(3D_E-0781). Accessibility has interface scale, contrast, motion,
+subtitles, colour vision, photosensitive mode and the fog and lighting
+switches. Gameplay is hidden until a game defines an option. The new
+text is translated into every shipped language as a draft.
+
+### 2026-10-20 Fixed — No more phantom "Change Material property" undo steps (3D_E-0766)
+
+Editing a transform field, or typing in the Save dialog, no longer adds
+material steps to History. Only an edit inside the material controls
+does.
+
 ### 2026-10-20 Fixed — The physics walk (P) no longer falls through the meadow (3D_E-0757)
 
 Jolt's only ground was a flat box at height 0, metres below the meadow,

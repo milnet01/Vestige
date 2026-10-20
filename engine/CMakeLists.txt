@@ -347,6 +347,10 @@ set(ENGINE_SOURCES
     ui/ui_keybind_row.cpp
     ui/menu_prefabs.cpp
     ui/graphics_settings_page.cpp
+    ui/audio_settings_page.cpp
+    ui/controls_settings_page.cpp
+    ui/accessibility_settings_page.cpp
+    ui/settings_page_layout.cpp
     ui/ui_notification_toast.cpp
     systems/ui_system.cpp
     # Phase 9F: 2D game support

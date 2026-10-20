@@ -21,6 +21,8 @@
 #include "ui/ui_theme.h"
 
 #include <functional>
+#include <string>
+#include <vector>
 
 namespace Vestige
 {
@@ -102,11 +104,21 @@ struct SettingsMenuActions
     std::function<void()> revert;           ///< Drop the unsaved changes.
     std::function<void()> restoreDefaults;  ///< Reset the page's options.
     std::function<bool()> isDirty;          ///< True while there are unsaved changes.
+
+    /// 3D_E-0759: the sidebar's categories, as string-table keys, top to
+    /// bottom. Non-empty: each is a focusable button that highlights itself
+    /// and calls `selectCategory` with its index. Empty: the static
+    /// five-label sidebar with Display highlighted.
+    std::vector<std::string> categories;
+    std::function<void(int)> selectCategory;  ///< A category was clicked or activated.
+    int activeCategory = 0;                   ///< The category highlighted when built.
 };
 
 /// @brief 3D_E-0035 overload: the chrome with working footer buttons. Apply
 ///        and Revert are enabled, and the status reads `ui.settings.unsaved`,
 ///        only while `actions.isDirty()` is true; this updates each frame.
+///        With `actions.categories` set, the sidebar lists those categories
+///        and switches between them (3D_E-0759).
 void buildSettingsMenu(UICanvas& canvas,
                         const UITheme& theme,
                         TextRenderer* textRenderer,

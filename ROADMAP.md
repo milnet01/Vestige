@@ -1,6 +1,6 @@
 <!-- ants-roadmap-format: 1 -->
 <!-- Generated from the Ants Terminal roadmap store. Edit it with roadmap_log; hand edits are discarded by the next write. -->
-<!-- ants-roadmap-id-high-water: 3D_E=782 3D_E#S=989 -->
+<!-- ants-roadmap-id-high-water: 3D_E=785 3D_E#S=989 -->
 
 # Vestige Engine Roadmap
 
@@ -5637,7 +5637,7 @@ shipped that have no invocation path at all.
   Source: in-session-2026-10-12 (trailer filming).
   Lanes: editor, audio.
 
-- 📋 [3D_E-0759] **Player Settings: Audio, Controls, Gameplay and Accessibility are names with no pages.**
+- ✅ [3D_E-0759] **Player Settings: Audio, Controls, Gameplay and Accessibility are names with no pages.**
   menu_prefabs.cpp builds the five sidebar categories as plain labels;
   only Display has a page (graphics_settings_page.cpp). Clicking them
   in the v0.1.76 download does nothing (recorded 2026-10-12). The
@@ -5650,6 +5650,16 @@ shipped that have no invocation path at all.
   container is visible. Escape hatch: if Controls rebinding needs a
   capture design of its own, stop and spec that part alone. CPU / GPU
   placement: not GPU work.
+  2026-10-20: Audio, Controls and Accessibility pages
+  (engine/ui/*_settings_page.*, shared layout in
+  settings_page_layout.*), sidebar categories are focusable buttons that
+  switch which page container shows; Gameplay left out (3D_E-0782), key
+  rebinding split (3D_E-0781). Restore defaults resets the active page's
+  section; Controls resets only its four fields so the key bindings
+  survive. 36 new keys in all nine tables (Claude-written drafts,
+  3D_E-0776). Tests: tests/test_settings_pages.cpp (16). Checked in-app:
+  --player, Esc, Settings, each category. Follow-ups 3D_E-0784,
+  3D_E-0785.
   **Layman:** In the game's Settings screen only the Display page works; clicking the other four names does nothing.
   Kind: fix.
   Source: in-session-2026-10-12 (trailer filming).
@@ -5681,6 +5691,16 @@ shipped that have no invocation path at all.
   draws no nodes. Two recordings, both broken; one still picture of
   the same steps drew the nodes (tiny). Intermittent; not yet seen on
   the real desktop.
+  2026-10-20 locate-defect: hypothesis: ScriptEditorPanel::renderGraph's
+  deferred m_needsFitView -> navigateToContent(), plus the view restored
+  from NodeEditor.json (zoom 1.37, visible_rect about 630x370), are
+  applied while the ##script-canvas child has a stale or tiny size (the
+  editor resizes its own window to 1920x1080 at start; headless frames
+  are slow), so imgui-node-editor computes a collapsed zoom: nodes tiny
+  or off-screen, grid clipped to a corner. Confirm by: log
+  ImGui::GetContentRegionAvail() inside the child and
+  ed::GetCurrentZoom() on the first frames and the fit frame, with
+  NodeEditor.json present vs deleted. Contract: none.
   **Layman:** Opening the script editor sometimes shows a broken grey patch instead of the node diagram.
   Kind: fix.
   Source: in-session-2026-10-12 (trailer filming).
@@ -5710,6 +5730,18 @@ shipped that have no invocation path at all.
   "Selected entity not found (ID 1276)" while the cube is ID 1317.
   Steps: wait, move 276 14, click, move 290 78, move 397 78, click,
   drag 968 432 1180 432, key ctrl+d.
+  2026-10-20 locate-defect, not settled by reading:
+  Scene::duplicateEntity, EntityActions::duplicateEntity (selects the
+  clone) and CreateEntityCommand (no-op first execute) read correct.
+  Entity ids come from one global counter (Entity::s_nextId), so a
+  clone's id is always higher than its original's: the Inspector's \"not
+  found (ID 1276)\" beside a live cube 1317 suggests the ORIGINAL (1276)
+  vanished and the clone survived, not that the clone failed. Two Ctrl+D
+  handlers exist (Editor at editor.cpp, Ctrl+D block; HierarchyPanel
+  when its window is focused), and the Editor one skips the
+  WantTextInput check. Next: rerun the note's demoreel steps with
+  --app-log and read the \"Duplicated:\" / \"Deleted entity ID\" lines
+  and the History panel to see which entity is removed and by what.
   **Layman:** Duplicating an object in the editor looks like it worked, but no copy shows up and the selected object goes blank.
   Kind: fix.
   Source: in-session-2026-10-12 (trailer filming).
@@ -5722,18 +5754,36 @@ shipped that have no invocation path at all.
   the Sun recoloured to 50/50/70; only a faint glint on the pond. Clip
   03 of the trailer footage noted the same. Next: check the light reaches
   the forward/deferred light list and its intensity against the sun's.
+  2026-10-20 locate-defect, reading only: the path is
+  Scene::collectRenderData (scene.cpp, PointLightComponent ->
+  data.pointLights) -> Renderer::applySceneLights (keeps the first
+  MAX_POINT_LIGHTS = 8, silently) -> scene.frag.glsl point-light loops.
+  Two candidates to separate with one run: (a) the light is dropped
+  because 8 earlier point lights (including synthetic ones from
+  EmissiveLightComponent) fill the cap first, so log
+  m_pointLights.size() and whether the new light is in it; (b) it is
+  there but too weak: EntityFactory::createPointLight gives diffuse 1.0
+  against a sun of 1.15 plus sky/IBL ambient under auto-exposure, so
+  compare the cube's lit colour with the light on and off. Grass and
+  terrain use their own shaders; check they read u_pointLights at all.
   **Layman:** Adding a lamp in the editor does not light anything up that you can see.
   Kind: investigate.
   Source: in-session-2026-10-12 (trailer filming).
   Lanes: renderer, editor.
 
-- 📋 [3D_E-0766] **Editing a transform field, or typing in the Save dialog, adds unrelated "Change Material property" steps to History.**
+- ✅ [3D_E-0766] **Editing a transform field, or typing in the Save dialog, adds unrelated "Change Material property" steps to History.**
   Recorded 2026-10-12 on the v0.1.76 download: with a new cube selected,
   typing three Inspector values (double-click, Ctrl+A, value, Enter)
   left ten History steps, six of them "Change Material property". Typing a
   name into File > Save Scene As with the cube selected added three more.
   Sun colour edits, by contrast, added no History step at all; check
   whether light colour changes are undoable.
+  2026-10-20: the material block now sits in a GroupEditWatch
+  (edit_tracker.h) and records a step only when a widget inside it is
+  released, instead of asking ImGui::IsAnyItemActive().
+  tests/test_group_edit_watch.cpp: dragging a field outside the group
+  recorded a step under the old check (red) and none now. The
+  light-colour half of the note is 3D_E-0783.
   **Layman:** The undo list fills with material changes the user never made, so undo steps through invisible edits.
   Kind: fix.
   Source: in-session-2026-10-12 (trailer filming).
@@ -5916,6 +5966,42 @@ shipped that have no invocation path at all.
   **Layman:** When a game built on Vestige has its own options, give them a Gameplay page in Settings.
   Kind: feature.
   Source: user-decision-2026-10-20 (3D_E-0759 split).
+  Lanes: ui.
+
+- 📋 [3D_E-0783] **Light inspectors: no undo, and Advanced Colors edits are overwritten every frame.**
+  Found 2026-10-20 checking 3D_E-0766's note that Sun colour edits
+  leave no History step. InspectorPanel::drawDirectionalLight and
+  drawPointLight (and drawSpotLight, same shape) call ColorEdit3 with no
+  EditTracker / DragUndo, so nothing is undoable. They also set
+  light.specular = diffuse and light.ambient = diffuse * k every frame
+  before the "Advanced Colors" tree, so an Ambient or Specular edit is
+  replaced the next frame. Either derive them only when Color changes,
+  or drop the Advanced tree.
+  **Layman:** Changing a light's colour can't be undone, and the extra colour settings for lights snap back as soon as you change them.
+  Kind: fix.
+  Source: in-session-2026-10-20 (3D_E-0766 side note).
+  Lanes: editor.
+
+- 📋 [3D_E-0784] **Player Settings > Display: Tab walks the options bottom to top.**
+  buildGraphicsSettingsPage adds its controls bottom row first (so an
+  open dropdown list sits above the rows below it), and UISystem's tab
+  order follows insertion order. The Audio, Controls and Accessibility
+  pages (3D_E-0759) add top to bottom. Give the tab order its own
+  sequence, or order Display top to bottom if the dropdown overlap no
+  longer depends on it (UISystem draws the open list last).
+  **Layman:** Pressing Tab on the Display settings page jumps to the last option first and moves upwards.
+  Kind: fix.
+  Source: in-session-2026-10-20 (3D_E-0759 build).
+  Lanes: ui.
+
+- 📋 [3D_E-0785] **Player Settings sidebar: at 1.5x and 2.0x interface scale a category's hover fill spills into the next row.**
+  The category buttons (menu_prefabs.cpp, addSettingsCategoryButtons)
+  take their height from the theme's button height, which grows with
+  interface scale, while the rows stay 56 px apart. Clicks still land
+  on the right row.
+  **Layman:** With the interface made larger, the highlight behind a Settings category overlaps the one below it.
+  Kind: fix.
+  Source: in-session-2026-10-20 (3D_E-0759 build).
   Lanes: ui.
 
 ## 0.3.0 — An editor a builder can use
@@ -10454,7 +10540,7 @@ record, and a real clearance before commercial release needs counsel.
   recommended. Schedule it with the release that builds the AI Director.
   Kind: implement.
 
-- 📋 [3D_E-0770] **Tidy the command-line parser: shared value-fetch helper and computed prefix lengths.**
+- ✅ [3D_E-0770] **Tidy the command-line parser: shared value-fetch helper and computed prefix lengths.**
   Found by the review-readability draft trial, 2026-10-19.
   - app/cli_args.cpp copies the "option needs a value" check four times;
     those copies omit the "Run --help" hint the unknown-option branch
@@ -10463,6 +10549,11 @@ record, and a real clearance before commercial release needs counsel.
     are hand-counted; compute them from the option text.
   - printUsage and parseArgs list the same options separately with nothing
     tying them (not raised by the lane; seen by hand).
+  2026-10-20: takeValue() is the one missing-value check (now with the
+  --help hint); the --isolate-feature= and --profile-log= prefixes are
+  named constants with computed lengths. Not done: one table tying
+  printUsage to parseArgs; the --isolate-feature names already share one
+  list (3D_E-0769).
   **Layman:** Small clean-ups so the next person adding a launch option can't get it subtly wrong.
   Kind: refactor.
   Source: review-readability-trial-2026-10-19.

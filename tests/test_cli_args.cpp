@@ -139,6 +139,16 @@ TEST(CliArgs, SceneFlagTakesPathValue)
     EXPECT_EQ(r.config.startupScene, "my.scene");
 }
 
+TEST(CliArgs, OptionMissingItsValueIsAnError)
+{
+    for (const char* option : {"--scene", "--assets", "--bake-acoustics", "--demo-capture"})
+    {
+        auto r = run({option});
+        EXPECT_FALSE(r.ok) << option;
+        EXPECT_EQ(r.exitCode, 2) << option;
+    }
+}
+
 TEST(CliArgs, TwoSceneOptionsAreAnError)
 {
     // 3D_E-0769 — both write the startup scene; the parser refuses to pick one.

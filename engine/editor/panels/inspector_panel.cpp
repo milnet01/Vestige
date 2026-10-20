@@ -471,25 +471,23 @@ void InspectorPanel::drawMeshRenderer(Entity& entity)
         // call setters directly inside drawMaterialBlinnPhong / drawMaterialPbr /
         // drawMaterialTextures / drawMaterialTransparency; threading an
         // EditTracker through those signatures would touch five methods.
-        // Instead snapshot before the call and detect "any-item-active just
-        // released" after — coarser than per-widget but correct for the
+        // Instead snapshot before the call and detect "a widget inside it
+        // just released" after — coarser than per-widget but correct for the
         // common case (one drag = one undo entry).
         auto& mat = *mr->getMaterial();
         const bool sameEntityAsLast =
             (m_materialEditingEntity == entity.getId());
-        if (!m_materialEditing || !sameEntityAsLast)
+        if (!m_materialWatch.active() || !sameEntityAsLast)
         {
             m_materialBefore = mat;
             m_materialEditingEntity = entity.getId();
         }
 
+        m_materialWatch.begin();
         drawMaterial(mat);
+        const bool released = m_materialWatch.end();
 
-        const bool isAnyActiveNow = ImGui::IsAnyItemActive();
-        const bool wasEditing = m_materialEditing;
-        m_materialEditing = isAnyActiveNow;
-
-        if (wasEditing && !isAnyActiveNow && m_commandHistory && m_currentScene)
+        if (released && m_commandHistory && m_currentScene)
         {
             const uint32_t editedEntityId = m_materialEditingEntity;
             Material beforeSnapshot = m_materialBefore;

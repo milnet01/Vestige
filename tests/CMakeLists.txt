@@ -166,6 +166,7 @@ add_executable(vestige_tests
     test_text_centering.cpp
     test_ui_canvas_layers.cpp
     test_graphics_settings_page.cpp
+    test_settings_pages.cpp
     test_ui_world_projection.cpp
     test_ui_design_widgets.cpp
     test_ui_theme_accessibility.cpp
@@ -191,6 +192,7 @@ add_executable(vestige_tests
     test_underwater_parity.cpp
     test_blocks_movement.cpp
     test_edit_tracker_drag_undo.cpp
+    test_group_edit_watch.cpp
     test_shader_copies_registry.cpp
     test_renderer_view_override.cpp
     test_update_core.cpp

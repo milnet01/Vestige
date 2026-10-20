@@ -3,22 +3,26 @@
 
 #include "ui/graphics_settings_page.h"
 
+#include "ui/accessibility_settings_page.h"
+#include "ui/audio_settings_page.h"
+#include "ui/controls_settings_page.h"
+
 #include "core/settings.h"
 #include "core/settings_editor.h"
 #include "localization/localization_service.h"
 #include "systems/ui_system.h"
 #include "ui/menu_prefabs.h"
+#include "ui/settings_page_layout.h"
 #include "ui/ui_canvas.h"
 #include "ui/ui_checkbox.h"
 #include "ui/ui_dropdown.h"
 #include "ui/ui_frame_hook.h"
-#include "ui/ui_label.h"
+#include "ui/ui_panel.h"
 #include "ui/ui_slider.h"
 #include "ui/ui_theme.h"
 
 #include <algorithm>
 #include <array>
-#include <cmath>
 #include <memory>
 #include <string>
 #include <utility>
@@ -29,12 +33,7 @@ namespace Vestige
 namespace
 {
 
-// Content area of the Settings chrome (menu_prefabs.cpp): right of the
-// sidebar, above the footer rule.
-constexpr float kLabelX   = 468.0f;
-constexpr float kControlX = 1000.0f;
-constexpr float kFirstRow = 236.0f;
-constexpr float kRowStep  = 52.0f;
+using namespace SettingsPageLayout;
 
 constexpr const char* kPresetOptions[] = {
     "ui.settings.graphics.preset.low",
@@ -94,53 +93,6 @@ constexpr const char* kFooterKeys[] = {
     "ui.settings.restore_defaults",
 };
 
-template <typename T, std::size_t N>
-int indexOf(const T (&values)[N], T value)
-{
-    for (std::size_t i = 0; i < N; ++i)
-    {
-        if (values[i] == value)
-        {
-            return static_cast<int>(i);
-        }
-    }
-    return 0;
-}
-
-float rowY(int row)
-{
-    return kFirstRow + kRowStep * static_cast<float>(row);
-}
-
-template <std::size_t N>
-std::unique_ptr<UIDropdown> makeDropdown(const char* const (&keys)[N], const UITheme& theme,
-                                         TextRenderer* text, int row, const char* labelKey)
-{
-    auto d = std::make_unique<UIDropdown>();
-    for (const char* key : keys)
-    {
-        d->options.push_back({key, std::string(tr(key))});
-    }
-    d->position = {kControlX, rowY(row)};
-    d->size = {320.0f, 40.0f};
-    d->theme = &theme;
-    d->textRenderer = text;
-    d->accessible().label = std::string(tr(labelKey));
-    return d;
-}
-
-std::unique_ptr<UICheckbox> makeCheckbox(const UITheme& theme, TextRenderer* text,
-                                         int row, const char* labelKey)
-{
-    auto c = std::make_unique<UICheckbox>();
-    c->position = {kControlX, rowY(row) + 10.0f};
-    c->size = {24.0f, 20.0f};
-    c->theme = &theme;
-    c->textRenderer = text;
-    c->accessible().label = std::string(tr(labelKey));
-    return c;
-}
-
 /// Writes one option and marks the preset Custom (spec §4.2 *Edit*).
 template <typename Write>
 void setOption(SettingsEditor& editor, Write write)
@@ -159,31 +111,11 @@ GraphicsSettingsPage buildGraphicsSettingsPage(UICanvas& canvas, const UITheme& 
 {
     GraphicsSettingsPage page;
 
-    for (std::size_t row = 0; row < std::size(kRowLabels); ++row)
-    {
-        auto label = std::make_unique<UILabel>();
-        label->text = std::string(tr(kRowLabels[row]));
-        label->position = {kLabelX, rowY(static_cast<int>(row)) + 10.0f};
-        label->scale = 0.34f;
-        label->color = theme.textPrimary;
-        label->textRenderer = text;
-        canvas.addElement(std::move(label));
-    }
+    auto root = makePageRoot();
+    addRowLabels(*root, kRowLabels, std::size(kRowLabels), theme, text);
 
     auto preset = makeDropdown(kPresetOptions, theme, text, 0, kRowLabels[0]);
-    auto scale = std::make_unique<UISlider>();
-    scale->position = {kControlX, rowY(1)};
-    scale->size = {420.0f, 44.0f};
-    scale->minValue = 0.5f;
-    scale->maxValue = 1.0f;
-    scale->keyStep = 0.05f;
-    scale->formatter = [](float v)
-    {
-        return UISlider::composePercentText(static_cast<int>(std::lround(v * 100.0f)));
-    };
-    scale->theme = &theme;
-    scale->textRenderer = text;
-    scale->accessible().label = std::string(tr(kRowLabels[1]));
+    auto scale  = makeSlider(theme, text, 1, kRowLabels[1], 0.5f, 1.0f, 0.05f, percentText);
     auto antiAlias = makeDropdown(kAntiAliasOptions, theme, text, 2, kRowLabels[2]);
     auto ao        = makeCheckbox(theme, text, 3, kRowLabels[3]);
     auto bloom     = makeCheckbox(theme, text, 4, kRowLabels[4]);
@@ -198,6 +130,7 @@ GraphicsSettingsPage buildGraphicsSettingsPage(UICanvas& canvas, const UITheme& 
     page = {preset.get(), scale.get(), antiAlias.get(), ao.get(), bloom.get(),
             volume.get(), terrain.get(), foliage.get(), grass.get(), tree.get(),
             vsync.get(), window.get()};
+    page.root = root.get();
 
     SettingsEditor* ed = &editor;
     page.preset->onSelectionChanged.connect([ed](int i)
@@ -258,7 +191,8 @@ GraphicsSettingsPage buildGraphicsSettingsPage(UICanvas& canvas, const UITheme& 
     });
 
     // Copies pending() into the controls before they draw, every frame.
-    canvas.addElement(std::make_unique<UIFrameHook>([ed, page]()
+    // Inside the page's container: it runs only while the page shows.
+    root->addChild(std::make_unique<UIFrameHook>([ed, page]()
     {
         const DisplaySettings& d = ed->pending().display;
         page.preset->selectedIndex = indexOf(kPresets, d.qualityPreset);
@@ -277,43 +211,138 @@ GraphicsSettingsPage buildGraphicsSettingsPage(UICanvas& canvas, const UITheme& 
 
     // Added bottom row first: an open dropdown list is drawn on top by
     // UISystem, so order only decides which control a press reaches first.
-    canvas.addElement(std::move(window));
-    canvas.addElement(std::move(vsync));
-    canvas.addElement(std::move(tree));
-    canvas.addElement(std::move(grass));
-    canvas.addElement(std::move(foliage));
-    canvas.addElement(std::move(terrain));
-    canvas.addElement(std::move(volume));
-    canvas.addElement(std::move(bloom));
-    canvas.addElement(std::move(ao));
-    canvas.addElement(std::move(antiAlias));
-    canvas.addElement(std::move(scale));
-    canvas.addElement(std::move(preset));
+    root->addChild(std::move(window));
+    root->addChild(std::move(vsync));
+    root->addChild(std::move(tree));
+    root->addChild(std::move(grass));
+    root->addChild(std::move(foliage));
+    root->addChild(std::move(terrain));
+    root->addChild(std::move(volume));
+    root->addChild(std::move(bloom));
+    root->addChild(std::move(ao));
+    root->addChild(std::move(antiAlias));
+    root->addChild(std::move(scale));
+    root->addChild(std::move(preset));
+    canvas.addElement(std::move(root));
     return page;
 }
+
+namespace
+{
+
+// The player sidebar, in order. Gameplay is left out: the engine has no
+// gameplay options of its own (3D_E-0782).
+constexpr const char* kCategoryKeys[] = {
+    "ui.settings.category.display",
+    "ui.settings.category.audio",
+    "ui.settings.category.controls",
+    "ui.settings.category.accessibility",
+};
+enum SettingsCategory : int
+{
+    kDisplayCategory = 0,
+    kAudioCategory,
+    kControlsCategory,
+    kAccessibilityCategory,
+    kCategoryCount,
+};
+
+using PageRoots = std::array<UIElement*, kCategoryCount>;
+
+void showPage(const PageRoots& roots, int active)
+{
+    for (int i = 0; i < kCategoryCount; ++i)
+    {
+        if (roots[static_cast<std::size_t>(i)] != nullptr)
+        {
+            roots[static_cast<std::size_t>(i)]->visible = (i == active);
+        }
+    }
+}
+
+// Restore defaults resets only the page on show.
+void restorePageDefaults(SettingsEditor& editor, int active)
+{
+    switch (active)
+    {
+        case kAudioCategory:
+            editor.restoreAudioDefaults();
+            break;
+        case kControlsCategory:
+        {
+            // Not restoreControlsDefaults(): that also clears the key
+            // bindings and resets the live input map, which this page
+            // neither shows nor can revert.
+            const ControlsSettings defaults{};
+            editor.mutate([&defaults](Settings& s)
+            {
+                s.controls.mouseSensitivity     = defaults.mouseSensitivity;
+                s.controls.invertY              = defaults.invertY;
+                s.controls.gamepadDeadzoneLeft  = defaults.gamepadDeadzoneLeft;
+                s.controls.gamepadDeadzoneRight = defaults.gamepadDeadzoneRight;
+            });
+            break;
+        }
+        case kAccessibilityCategory:
+            editor.restoreAccessibilityDefaults();
+            break;
+        case kDisplayCategory:
+        default:
+            editor.restoreGraphicsDefaults();
+            break;
+    }
+}
+
+} // namespace
 
 void wireSettingsScreen(UISystem& ui, SettingsEditor& editor,
                         const std::filesystem::path& settingsPath)
 {
     SettingsEditor* ed = &editor;
+    // The page on show. It outlives a rebuild of the open screen (a language
+    // change), and goes back to Display whenever Settings closes.
+    auto active = std::make_shared<int>(kDisplayCategory);
     ui.setScreenBuilder(GameScreen::Settings,
-        [ed, settingsPath](UICanvas& canvas, const UITheme& theme, TextRenderer* text,
-                           UISystem& system)
+        [ed, settingsPath, active](UICanvas& canvas, const UITheme& theme, TextRenderer* text,
+                                   UISystem& system)
         {
+            auto roots = std::make_shared<PageRoots>();
             SettingsMenuActions actions;
             actions.apply           = [ed, settingsPath] { (void)ed->apply(settingsPath); };
             actions.revert          = [ed] { ed->revert(); };
-            actions.restoreDefaults = [ed] { ed->restoreGraphicsDefaults(); };
+            actions.restoreDefaults = [ed, active] { restorePageDefaults(*ed, *active); };
             actions.isDirty         = [ed] { return ed->isDirty(); };
+            actions.categories.assign(std::begin(kCategoryKeys), std::end(kCategoryKeys));
+            actions.activeCategory  = *active;
+            actions.selectCategory  = [active, roots](int category)
+            {
+                *active = category;
+                showPage(*roots, category);
+            };
             buildSettingsMenu(canvas, theme, text, system, actions);
-            buildGraphicsSettingsPage(canvas, theme, text, *ed);
+            (*roots)[kDisplayCategory] = buildGraphicsSettingsPage(canvas, theme, text, *ed).root;
+            (*roots)[kAudioCategory]   = buildAudioSettingsPage(canvas, theme, text, *ed).root;
+            (*roots)[kControlsCategory] =
+                buildControlsSettingsPage(canvas, theme, text, *ed).root;
+            (*roots)[kAccessibilityCategory] =
+                buildAccessibilitySettingsPage(canvas, theme, text, *ed).root;
+            showPage(*roots, *active);
         });
-    ui.onModalPopped.connect([ed](GameScreen popped)
+    ui.onModalPopped.connect([ed, active](GameScreen popped)
     {
-        if (popped == GameScreen::Settings && ed->isDirty())
+        if (popped == GameScreen::Settings)
         {
-            ed->revert();
+            *active = kDisplayCategory;
+            if (ed->isDirty())
+            {
+                ed->revert();
+            }
         }
+    });
+    // Changing the root screen drops any open modal without a pop.
+    ui.onRootScreenChanged.connect([active](GameScreen)
+    {
+        *active = kDisplayCategory;
     });
 }
 
@@ -325,6 +354,12 @@ std::vector<std::string_view> settingsPageKeys()
     keys.insert(keys.end(), std::begin(kDetailOptions), std::end(kDetailOptions));
     keys.insert(keys.end(), std::begin(kWindowOptions), std::end(kWindowOptions));
     keys.insert(keys.end(), std::begin(kFooterKeys), std::end(kFooterKeys));
+    keys.insert(keys.end(), std::begin(kCategoryKeys), std::end(kCategoryKeys));
+    for (const auto& pageKeys : {audioSettingsPageKeys(), controlsSettingsPageKeys(),
+                                 accessibilitySettingsPageKeys()})
+    {
+        keys.insert(keys.end(), pageKeys.begin(), pageKeys.end());
+    }
     return keys;
 }
 

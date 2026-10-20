@@ -11,6 +11,7 @@
 #include <cstring>
 #include <iostream>
 #include <string>
+#include <string_view>
 
 namespace Vestige
 {
@@ -28,6 +29,29 @@ std::string isolateFeatureNameList()
     }
     return list;
 }
+
+/// Fetches the value that must follow @a argv[i]. When it is missing, prints
+/// what is needed and the --help hint, sets @a exitCode to 2 and returns null.
+const char* takeValue(int argc, char* argv[], int& i, const char* what, int& exitCode)
+{
+    if (i + 1 >= argc)
+    {
+        std::cerr << argv[i] << " requires " << what << "\n"
+                  << "Run '" << argv[0] << " --help' for usage.\n";
+        exitCode = 2;
+        return nullptr;
+    }
+    return argv[++i];
+}
+
+/// True when @a arg starts with @a prefix.
+bool hasPrefix(const char* arg, std::string_view prefix)
+{
+    return std::strncmp(arg, prefix.data(), prefix.size()) == 0;
+}
+
+constexpr std::string_view kIsolateFeaturePrefix = "--isolate-feature=";
+constexpr std::string_view kProfileLogPrefix     = "--profile-log=";
 
 bool isIsolateFeatureName(const std::string& name)
 {
@@ -145,10 +169,9 @@ bool parseArgs(int argc, char* argv[], EngineConfig& config, int& exitCode)
         }
         else if (std::strcmp(arg, "--scene") == 0)
         {
-            if (i + 1 >= argc)
+            const char* path = takeValue(argc, argv, i, "a path argument", exitCode);
+            if (path == nullptr)
             {
-                std::cerr << "--scene requires a path argument\n";
-                exitCode = 2;
                 return false;
             }
             if (!config.startupScene.empty())
@@ -157,24 +180,22 @@ bool parseArgs(int argc, char* argv[], EngineConfig& config, int& exitCode)
                 exitCode = 2;
                 return false;
             }
-            config.startupScene = argv[++i];
+            config.startupScene = path;
         }
         else if (std::strcmp(arg, "--assets") == 0)
         {
-            if (i + 1 >= argc)
+            const char* path = takeValue(argc, argv, i, "a path argument", exitCode);
+            if (path == nullptr)
             {
-                std::cerr << "--assets requires a path argument\n";
-                exitCode = 2;
                 return false;
             }
-            config.assetPath = argv[++i];
+            config.assetPath = path;
         }
         else if (std::strcmp(arg, "--bake-acoustics") == 0)
         {
-            if (i + 1 >= argc)
+            const char* path = takeValue(argc, argv, i, "a scene path argument", exitCode);
+            if (path == nullptr)
             {
-                std::cerr << "--bake-acoustics requires a scene path argument\n";
-                exitCode = 2;
                 return false;
             }
             if (!config.startupScene.empty())
@@ -183,7 +204,7 @@ bool parseArgs(int argc, char* argv[], EngineConfig& config, int& exitCode)
                 exitCode = 2;
                 return false;
             }
-            config.startupScene         = argv[++i];
+            config.startupScene         = path;
             config.bakeAcousticsAndExit = true;
             Logger::info("Acoustic bake requested for scene: " +
                          config.startupScene);
@@ -200,19 +221,18 @@ bool parseArgs(int argc, char* argv[], EngineConfig& config, int& exitCode)
         }
         else if (std::strcmp(arg, "--demo-capture") == 0)
         {
-            if (i + 1 >= argc)
+            const char* dir = takeValue(argc, argv, i, "a directory argument", exitCode);
+            if (dir == nullptr)
             {
-                std::cerr << "--demo-capture requires a directory argument\n";
-                exitCode = 2;
                 return false;
             }
             config.demoFlythroughMode = true;
-            config.demoCaptureDir = argv[++i];
+            config.demoCaptureDir = dir;
             Logger::info("Demo capture enabled: " + config.demoCaptureDir);
         }
-        else if (std::strncmp(arg, "--isolate-feature=", 18) == 0)
+        else if (hasPrefix(arg, kIsolateFeaturePrefix))
         {
-            config.isolateFeature = arg + 18;
+            config.isolateFeature = arg + kIsolateFeaturePrefix.size();
             if (!isIsolateFeatureName(config.isolateFeature))
             {
                 std::cerr << "--isolate-feature= needs one of: "
@@ -229,9 +249,9 @@ bool parseArgs(int argc, char* argv[], EngineConfig& config, int& exitCode)
             config.profileLogPath = EngineConfig::PROFILE_LOG_DEFAULT_SENTINEL;
             Logger::info("Profiler CSV logging enabled (default path)");
         }
-        else if (std::strncmp(arg, "--profile-log=", 14) == 0)
+        else if (hasPrefix(arg, kProfileLogPrefix))
         {
-            config.profileLogPath = arg + 14;
+            config.profileLogPath = arg + kProfileLogPrefix.size();
             if (config.profileLogPath.empty())
             {
                 std::cerr << "--profile-log= requires a non-empty path\n";

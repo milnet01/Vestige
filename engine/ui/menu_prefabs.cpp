@@ -12,7 +12,10 @@
 #include "ui/ui_notification_toast.h"
 #include "ui/ui_panel.h"
 
+#include <algorithm>
 #include <memory>
+#include <string>
+#include <vector>
 
 namespace Vestige
 {
@@ -261,6 +264,107 @@ void buildPauseMenuImpl(UICanvas& canvas, const UITheme& theme,
     // made-up data; they return when a save system supplies the real values.
 }
 
+// The "01  " number prefix is not text to translate and is joined in code.
+std::string numberedCategory(std::size_t index, const char* key)
+{
+    return "0" + std::to_string(index + 1) + "  " + std::string(Vestige::tr(key));
+}
+
+constexpr float kCategoryStep = 56.0f;
+
+// The legacy sidebar: five labels with Display highlighted; nothing reacts.
+void addStaticSettingsCategories(UICanvas& canvas, const UITheme& theme,
+                                 TextRenderer* textRenderer, const glm::vec2& sidebar,
+                                 float sidebarW)
+{
+    // String-table keys (3D_E-0024).
+    const char* categories[] = {
+        "ui.settings.category.display",
+        "ui.settings.category.audio",
+        "ui.settings.category.controls",
+        "ui.settings.category.gameplay",
+        "ui.settings.category.accessibility",
+    };
+    for (size_t i = 0; i < std::size(categories); ++i)
+    {
+        const float catY = sidebar.y + 16.0f + static_cast<float>(i) * kCategoryStep;
+        // Active-highlight strip on the first item (Display) — accent vertical bar.
+        if (i == 0)
+        {
+            canvas.addElement(makePanel({sidebar.x, catY},
+                                          {2.0f, kCategoryStep}, theme.accent));
+            canvas.addElement(makePanel({sidebar.x + 2.0f, catY},
+                                          {sidebarW - 2.0f, kCategoryStep}, theme.panelBgHover));
+        }
+        const glm::vec3 col = (i == 0)
+            ? glm::vec3(theme.accent)
+            : theme.textPrimary;
+        canvas.addElement(makeLabel(numberedCategory(i, categories[i]),
+                                      {sidebar.x + 48.0f, catY + 18.0f},
+                                      0.34f, col, textRenderer));
+    }
+}
+
+// 3D_E-0759: one focusable button per category. Activating one moves the
+// highlight (accent strip, hover fill, accent text) to it and reports it.
+void addSettingsCategoryButtons(UICanvas& canvas, const UITheme& theme,
+                                TextRenderer* textRenderer,
+                                const SettingsMenuActions& actions,
+                                const glm::vec2& sidebar, float sidebarW)
+{
+    struct CategoryRow
+    {
+        UIPanel* strip = nullptr;
+        UIPanel* fill  = nullptr;
+        UILabel* label = nullptr;
+    };
+    auto rows = std::make_shared<std::vector<CategoryRow>>();
+    const UITheme* th = &theme;
+    auto highlight = [rows, th](std::size_t active)
+    {
+        for (std::size_t i = 0; i < rows->size(); ++i)
+        {
+            const bool on = (i == active);
+            (*rows)[i].strip->visible = on;
+            (*rows)[i].fill->visible  = on;
+            (*rows)[i].label->color   = on ? glm::vec3(th->accent) : th->textPrimary;
+        }
+    };
+
+    for (std::size_t i = 0; i < actions.categories.size(); ++i)
+    {
+        const char* key = actions.categories[i].c_str();
+        const float catY = sidebar.y + 16.0f + static_cast<float>(i) * kCategoryStep;
+
+        auto strip = makePanel({sidebar.x, catY}, {2.0f, kCategoryStep}, theme.accent);
+        auto fill  = makePanel({sidebar.x + 2.0f, catY},
+                               {sidebarW - 2.0f, kCategoryStep}, theme.panelBgHover);
+        // No caption of its own: the label drawn over it carries the text,
+        // so the hover fill sits behind the words.
+        auto button = makeButton("", {sidebar.x, catY}, {sidebarW, kCategoryStep},
+                                 UIButtonStyle::GHOST, theme, textRenderer);
+        button->accessible().label = std::string(Vestige::tr(key));
+        auto label = makeLabel(numberedCategory(i, key), {sidebar.x + 48.0f, catY + 18.0f},
+                               0.34f, theme.textPrimary, textRenderer);
+
+        rows->push_back({strip.get(), fill.get(), label.get()});
+        button->onClick.connect([highlight, i, select = actions.selectCategory]()
+        {
+            highlight(i);
+            if (select)
+            {
+                select(static_cast<int>(i));
+            }
+        });
+
+        canvas.addElement(std::move(strip));
+        canvas.addElement(std::move(fill));
+        canvas.addElement(std::move(button));
+        canvas.addElement(std::move(label));
+    }
+    highlight(static_cast<std::size_t>(std::max(actions.activeCategory, 0)));
+}
+
 void buildSettingsMenuImpl(UICanvas& canvas, const UITheme& theme,
                             TextRenderer* textRenderer, UISystem* uiSystem,
                             const SettingsMenuActions* actions = nullptr)
@@ -299,41 +403,21 @@ void buildSettingsMenuImpl(UICanvas& canvas, const UITheme& theme,
     canvas.addElement(makePanel({modalX + 48.0f, modalY + 120.0f},
                                   {modalW - 96.0f, 1}, theme.ruleStrong));
 
-    // Sidebar — 5 categories, each 60 px tall.
+    // Sidebar — one 56-px row per category.
     constexpr float sidebarX = modalX;
     constexpr float sidebarW = 300.0f;
     const float sidebarY = modalY + 130.0f;
     canvas.addElement(makePanel({sidebarX + sidebarW, sidebarY},
                                   {1, modalH - 160.0f}, theme.ruleStrong));
 
-    // String-table keys (3D_E-0024); the "01  " number prefix is not text
-    // to translate and is joined in code below.
-    const char* categories[] = {
-        "ui.settings.category.display",
-        "ui.settings.category.audio",
-        "ui.settings.category.controls",
-        "ui.settings.category.gameplay",
-        "ui.settings.category.accessibility",
-    };
-    for (size_t i = 0; i < std::size(categories); ++i)
+    if (actions != nullptr && !actions->categories.empty())
     {
-        const float catY = sidebarY + 16.0f + static_cast<float>(i) * 56.0f;
-        // Active-highlight strip on the first item (Display) — accent vertical bar.
-        if (i == 0)
-        {
-            canvas.addElement(makePanel({sidebarX, catY},
-                                          {2.0f, 56.0f}, theme.accent));
-            canvas.addElement(makePanel({sidebarX + 2.0f, catY},
-                                          {sidebarW - 2.0f, 56.0f}, theme.panelBgHover));
-        }
-        const glm::vec3 col = (i == 0)
-            ? glm::vec3(theme.accent)
-            : theme.textPrimary;
-        const std::string categoryLabel = "0" + std::to_string(i + 1) + "  "
-                                        + std::string(Vestige::tr(categories[i]));
-        canvas.addElement(makeLabel(categoryLabel,
-                                      {sidebarX + 48.0f, catY + 18.0f},
-                                      0.34f, col, textRenderer));
+        addSettingsCategoryButtons(canvas, theme, textRenderer, *actions,
+                                   {sidebarX, sidebarY}, sidebarW);
+    }
+    else
+    {
+        addStaticSettingsCategories(canvas, theme, textRenderer, {sidebarX, sidebarY}, sidebarW);
     }
 
     // Footer — Restore Defaults / Revert / Apply buttons + dirty indicator.

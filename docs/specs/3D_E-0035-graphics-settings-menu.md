@@ -350,10 +350,10 @@ the preset and one option, Apply, restart, and see both kept.
 - Shadow quality, view distance, field of view, motion blur, texture
   detail, reflection quality, ray tracing, resolution list — each needs a
   runtime setter first; deferred; not yet queued.
-- Content for the Audio, Controls, Gameplay and Accessibility pages —
-  deferred; not yet queued.
-- Clicking a sidebar category to switch pages — needs content on more
-  than one page first.
+- Content for the other pages, and clicking a sidebar category to switch
+  pages — built under 3D_E-0759, which gave Audio, Controls and
+  Accessibility pages and left Gameplay out of the sidebar until a game
+  defines an option (3D_E-0782).
 
 ## 10. What checks this
 

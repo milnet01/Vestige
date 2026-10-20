@@ -107,4 +107,33 @@ private:
     std::uint32_t m_ownerId = 0;
 };
 
+/// @brief Watches a block of widgets drawn between begin() and end(), for a
+///        block whose widgets cannot each be tracked (the material inspector).
+///
+/// Before 3D_E-0766 that block asked ImGui::IsAnyItemActive(), which is true
+/// for ANY held widget in the whole UI: releasing a transform field or typing
+/// in the Save dialog pushed a "Change Material property" step. ImGui's group
+/// reports itself active only while a widget inside it is held.
+class GroupEditWatch
+{
+public:
+    void begin() { ImGui::BeginGroup(); }
+
+    /// @return True on the frame a held widget inside the group is released.
+    bool end()
+    {
+        ImGui::EndGroup();
+        const bool activeNow = ImGui::IsItemActive();
+        const bool released = m_active && !activeNow;
+        m_active = activeNow;
+        return released;
+    }
+
+    /// True while a widget inside the group is held.
+    bool active() const { return m_active; }
+
+private:
+    bool m_active = false;
+};
+
 }  // namespace Vestige

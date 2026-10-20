@@ -5,6 +5,8 @@
 /// @brief Inspector panel — displays and edits properties of the selected entity.
 #pragma once
 
+#include "editor/panels/edit_tracker.h"
+
 #include "editor/material_preview.h"
 #include "renderer/material.h"
 
@@ -81,9 +83,9 @@ private:
     // drawMaterial / drawMaterialPbr / drawMaterialBlinnPhong call setters
     // directly inside sub-methods, so per-widget tracking would require
     // threading EditTracker through five signatures. Instead bracket the
-    // whole call: snapshot on first frame any item activates, push undo
-    // on first frame no item is active again.
-    bool m_materialEditing = false;
+    // whole call in a GroupEditWatch: snapshot while no widget in it is
+    // held, push undo on the frame a held one is released (3D_E-0766).
+    GroupEditWatch m_materialWatch;
     uint32_t m_materialEditingEntity = 0;
     Material m_materialBefore;
 };
