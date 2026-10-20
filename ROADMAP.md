@@ -1,6 +1,6 @@
 <!-- ants-roadmap-format: 1 -->
 <!-- Generated from the Ants Terminal roadmap store. Edit it with roadmap_log; hand edits are discarded by the next write. -->
-<!-- ants-roadmap-id-high-water: 3D_E=780 3D_E#S=989 -->
+<!-- ants-roadmap-id-high-water: 3D_E=782 3D_E#S=989 -->
 
 # Vestige Engine Roadmap
 
@@ -5642,6 +5642,14 @@ shipped that have no invocation path at all.
   only Display has a page (graphics_settings_page.cpp). Clicking them
   in the v0.1.76 download does nothing (recorded 2026-10-12). The
   editor's Help > Settings has those pages, plus Language.
+  2026-10-20, write-spec Q1: no spec (spec-format.md section 1). One
+  subsystem (engine/ui), shape already set: each page mirrors
+  buildGraphicsSettingsPage (edits SettingsEditor::pending(), footer
+  Apply/Revert), and the fields are the ones the editor's Help >
+  Settings tabs already edit. Sidebar click switches which page's
+  container is visible. Escape hatch: if Controls rebinding needs a
+  capture design of its own, stop and spec that part alone. CPU / GPU
+  placement: not GPU work.
   **Layman:** In the game's Settings screen only the Display page works; clicking the other four names does nothing.
   Kind: fix.
   Source: in-session-2026-10-12 (trailer filming).
@@ -5887,6 +5895,28 @@ shipped that have no invocation path at all.
   Kind: fix.
   Source: in-session-2026-10-20 (3D_E-0757 check).
   Lanes: physics, core.
+
+- 📋 [3D_E-0781] **Player Settings > Controls: change which key or button does each action.**
+  Split from 3D_E-0759 by the user, 2026-10-20. The editor's
+  SettingsEditorPanel::drawRebindModal already captures a key per action
+  slot; the game UI (UISystem) has no capture mode. Needs one: while
+  capturing, the next key or button goes to the binding, Esc cancels,
+  and a clash with another action is shown.
+  **Layman:** Let players change their keys from the game's own Settings screen, as the editor already can.
+  Kind: feature.
+  Source: user-decision-2026-10-20 (3D_E-0759 split).
+  Lanes: ui, input.
+
+- 📋 [3D_E-0782] **Player Settings: show a Gameplay page once a game defines gameplay options.**
+  User decision 2026-10-20 (3D_E-0759): no engine gameplay options
+  exist (GameplaySettings is a free-form map each game fills), so the
+  player Settings sidebar leaves Gameplay out until a game defines one.
+  Needs a way for game code to declare an option (label key, type,
+  range) that the page can draw.
+  **Layman:** When a game built on Vestige has its own options, give them a Gameplay page in Settings.
+  Kind: feature.
+  Source: user-decision-2026-10-20 (3D_E-0759 split).
+  Lanes: ui.
 
 ## 0.3.0 — An editor a builder can use
 
