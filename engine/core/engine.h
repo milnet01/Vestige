@@ -34,6 +34,7 @@
 #include "ui/caption_map.h"
 #include "ui/subtitle.h"
 
+#include <array>
 #include <filesystem>
 #include <memory>
 #include <string>
@@ -67,9 +68,17 @@ struct EngineConfig
 
     /// @brief Diagnostic feature isolation (CLI: --isolate-feature=NAME).
     /// Disables one feature so visual-test runs can mechanically bisect
-    /// regressions. Recognised names: "motion-overlay", "bloom", "ssao",
-    /// "ibl". Empty string = no override.
+    /// regressions. The parser accepts only ISOLATE_FEATURE_NAMES; each
+    /// one is handled in Engine::initialize(). Empty string = no override.
     std::string isolateFeature;
+
+    /// @brief Every name --isolate-feature accepts. The --help text and the
+    /// parser read this list; add a name here and handle it in
+    /// Engine::initialize().
+    static constexpr std::array<const char*, 8> ISOLATE_FEATURE_NAMES = {
+        "motion-overlay", "bloom", "ssao", "ibl", "ibl-diffuse",
+        "ibl-specular", "sh-grid", "grass-shadow",
+    };
 
     /// @brief Optional .scene file to load at startup (CLI: --scene PATH).
     /// When set, replaces the built-in demo scene. Resolved against CWD
@@ -191,6 +200,10 @@ private:
     void drawLightGizmos(Scene& scene, const Selection& selection,
                          bool showAll = false);
     void createPhysicsStaticBodies();
+    /// @brief Gives Jolt a height-field collider matching the terrain, so the
+    ///        physics walker (P key) stands on the ground (3D_E-0757). Called
+    ///        from the post-init block, after the meadow reshapes the heightmap.
+    void createTerrainCollider();
 
     EventBus m_eventBus;
 

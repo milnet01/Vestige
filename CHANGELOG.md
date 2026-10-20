@@ -25,6 +25,21 @@ may change any interface without notice.
 
 ## [Unreleased]
 
+### 2026-10-20 Fixed — The physics walk (P) no longer falls through the meadow (3D_E-0757)
+
+Jolt's only ground was a flat box at height 0, metres below the meadow,
+so the physics walker sank through the terrain. The terrain now gets a
+Jolt height-field collider matching its shape. Rocks and logs still have
+no physics collider (3D_E-0779).
+
+### 2026-10-20 Fixed — Launch options say what they do (3D_E-0769)
+
+`--editor` now also undoes `--player`'s game menus. `--isolate-feature`
+refuses an empty or unknown name, and `--help` lists all eight names
+from the same list the parser checks. Naming a startup scene twice
+(`--scene` or `--bake-acoustics`) is an error instead of the last one
+silently winning.
+
 ### 2026-10-19 Added — Volumetric fog and God rays can be switched off in Settings (3D_E-0767)
 
 Help > Settings > Accessibility has two new checkboxes after Fog

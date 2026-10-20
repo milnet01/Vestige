@@ -225,6 +225,7 @@ set(ENGINE_SOURCES
     physics/physics_world.cpp
     physics/rigid_body.cpp
     physics/physics_character_controller.cpp
+    physics/terrain_height_field.cpp
     physics/physics_constraint.cpp
     physics/physics_debug.cpp
     physics/cloth_simulator.cpp

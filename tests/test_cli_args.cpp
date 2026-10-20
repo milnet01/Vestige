@@ -123,11 +123,59 @@ TEST(CliArgs, PlayerFlagPlaysWithTheGameScreens)
     EXPECT_TRUE(r.config.enableGameScreens);
 }
 
+TEST(CliArgs, EditorAfterPlayerRestoresTheEditorDefault)
+{
+    // 3D_E-0769 — --editor is the default, so it must undo all of --player.
+    auto r = run({"--player", "--editor"});
+    EXPECT_TRUE(r.ok);
+    EXPECT_FALSE(r.config.startInPlayMode);
+    EXPECT_FALSE(r.config.enableGameScreens);
+}
+
 TEST(CliArgs, SceneFlagTakesPathValue)
 {
     auto r = run({"--scene", "my.scene"});
     EXPECT_TRUE(r.ok);
     EXPECT_EQ(r.config.startupScene, "my.scene");
+}
+
+TEST(CliArgs, TwoSceneOptionsAreAnError)
+{
+    // 3D_E-0769 — both write the startup scene; the parser refuses to pick one.
+    auto both = run({"--scene", "a.scene", "--bake-acoustics", "b.scene"});
+    EXPECT_FALSE(both.ok);
+    EXPECT_EQ(both.exitCode, 2);
+
+    auto twice = run({"--scene", "a.scene", "--scene", "b.scene"});
+    EXPECT_FALSE(twice.ok);
+    EXPECT_EQ(twice.exitCode, 2);
+}
+
+// --- --isolate-feature ------------------------------------------------------
+
+TEST(CliArgs, IsolateFeatureAcceptsEveryListedName)
+{
+    for (const char* name : Vestige::EngineConfig::ISOLATE_FEATURE_NAMES)
+    {
+        auto r = run({std::string("--isolate-feature=") + name});
+        EXPECT_TRUE(r.ok) << name;
+        EXPECT_EQ(r.config.isolateFeature, name);
+    }
+}
+
+TEST(CliArgs, IsolateFeatureWithEmptyNameIsAnError)
+{
+    // Same rule as --profile-log= (3D_E-0769).
+    auto r = run({"--isolate-feature="});
+    EXPECT_FALSE(r.ok);
+    EXPECT_EQ(r.exitCode, 2);
+}
+
+TEST(CliArgs, IsolateFeatureWithUnknownNameIsAnError)
+{
+    auto r = run({"--isolate-feature=blom"});
+    EXPECT_FALSE(r.ok);
+    EXPECT_EQ(r.exitCode, 2);
 }
 
 TEST(CliArgs, NoVsyncFlagDisablesVsync)

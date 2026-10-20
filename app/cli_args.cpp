@@ -15,6 +15,34 @@
 namespace Vestige
 {
 
+namespace
+{
+
+/// The accepted --isolate-feature names, comma-separated, for messages.
+std::string isolateFeatureNameList()
+{
+    std::string list;
+    for (const char* name : EngineConfig::ISOLATE_FEATURE_NAMES)
+    {
+        list += list.empty() ? name : std::string(", ") + name;
+    }
+    return list;
+}
+
+bool isIsolateFeatureName(const std::string& name)
+{
+    for (const char* known : EngineConfig::ISOLATE_FEATURE_NAMES)
+    {
+        if (name == known)
+        {
+            return true;
+        }
+    }
+    return false;
+}
+
+} // namespace
+
 void printUsage(const char* argv0)
 {
     std::cout
@@ -56,9 +84,8 @@ void printUsage(const char* argv0)
         << "                          every frame to DIR as a numbered PNG,\n"
         << "                          so the video is smooth at any speed.\n"
         << "  --isolate-feature=NAME  Disable one feature for visual-test\n"
-        << "                          bisection. NAME ∈ {motion-overlay,\n"
-        << "                          bloom, ssao, ibl, ibl-diffuse,\n"
-        << "                          ibl-specular, sh-grid, grass-shadow}.\n"
+        << "                          bisection. NAME is one of:\n"
+        << "                          " << isolateFeatureNameList() << ".\n"
         << "  --profile-log[=PATH]    Enable the profiler and append ~1 Hz\n"
         << "                          per-pass CPU/GPU timings to PATH as CSV\n"
         << "                          (default: vestige_profile_<ts>.csv in the\n"
@@ -102,8 +129,10 @@ bool parseArgs(int argc, char* argv[], EngineConfig& config, int& exitCode)
         else if (std::strcmp(arg, "--editor") == 0)
         {
             // Default — explicit form is accepted for symmetry with --play
-            // and so desktop launchers can be unambiguous.
-            config.startInPlayMode = false;
+            // and so desktop launchers can be unambiguous. It restores the
+            // whole default, so it also undoes --player's game screens.
+            config.startInPlayMode   = false;
+            config.enableGameScreens = false;
         }
         else if (std::strcmp(arg, "--play") == 0)
         {
@@ -119,6 +148,12 @@ bool parseArgs(int argc, char* argv[], EngineConfig& config, int& exitCode)
             if (i + 1 >= argc)
             {
                 std::cerr << "--scene requires a path argument\n";
+                exitCode = 2;
+                return false;
+            }
+            if (!config.startupScene.empty())
+            {
+                std::cerr << "--scene: a startup scene was already given\n";
                 exitCode = 2;
                 return false;
             }
@@ -139,6 +174,12 @@ bool parseArgs(int argc, char* argv[], EngineConfig& config, int& exitCode)
             if (i + 1 >= argc)
             {
                 std::cerr << "--bake-acoustics requires a scene path argument\n";
+                exitCode = 2;
+                return false;
+            }
+            if (!config.startupScene.empty())
+            {
+                std::cerr << "--bake-acoustics: a startup scene was already given\n";
                 exitCode = 2;
                 return false;
             }
@@ -172,6 +213,13 @@ bool parseArgs(int argc, char* argv[], EngineConfig& config, int& exitCode)
         else if (std::strncmp(arg, "--isolate-feature=", 18) == 0)
         {
             config.isolateFeature = arg + 18;
+            if (!isIsolateFeatureName(config.isolateFeature))
+            {
+                std::cerr << "--isolate-feature= needs one of: "
+                          << isolateFeatureNameList() << "\n";
+                exitCode = 2;
+                return false;
+            }
             Logger::info("Isolate feature requested: " + config.isolateFeature);
         }
         else if (std::strcmp(arg, "--profile-log") == 0)

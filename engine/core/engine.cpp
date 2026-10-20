@@ -49,6 +49,7 @@
 #include "environment/terrain.h"
 #include "environment/meadow_terrain.h"
 #include "physics/physics_character_controller.h"
+#include "physics/terrain_height_field.h"
 
 #include <Jolt/Physics/Collision/Shape/BoxShape.h>
 #include "renderer/radiosity_baker.h"
@@ -1285,6 +1286,7 @@ bool Engine::initialize(const EngineConfig& config)
         {
             finalizeMeadowTerrain();
         }
+        createTerrainCollider();
     }
 
     // Apply --isolate-feature CLI override (visual-regression bisection).
@@ -1330,9 +1332,10 @@ bool Engine::initialize(const EngineConfig& config)
         }
         else
         {
-            Logger::warning("Unknown --isolate-feature value: '" + f +
-                "' (expected: motion-overlay, bloom, ssao, ibl, "
-                "ibl-diffuse, ibl-specular, sh-grid, grass-shadow)");
+            // parseArgs only lets EngineConfig::ISOLATE_FEATURE_NAMES
+            // through, so reaching here means a listed name has no branch.
+            Logger::warning("--isolate-feature=" + f +
+                " is listed in EngineConfig::ISOLATE_FEATURE_NAMES but not handled");
         }
     }
 
@@ -2560,12 +2563,57 @@ void Engine::createPhysicsStaticBodies()
         ++count;
     }
 
-    // Add a large ground plane if no terrain-sized collider exists
+    // A ground plane at Y 0 for scenes with no terrain; where there is one,
+    // createTerrainCollider adds the real surface later.
     JPH::BoxShape* const ground = new JPH::BoxShape(JPH::Vec3(500, 0.5f, 500));
     m_physicsWorld.createStaticBody(ground, glm::vec3(0, -0.5f, 0));
 
     Logger::info("Physics: created " + std::to_string(count) +
                  " static bodies from scene + ground plane");
+}
+
+void Engine::createTerrainCollider()
+{
+    if (!m_physicsWorld.isInitialized() || !m_terrain || !m_terrain->isInitialized())
+    {
+        return;
+    }
+
+    const TerrainConfig& tcfg = m_terrain->getConfig();
+    const int W = m_terrain->getWidth();
+    const int D = m_terrain->getDepth();
+    if (W != D)
+    {
+        // Jolt height fields are square; no Vestige terrain is otherwise yet.
+        Logger::warning("Physics: terrain is " + std::to_string(W) + "x" +
+                        std::to_string(D) + ", not square; no terrain collider");
+        return;
+    }
+
+    TerrainHeightFieldDesc desc;
+    desc.sampleCount = W;
+    desc.origin = tcfg.origin;
+    desc.spacingX = tcfg.spacingX;
+    desc.spacingZ = tcfg.spacingZ;
+    desc.heightScale = tcfg.heightScale;
+    desc.heights01.resize(static_cast<size_t>(W) * static_cast<size_t>(D));
+    for (int z = 0; z < D; ++z)
+    {
+        for (int x = 0; x < W; ++x)
+        {
+            desc.heights01[static_cast<size_t>(z) * static_cast<size_t>(W) +
+                           static_cast<size_t>(x)] = m_terrain->getRawHeight(x, z);
+        }
+    }
+
+    const JPH::ShapeRefC shape = createTerrainHeightFieldShape(desc);
+    if (!shape)
+    {
+        return;
+    }
+    m_physicsWorld.createStaticBody(shape.GetPtr(), glm::vec3(0.0f));
+    Logger::info("Physics: created terrain collider (" + std::to_string(W) + "x" +
+                 std::to_string(D) + " height field)");
 }
 
 void Engine::setupVisualTestViewpoints()

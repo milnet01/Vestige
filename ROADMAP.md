@@ -1,6 +1,6 @@
 <!-- ants-roadmap-format: 1 -->
 <!-- Generated from the Ants Terminal roadmap store. Edit it with roadmap_log; hand edits are discarded by the next write. -->
-<!-- ants-roadmap-id-high-water: 3D_E=774 3D_E#S=989 -->
+<!-- ants-roadmap-id-high-water: 3D_E=780 3D_E#S=989 -->
 
 # Vestige Engine Roadmap
 
@@ -5441,7 +5441,7 @@ shipped that have no invocation path at all.
   Source: in-session-2026-10-02.
   Lanes: ui.
 
-- 📋 [3D_E-0751] **Debug test shard 3 sometimes fails on a 128-byte leak from an unloaded library.**
+- 🚫 [3D_E-0751] **Debug test shard 3 sometimes fails on a 128-byte leak from an unloaded library.**
   Seen 2026-10-07 in the Debug ASan build (build/), full `ctest -j 6`:
   vestige_tests_shard_3 ran 1021 tests, all passed, then LeakSanitizer
   reported "Direct leak of 128 byte(s)" allocated from "<unknown module>"
@@ -5485,6 +5485,16 @@ shipped that have no invocation path at all.
   no shim), once; if it stays clean, add an LSan suppression for the
   unknown-module pthread_once stack with this history as the reason.
   Script: vestige-0751-scratch/hunt.sh.
+  2026-10-20: full `ctest -j 6 --repeat until-fail:5` (all 20 entries,
+  no shim, LSAN_OPTIONS=fast_unwind_on_malloc=0) passed: 0 leaks. That
+  makes 0 in 304 shard runs since the two hits on 2026-10-15. Closed as
+  not reproduced, with no suppression: the only symbolised frames are
+  __pthread_once_slow and start_thread, so a leak: entry would also hide
+  Vestige's own std::call_once leaks, and tests/CMakeLists.txt keeps no
+  LSan suppression file on purpose. If it recurs: rerun that ctest
+  command with LD_DEBUG=files LD_DEBUG_OUTPUT=<dir>/ld set, and match
+  the leak's frame addresses to the library load addresses in those
+  logs.
   **Layman:** One group of tests occasionally fails at exit on a small memory leak inside a driver-like library, even though every test in it passed.
   Kind: fix.
   Source: in-session-2026-10-07.
@@ -5590,7 +5600,7 @@ shipped that have no invocation path at all.
   Source: in-session-2026-10-12 (trailer filming).
   Lanes: core, localization.
 
-- 📋 [3D_E-0757] **The physics walker falls through the meadow ground: the terrain has no physics collider.**
+- ✅ [3D_E-0757] **The physics walker falls through the meadow ground: the terrain has no physics collider.**
   Engine colliders are scene-AABB boxes plus a 500 x 500 ground box
   with its top at Y 0; the meadow terrain sits metres above it and
   gets no collider. Recorded 2026-10-12 on the v0.1.76 download:
@@ -5598,6 +5608,15 @@ shipped that have no invocation path at all.
   green. Footsteps (FootstepSystem) only fire in this mode, so the
   meadow has no usable footstep sound. Sibling of 3D_E-0725, which
   fixed the fly camera only and names the Jolt path as not covered.
+  2026-10-20: Engine::createTerrainCollider gives Jolt a 257x257
+  HeightFieldShape (engine/physics/terrain_height_field.cpp) built from
+  the terrain's heights after the meadow is shaped. CPU / GPU placement:
+  CPU (Jolt is CPU-only; built once at load). Tests:
+  tests/test_terrain_height_field.cpp (walker settles at 7 m with no Y-0
+  floor; ray hits match the heightmap on a slope). In-app: Debug --play,
+  P (notice "Controller: Physics (Jolt)"), hold W: the view walks to the
+  pond on the ground, no sinking. Follow-ups: 3D_E-0779 (props),
+  3D_E-0780 (editor terrain edits).
   **Layman:** Turning on the physics walk (the P key) in the meadow drops the player through the ground and under the world.
   Kind: fix.
   Source: in-session-2026-10-12 (trailer filming).
@@ -5762,7 +5781,7 @@ shipped that have no invocation path at all.
   Source: in-session-2026-10-15 (push of cf5e3ff).
   Lanes: tests, ci.
 
-- 📋 [3D_E-0769] **Command-line options: --editor does not undo --player, and the --isolate-feature name list has drifted.**
+- ✅ [3D_E-0769] **Command-line options: --editor does not undo --player, and the --isolate-feature name list has drifted.**
   Found by the review-readability draft trial, 2026-10-19; each checked
   by hand.
   - app/cli_args.cpp: `--player --editor` leaves enableGameScreens on
@@ -5775,6 +5794,13 @@ shipped that have no invocation path at all.
     with no warning.
   - An empty --isolate-feature= is silently ignored, while an empty
     --profile-log= is an error. Pick one rule.
+  2026-10-20: --editor also clears enableGameScreens;
+  EngineConfig::ISOLATE_FEATURE_NAMES is the one list (--help and the
+  parser read it; engine.cpp's fallback now says a listed name has no
+  branch); an empty or unknown --isolate-feature name exits 2, as
+  --profile-log= does; a second scene option (--scene or
+  --bake-acoustics) exits 2. Four tests in tests/test_cli_args.cpp, red
+  before the fix.
   **Layman:** Two launch options don't do quite what their notes say: one leaves the game menus on, and one note lists half the accepted names.
   Kind: fix.
   Source: review-readability-trial-2026-10-19.
@@ -5820,6 +5846,47 @@ shipped that have no invocation path at all.
   **Layman:** Make sure every goal in the new discovery page has planned work behind it.
   Kind: chore.
   Source: user-request-2026-10-20 (3D_E-0720 follow-up).
+
+- 📋 [3D_E-0777] **GPU cloth reset() clears the pins; CPU cloth reset() keeps them.**
+  Named as still open in 3D_E-0630's resolution note (2026-09-21)
+  but never filed. GpuClothSimulator::reset vs ClothSimulator::reset.
+  Write the CPU/GPU parity test first (project rule 7).
+  **Layman:** Resetting a curtain on the graphics card drops it from its hooks, while the same reset on the processor keeps it hanging.
+  Kind: fix.
+  Source: review-code 2026-08-31 lane physics (left open by 3D_E-0630; filed 2026-10-20).
+  Lanes: physics.
+
+- 📋 [3D_E-0778] **GPU cloth: changing stretch, shear or bend compliance at run time does nothing.**
+  Named as still open in 3D_E-0630's resolution note (2026-09-21)
+  but never filed. gpu_cloth_simulator.cpp: three setters set
+  m_compliancesDirty, and nothing reads it. The compliance SSBO is
+  immutable, so a naive re-upload also fails silently: diagnose first.
+  **Layman:** Adjusting how stretchy a large curtain is has no effect once it is running on the graphics card.
+  Kind: fix.
+  Source: review-code 2026-08-31 lane physics (left open by 3D_E-0630; filed 2026-10-20).
+  Lanes: physics.
+
+- 📋 [3D_E-0779] **The physics walker passes through the meadow's rocks, logs and tree trunks.**
+  Seen 2026-10-20 in the 0757 check: the log reads "Physics: created
+  0 static bodies from scene + ground plane". createPhysicsStaticBodies
+  runs at initialize, before finalizeMeadowTerrain places the props;
+  tree trunks come per frame from FoliageManager::appendTreeTrunkColliders
+  (legacy controller only, per 3D_E-0725). Give Jolt the same blocking
+  set (setBlocksMovement) once the meadow is built.
+  **Layman:** With the physics walk on, the player can walk straight through rocks and fallen logs in the meadow.
+  Kind: fix.
+  Source: in-session-2026-10-20 (3D_E-0757 check).
+  Lanes: physics, core.
+
+- 📋 [3D_E-0780] **Editing the terrain in the editor leaves the physics collider on the old shape.**
+  Engine::createTerrainCollider (3D_E-0757) builds the Jolt height
+  field once, after the meadow is shaped. The terrain brush changes the
+  heightmap later with no rebuild. Rebuild (or update the edited region
+  of) the height field when the brush stroke ends.
+  **Layman:** After you reshape the ground in the editor, the physics walk still follows the old ground.
+  Kind: fix.
+  Source: in-session-2026-10-20 (3D_E-0757 check).
+  Lanes: physics, core.
 
 ## 0.3.0 — An editor a builder can use
 
@@ -7585,6 +7652,34 @@ Outdoor landscapes surrounding the Temple complex — hills, valleys, and the Ki
   reprojection.
   Kind: implement.
 
+- 📋 [3D_E-0775] **Collision that follows each object's real shape, and stays cheap: research, then a spec.**
+  User request 2026-10-20: a proper collision system, accurate to the
+  shape of each object, made cheap enough to run while staying extremely
+  accurate. Expects real online research.
+  Today: Engine::createPhysicsStaticBodies gives Jolt one box per
+  entity (its AABB, from Scene::collectColliders), so walls with
+  doorways, arches, columns and sloped roofs collide as solid boxes.
+  Terrain gets a height field from 3D_E-0757.
+  Research questions (cite sources in the spec):
+  - Which shape per object class: exact triangle mesh (static only),
+    convex decomposition (CoACD, see 3D_E-0664), simplified collision
+    proxies baked offline, or signed distance fields.
+  - How shipped engines keep exact-mesh collision cheap: broad-phase
+    layers, mesh BVH quantisation, a collision LOD separate from the
+    render LOD, caching shapes across scenes.
+  - Accuracy target: how far the collision surface may sit from the
+    visible surface (a few cm?) and how to measure it automatically.
+  - Cost budget: physics time per frame inside the 60 FPS floor.
+  - Authoring: bake in the asset pipeline vs at load; editor override.
+  CPU / GPU placement: CPU. Jolt is CPU-only and the walker's queries
+  need answers the same frame; offline baking (decomposition) also CPU.
+  Then: write-spec (it meets spec-format.md section 1: several
+  subsystems and costly to redo).
+  **Layman:** Make the player bump into objects exactly where they really are, not into invisible boxes around them, without slowing the game down.
+  Kind: research.
+  Source: user-request-2026-10-20.
+  Lanes: physics, assets.
+
 ## 0.5.0 — Interactivity
 
 Breaks: visual scripting graphs. 3D_E-S0042 switches scripting on, so the
@@ -8752,6 +8847,23 @@ Biblical rendition of the Tabernacle as described in Exodus 25-40.
   **Layman:** Put a link on the project's front page so visitors can see a finished example of what the engine can do.
   Kind: doc.
   Source: user-request-2026-09-25 (1.0.0 reshape).
+
+- 📋 [3D_E-0776] **Second-model check of every translation once the player-facing text is final.**
+  User decision 2026-10-20: keep the localisation framework (3D_E-0024)
+  and its string-coverage lint working during development; run the
+  translation check once, just before 1.0, when the text has stopped
+  changing. Until then the Claude-written translations stay, marked as
+  drafts (docs/localization/review.md).
+  Method (user, 2026-10-20): through the Chrome extension, DeepSeek
+  (chat.deepseek.com) for zh_CN, zh_TW, ja and ko; Gemini for the rest.
+  demoreel did the same on 2026-10-16 (its DEMO-0210, DEMO-0215; commits
+  5d7a135, 73d813e): refuse a suggestion that breaks wording the table
+  already uses elsewhere; the result stays a draft until a fluent person
+  reads it. Ask the demoreel session for its prompt and batch sizes.
+  **Layman:** Just before 1.0, have other AI models check the game's translations, once the wording has stopped changing.
+  Kind: chore.
+  Source: user-request-2026-10-20.
+  Lanes: localization.
 
 ## 1.1.0 — Procedural generation
 
