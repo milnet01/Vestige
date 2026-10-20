@@ -1953,6 +1953,14 @@ void Editor::processViewportClick(int fboWidth, int fboHeight)
         m_boxSelectEnd = m_boxSelectStart;
     }
 
+    // A press that lands on the gizmo in the same frame the mouse arrives
+    // starts a box select too, because m_gizmoActive is last frame's. Once
+    // the gizmo takes the drag, it is a transform, not a selection (3D_E-0764).
+    if (m_boxSelectActive && m_gizmoActive)
+    {
+        m_boxSelectActive = false;
+    }
+
     // --- Update drag end position while dragging ---
     if (m_boxSelectActive && io.MouseDown[0])
     {

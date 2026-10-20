@@ -2233,6 +2233,10 @@ void Engine::run()
                 m_editor->getPickCoords(pickX, pickY);
                 uint32_t entityId = m_renderer->pickEntityAt(pickX, pickY);
                 m_editor->handlePickResult(entityId);
+                if (activeScene)
+                {
+                    m_editor->getSelection().retainExisting(*activeScene);
+                }
 
                 // Log the selection result
                 if (entityId != 0 && activeScene)
@@ -2261,7 +2265,12 @@ void Engine::run()
                 {
                     sel.addToSelection(id);
                 }
-                Logger::info("Box selected " + std::to_string(ids.size()) + " entities");
+                if (activeScene)
+                {
+                    sel.retainExisting(*activeScene);
+                }
+                Logger::info("Box selected " + std::to_string(sel.getSelectedIds().size()) +
+                             " entities");
             }
 
             // Render selection outlines into the output FBO

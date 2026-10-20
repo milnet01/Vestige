@@ -341,7 +341,7 @@ void addSettingsCategoryButtons(UICanvas& canvas, const UITheme& theme,
                                {sidebarW - 2.0f, kCategoryStep}, theme.panelBgHover);
         // No caption of its own: the label drawn over it carries the text,
         // so the hover fill sits behind the words.
-        auto button = makeButton("", {sidebar.x, catY}, {sidebarW, kCategoryStep},
+        auto button = makeButton("", {sidebar.x, catY}, {sidebarW, kCategoryStep},  // i18n-exempt: no caption
                                  UIButtonStyle::GHOST, theme, textRenderer);
         button->accessible().label = std::string(Vestige::tr(key));
         auto label = makeLabel(numberedCategory(i, key), {sidebar.x + 48.0f, catY + 18.0f},

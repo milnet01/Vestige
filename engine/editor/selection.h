@@ -49,6 +49,11 @@ public:
     /// @return Pointer to the entity, or nullptr.
     Entity* getPrimaryEntity(Scene& scene) const;
 
+    /// @brief Drops every selected ID that is not an entity in @a scene. The
+    ///        ID buffer can hold values no entity owns (3D_E-0764), so a pick
+    ///        result is filtered through this before the Inspector sees it.
+    void retainExisting(Scene& scene);
+
 private:
     std::vector<uint32_t> m_selectedIds;
 };

@@ -89,4 +89,12 @@ Entity* Selection::getPrimaryEntity(Scene& scene) const
     return scene.findEntityById(id);
 }
 
+void Selection::retainExisting(Scene& scene)
+{
+    m_selectedIds.erase(
+        std::remove_if(m_selectedIds.begin(), m_selectedIds.end(),
+                       [&scene](uint32_t id) { return scene.findEntityById(id) == nullptr; }),
+        m_selectedIds.end());
+}
+
 } // namespace Vestige

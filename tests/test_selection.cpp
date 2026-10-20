@@ -4,6 +4,8 @@
 /// @file test_selection.cpp
 /// @brief Unit tests for the Selection class (editor entity selection management).
 #include "editor/selection.h"
+#include "scene/entity.h"
+#include "scene/scene.h"
 
 #include <gtest/gtest.h>
 
@@ -218,4 +220,21 @@ TEST(SelectionTest, SelectAfterClearWorks)
     EXPECT_TRUE(sel.hasSelection());
     EXPECT_EQ(sel.getPrimaryId(), 42u);
     EXPECT_EQ(sel.getSelectedIds().size(), 1u);
+}
+
+// 3D_E-0764 — the ID buffer can return a value no entity owns; a pick must
+// not leave such an ID selected (the Inspector showed "not found").
+TEST(SelectionTest, RetainExistingDropsIdsTheSceneDoesNotHave)
+{
+    Scene scene;
+    Entity* cube = scene.createEntity("Cube");
+    ASSERT_NE(cube, nullptr);
+
+    Selection sel;
+    sel.select(cube->getId());
+    sel.addToSelection(cube->getId() + 1000);  // not an entity
+    sel.retainExisting(scene);
+
+    EXPECT_EQ(sel.getSelectedIds().size(), 1u);
+    EXPECT_EQ(sel.getPrimaryId(), cube->getId());
 }

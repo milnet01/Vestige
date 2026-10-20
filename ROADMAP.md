@@ -5723,7 +5723,7 @@ shipped that have no invocation path at all.
   Source: in-session-2026-10-12 (trailer filming).
   Lanes: editor.
 
-- 📋 [3D_E-0764] **Edit > Duplicate (Ctrl+D) lists a copy in History that never appears, and the Inspector loses the selection.**
+- ✅ [3D_E-0764] **Edit > Duplicate (Ctrl+D) lists a copy in History that never appears, and the Inspector loses the selection.**
   Recorded 2026-10-12 on the v0.1.76 download (demoreel --gpu, 1920x1080):
   Create > Primitives > Cube, drag its X arrow, Ctrl+D. History shows
   "Create 'Cube (1)'" but only one cube is drawn, and the Inspector reads
@@ -5742,6 +5742,17 @@ shipped that have no invocation path at all.
   WantTextInput check. Next: rerun the note's demoreel steps with
   --app-log and read the \"Duplicated:\" / \"Deleted entity ID\" lines
   and the History panel to see which entity is removed and by what.
+  2026-10-20: cause was not Duplicate. A fast drag starting on the gizmo
+  also started a box select (Editor::processViewportClick reads
+  m_gizmoActive from the previous frame), and the box picked ID 1278, a
+  value in the ID buffer that no scene entity owns; Ctrl+D then had
+  nothing to copy. Recorded before (selection 1278 not found, cube 1320)
+  and after (History: Create 'Cube', Transform 'Cube', Create 'Cube
+  (1)'; Inspector on Cube (1)). Fixes: a box select is cancelled once
+  the gizmo takes the drag; Selection::retainExisting drops picked IDs
+  the scene does not have (point and box picks). Test:
+  SelectionTest.RetainExistingDropsIdsTheSceneDoesNotHave. Not found:
+  which draw writes ID 1278 into the ID buffer.
   **Layman:** Duplicating an object in the editor looks like it worked, but no copy shows up and the selected object goes blank.
   Kind: fix.
   Source: in-session-2026-10-12 (trailer filming).

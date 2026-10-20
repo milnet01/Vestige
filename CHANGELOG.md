@@ -25,6 +25,14 @@ may change any interface without notice.
 
 ## [Unreleased]
 
+### 2026-10-20 Fixed — Dragging the gizmo no longer loses the selection (3D_E-0764)
+
+A quick drag that started on the move gizmo also ran a box selection,
+which could select a picking value that belongs to no object. The
+Inspector then showed "Selected entity not found" and Duplicate had
+nothing to copy. The drag now stays a move, and picks keep only real
+objects.
+
 ### 2026-10-20 Added — Player Settings: Audio, Controls and Accessibility pages (3D_E-0759)
 
 The game's Settings screen now switches pages when a category is
