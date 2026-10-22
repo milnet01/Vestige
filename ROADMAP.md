@@ -5684,7 +5684,7 @@ shipped that have no invocation path at all.
   Source: in-session-2026-10-12 (trailer filming).
   Lanes: ui.
 
-- 📋 [3D_E-0761] **The script editor's node canvas draws broken: a partial grid and no nodes.**
+- ✅ [3D_E-0761] **The script editor's node canvas draws broken: a partial grid and no nodes.**
   Recorded 2026-10-12 on the v0.1.76 download, 1920x1080 headless
   (demoreel --gpu): View > Script Editor shows the grid only in a
   strip at the canvas's top-left, and loading Templates > Door Opens
@@ -5714,6 +5714,20 @@ shipped that have no invocation path at all.
   \"visible_rect\" (about 630x370 at zoom 1.37) is what sizes the strip;
   retry with NodeEditor.json deleted. The readout was a local edit,
   removed, not committed.
+  2026-10-22: FIXED by bumping imgui-node-editor v0.9.3 -> v0.9.4
+  (user chose the upgrade over a one-line patch). Cause: v0.9.3's
+  ImGuiEx::Canvas::EnterLocalSpace recorded the command count before
+  drawing, and when the child's draw list held one empty command ImGui
+  reused it, so LeaveLocalSpace never moved that command's clip rect
+  to screen space; the grid was clipped to (0,0)-(canvas size).
+  Upstream fixed it in #260 (m_DrawListFirstCommandIndex). Proof:
+  headless test NodeEditorCanvasClipTest fails on v0.9.3 (clip.x 0 vs
+  canvas 316) and passes on v0.9.4; demoreel shots of View > Script
+  Editor show the grid filling the canvas, and Templates > Door Opens
+  draws all four nodes and links. The fetch is now the release archive
+  with SHA256 and CMP0135, and the v0.9.3 compat string patches are
+  gone. Independent subagent review: one blocker (an option CMake 3.21
+  lacks), fixed and checked with the pinned 3.21 binary.
   **Layman:** Opening the script editor sometimes shows a broken grey patch instead of the node diagram.
   Kind: fix.
   Source: in-session-2026-10-12 (trailer filming).

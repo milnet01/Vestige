@@ -234,88 +234,41 @@ target_link_libraries(imgui_filebrowser INTERFACE imgui_lib)
 # imgui-node-editor — node graph editor widget for visual scripting (MIT, Phase 9E-3)
 # See docs/phases/phase_09e3_research.md for the library survey + fallback strategy.
 #
-# Step 1 spike (2026-04-13):
-# - Upstream v0.9.3 uses a few ImGui APIs that have since been removed or
-#   deprecated in ImGui 1.92.x: ImRect::Floor() and ImGui::GetKeyIndex().
-# - The fix is purely mechanical (5 + 5 call sites). Applied in-tree via
-#   string-replace during configure so there's no separate .patch file to
-#   maintain. The rewrite is idempotent (second runs are no-ops).
-# - Tried pthom's imgui_bundle fork (fallback #1): it fixes Floor()/GetKeyIndex
-#   but depends on custom ImGuiContextHookType_BeginWindow/EndWindow values
-#   that exist only in pthom's ImGui fork, not upstream. Staying on thedmd
-#   keeps us aligned with canonical ImGui.
+# v0.9.4 builds against ImGui 1.92.x as released, so the configure-time
+# string patches v0.9.3 needed are gone. It also fixes 3D_E-0761: v0.9.3's
+# canvas left its first draw command's clip rect in canvas space, so the
+# Script Editor grid drew only in a top-left strip (upstream #260).
+# Fetched as the release archive rather than a git checkout: the old
+# patches edited the checkout in place, and a git update cannot move a
+# dirty checkout to a new tag.
+#
+# CMP0135 NEW dates extracted files at extraction (CMake 3.24+). Set here
+# for the directory, so later archive fetches below get it too.
+if(POLICY CMP0135)
+    cmake_policy(SET CMP0135 NEW)
+endif()
 FetchContent_Declare(
     imgui_node_editor
-    GIT_REPOSITORY https://github.com/thedmd/imgui-node-editor.git
-    GIT_TAG        v0.9.3
-    GIT_SHALLOW    TRUE
-    # Engine defines `imgui_node_editor_lib` STATIC target below
-    # (after the ImGui 1.92.x compat string-rewrite) — SOURCE_SUBDIR skip.
+    URL      https://github.com/thedmd/imgui-node-editor/archive/refs/tags/v0.9.4.tar.gz
+    URL_HASH SHA256=14189f3c36289411469004a4101d97d9741fb68be90ea1b09beaaaa7405c05ed
+    # Engine defines `imgui_node_editor_lib` STATIC target below — SOURCE_SUBDIR skip.
     SOURCE_SUBDIR  __engine_defines_target__
 )
 FetchContent_MakeAvailable(imgui_node_editor)
 
-# ---------------------------------------------------------------------------
-# ImGui 1.92.x compatibility patch — see comment above.
-# Idempotent: replacements on already-rewritten code are no-ops.
-# ---------------------------------------------------------------------------
-set(_ne_src "${imgui_node_editor_SOURCE_DIR}/imgui_node_editor.cpp")
-if(EXISTS "${_ne_src}")
-    file(READ "${_ne_src}" _ne_contents)
-
-    # ImRect::Floor() was removed. Replace with explicit ImFloor on Min/Max.
-    # Enumerate each distinct receiver — there are only seven across the file.
-    foreach(_recv
-        "node->m_GroupBounds"
-        "node->m_Bounds"
-        "newBounds"
-        "m_NodeRect"
-        "m_CurrentPin->m_Bounds"
-        "m_GroupBounds")
-        string(REPLACE "${_recv}.Floor();"
-                       "${_recv}.Min = ImFloor(${_recv}.Min); ${_recv}.Max = ImFloor(${_recv}.Max);"
-                       _ne_contents "${_ne_contents}")
-    endforeach()
-    unset(_recv)
-
-    # ImGui::GetKeyIndex(ImGuiKey_Foo) is a deprecated-then-removed identity
-    # function — ImGuiKey_Foo can be passed directly to IsKeyPressed().
-    string(REGEX REPLACE "ImGui::GetKeyIndex\\((ImGuiKey_[A-Za-z0-9_]+)\\)"
-                         "\\1"
-                         _ne_contents "${_ne_contents}")
-
-    file(WRITE "${_ne_src}" "${_ne_contents}")
-    unset(_ne_contents)
+# The archive keeps upstream's file dates, which predate objects an existing
+# build tree compiled from an older version, so those would not be rebuilt.
+# Re-date the sources once per extraction: a new extraction replaces the
+# directory, marker included. CMP0135 does this only from CMake 3.24.
+set(_ne_marker "${imgui_node_editor_SOURCE_DIR}/.vestige-redated")
+if(NOT EXISTS "${_ne_marker}")
+    file(GLOB _ne_sources "${imgui_node_editor_SOURCE_DIR}/*.cpp"
+                          "${imgui_node_editor_SOURCE_DIR}/*.h"
+                          "${imgui_node_editor_SOURCE_DIR}/*.inl")
+    file(TOUCH ${_ne_sources} "${_ne_marker}")
+    unset(_ne_sources)
 endif()
-unset(_ne_src)
-
-# imgui_extra_math.inl defines ImVec2 ==, !=, and scalar*vec operators that
-# now collide with definitions added to upstream ImGui (gated by
-# IMGUI_DEFINE_MATH_OPERATORS, which node-editor sets). Guard the colliding
-# definitions on the same flag ImGui uses to mark "operators already defined".
-set(_ne_inl "${imgui_node_editor_SOURCE_DIR}/imgui_extra_math.inl")
-if(EXISTS "${_ne_inl}")
-    file(READ "${_ne_inl}" _ne_inl_contents)
-    string(FIND "${_ne_inl_contents}" "VESTIGE_OP_GUARD" _ne_already_patched)
-    if(_ne_already_patched EQUAL -1)
-        string(REPLACE
-            "inline bool operator==(const ImVec2& lhs, const ImVec2& rhs)\n{\n    return lhs.x == rhs.x && lhs.y == rhs.y;\n}"
-            "// VESTIGE_OP_GUARD\n#ifndef IMGUI_DEFINE_MATH_OPERATORS_IMPLEMENTED\ninline bool operator==(const ImVec2& lhs, const ImVec2& rhs)\n{\n    return lhs.x == rhs.x && lhs.y == rhs.y;\n}\n#endif"
-            _ne_inl_contents "${_ne_inl_contents}")
-        string(REPLACE
-            "inline bool operator!=(const ImVec2& lhs, const ImVec2& rhs)\n{\n    return lhs.x != rhs.x || lhs.y != rhs.y;\n}"
-            "#ifndef IMGUI_DEFINE_MATH_OPERATORS_IMPLEMENTED\ninline bool operator!=(const ImVec2& lhs, const ImVec2& rhs)\n{\n    return lhs.x != rhs.x || lhs.y != rhs.y;\n}\n#endif"
-            _ne_inl_contents "${_ne_inl_contents}")
-        string(REPLACE
-            "inline ImVec2 operator*(const float lhs, const ImVec2& rhs)\n{\n    return ImVec2(lhs * rhs.x, lhs * rhs.y);\n}"
-            "#ifndef IMGUI_DEFINE_MATH_OPERATORS_IMPLEMENTED\ninline ImVec2 operator*(const float lhs, const ImVec2& rhs)\n{\n    return ImVec2(lhs * rhs.x, lhs * rhs.y);\n}\n#endif"
-            _ne_inl_contents "${_ne_inl_contents}")
-        file(WRITE "${_ne_inl}" "${_ne_inl_contents}")
-    endif()
-    unset(_ne_inl_contents)
-    unset(_ne_already_patched)
-endif()
-unset(_ne_inl)
+unset(_ne_marker)
 
 add_library(imgui_node_editor_lib STATIC
     ${imgui_node_editor_SOURCE_DIR}/imgui_node_editor.cpp

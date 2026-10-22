@@ -26,7 +26,7 @@ publishes no suitable release tag — see "Branch-commit pins" below.
 | Dear ImGui       | commit `4cb21e4a` (docking branch, see below)   | MIT                                               | <https://github.com/ocornut/imgui> |
 | ImGuizmo         | `1.10`                                          | MIT                                               | <https://github.com/CedricGuillemet/ImGuizmo> |
 | imgui-filebrowser| commit `47a18845` (master branch, see below)    | MIT                                               | <https://github.com/AirGuanZ/imgui-filebrowser> |
-| imgui-node-editor| v0.9.3                                          | MIT                                               | <https://github.com/thedmd/imgui-node-editor> |
+| imgui-node-editor| v0.9.4                                          | MIT                                               | <https://github.com/thedmd/imgui-node-editor> |
 | ImPlot           | commit `1351ab2c` (master branch, see below)    | MIT                                               | <https://github.com/epezent/implot> |
 | FreeType         | VER-2-14-3                                      | FreeType Project License (BSD-style) — chosen over GPLv2 | <https://github.com/freetype/freetype> (official mirror; build fetches this) |
 | tinyexr          | v1.0.13                                         | BSD 3-Clause                                      | <https://github.com/syoyo/tinyexr> |

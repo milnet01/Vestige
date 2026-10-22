@@ -25,6 +25,14 @@ may change any interface without notice.
 
 ## [Unreleased]
 
+### 2026-10-22 Fixed — The Script Editor canvas draws in full (3D_E-0761)
+
+The Script Editor's node canvas showed its grid only in a strip at the
+top-left, and templates could appear to load no nodes. The node-editor
+library (imgui-node-editor) clipped the canvas to the wrong area; it is
+now on v0.9.4, which fixes this upstream. The grid fills the canvas and
+template nodes show.
+
 ### 2026-10-20 Fixed — Dragging the gizmo no longer loses the selection (3D_E-0764)
 
 A quick drag that started on the move gizmo also ran a box selection,
