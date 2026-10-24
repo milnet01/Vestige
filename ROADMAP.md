@@ -1,6 +1,6 @@
 <!-- ants-roadmap-format: 1 -->
 <!-- Generated from the Ants Terminal roadmap store. Edit it with roadmap_log; hand edits are discarded by the next write. -->
-<!-- ants-roadmap-id-high-water: 3D_E=793 3D_E#S=989 -->
+<!-- ants-roadmap-id-high-water: 3D_E=794 3D_E#S=989 -->
 
 # Vestige Engine Roadmap
 
@@ -10704,3 +10704,17 @@ record, and a real clearance before commercial release needs counsel.
   Kind: refactor.
   Source: review-readability-trial-2026-10-19.
   Lanes: app.
+
+- 📋 [3D_E-0794] **Move the Formula Workbench and its formula library into their own repository, pulled in by Vestige at a pinned version.**
+  User decision 2026-10-24: do it after the shared frameledger
+  repository, reusing its own-repo + pinned-version pattern. Scope:
+  engine/formula/ (used at runtime by lut_loader, quality_manager and
+  scripting/pure_nodes) and tools/formula_workbench/ (links all of
+  vestige_engine; needs only the formula library, the node-editor widget
+  and core/logger). Spans several subsystems and CLAUDE.md rule 6 names
+  the tools/ path, so spec-format.md section 1 likely says spec it; run
+  write-spec first. Pin per .claude/rules/dependency-pins.md.
+  **Layman:** Make the formula tool a separate project that Vestige and the other games can all use.
+  Kind: refactor.
+  Source: user-request-2026-10-24.
+  Lanes: formula, tools.
