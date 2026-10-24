@@ -1,6 +1,6 @@
 <!-- ants-roadmap-format: 1 -->
 <!-- Generated from the Ants Terminal roadmap store. Edit it with roadmap_log; hand edits are discarded by the next write. -->
-<!-- ants-roadmap-id-high-water: 3D_E=794 3D_E#S=989 -->
+<!-- ants-roadmap-id-high-water: 3D_E=795 3D_E#S=989 -->
 
 # Vestige Engine Roadmap
 
@@ -6136,6 +6136,19 @@ shipped that have no invocation path at all.
   Kind: doc-fix.
   Source: ut-ants-review-2026-10-24.
   Lanes: profiler.
+
+- 📋 [3D_E-0795] **After the 60 FPS per-second floor holds, also gate on frame time: no frame after warm-up beyond 16.67 ms.**
+  User decision 2026-10-24: frame time matters as well as FPS, but
+  in order: 60 FPS first (CLAUDE.md's per-second rule), then frame time.
+  Needs per-frame capture (3D_E-0786) and frameledger's floor check S8
+  failure (2), its per-frame budget. When the per-second floor holds on
+  the meadow flythrough, measure the over-budget frames, fix their
+  causes, then turn on failure (2) in Vestige's gate and amend CLAUDE.md's
+  Performance section (a rule 14 check is owed on that edit).
+  **Layman:** Once the game holds 60 frames a second, also remove the single slow frames that show as stutter.
+  Kind: perf.
+  Source: user-decision-2026-10-24.
+  Lanes: profiler, renderer.
 
 ## 0.3.0 — An editor a builder can use
 
