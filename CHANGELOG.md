@@ -25,6 +25,12 @@ may change any interface without notice.
 
 ## [Unreleased]
 
+### 2026-10-24 Fixed — Light edits can be undone (3D_E-0783)
+
+Changing a light's direction, colour, brightness, range, cone or shadow
+setting in the inspector left no History step, so Undo skipped it. Each
+edit to a directional, point or spot light now records one step.
+
 ### 2026-10-24 Fixed — The physics walk follows ground you reshape in the editor (3D_E-0780)
 
 After you sculpted, flattened or undid a terrain edit, the physics walk

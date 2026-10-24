@@ -6067,7 +6067,7 @@ shipped that have no invocation path at all.
   Source: user-decision-2026-10-20 (3D_E-0759 split).
   Lanes: ui.
 
-- 📋 [3D_E-0783] **Light inspectors: no undo, and Advanced Colors edits are overwritten every frame.**
+- ✅ [3D_E-0783] **Light inspectors: no undo, and Advanced Colors edits are overwritten every frame.**
   Found 2026-10-20 checking 3D_E-0766's note that Sun colour edits
   leave no History step. InspectorPanel::drawDirectionalLight and
   drawPointLight (and drawSpotLight, same shape) call ColorEdit3 with no
@@ -6079,6 +6079,12 @@ shipped that have no invocation path at all.
   2026-10-24: the Advanced Colors half shipped with 3D_E-0765
   (drawLightColorControls re-derives specular/ambient only when Color or
   Brightness changes). Undo for light edits remains.
+  2026-10-24: the undo half. New GroupUndo<T> (edit_tracker.h)
+  watches each light inspector as one group and gives back the value
+  from when the edit began; pushLightUndo records a
+  ComponentPropertyCommand on release. Light structs gained ==. Tests:
+  GroupEditWatchTest.GroupUndo* (headless ImGui drag). Not driven on
+  screen: no editor drag + Ctrl+Z was filmed.
   **Layman:** Changing a light's colour can't be undone, and the extra colour settings for lights snap back as soon as you change them.
   Kind: fix.
   Source: in-session-2026-10-20 (3D_E-0766 side note).

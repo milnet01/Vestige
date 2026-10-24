@@ -17,6 +17,12 @@ struct DirectionalLight
     glm::vec3 ambient   = glm::vec3(0.1f, 0.1f, 0.1f);
     glm::vec3 diffuse   = glm::vec3(0.8f, 0.8f, 0.8f);
     glm::vec3 specular  = glm::vec3(1.0f, 1.0f, 1.0f);
+
+    bool operator==(const DirectionalLight& o) const
+    {
+        return direction == o.direction && ambient == o.ambient
+            && diffuse == o.diffuse && specular == o.specular;
+    }
 };
 
 /// @brief A point light — emits in all directions from a position, with falloff.
@@ -37,6 +43,13 @@ struct PointLight
 
     // Shadow casting
     bool castsShadow = false;
+
+    bool operator==(const PointLight& o) const
+    {
+        return position == o.position && ambient == o.ambient && diffuse == o.diffuse
+            && specular == o.specular && constant == o.constant && linear == o.linear
+            && quadratic == o.quadratic && range == o.range && castsShadow == o.castsShadow;
+    }
 };
 
 /// @brief A spot light — cone-shaped light from a position in a direction.
@@ -59,6 +72,15 @@ struct SpotLight
 
     /// @brief Cached range for the inspector (not used by the shader).
     float range = 0.0f;
+
+    bool operator==(const SpotLight& o) const
+    {
+        return position == o.position && direction == o.direction && ambient == o.ambient
+            && diffuse == o.diffuse && specular == o.specular
+            && innerCutoff == o.innerCutoff && outerCutoff == o.outerCutoff
+            && constant == o.constant && linear == o.linear && quadratic == o.quadratic
+            && range == o.range;
+    }
 };
 
 /// @brief Maximum number of each light type supported by the shader.

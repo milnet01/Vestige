@@ -136,4 +136,44 @@ private:
     bool m_active = false;
 };
 
+/// @brief A GroupEditWatch that also remembers the block's value from before
+///        the edit, for a block that records one undo step per edit.
+///
+/// The light inspectors (3D_E-0783) draw their fields through helpers that
+/// submit several widgets each, so no widget can be tracked on its own.
+template <typename T>
+class GroupUndo
+{
+public:
+    /// @brief Call before the block's widgets.
+    /// @param current The block's value before its widgets run this frame.
+    /// @param ownerId The entity being edited; a new one starts afresh.
+    void begin(const T& current, std::uint32_t ownerId)
+    {
+        if (!m_watch.active() || ownerId != m_ownerId)
+        {
+            m_before  = current;
+            m_ownerId = ownerId;
+        }
+        m_watch.begin();
+    }
+
+    /// @brief Call after the block's widgets.
+    /// @return The value from before the edit, on the frame a held widget
+    ///         inside the block is released; empty otherwise.
+    std::optional<T> end()
+    {
+        if (m_watch.end())
+        {
+            return m_before;
+        }
+        return std::nullopt;
+    }
+
+private:
+    GroupEditWatch m_watch;
+    T m_before{};
+    std::uint32_t m_ownerId = 0;
+};
+
 }  // namespace Vestige

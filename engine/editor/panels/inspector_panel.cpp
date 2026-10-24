@@ -1064,6 +1064,32 @@ void InspectorPanel::drawCameraComponent(Entity& entity)
     ImGui::Spacing();
 }
 
+/// @brief Records a light inspector edit as one History step (3D_E-0783).
+/// @tparam Comp A light component whose `light` member is copyable and ==.
+template <typename Comp>
+static void pushLightUndo(CommandHistory* history, Scene* scene, uint32_t entityId,
+                          const decltype(Comp::light)& before,
+                          const decltype(Comp::light)& after, const char* description)
+{
+    if (!history || !scene || before == after)
+    {
+        return;
+    }
+    using Light = decltype(Comp::light);
+    history->execute(std::make_unique<ComponentPropertyCommand<Light>>(
+        before, after, description,
+        [scene, entityId](const Light& s)
+        {
+            if (auto* entity = scene->findEntityById(entityId))
+            {
+                if (auto* comp = entity->getComponent<Comp>())
+                {
+                    comp->light = s;
+                }
+            }
+        }));
+}
+
 void InspectorPanel::drawDirectionalLight(Entity& entity)
 {
     auto* comp = entity.getComponent<DirectionalLightComponent>();
@@ -1079,10 +1105,20 @@ void InspectorPanel::drawDirectionalLight(Entity& entity)
 
     auto& light = comp->light;
 
+    // One group: the helpers below draw several widgets each (3D_E-0783).
+    static GroupUndo<DirectionalLight> s_undo;
+    s_undo.begin(light, entity.getId());
+
     drawVec3Control("Direction", light.direction, 0.0f, 0.01f);
 
     static LightColor s_shown;
     drawLightColorControls(s_shown, light.diffuse, light.specular, light.ambient, 0.1f);
+
+    if (auto before = s_undo.end())
+    {
+        pushLightUndo<DirectionalLightComponent>(m_commandHistory, m_currentScene, entity.getId(),
+            *before, light, "Change Directional Light property");
+    }
 
     ImGui::Spacing();
 }
@@ -1102,6 +1138,10 @@ void InspectorPanel::drawPointLight(Entity& entity)
 
     auto& light = comp->light;
 
+    // One group: the helpers below draw several widgets each (3D_E-0783).
+    static GroupUndo<PointLight> s_undo;
+    s_undo.begin(light, entity.getId());
+
     static LightColor s_shown;
     drawLightColorControls(s_shown, light.diffuse, light.specular, light.ambient, 0.05f);
 
@@ -1112,6 +1152,12 @@ void InspectorPanel::drawPointLight(Entity& entity)
 
     ImGui::Spacing();
     ImGui::Checkbox("Casts Shadow", &light.castsShadow);
+
+    if (auto before = s_undo.end())
+    {
+        pushLightUndo<PointLightComponent>(m_commandHistory, m_currentScene, entity.getId(),
+            *before, light, "Change Point Light property");
+    }
 
     ImGui::Spacing();
 }
@@ -1130,6 +1176,10 @@ void InspectorPanel::drawSpotLight(Entity& entity)
     }
 
     auto& light = comp->light;
+
+    // One group: the helpers below draw several widgets each (3D_E-0783).
+    static GroupUndo<SpotLight> s_undo;
+    s_undo.begin(light, entity.getId());
 
     drawVec3Control("Direction", light.direction, 0.0f, 0.01f);
 
@@ -1155,6 +1205,12 @@ void InspectorPanel::drawSpotLight(Entity& entity)
 
     // Range and attenuation controls
     drawAttenuationControls(light.constant, light.linear, light.quadratic, light.range);
+
+    if (auto before = s_undo.end())
+    {
+        pushLightUndo<SpotLightComponent>(m_commandHistory, m_currentScene, entity.getId(),
+            *before, light, "Change Spot Light property");
+    }
 
     ImGui::Spacing();
 }
