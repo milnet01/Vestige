@@ -5989,11 +5989,19 @@ shipped that have no invocation path at all.
   Source: review-code 2026-08-31 lane physics (left open by 3D_E-0630; filed 2026-10-20).
   Lanes: physics.
 
-- 📋 [3D_E-0778] **GPU cloth: changing stretch, shear or bend compliance at run time does nothing.**
+- ✅ [3D_E-0778] **GPU cloth: changing stretch, shear or bend compliance at run time does nothing.**
   Named as still open in 3D_E-0630's resolution note (2026-09-21)
   but never filed. gpu_cloth_simulator.cpp: three setters set
   m_compliancesDirty, and nothing reads it. The compliance SSBO is
   immutable, so a naive re-upload also fails silently: diagnose first.
+  2026-10-24: diagnosis held: nothing read m_compliancesDirty and the
+  constraints SSBO was immutable. Now created with
+  GL_DYNAMIC_STORAGE_BIT; simulate() calls uploadCompliancesIfDirty,
+  which rewrites each constraint's compliance by its grid step (one
+  cell stretch, diagonal shear, two cells bend; the colouring reorders
+  them). Setters clamp at 0 like the CPU. Test
+  RuntimeComplianceMatchesBuiltCompliance: red without the fix (0.46 /
+  0.11 / 0.02 m off), green after.
   **Layman:** Adjusting how stretchy a large curtain is has no effect once it is running on the graphics card.
   Kind: fix.
   Source: review-code 2026-08-31 lane physics (left open by 3D_E-0630; filed 2026-10-20).

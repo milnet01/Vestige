@@ -270,6 +270,7 @@ private:
     void buildAndUploadTriangles(); ///< Phase 10.9 Sh4a — triangle colour-groups for wind drag.
     void uploadCollidersIfDirty();
     void uploadPinsIfDirty();
+    void uploadCompliancesIfDirty();
     /// Clears the sleep state; every pin edit calls it (3D_E-0753).
     void wakeForPinEdit();
     void loadShadersIfNeeded();
@@ -417,9 +418,8 @@ private:
     // return a stable reference without reconstructing.
     ClothConfig m_config;
 
-    // When any live compliance setter moves, set this true so the next
-    // `simulate()` call re-uploads the constraints SSBO. Keeps live tuning
-    // cheap for the 95% case (values don't change) while correct for the 5%.
+    // Set by the stretch, shear and bend compliance setters; the next
+    // `simulate()` rewrites the constraints SSBO (uploadCompliancesIfDirty).
     bool m_compliancesDirty = false;
 };
 

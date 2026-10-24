@@ -25,6 +25,14 @@ may change any interface without notice.
 
 ## [Unreleased]
 
+### 2026-10-24 Fixed — Stretch, shear and bend changes reach a GPU cloth (3D_E-0778)
+
+Changing a cloth's stretch, shear or bend compliance while it ran on the
+graphics card did nothing; only the processor version took the new
+value. The GPU now applies it on the next step, and clamps a negative
+value to zero as the processor version does. A test checks that a value
+set at run time drapes the same as one set when the cloth was built.
+
 ### 2026-10-24 Fixed — Resetting a GPU cloth keeps it on its hooks (3D_E-0777)
 
 Reset Simulation on a cloth simulated on the graphics card dropped every

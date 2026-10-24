@@ -112,19 +112,19 @@ void GpuClothSimulator::setAdaptiveDamping(float factor)
 
 void GpuClothSimulator::setStretchCompliance(float compliance)
 {
-    m_config.stretchCompliance = compliance;
+    m_config.stretchCompliance = std::max(0.0f, compliance);  // As on the CPU.
     m_compliancesDirty = true;
 }
 
 void GpuClothSimulator::setShearCompliance(float compliance)
 {
-    m_config.shearCompliance = compliance;
+    m_config.shearCompliance = std::max(0.0f, compliance);  // As on the CPU.
     m_compliancesDirty = true;
 }
 
 void GpuClothSimulator::setBendCompliance(float compliance)
 {
-    m_config.bendCompliance = compliance;
+    m_config.bendCompliance = std::max(0.0f, compliance);  // As on the CPU.
     m_compliancesDirty = true;
 }
 
@@ -642,11 +642,37 @@ void GpuClothSimulator::buildAndUploadConstraints(const ClothConfig& config)
         m_constraintsSSBO,
         static_cast<GLsizeiptr>(m_constraintCount * sizeof(GpuConstraint)),
         m_constraints.data(),
-        /*flags=*/0);  // Immutable for the cloth's lifetime.
+        GL_DYNAMIC_STORAGE_BIT);  // Live compliance edits rewrite it (3D_E-0778).
 
     Logger::info("[GpuClothSimulator] Built " + std::to_string(m_constraintCount)
                  + " constraints in " + std::to_string(m_colourRanges.size())
                  + " colour groups");
+}
+
+// The constraints were coloured, so they are no longer in generation order and
+// carry no type. A constraint's type follows from the grid step between its
+// two particles: one cell is stretch, one diagonal is shear, two cells is bend
+// (generateGridConstraints). 3D_E-0778.
+void GpuClothSimulator::uploadCompliancesIfDirty()
+{
+    if (!m_compliancesDirty || m_constraintsSSBO == 0) return;
+
+    for (GpuConstraint& c : m_constraints)
+    {
+        const int dx = std::abs(static_cast<int>(c.i1 % m_gridW) - static_cast<int>(c.i0 % m_gridW));
+        const int dz = std::abs(static_cast<int>(c.i1 / m_gridW) - static_cast<int>(c.i0 / m_gridW));
+        if (dx + dz == 1)
+            c.compliance = m_config.stretchCompliance;
+        else if (dx == 1 && dz == 1)
+            c.compliance = m_config.shearCompliance;
+        else
+            c.compliance = m_config.bendCompliance;
+    }
+    glNamedBufferSubData(
+        m_constraintsSSBO, 0,
+        static_cast<GLsizeiptr>(m_constraintCount * sizeof(GpuConstraint)),
+        m_constraints.data());
+    m_compliancesDirty = false;
 }
 
 void GpuClothSimulator::buildAndUploadDihedrals(const ClothConfig& config)
@@ -734,6 +760,7 @@ void GpuClothSimulator::simulate(float deltaTime)
 
     uploadCollidersIfDirty();
     uploadPinsIfDirty();
+    uploadCompliancesIfDirty();
 
     // Phase 10.9 Cl10 — sleep. Advance the gust clock BEFORE the sleep check,
     // as the CPU does, so a sleeping cloth still sees the gust that wakes it.

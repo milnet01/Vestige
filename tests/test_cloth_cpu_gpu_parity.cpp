@@ -517,6 +517,70 @@ TEST_F(ClothCpuGpuParityTest, Cl10_PinEditWakesASleepingCloth)
 }
 
 // =============================================================================
+// Run-time compliance changes reach the GPU solver (3D_E-0778)
+// =============================================================================
+// GPU against GPU, like the mass test below: a cloth whose compliance is set
+// after initialize() must drape exactly like one built with that compliance.
+// Same device, same constraint order, so the two runs agree to float noise.
+// The guard asserts the new value changes the drape at all, so the test
+// cannot pass on a compliance that makes no difference.
+TEST_F(ClothCpuGpuParityTest, RuntimeComplianceMatchesBuiltCompliance)
+{
+    struct Kind
+    {
+        const char* name;
+        float ClothConfig::*field;
+        void (GpuClothSimulator::*setter)(float);
+        float value;
+    };
+    const Kind kinds[] = {
+        {"stretch", &ClothConfig::stretchCompliance, &GpuClothSimulator::setStretchCompliance, 0.01f},
+        {"shear",   &ClothConfig::shearCompliance,   &GpuClothSimulator::setShearCompliance,   0.05f},
+        {"bend",    &ClothConfig::bendCompliance,    &GpuClothSimulator::setBendCompliance,    0.0f},
+    };
+
+    // Drapes a corner-pinned cloth for 2 s; @a live, when set, is applied
+    // after initialize() instead of through the config.
+    auto drape = [](const ClothConfig& cfg, const Kind* live, std::vector<glm::vec3>& out)
+    {
+        GpuClothSimulator gpu;
+        gpu.setShaderPath(VESTIGE_SHADER_DIR);
+        gpu.initialize(cfg, /*seed=*/0);
+        if (!gpu.isInitialized() || !gpu.hasShaders()) return false;
+        gpu.setWindQuality(ClothWindQuality::SIMPLE);
+        if (live) (gpu.*(live->setter))(live->value);
+        pinCorners(gpu);
+        run(gpu, FRAMES_2S);
+        const glm::vec3* p = gpu.getPositions();
+        out.assign(p, p + gpu.getParticleCount());
+        return true;
+    };
+
+    for (const Kind& kind : kinds)
+    {
+        SCOPED_TRACE(kind.name);
+        std::vector<glm::vec3> base, built, live;
+        ClothConfig changed = parityConfig();
+        changed.*(kind.field) = kind.value;
+        if (!drape(parityConfig(), nullptr, base) || !drape(changed, nullptr, built)
+            || !drape(parityConfig(), &kind, live))
+            GTEST_SKIP() << "GPU compute pipeline unavailable";
+
+        const uint32_t n = W * H;
+        ASSERT_GT(hausdorff(base.data(), built.data(), n), 0.01f * clothDiagonal())
+            << "fixture: a " << kind.name << " compliance of " << kind.value
+            << " does not change the drape, so this test could not fail";
+
+        float worst = 0.0f;
+        for (uint32_t i = 0; i < n; ++i)
+            worst = std::max(worst, glm::length(live[i] - built[i]));
+        EXPECT_LT(worst, 1e-4f)
+            << "setting " << kind.name << " compliance at run time drapes " << worst
+            << " m away from building with it";
+    }
+}
+
+// =============================================================================
 // reset() keeps the pins (3D_E-0777)
 // =============================================================================
 // The CPU reset puts every free particle back at rest and every pinned one at
