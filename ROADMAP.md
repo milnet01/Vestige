@@ -5919,12 +5919,26 @@ shipped that have no invocation path at all.
   Source: review-readability-trial-2026-10-19.
   Lanes: app.
 
-- 📋 [3D_E-0771] **The meadow logs thousands of GL_INVALID_OPERATION errors in glDrawElements.**
+- 🚫 [3D_E-0771] **The meadow logs thousands of GL_INVALID_OPERATION errors in glDrawElements.**
   Seen 2026-10-19 in the Debug build on the RX 6600 (demoreel --gpu,
   editor, meadow): the first error comes right after "TerrainRenderer:
   created 33x33 grid mesh", then about 3,900 in one ~3-minute run.
   Noted in July as "on the meadow foliage", pre-existing, never filed.
   Next: break on the GL debug callback to name the draw call.
+  2026-10-24: not reproducible. Five Debug editor runs on the RX 6600
+  (demoreel --gpu, 4-5 min each on the meadow) under gdb with a
+  breakpoint on glDebugCallback for GL_DEBUG_TYPE_ERROR; it never hit.
+  Configs: default settings from the repo root; from build/bin (the
+  2026-10-19 asset set); the user's real settings.json copied to a
+  scratch XDG dir; a 1600x1000 screen giving the 2026-10-19 resize
+  path (1280x720 then 1600x1000). All logs ever written hold the error
+  in only four runs, 2026-10-19 22:17-22:20, on Mesa 26.2.4; Mesa is
+  now 26.2.5 (updated 2026-10-23). Earlier and later runs on 26.2.4
+  reach the first frame without it. Cause unknown; no code changed.
+  Reopen if a log shows it again. Recipe: gdb -batch with
+  `break glDebugCallback if type == 0x824C`, run, `bt 25`; inside
+  demoreel record --gpu (the file log is cut off when the app is
+  killed, so read gdb's output, not the log).
   **Layman:** The graphics driver rejects one of the meadow's drawing calls every frame; it may be hiding a missing effect.
   Kind: fix.
   Source: in-session-2026-10-19 (0767 screenshot).
@@ -6070,6 +6084,11 @@ shipped that have no invocation path at all.
   premise is defeated. Fix: accumulate raw per-frame ms in
   ProfileLog::sample; per-frame rows follow the shared frameledger format
   once agreed.
+  2026-10-24: agreed frameledger's design for Vestige. Promised with
+  the first pinned release: a ctest entry compiling frameledger.h in
+  one C++17 file (MSVC /W4 /WX on Windows CI, -Wpedantic on Linux),
+  failures reported to frameledger; and actions/setup-python pinned to
+  3.12 in the Windows job before the analyser runs there.
   **Layman:** The frame-rate check smooths over about five seconds at a time, so a single stutter never shows.
   Kind: fix.
   Source: ut-ants-review-2026-10-24.
