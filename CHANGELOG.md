@@ -25,6 +25,12 @@ may change any interface without notice.
 
 ## [Unreleased]
 
+### 2026-10-24 Fixed — Settings sidebar highlights stay in their row at a larger interface scale (3D_E-0785)
+
+At 1.5x or 2.0x interface scale, the hover highlight behind a Settings
+category reached into the category below. The highlight now keeps its
+row's height at every scale.
+
 ### 2026-10-24 Fixed — Tab moves down the Display settings, not up (3D_E-0784)
 
 In Settings > Display, Tab went to the last option first and moved

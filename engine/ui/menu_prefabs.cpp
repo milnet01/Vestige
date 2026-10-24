@@ -343,6 +343,7 @@ void addSettingsCategoryButtons(UICanvas& canvas, const UITheme& theme,
         // so the hover fill sits behind the words.
         auto button = makeButton("", {sidebar.x, catY}, {sidebarW, kCategoryStep},  // i18n-exempt: no caption
                                  UIButtonStyle::GHOST, theme, textRenderer);
+        button->keepHeight = true;  // The rows stay kCategoryStep apart at any scale.
         button->accessible().label = std::string(Vestige::tr(key));
         auto label = makeLabel(numberedCategory(i, key), {sidebar.x + 48.0f, catY + 18.0f},
                                0.34f, theme.textPrimary, textRenderer);

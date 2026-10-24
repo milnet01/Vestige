@@ -6107,11 +6107,17 @@ shipped that have no invocation path at all.
   Source: in-session-2026-10-20 (3D_E-0759 build).
   Lanes: ui.
 
-- 📋 [3D_E-0785] **Player Settings sidebar: at 1.5x and 2.0x interface scale a category's hover fill spills into the next row.**
+- ✅ [3D_E-0785] **Player Settings sidebar: at 1.5x and 2.0x interface scale a category's hover fill spills into the next row.**
   The category buttons (menu_prefabs.cpp, addSettingsCategoryButtons)
   take their height from the theme's button height, which grows with
   interface scale, while the rows stay 56 px apart. Clicks still land
   on the right row.
+  2026-10-24: UIButton::render forced size.y to the theme's button
+  height (84 px at 1.5x, 112 at 2.0x) against a 56 px row step. New
+  UIButton::keepHeight keeps the authored height (drawnHeight());
+  addSettingsCategoryButtons sets it. Test
+  MenuPrefabs.SettingsCategoryButtonsFitTheirRowsAtAnyScale, red before
+  (84 / 112 px in a 56 px row), green after.
   **Layman:** With the interface made larger, the highlight behind a Settings category overlaps the one below it.
   Kind: fix.
   Source: in-session-2026-10-20 (3D_E-0759 build).

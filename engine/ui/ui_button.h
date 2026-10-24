@@ -70,6 +70,11 @@ public:
     /// @brief Use the smaller (40 px) button height. Matches `.btn--sm`.
     bool small = false;
 
+    /// @brief Keep the authored `size.y` instead of the theme's height. For a
+    ///        button that fills a fixed-height row, such as a Settings sidebar
+    ///        category, whose row does not grow with interface scale (3D_E-0785).
+    bool keepHeight = false;
+
     /// @brief Disabled — renders disabled colour, ignores hover/press.
     bool disabled = false;
 
@@ -87,6 +92,10 @@ public:
 
     /// @brief Returns the current button height in pixels (depends on `small`).
     float effectiveHeight() const;
+
+    /// @brief The height the button is drawn at: `size.y` with `keepHeight`,
+    ///        else effectiveHeight().
+    float drawnHeight() const { return keepHeight ? size.y : effectiveHeight(); }
 };
 
 } // namespace Vestige

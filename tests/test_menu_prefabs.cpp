@@ -8,10 +8,12 @@
 #include <gtest/gtest.h>
 
 #include "ui/menu_prefabs.h"
+#include "ui/ui_button.h"
 #include "ui/ui_canvas.h"
 #include "ui/ui_label.h"
 #include "ui/ui_panel.h"
 #include "ui/ui_theme.h"
+#include "systems/ui_system.h"
 
 #include <string>
 #include <vector>
@@ -84,6 +86,40 @@ TEST(MenuPrefabs, SettingsMenuPopulatesChrome)
     // adding 2 extras) + footer (rule + label + 3 buttons).
     EXPECT_GT(canvas.getElementCount(), 12u);
     EXPECT_LT(canvas.getElementCount(), 30u);
+}
+
+// 3D_E-0785 — at a larger interface scale the sidebar's category buttons were
+// drawn at the theme's button height (84 px at 1.5x), so a hover fill spilled
+// into the row below. Rows stay a fixed step apart, so the button keeps it.
+TEST(MenuPrefabs, SettingsCategoryButtonsFitTheirRowsAtAnyScale)
+{
+    for (float scale : {1.0f, 1.5f, 2.0f})
+    {
+        SCOPED_TRACE(scale);
+        UICanvas canvas;
+        UISystem ui;
+        const UITheme theme = UITheme::defaultTheme().withScale(scale);
+        SettingsMenuActions actions;
+        actions.categories = {"ui.settings.category.display", "ui.settings.category.audio"};
+        buildSettingsMenu(canvas, theme, nullptr, ui, actions);
+
+        std::vector<const UIButton*> rows;
+        for (size_t i = 0; i < canvas.getElementCount(); ++i)
+        {
+            const auto* b = dynamic_cast<const UIButton*>(canvas.getElementAt(i));
+            if (b != nullptr && b->label.empty())  // category buttons carry no caption
+            {
+                rows.push_back(b);
+            }
+        }
+        ASSERT_EQ(rows.size(), 2u);
+        const float step = rows[1]->position.y - rows[0]->position.y;
+        for (const UIButton* b : rows)
+        {
+            EXPECT_LE(b->drawnHeight(), step) << "drawn " << b->drawnHeight()
+                                              << " px in a " << step << " px row";
+        }
+    }
 }
 
 // 3D_E-0760 — Settings opens over the pause menu. A see-through Settings panel

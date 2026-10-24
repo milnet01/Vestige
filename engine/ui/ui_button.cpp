@@ -110,8 +110,8 @@ void UIButton::render(SpriteBatchRenderer& batch,
 
     // Force the configured height — caller's `size.y` is overridden so the
     // button always matches the theme's specified height regardless of how
-    // the canvas was authored.
-    size.y = effectiveHeight();
+    // the canvas was authored, unless the button keeps its own (keepHeight).
+    size.y = drawnHeight();
 
     const UIButtonState renderState = disabled ? UIButtonState::DISABLED : state;
     const glm::vec2 absPos = computeAbsolutePosition(parentOffset, screenWidth, screenHeight);
