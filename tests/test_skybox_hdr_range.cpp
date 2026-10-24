@@ -12,6 +12,7 @@
 /// bright block and read back both cubemaps.
 
 #include "gl_test_fixture.h"
+#include "test_helpers.h"
 
 #include "renderer/environment_map.h"
 #include "renderer/fullscreen_quad.h"
@@ -54,8 +55,10 @@ std::string writeSunEquirect()
             pixels[i + 2] = kSunValue;
         }
     }
-    const std::string path =
-        (std::filesystem::temp_directory_path() / "vestige_test_sun_equirect.hdr").string();
+    // Per-test name: ctest runs shards in parallel, and Windows refuses to
+    // delete a file another shard still has open.
+    const std::string path = (std::filesystem::temp_directory_path()
+        / ("vestige_sun_equirect_" + Testing::vestigeTestStamp() + ".hdr")).string();
     EXPECT_NE(stbi_write_hdr(path.c_str(), kWidth, kHeight, 3, pixels.data()), 0);
     return path;
 }
