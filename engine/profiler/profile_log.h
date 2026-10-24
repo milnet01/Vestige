@@ -96,8 +96,8 @@ private:
 
     std::FILE* m_file = nullptr;
     std::vector<Accum> m_accum;  ///< Interval accumulators, in first-seen order.
-    double m_fpsSum = 0.0;
-    long m_frameCount = 0;
+    long m_frameCount = 0;         ///< Frames sampled this interval (pass averages).
+    long m_intervalFrames = 0;     ///< Frames ending after the interval start (fps).
     double m_lastWriteSec = 0.0;   ///< time_s of the last flush (interval start).
     double m_lastSampleSec = 0.0;  ///< time_s of the last sample (final flush).
     bool m_started = false;        ///< False until the first sample sets origin.

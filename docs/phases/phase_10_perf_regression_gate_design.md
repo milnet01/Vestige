@@ -182,9 +182,9 @@ governs only the **exit code** (§5.5 / INV-4), not whether a verdict is compute
 
 `fps` is **never** a metric key in this loop — it is not gated and carries no verdict; it
 rides along on the `frame,total` row as reported context only (INV-5). (It is *not*
-`1000 / frame_ms`: the logger accumulates `fps` as the mean of per-frame `getFps()` while
-`frame,total` ms is a separate windowed average `getAvgFrameTimeMs()` —
-`profile_log.cpp:156-158,205` — so the two are correlated but not reciprocal.) The
+`1000 / frame_ms`: `ProfileLog` writes `fps` as the interval's frames over its wall time
+(3D_E-0800), while `frame,total` ms averages the windowed `getAvgFrameTimeMs()`, so the
+two are correlated but not reciprocal.) The
 frame-time regression is judged on `frame,total` ms.
 
 A current metric **absent from the baseline** → informational note only ("new metric —

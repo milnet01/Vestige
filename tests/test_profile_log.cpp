@@ -8,8 +8,12 @@
 
 #include <gtest/gtest.h>
 
+#include "profiler/performance_profiler.h"
 #include "profiler/profile_log.h"
+#include "test_helpers.h"
 
+#include <filesystem>
+#include <fstream>
 #include <string>
 #include <vector>
 
@@ -83,4 +87,50 @@ TEST(ProfileLog, EmptySampleYieldsNoRows)
     s.timeSec = 3.0;
     s.fps = 60.0;
     EXPECT_TRUE(formatSampleRows(s).empty());
+}
+
+// 3D_E-0800: the fps column is frames over wall time, not a mean of per-frame
+// rates. 50 frames at 10 ms plus one 500 ms frame is 51 frames in one second;
+// a mean of per-frame FPS read about 98 and passed tools/fps_floor.py.
+TEST(ProfileLog, FpsIsFramesOverWallTimeSoAHitchShows)
+{
+    const std::string path = (std::filesystem::temp_directory_path()
+        / ("vestige_profile_log_" + Testing::vestigeTestStamp() + ".csv")).string();
+    PerformanceProfiler profiler;
+    ProfileLog log;
+    ASSERT_TRUE(log.open(path));
+
+    auto frame = [&](float frameSec, double elapsedSec)
+    {
+        profiler.endFrame(frameSec);
+        log.sample(profiler, elapsedSec);
+    };
+
+    frame(0.010f, 0.0);  // the first sample only anchors the interval
+    for (int i = 1; i <= 50; ++i)
+    {
+        frame(0.010f, i * 0.010);
+    }
+    frame(0.500f, 1.0);  // the hitch; ends the first second
+    for (int i = 1; i <= 60; ++i)
+    {
+        frame(1.0f / 60.0f, 1.0 + (i / 60.0));  // a steady second at 60
+    }
+    log.close();
+
+    std::vector<std::string> fps;
+    std::ifstream in(path);
+    for (std::string line; std::getline(in, line);)
+    {
+        if (line.find(",frame,total,") != std::string::npos)
+        {
+            fps.push_back(line.substr(line.rfind(',') + 1));
+        }
+    }
+    in.close();
+    std::filesystem::remove(path);
+
+    ASSERT_EQ(fps.size(), 2u);
+    EXPECT_EQ(fps[0], "51.0") << "a hitch second must read its real rate";
+    EXPECT_EQ(fps[1], "60.0");
 }

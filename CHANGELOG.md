@@ -25,6 +25,14 @@ may change any interface without notice.
 
 ## [Unreleased]
 
+### 2026-10-24 Fixed — The profile log's FPS shows a stutter (3D_E-0800)
+
+`--profile-log` wrote each second's FPS as the average of every frame's
+own FPS. One long frame among fast ones barely moved that average: a
+second of 50 fast frames and one half-second freeze read 98.1 FPS when it
+really ran 51 frames. The column is now frames divided by the seconds
+they took, so `tools/fps_floor.py` sees that second fail.
+
 ### 2026-10-24 Fixed — The HDRI sky keeps the sun's brightness (3D_E-0772)
 
 Loading an HDRI sky capped every pixel at 50. The meadow's sun peaks near

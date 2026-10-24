@@ -96,8 +96,8 @@ bool ProfileLog::open(const std::string& path)
     std::fputs("time_s,category,name,depth,ms,fps\n", m_file);
 
     m_accum.clear();
-    m_fpsSum = 0.0;
     m_frameCount = 0;
+    m_intervalFrames = 0;
     m_lastWriteSec = 0.0;
     m_lastSampleSec = 0.0;
     m_started = false;
@@ -110,8 +110,9 @@ void ProfileLog::close()
     {
         return;
     }
-    // Don't lose the final partial (<1 s) interval on a short run.
-    if (m_frameCount > 0)
+    // Don't lose the final partial (<1 s) interval on a short run. A run whose
+    // only frame anchored the interval has no frame time to report.
+    if (m_frameCount > 0 && m_intervalFrames > 0)
     {
         flush(m_lastSampleSec);
     }
@@ -155,7 +156,12 @@ void ProfileLog::sample(PerformanceProfiler& profiler, double elapsedSec)
     // (Profiler getters are float; widen explicitly for the double accumulators.)
     addSample(ProfileCategory::Frame, "total", 0,
               static_cast<double>(profiler.getAvgFrameTimeMs()));
-    m_fpsSum += static_cast<double>(profiler.getFps());
+    // fps counts frames that END inside the interval; the first sample only
+    // anchors its start (3D_E-0800).
+    if (elapsedSec > m_lastWriteSec)
+    {
+        ++m_intervalFrames;
+    }
 
     // GPU — only once the triple-buffered timestamp queries are warm.
     GpuTimer& gpu = profiler.getGpuTimer();
@@ -202,7 +208,10 @@ void ProfileLog::flush(double elapsedSec)
 
     ProfileSample s;
     s.timeSec = elapsedSec;
-    s.fps = m_fpsSum / static_cast<double>(m_frameCount);
+    // Frames over wall time, not a mean of per-frame FPS: a mean of rates lets
+    // one long frame among fast ones read far above the real rate (3D_E-0800).
+    const double spanSec = elapsedSec - m_lastWriteSec;
+    s.fps = spanSec > 0.0 ? static_cast<double>(m_intervalFrames) / spanSec : 0.0;
     s.entries.reserve(m_accum.size());
     for (const auto& a : m_accum)
     {
@@ -218,8 +227,8 @@ void ProfileLog::flush(double elapsedSec)
     std::fflush(m_file);
 
     m_accum.clear();
-    m_fpsSum = 0.0;
     m_frameCount = 0;
+    m_intervalFrames = 0;
     m_lastWriteSec = elapsedSec;
 }
 

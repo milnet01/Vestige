@@ -6152,6 +6152,9 @@ shipped that have no invocation path at all.
   one C++17 file (MSVC /W4 /WX on Windows CI, -Wpedantic on Linux),
   failures reported to frameledger; and actions/setup-python pinned to
   3.12 in the Windows job before the analyser runs there.
+  2026-10-24: the fps half is fixed by 3D_E-0800 (frames over wall
+  time). The frame,total ms column is still an average of the rolling
+  average; per-frame capture remains this item's work.
   **Layman:** The frame-rate check smooths over about five seconds at a time, so a single stutter never shows.
   Kind: fix.
   Source: ut-ants-review-2026-10-24.
@@ -6245,7 +6248,7 @@ shipped that have no invocation path at all.
   Source: in-session-2026-10-24 (3D_E-0779 fix).
   Lanes: physics, core.
 
-- 📋 [3D_E-0800] **The profile log's fps column averages per-frame FPS, so a hitch can pass the 60 FPS floor.**
+- ✅ [3D_E-0800] **The profile log's fps column averages per-frame FPS, so a hitch can pass the 60 FPS floor.**
   engine/profiler/profile_log.cpp sums PerformanceProfiler::getFps()
   (1000 / that frame's ms) each frame and writes s.fps = m_fpsSum /
   m_frameCount. That is a mean of rates. 50 frames at 10 ms plus one
@@ -6255,10 +6258,16 @@ shipped that have no invocation path at all.
   hides hitches. Fix: write frames / wall seconds for the sample, with a
   red test on that case. 3D_E-0786 replaces this path with per-frame
   capture; fix this first, because the floor check reads it today.
+  2026-10-24: ProfileLog writes the interval's frames over its wall
+  time; the first sample only anchors the interval, and close() skips an
+  interval whose only frame was that anchor. Test
+  ProfileLog.FpsIsFramesOverWallTimeSoAHitchShows: red before (98.1 for
+  the hitch second), green after (51.0 and 60.0).
   **Layman:** The speed log can say a second ran at 98 frames per second when a freeze inside it meant it really ran at 51.
   Kind: fix.
   Source: review-2026-10-24 (frameledger FLED-0004 second review).
   Lanes: profiler.
+  Splits-from: 3D_E-0786.
 
 ## 0.3.0 — An editor a builder can use
 
