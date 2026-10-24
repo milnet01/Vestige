@@ -25,6 +25,13 @@ may change any interface without notice.
 
 ## [Unreleased]
 
+### 2026-10-24 Fixed — The physics walker no longer passes through the meadow's rocks, logs and trees (3D_E-0779)
+
+With the physics walk on, the player walked through every rock, log and
+tree trunk in the meadow. Its solid bodies were made at start-up, before
+the meadow placed those objects. They are now made afterwards, and the
+tree trunks are included, at the size the older walker already used.
+
 ### 2026-10-24 Fixed — Stretch, shear and bend changes reach a GPU cloth (3D_E-0778)
 
 Changing a cloth's stretch, shear or bend compliance while it ran on the

@@ -1,6 +1,6 @@
 <!-- ants-roadmap-format: 1 -->
 <!-- Generated from the Ants Terminal roadmap store. Edit it with roadmap_log; hand edits are discarded by the next write. -->
-<!-- ants-roadmap-id-high-water: 3D_E=795 3D_E#S=989 -->
+<!-- ants-roadmap-id-high-water: 3D_E=796 3D_E#S=989 -->
 
 # Vestige Engine Roadmap
 
@@ -6007,13 +6007,20 @@ shipped that have no invocation path at all.
   Source: review-code 2026-08-31 lane physics (left open by 3D_E-0630; filed 2026-10-20).
   Lanes: physics.
 
-- 📋 [3D_E-0779] **The physics walker passes through the meadow's rocks, logs and tree trunks.**
+- ✅ [3D_E-0779] **The physics walker passes through the meadow's rocks, logs and tree trunks.**
   Seen 2026-10-20 in the 0757 check: the log reads "Physics: created
   0 static bodies from scene + ground plane". createPhysicsStaticBodies
   runs at initialize, before finalizeMeadowTerrain places the props;
   tree trunks come per frame from FoliageManager::appendTreeTrunkColliders
   (legacy controller only, per 3D_E-0725). Give Jolt the same blocking
   set (setBlocksMovement) once the meadow is built.
+  2026-10-24: createPhysicsStaticBodies now runs after
+  finalizeMeadowTerrain and createTerrainCollider, and adds the tree
+  trunk boxes (kTreeTrunkRadius / kTreeTrunkHeight, shared with the
+  legacy controller). --demo-flythrough log: "created 122 static bodies"
+  (was 0 on 2026-10-20). No automated test: Engine::initialize cannot
+  run in the test binary. Not covered: bodies are not rebuilt when a
+  scene is loaded later or props are added in the editor.
   **Layman:** With the physics walk on, the player can walk straight through rocks and fallen logs in the meadow.
   Kind: fix.
   Source: in-session-2026-10-20 (3D_E-0757 check).
@@ -6182,6 +6189,19 @@ shipped that have no invocation path at all.
   Kind: perf.
   Source: user-decision-2026-10-24.
   Lanes: profiler, renderer.
+
+- 📋 [3D_E-0796] **Physics static bodies are built once at start-up and never rebuilt for a scene opened or edited later.**
+  Engine::createPhysicsStaticBodies runs once in initialize (after the
+  meadow is finalized, 3D_E-0779). Opening another scene in the editor,
+  or adding, moving or deleting a blocking prop, leaves Jolt's bodies on
+  the old set, so the physics walker collides with props that are gone
+  and passes through new ones. Rebuild (or update) the scene's static
+  bodies on scene load and on blocking-prop edits; 3D_E-0780 is the same
+  gap for the terrain.
+  **Layman:** In the editor, the physics walk still bumps into things from before you changed the scene, and walks through things you added.
+  Kind: fix.
+  Source: in-session-2026-10-24 (3D_E-0779 fix).
+  Lanes: physics, core.
 
 ## 0.3.0 — An editor a builder can use
 

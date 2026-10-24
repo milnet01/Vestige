@@ -83,6 +83,12 @@ namespace Vestige
 
 namespace
 {
+/// Tree trunk collider at unit scale: trees are foliage, not scene entities,
+/// so both walkers get these boxes from FoliageManager::appendTreeTrunkColliders.
+/// TODO: revisit via Formula Workbench — art-directed trunk size.
+constexpr float kTreeTrunkRadius = 0.3f;
+constexpr float kTreeTrunkHeight = 6.0f;
+
 /// Marks every mesh in an instantiated model (a hierarchy) as blocking or not.
 void setBlocksMovementRecursive(Entity& entity, bool blocks)
 {
@@ -421,9 +427,6 @@ bool Engine::initialize(const EngineConfig& config)
             Logger::error("--scene path not found: " + config.startupScene);
         }
     }
-
-    // Create static physics bodies from scene geometry (for physics character controller)
-    createPhysicsStaticBodies();
 
     // Wire up foliage shadow casting into the renderer's shadow pass
     m_renderer->setFoliageShadowCaster(m_foliageRenderer, m_foliageManager);
@@ -1289,6 +1292,10 @@ bool Engine::initialize(const EngineConfig& config)
         createTerrainCollider();
     }
 
+    // Static physics bodies for the physics walker. After the meadow is
+    // finalized, which places its rocks, logs and trees (3D_E-0779).
+    createPhysicsStaticBodies();
+
     // Apply --isolate-feature CLI override (visual-regression bisection).
     // Logged loudly so accompanying frame reports are easy to attribute.
     if (!config.isolateFeature.empty())
@@ -1854,10 +1861,8 @@ void Engine::run()
             }
             if (m_foliageManager)
             {
-                // Trees are foliage, not scene entities, so they add their own
-                // trunk boxes (a unit-scale trunk ~0.3 m radius, 6 m tall).
-                // TODO: revisit via Formula Workbench — art-directed trunk size.
-                m_foliageManager->appendTreeTrunkColliders(m_colliders, 0.3f, 6.0f);
+                m_foliageManager->appendTreeTrunkColliders(m_colliders, kTreeTrunkRadius,
+                                                           kTreeTrunkHeight);
             }
             m_controller->update(deltaTime, m_colliders);
         }
@@ -2546,9 +2551,15 @@ void Engine::createPhysicsStaticBodies()
         return;
     }
 
-    // Convert all scene AABB colliders to static Jolt box bodies
+    // Convert all scene AABB colliders to static Jolt box bodies, plus the
+    // tree trunks the legacy controller gets each frame.
     std::vector<AABB> colliders;
     scene->collectColliders(colliders);
+    if (m_foliageManager)
+    {
+        m_foliageManager->appendTreeTrunkColliders(colliders, kTreeTrunkRadius,
+                                                   kTreeTrunkHeight);
+    }
 
     int count = 0;
     for (const auto& aabb : colliders)
