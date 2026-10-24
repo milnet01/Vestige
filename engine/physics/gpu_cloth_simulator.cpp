@@ -285,6 +285,7 @@ bool GpuClothSimulator::pinParticle(uint32_t index, const glm::vec3& worldPos)
     if (index >= m_particleCount) return false;
     readbackPositionsIfDirty();
     m_positionMirror[index] = worldPos;
+    m_pinTargets[index]     = worldPos;
     if (m_invMassMirror[index] != 0.0f)
     {
         m_invMassMirror[index] = 0.0f;
@@ -316,6 +317,7 @@ void GpuClothSimulator::setPinPosition(uint32_t index, const glm::vec3& worldPos
     if (m_invMassMirror[index] != 0.0f) return;  // Not pinned: silently ignore.
     readbackPositionsIfDirty();
     m_positionMirror[index] = worldPos;
+    m_pinTargets[index]     = worldPos;
     m_pinsDirty = true;
     wakeForPinEdit();
 }
@@ -1104,16 +1106,21 @@ void GpuClothSimulator::reset()
     // recent pin move / sim drift instead of the original grid. The
     // snapshot is captured once at `buildInitialGrid()` and refreshed only
     // when the caller explicitly invokes `captureRestPositions()`.
+    //
+    // Pins stay pinned, each at its target, as in ClothSimulator::reset:
+    // nothing re-pins after a reset, so clearing them dropped a curtain off
+    // its hooks (3D_E-0777). `m_invMassMirror` already holds 0 for pins and
+    // the config's free weight for the rest (3D_E-0630), so it is kept.
+    m_positionMirror = m_initialPositions;
+    for (uint32_t p : m_pinIndices)
+    {
+        m_positionMirror[p] = m_pinTargets[p];
+    }
+
     std::vector<glm::vec4> rest(m_particleCount);
     for (uint32_t i = 0; i < m_particleCount; ++i)
     {
-        // Pack the snapshot with the FREE inverse mass rather than
-        // `m_invMassMirror[i]` because `reset()` is also restoring
-        // inverse-mass: pins re-arm by calling `pinParticle` after reset,
-        // mirroring the CPU contract. It is the free weight and not a bare
-        // 1.0 -- reset must leave the solver at the config's mass, not at
-        // unit mass (3D_E-0630).
-        rest[i] = glm::vec4(m_initialPositions[i], freeInverseMass(m_config));
+        rest[i] = glm::vec4(m_positionMirror[i], m_invMassMirror[i]);
     }
     const GLsizeiptr bytes = static_cast<GLsizeiptr>(m_particleCount * sizeof(glm::vec4));
     glNamedBufferSubData(m_positionsSSBO,     0, bytes, rest.data());
@@ -1122,14 +1129,8 @@ void GpuClothSimulator::reset()
     std::vector<glm::vec4> zeros(m_particleCount, glm::vec4(0.0f));
     glNamedBufferSubData(m_velocitiesSSBO,    0, bytes, zeros.data());
 
-    // Restore the mirror + invMass to match the reset SSBO so the next
-    // `getPositions()` (no-op readback path, m_positionsDirty == false)
-    // returns the rest pose, and pin state matches "all free until pinned
-    // again" — same contract the CPU backend honours at
-    // `cloth_simulator.cpp:689-693`.
-    m_positionMirror = m_initialPositions;
-    m_invMassMirror.assign(m_particleCount, freeInverseMass(m_config));
-    m_pinIndices.clear();
+    // The SSBOs now match the mirror, so the next `getPositions()` (no-op
+    // readback path, m_positionsDirty == false) returns the reset pose.
     m_pinsDirty      = false;
     m_positionsDirty = false;
     m_normalsDirty   = false;
@@ -1220,6 +1221,7 @@ void GpuClothSimulator::buildInitialGrid(const ClothConfig& config)
     m_normalMirror.resize(m_particleCount, glm::vec3(0.0f, 1.0f, 0.0f));
     m_texCoords.resize(m_particleCount);
     m_invMassMirror.assign(m_particleCount, freeInverseMass(m_config));  // All free until pin applied.
+    m_pinTargets.assign(m_particleCount, glm::vec3(0.0f));
 
     const float wMinus1 = static_cast<float>(W - 1);
     const float hMinus1 = static_cast<float>(H - 1);
@@ -1357,6 +1359,7 @@ void GpuClothSimulator::destroyBuffers()
     m_planeColliders.clear();
     m_collidersDirty = true;
     m_pinIndices.clear();
+    m_pinTargets.clear();
     m_lras.clear();
     m_lraCount = 0;
     m_pinsDirty = false;

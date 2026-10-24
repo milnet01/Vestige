@@ -5974,10 +5974,16 @@ shipped that have no invocation path at all.
   Kind: chore.
   Source: user-request-2026-10-20 (3D_E-0720 follow-up).
 
-- 📋 [3D_E-0777] **GPU cloth reset() clears the pins; CPU cloth reset() keeps them.**
+- ✅ [3D_E-0777] **GPU cloth reset() clears the pins; CPU cloth reset() keeps them.**
   Named as still open in 3D_E-0630's resolution note (2026-09-21)
   but never filed. GpuClothSimulator::reset vs ClothSimulator::reset.
   Write the CPU/GPU parity test first (project rule 7).
+  2026-10-24: GpuClothSimulator::reset keeps pins at their latest
+  target (new m_pinTargets), matching ClothSimulator::reset, the CPU
+  reference (rule 7). Parity test ResetKeepsPinsAtTheirTargets was red
+  on the GPU (corner fell 1.57 m after reset), green after. Three Cl5
+  GPU tests now assert the CPU contract for a moved pin; the snapshot
+  still governs free particles. IClothSolverBackend::reset doc states it.
   **Layman:** Resetting a curtain on the graphics card drops it from its hooks, while the same reset on the processor keeps it hanging.
   Kind: fix.
   Source: review-code 2026-08-31 lane physics (left open by 3D_E-0630; filed 2026-10-20).

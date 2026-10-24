@@ -453,6 +453,9 @@ TEST(ClothCollisionShader, CollidersUboExposesFrictionCoefficients_Sh3)
 // `m_initialPositions` is the rest snapshot, captured at init and refreshable
 // via `captureRestPositions()`. The GPU stub `captureRestPositions() = {}`
 // (header line 95) silently drops the call.
+//
+// 3D_E-0777 narrowed this: the snapshot governs FREE particles. A pinned
+// particle stays pinned and resets to its pin target, as on the CPU.
 
 namespace
 {
@@ -476,12 +479,12 @@ ClothConfig clothCl5Config(uint32_t w = 4, uint32_t h = 4)
 
 class GpuClothResetSemantics : public ::Vestige::Test::GLTestFixture {};
 
-TEST_F(GpuClothResetSemantics, ResetRestoresInitialGridIgnoringSetPinPosition_Cl5)
+TEST_F(GpuClothResetSemantics, ResetKeepsMovedPinAtTargetAndFreesToGrid_Cl5)
 {
-    // Reproduce the headline ROADMAP bug: pin a particle, move it via
-    // setPinPosition, reset → expect the particle back at its original grid
-    // location. Pre-Cl5 reset() reads from the mirror that setPinPosition
-    // mutated, so the particle stays at the moved-to coordinate.
+    // Pin a particle and move it with setPinPosition, then reset. The pin
+    // stays pinned at its new target, as on the CPU (3D_E-0777); a free
+    // particle goes back to its original grid location, not to whatever the
+    // mutable mirror holds (Cl5).
     GpuClothSimulator sim;
     sim.initialize(clothCl5Config());
     ASSERT_TRUE(sim.isInitialized());
@@ -489,29 +492,35 @@ TEST_F(GpuClothResetSemantics, ResetRestoresInitialGridIgnoringSetPinPosition_Cl
     const glm::vec3* posBefore = sim.getPositions();
     ASSERT_NE(posBefore, nullptr);
     const glm::vec3 originalGridPos = posBefore[0];
+    const glm::vec3 freeGridPos     = posBefore[1];
     // Sanity: 4x4 grid centred at origin, spacing 1 → particle 0 at (-1.5,0,-1.5).
     ASSERT_FLOAT_EQ(originalGridPos.x, -1.5f);
     ASSERT_FLOAT_EQ(originalGridPos.y,  0.0f);
     ASSERT_FLOAT_EQ(originalGridPos.z, -1.5f);
 
+    const glm::vec3 target(0.0f, 5.0f, 0.0f);
     ASSERT_TRUE(sim.pinParticle(0, originalGridPos));
-    sim.setPinPosition(0, glm::vec3(0.0f, 5.0f, 0.0f));
+    sim.setPinPosition(0, target);
 
     sim.reset();
 
+    EXPECT_TRUE(sim.isParticlePinned(0));
     const glm::vec3* posAfter = sim.getPositions();
     ASSERT_NE(posAfter, nullptr);
-    EXPECT_FLOAT_EQ(posAfter[0].x, originalGridPos.x);
-    EXPECT_FLOAT_EQ(posAfter[0].y, originalGridPos.y);
-    EXPECT_FLOAT_EQ(posAfter[0].z, originalGridPos.z);
+    EXPECT_FLOAT_EQ(posAfter[0].x, target.x);
+    EXPECT_FLOAT_EQ(posAfter[0].y, target.y);
+    EXPECT_FLOAT_EQ(posAfter[0].z, target.z);
+    EXPECT_FLOAT_EQ(posAfter[1].x, freeGridPos.x);
+    EXPECT_FLOAT_EQ(posAfter[1].y, freeGridPos.y);
+    EXPECT_FLOAT_EQ(posAfter[1].z, freeGridPos.z);
 }
 
 TEST_F(GpuClothResetSemantics, CaptureRestPositionsRefreshesSnapshotForReset_Cl5)
 {
     // After captureRestPositions(), reset() must restore to the captured
-    // pose, not the originally-built grid. Pre-Cl5 the override is `{}` so
-    // captureRestPositions has no effect: reset still reads from whatever
-    // the mirror happens to hold, which is the most recent setPinPosition.
+    // pose, not the originally-built grid. The particle is unpinned before
+    // the reset so it comes back from the snapshot, not from a pin target.
+    // Pre-Cl5 the override was `{}`, so captureRestPositions had no effect.
     GpuClothSimulator sim;
     sim.initialize(clothCl5Config());
     ASSERT_TRUE(sim.isInitialized());
@@ -522,6 +531,7 @@ TEST_F(GpuClothResetSemantics, CaptureRestPositionsRefreshesSnapshotForReset_Cl5
     ASSERT_TRUE(sim.pinParticle(0, capturedPin));
     sim.captureRestPositions();   // Pre-Cl5: no-op stub.
     sim.setPinPosition(0, laterPin);
+    sim.unpinParticle(0);
 
     sim.reset();
 
@@ -563,16 +573,23 @@ TEST_F(GpuClothResetSemantics, ResetThroughBackendInterface_Cl5)
     ASSERT_NE(posBefore, nullptr);
     const glm::vec3 originalGridPos = posBefore[0];
 
+    const glm::vec3 freeGridPos = posBefore[1];
+    const glm::vec3 target(7.0f, 7.0f, 7.0f);
+
     ASSERT_TRUE(backend->pinParticle(0, originalGridPos));
-    backend->setPinPosition(0, glm::vec3(7.0f, 7.0f, 7.0f));
+    backend->setPinPosition(0, target);
 
     backend->reset();
 
+    EXPECT_TRUE(backend->isParticlePinned(0));
     const glm::vec3* posAfter = backend->getPositions();
     ASSERT_NE(posAfter, nullptr);
-    EXPECT_FLOAT_EQ(posAfter[0].x, originalGridPos.x);
-    EXPECT_FLOAT_EQ(posAfter[0].y, originalGridPos.y);
-    EXPECT_FLOAT_EQ(posAfter[0].z, originalGridPos.z);
+    EXPECT_FLOAT_EQ(posAfter[0].x, target.x);
+    EXPECT_FLOAT_EQ(posAfter[0].y, target.y);
+    EXPECT_FLOAT_EQ(posAfter[0].z, target.z);
+    EXPECT_FLOAT_EQ(posAfter[1].x, freeGridPos.x);
+    EXPECT_FLOAT_EQ(posAfter[1].y, freeGridPos.y);
+    EXPECT_FLOAT_EQ(posAfter[1].z, freeGridPos.z);
 }
 
 // ---------------------------------------------------------------------------

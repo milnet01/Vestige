@@ -113,7 +113,9 @@ public:
     /// re-runs only the normals shader + flags the mirror dirty.
     virtual void syncBuffersOnly() = 0;
 
-    /// @brief Returns the cloth to its post-`initialize()` rest state.
+    /// @brief Returns the cloth to its rest pose (`captureRestPositions()`)
+    ///        with zero velocity. Pins stay pinned, each at its latest
+    ///        `pinParticle` / `setPinPosition` target.
     virtual void reset() = 0;
 
     /// @brief True once `initialize()` has succeeded.

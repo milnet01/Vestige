@@ -25,6 +25,13 @@ may change any interface without notice.
 
 ## [Unreleased]
 
+### 2026-10-24 Fixed — Resetting a GPU cloth keeps it on its hooks (3D_E-0777)
+
+Reset Simulation on a cloth simulated on the graphics card dropped every
+pin, so the cloth fell. The processor version kept them. Both now keep
+each pin at its latest position and put the rest of the cloth back at
+rest. A CPU/GPU parity test pins this.
+
 ### 2026-10-24 Fixed — A new lamp is bright enough to see, and lights have a Brightness slider (3D_E-0765)
 
 A point light added from Create > Lights lit nothing visible in daylight.

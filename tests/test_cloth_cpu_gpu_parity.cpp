@@ -517,6 +517,56 @@ TEST_F(ClothCpuGpuParityTest, Cl10_PinEditWakesASleepingCloth)
 }
 
 // =============================================================================
+// reset() keeps the pins (3D_E-0777)
+// =============================================================================
+// The CPU reset puts every free particle back at rest and every pinned one at
+// its pin's current target, and leaves it pinned. The GPU reset used to clear
+// the pins, so a curtain reset in the editor fell off its hooks. ClothComponent
+// re-pins nothing after reset(), so the backend must keep them.
+TEST_F(ClothCpuGpuParityTest, ResetKeepsPinsAtTheirTargets)
+{
+    static constexpr uint32_t MOVED = 0;  // A corner pinned by pinCorners.
+    const uint32_t corners[4] = {0, W - 1, (H - 1) * W, (H - 1) * W + (W - 1)};
+    const glm::vec3 lift(0.0f, 0.2f, 0.0f);
+
+    ClothSimulator cpu;
+    GpuClothSimulator gpu;
+    bool gpuReady = false;
+    buildPair(parityConfig(), cpu, gpu, gpuReady);
+    if (!gpuReady)
+        GTEST_SKIP() << "GPU cloth compute pipeline not available in this environment";
+    pinCorners(cpu);
+    pinCorners(gpu);
+    const glm::vec3 target = cpu.getPositions()[MOVED] + lift;
+
+    IClothSolverBackend* backends[2] = {&cpu, &gpu};
+    const char* label[2] = {"CPU", "GPU"};
+    for (int b = 0; b < 2; ++b)
+    {
+        IClothSolverBackend& sim = *backends[b];
+        sim.setPinPosition(MOVED, target);
+        run(sim, 60);
+        sim.reset();
+
+        EXPECT_EQ(sim.getPinnedCount(), 4u) << label[b];
+        for (uint32_t idx : corners)
+            EXPECT_TRUE(sim.isParticlePinned(idx)) << label[b] << " corner " << idx;
+        const glm::vec3 p = sim.getPositions()[MOVED];
+        EXPECT_NEAR(glm::length(p - target), 0.0f, 1e-5f)
+            << label[b] << " moved pin reset to (" << p.x << ", " << p.y << ", " << p.z
+            << ") instead of its target";
+
+        run(sim, 60);
+        EXPECT_NEAR(glm::length(sim.getPositions()[MOVED] - target), 0.0f, 1e-4f)
+            << label[b] << " pinned corner fell after reset";
+    }
+
+    const float h = hausdorff(cpu.getPositions(), gpu.getPositions(), W * H);
+    EXPECT_LT(h, 0.05f * clothDiagonal())
+        << "after reset + 1 s the CPU and GPU cloths differ by " << h << " m";
+}
+
+// =============================================================================
 // Cl1 — the GPU must RESPOND to particleMass (3D_E-0630)
 // =============================================================================
 // Deliberately GPU-vs-GPU rather than CPU-vs-GPU, and that is the point.

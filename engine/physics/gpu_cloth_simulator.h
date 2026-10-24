@@ -107,9 +107,8 @@ public:
     ///        previous-frame mirror, then copies the mirror into
     ///        `m_initialPositions`. Mirrors `ClothSimulator::captureRestPositions`
     ///        at `cloth_simulator.cpp:714`. Pre-Cl5 this was a `{}` stub
-    ///        and `reset()` re-uploaded the mutable mirror, so pinned
-    ///        particles snapped to the last `setPinPosition` value rather
-    ///        than the original grid.
+    ///        and `reset()` re-uploaded the mutable mirror, so free
+    ///        particles snapped to their last simulated shape.
     void captureRestPositions() override;
 
     // -- GPU backend extras --
@@ -382,6 +381,10 @@ private:
     // single source of truth for pinned-vs-free; the GPU positions SSBO is
     // re-uploaded when pin state changes.
     std::vector<uint32_t>           m_pinIndices;
+    /// Where each pinned particle is held, indexed by particle (last
+    /// `pinParticle` / `setPinPosition`). `reset()` puts pins back here, as
+    /// the CPU backend's `PinConstraint::position` does (3D_E-0777).
+    std::vector<glm::vec3>          m_pinTargets;
     std::vector<GpuLraConstraint>   m_lras;
     uint32_t                         m_lraCount      = 0;
     bool                             m_pinsDirty     = false;
