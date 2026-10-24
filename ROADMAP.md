@@ -1,6 +1,6 @@
 <!-- ants-roadmap-format: 1 -->
 <!-- Generated from the Ants Terminal roadmap store. Edit it with roadmap_log; hand edits are discarded by the next write. -->
-<!-- ants-roadmap-id-high-water: 3D_E=796 3D_E#S=989 -->
+<!-- ants-roadmap-id-high-water: 3D_E=799 3D_E#S=989 -->
 
 # Vestige Engine Roadmap
 
@@ -5966,10 +5966,15 @@ shipped that have no invocation path at all.
   Source: user-request-2026-10-20 (3D_E-0034 follow-up).
   Lanes: renderer, assets.
 
-- 📋 [3D_E-0774] **Give each discovery sign (SIGN-1 to SIGN-4) a roadmap item that claims it.**
+- ✅ [3D_E-0774] **Give each discovery sign (SIGN-1 to SIGN-4) a roadmap item that claims it.**
   docs/discovery.md (agreed 2026-10-20) lists four signs. Run
   check-queue; where a sign has no item citing its label, file one in
   the 1.0.0 section (3D_E-0691 is the natural home for SIGN-1).
+  2026-10-24: check-queue found SIGN-2 and SIGN-3 named nowhere, and SIGN-1
+  and SIGN-4 only in this item and 3D_E-0720. Now claimed: SIGN-1 by
+  3D_E-0691 (its method corrected from perf_gate.py to fps_floor.py, per
+  CLAUDE.md § Performance), SIGN-2 by 3D_E-0797, SIGN-3 by 3D_E-0798,
+  SIGN-4 by 3D_E-0799.
   **Layman:** Make sure every goal in the new discovery page has planned work behind it.
   Kind: chore.
   Source: user-request-2026-10-20 (3D_E-0720 follow-up).
@@ -9186,11 +9191,15 @@ Biblical rendition of the Tabernacle as described in Exodus 25-40.
   Kind: release.
   Source: user-request-2026-09-25 (1.0.0 reshape).
 
-- 📋 [3D_E-0691] **Prove the Tabernacle walkthrough holds 60 FPS with the perf gate.**
+- 📋 [3D_E-0691] **Prove the Tabernacle walkthrough holds 60 FPS on the dev hardware.**
   This is the 1.0 exit condition in docs/standards/versioning-overrides.md
-  section 2. Run tools/perf_gate.py against the standalone walkthrough
-  build on the dev hardware CLAUDE.md names, and record the run.
-  **Layman:** Measure, with the existing speed test, that the finished walkthrough never drops below 60 frames per second on the dev PC.
+  section 2, and it claims SIGN-1 in docs/discovery.md. Walk the whole
+  standalone walkthrough, courtyard through the Holy Place into the Most
+  Holy Place, on the dev hardware, measured as CLAUDE.md § Performance
+  says: a Release build's --profile-log read by tools/fps_floor.py.
+  Record the run. (tools/perf_gate.py compares against a baseline; it is
+  not this check.)
+  **Layman:** Walk the finished Tabernacle from the courtyard to the Most Holy Place and measure that it never drops below 60 frames per second on the dev PC.
   Kind: perf.
   Source: user-request-2026-09-25 (1.0.0 reshape).
 
@@ -9218,6 +9227,43 @@ Biblical rendition of the Tabernacle as described in Exodus 25-40.
   Kind: chore.
   Source: user-request-2026-10-20.
   Lanes: localization.
+
+- 📋 [3D_E-0797] **Every Tabernacle size and material is backed by a written source.**
+  Claims SIGN-2 in docs/discovery.md. A source table, one row per
+  modelled part: its size in cubits, the cubit length used, its
+  material, and the passage or reference behind each. Where the text is
+  silent or sources disagree, the row says so and names the choice.
+  The Tabernacle content is moving to its private repo (3D_E-S0821);
+  the table lives beside it. Done when every part in the walkthrough
+  has a row and a check fails the build on a part with none.
+  **Layman:** Each measurement and material in the Tabernacle (cubits, gold, linen, acacia wood) comes with a note saying which text it follows.
+  Kind: feature.
+  Source: user-request-2026-10-20 (3D_E-0774).
+  Lanes: assets, docs.
+
+- 📋 [3D_E-0798] **A stranger downloads the walkthrough on Linux or Windows and is walking within a few minutes, unaided.**
+  Claims SIGN-3 in docs/discovery.md. Builds on Windows packaging
+  (3D_E-S0803), Linux packaging (3D_E-S0804) and the clean-clone check
+  (3D_E-S0820), which tests building from source rather than a download.
+  Done when a person new to the project, on each system, goes from the
+  download page to walking with no help, and the time and every stall
+  are recorded.
+  **Layman:** Someone who has never seen the project gets it, starts it and walks around on their own, on either system, in a few minutes.
+  Kind: feature.
+  Source: user-request-2026-10-20 (3D_E-0774).
+  Lanes: packaging.
+
+- 📋 [3D_E-0799] **Pointing at a Tabernacle object names it and says where scripture describes it.**
+  Claims SIGN-4 in docs/discovery.md. Builds on the look-at trigger
+  (3D_E-S0736) and the show-text action (3D_E-S0737). The name and
+  passage come from the same source table as the SIGN-2 item, so a
+  label and its measurements cannot disagree. Player-facing text goes
+  through localisation (3D_E-0024). Done when every object in the
+  table shows its label when pointed at.
+  **Layman:** Look at the altar or the lampstand and the walkthrough tells you what it is and which passage describes it.
+  Kind: feature.
+  Source: user-request-2026-10-20 (3D_E-0774).
+  Lanes: ui, scripting.
 
 ## 1.1.0 — Procedural generation
 
