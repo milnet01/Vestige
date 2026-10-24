@@ -25,6 +25,13 @@ may change any interface without notice.
 
 ## [Unreleased]
 
+### 2026-10-24 Fixed — The physics walk follows ground you reshape in the editor (3D_E-0780)
+
+After you sculpted, flattened or undid a terrain edit, the physics walk
+still followed the old ground. Its collision surface was built once, at
+start-up. It is now rebuilt once your edit settles: the frame after a
+brush stroke ends, an undo or a panel change.
+
 ### 2026-10-24 Fixed — The physics walker no longer passes through the meadow's rocks, logs and trees (3D_E-0779)
 
 With the physics walk on, the player walked through every rock, log and

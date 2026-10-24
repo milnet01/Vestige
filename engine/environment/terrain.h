@@ -13,6 +13,7 @@
 #include <glm/glm.hpp>
 #include <nlohmann/json_fwd.hpp>
 
+#include <cstdint>
 #include <filesystem>
 #include <vector>
 
@@ -133,8 +134,14 @@ public:
 
     // --- Partial GPU updates (for sculpting) ---
 
-    /// @brief Uploads a rectangular region of the heightmap to GPU.
+    /// @brief Uploads a rectangular region of the heightmap to GPU. Every
+    ///        height edit ends here, so it also bumps the height revision.
     void updateHeightmapRegion(int x, int z, int w, int h);
+
+    /// @brief Rises whenever the heights change (initialize or
+    ///        updateHeightmapRegion). The physics collider rebuilds on it
+    ///        (TerrainColliderSync, 3D_E-0780).
+    std::uint64_t getHeightRevision() const { return m_heightRevision; }
 
     /// @brief Recomputes normals for a region and uploads to GPU.
     void updateNormalMapRegion(int x, int z, int w, int h);
@@ -293,6 +300,7 @@ private:
 
     // CPU data
     std::vector<float> m_heightData;          ///< Normalized heights (0..1).
+    std::uint64_t m_heightRevision = 0;       ///< See getHeightRevision().
     std::vector<glm::vec3> m_normalData;      ///< Pre-computed normals.
     std::vector<glm::vec4> m_splatData;       ///< Splatmap weights (RGBA).
 

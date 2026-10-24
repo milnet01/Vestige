@@ -27,6 +27,7 @@
 #include "profiler/profile_log.h"
 #include "physics/physics_world.h"
 #include "physics/physics_debug.h"
+#include "physics/terrain_collider_sync.h"
 #include "testing/demo_flythrough.h"
 #include "testing/visual_test_runner.h"
 #include "core/system_registry.h"
@@ -235,6 +236,8 @@ private:
     double m_profileElapsedSec = 0.0;    ///< Cumulative time_s passed to sample().
     PhysicsWorld m_physicsWorld;
     PhysicsDebugDraw m_physicsDebugDraw;
+    JPH::BodyID m_terrainBodyId;                 ///< The terrain height-field body, if any.
+    TerrainColliderSync m_terrainColliderSync;   ///< When to rebuild it (3D_E-0780).
 
     /// Canonicalised asset roots installed into every path sandbox
     /// (ResourceManager, CubeLoader, AudioEngine). Empty means the sandbox

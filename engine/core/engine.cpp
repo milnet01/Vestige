@@ -1788,6 +1788,14 @@ void Engine::run()
         {
             VESTIGE_PROFILE_SCOPE("JoltPhysics");
 
+            // A terrain edit (brush stroke, undo, panel) leaves the collider on
+            // the old shape until the heights settle; then rebuild (3D_E-0780).
+            if (m_terrain && m_terrain->isInitialized()
+                && m_terrainColliderSync.shouldRebuild(m_terrain->getHeightRevision()))
+            {
+                createTerrainCollider();
+            }
+
             // Pre-compute look + velocity once per frame for the
             // physics-controller path. Done before the Jolt step so
             // input is settled when the callback fires.
@@ -2599,6 +2607,12 @@ void Engine::createTerrainCollider()
         return;
     }
 
+    // Replace any earlier collider. Marked built first, so a terrain that
+    // cannot get one is not retried every frame.
+    m_terrainColliderSync.markBuilt(m_terrain->getHeightRevision());
+    m_physicsWorld.destroyBody(m_terrainBodyId);
+    m_terrainBodyId = JPH::BodyID();
+
     const TerrainConfig& tcfg = m_terrain->getConfig();
     const int W = m_terrain->getWidth();
     const int D = m_terrain->getDepth();
@@ -2631,7 +2645,7 @@ void Engine::createTerrainCollider()
     {
         return;
     }
-    m_physicsWorld.createStaticBody(shape.GetPtr(), glm::vec3(0.0f));
+    m_terrainBodyId = m_physicsWorld.createStaticBody(shape.GetPtr(), glm::vec3(0.0f));
     Logger::info("Physics: created terrain collider (" + std::to_string(W) + "x" +
                  std::to_string(D) + " height field)");
 }

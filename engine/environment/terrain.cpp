@@ -34,6 +34,7 @@ bool Terrain::initialize(const TerrainConfig& config)
     }
 
     m_config = config;
+    ++m_heightRevision;  // A new (or resized) heightmap.
 
     // Validate dimensions (should be power-of-two + 1)
     if (m_config.width < 3 || m_config.depth < 3)
@@ -453,6 +454,7 @@ void Terrain::createGpuTextures()
 
 void Terrain::updateHeightmapRegion(int x, int z, int w, int h)
 {
+    ++m_heightRevision;  // Before the GL check: the CPU heights changed either way.
     if (!m_heightmapTex) return;
 
     // Extract the sub-rectangle from the CPU data

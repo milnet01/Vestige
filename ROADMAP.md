@@ -6026,11 +6026,20 @@ shipped that have no invocation path at all.
   Source: in-session-2026-10-20 (3D_E-0757 check).
   Lanes: physics, core.
 
-- 📋 [3D_E-0780] **Editing the terrain in the editor leaves the physics collider on the old shape.**
+- ✅ [3D_E-0780] **Editing the terrain in the editor leaves the physics collider on the old shape.**
   Engine::createTerrainCollider (3D_E-0757) builds the Jolt height
   field once, after the meadow is shaped. The terrain brush changes the
   heightmap later with no rebuild. Rebuild (or update the edited region
   of) the height field when the brush stroke ends.
+  2026-10-24: Terrain::getHeightRevision rises in initialize and
+  updateHeightmapRegion (every height edit ends there: brush, panel,
+  undo/redo, load). TerrainColliderSync rebuilds when the revision
+  differs from the last build and held still for a frame;
+  createTerrainCollider now replaces the old body (m_terrainBodyId).
+  Tests: TerrainColliderSync.* (rule) and
+  TerrainHeightRevisionTest (red before the increments). Flythrough
+  builds the collider once. Not verified end to end: no brush stroke
+  was driven in the editor.
   **Layman:** After you reshape the ground in the editor, the physics walk still follows the old ground.
   Kind: fix.
   Source: in-session-2026-10-20 (3D_E-0757 check).
@@ -6196,8 +6205,8 @@ shipped that have no invocation path at all.
   or adding, moving or deleting a blocking prop, leaves Jolt's bodies on
   the old set, so the physics walker collides with props that are gone
   and passes through new ones. Rebuild (or update) the scene's static
-  bodies on scene load and on blocking-prop edits; 3D_E-0780 is the same
-  gap for the terrain.
+  bodies on scene load and on blocking-prop edits; 3D_E-0780 closed the same
+  gap for the terrain (TerrainColliderSync is a model).
   **Layman:** In the editor, the physics walk still bumps into things from before you changed the scene, and walks through things you added.
   Kind: fix.
   Source: in-session-2026-10-24 (3D_E-0779 fix).
