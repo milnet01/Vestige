@@ -194,6 +194,7 @@ add_executable(vestige_tests
     test_edit_tracker_drag_undo.cpp
     test_group_edit_watch.cpp
     test_node_editor_canvas_clip.cpp
+    test_light_color.cpp
     test_shader_copies_registry.cpp
     test_renderer_view_override.cpp
     test_update_core.cpp

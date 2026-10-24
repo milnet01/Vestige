@@ -147,8 +147,11 @@ Entity* EntityFactory::createPointLight(Scene& scene, const glm::vec3& position)
     entity->transform.position = position;
 
     auto* comp = entity->addComponent<PointLightComponent>();
-    comp->light.diffuse = glm::vec3(1.0f, 0.9f, 0.8f);   // Warm white
-    comp->light.specular = glm::vec3(1.0f, 0.9f, 0.8f);
+    // Warm white at brightness 3: about 2.3 at 2 m with the default falloff,
+    // so a new lamp shows against the meadow sun's 1.15 (3D_E-0765).
+    comp->light.diffuse = glm::vec3(1.0f, 0.9f, 0.8f) * 3.0f;
+    comp->light.specular = comp->light.diffuse;
+    comp->light.ambient = comp->light.diffuse * 0.05f;
 
     Logger::info("Created: " + entity->getName());
     return entity;

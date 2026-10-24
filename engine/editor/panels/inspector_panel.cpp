@@ -5,6 +5,7 @@
 /// @brief Inspector panel implementation — property editing for selected entities.
 #include "editor/panels/inspector_panel.h"
 #include "editor/panels/edit_tracker.h"
+#include "editor/light_color.h"
 #include "editor/command_history.h"
 #include "editor/commands/transform_command.h"
 #include "editor/commands/entity_property_command.h"
@@ -918,6 +919,33 @@ void InspectorPanel::drawMaterialTransparency(Material& material)
 // Light components
 // ---------------------------------------------------------------------------
 
+/// @brief Draws a light's Color, Brightness and Advanced Colors controls.
+///
+/// @p shown is the caller's remembered split, so a picked colour stays put
+/// between frames. A Color or Brightness edit re-derives specular and ambient
+/// (ambient at @p ambientRatio); otherwise Advanced Colors edits stand.
+static void drawLightColorControls(LightColor& shown, glm::vec3& diffuse,
+                                   glm::vec3& specular, glm::vec3& ambient,
+                                   float ambientRatio)
+{
+    shown = reconcileLightColor(shown, diffuse);
+    bool changed = ImGui::ColorEdit3("Color", &shown.color.x);
+    changed |= ImGui::DragFloat("Brightness", &shown.brightness, 0.05f, 0.0f, 50.0f, "%.2f");
+    if (changed)
+    {
+        diffuse = combineLightColor(shown);
+        specular = diffuse;
+        ambient = diffuse * ambientRatio;
+    }
+
+    if (ImGui::TreeNode("Advanced Colors"))
+    {
+        ImGui::ColorEdit3("Ambient",  &ambient.x, ImGuiColorEditFlags_HDR | ImGuiColorEditFlags_Float);
+        ImGui::ColorEdit3("Specular", &specular.x, ImGuiColorEditFlags_HDR | ImGuiColorEditFlags_Float);
+        ImGui::TreePop();
+    }
+}
+
 /// @brief Draws a small attenuation curve plot.
 static void drawAttenuationCurve(float constant, float linear, float quadratic,
                                  float range)
@@ -1053,17 +1081,8 @@ void InspectorPanel::drawDirectionalLight(Entity& entity)
 
     drawVec3Control("Direction", light.direction, 0.0f, 0.01f);
 
-    // Simplified color model: single color, ambient/specular derived
-    ImGui::ColorEdit3("Color", &light.diffuse.x);
-    light.specular = light.diffuse;
-    light.ambient = light.diffuse * 0.1f;
-
-    if (ImGui::TreeNode("Advanced Colors"))
-    {
-        ImGui::ColorEdit3("Ambient",  &light.ambient.x);
-        ImGui::ColorEdit3("Specular", &light.specular.x);
-        ImGui::TreePop();
-    }
+    static LightColor s_shown;
+    drawLightColorControls(s_shown, light.diffuse, light.specular, light.ambient, 0.1f);
 
     ImGui::Spacing();
 }
@@ -1083,17 +1102,8 @@ void InspectorPanel::drawPointLight(Entity& entity)
 
     auto& light = comp->light;
 
-    // Simplified color model: single color, ambient/specular derived
-    ImGui::ColorEdit3("Color", &light.diffuse.x);
-    light.specular = light.diffuse;
-    light.ambient = light.diffuse * 0.05f;
-
-    if (ImGui::TreeNode("Advanced Colors"))
-    {
-        ImGui::ColorEdit3("Ambient",  &light.ambient.x);
-        ImGui::ColorEdit3("Specular", &light.specular.x);
-        ImGui::TreePop();
-    }
+    static LightColor s_shown;
+    drawLightColorControls(s_shown, light.diffuse, light.specular, light.ambient, 0.05f);
 
     ImGui::Spacing();
 
@@ -1123,17 +1133,9 @@ void InspectorPanel::drawSpotLight(Entity& entity)
 
     drawVec3Control("Direction", light.direction, 0.0f, 0.01f);
 
-    // Simplified color model
-    ImGui::ColorEdit3("Color", &light.diffuse.x);
-    light.specular = light.diffuse;
-    light.ambient = light.diffuse * 0.0f; // Spot lights typically have no ambient
-
-    if (ImGui::TreeNode("Advanced Colors"))
-    {
-        ImGui::ColorEdit3("Ambient",  &light.ambient.x);
-        ImGui::ColorEdit3("Specular", &light.specular.x);
-        ImGui::TreePop();
-    }
+    // Spot lights typically have no ambient.
+    static LightColor s_shown;
+    drawLightColorControls(s_shown, light.diffuse, light.specular, light.ambient, 0.0f);
 
     ImGui::Spacing();
 

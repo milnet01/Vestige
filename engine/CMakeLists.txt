@@ -129,6 +129,7 @@ set(ENGINE_SOURCES
     editor/editor_camera.cpp
     editor/entity_actions.cpp
     editor/entity_factory.cpp
+    editor/light_color.cpp
     editor/selection.cpp
     editor/panels/hierarchy_panel.cpp
     editor/panels/history_panel.cpp

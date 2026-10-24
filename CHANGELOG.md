@@ -25,6 +25,16 @@ may change any interface without notice.
 
 ## [Unreleased]
 
+### 2026-10-24 Fixed — A new lamp is bright enough to see, and lights have a Brightness slider (3D_E-0765)
+
+A point light added from Create > Lights lit nothing visible in daylight.
+It was created at brightness 1.0 against the meadow sun's 1.15, and the
+inspector's colour picker could not go above 1.0. New point lights now
+start at brightness 3. The point, spot and directional light inspectors
+show Color and Brightness separately; Brightness goes up to 50. Advanced
+Colors edits (ambient, specular) no longer revert on the next frame.
+Grass and terrain still ignore point and spot lights (3D_E-0793).
+
 ### 2026-10-22 Fixed — The Script Editor canvas draws in full (3D_E-0761)
 
 The Script Editor's node canvas showed its grid only in a strip at the

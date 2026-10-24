@@ -1,6 +1,6 @@
 <!-- ants-roadmap-format: 1 -->
 <!-- Generated from the Ants Terminal roadmap store. Edit it with roadmap_log; hand edits are discarded by the next write. -->
-<!-- ants-roadmap-id-high-water: 3D_E=785 3D_E#S=989 -->
+<!-- ants-roadmap-id-high-water: 3D_E=793 3D_E#S=989 -->
 
 # Vestige Engine Roadmap
 
@@ -5785,7 +5785,7 @@ shipped that have no invocation path at all.
   Source: in-session-2026-10-12 (trailer filming).
   Lanes: editor.
 
-- 📋 [3D_E-0765] **A new point light makes no visible change in the meadow, even beside a cube or with the sun dimmed.**
+- ✅ [3D_E-0765] **A new point light makes no visible change in the meadow, even beside a cube or with the sun dimmed.**
   Recorded 2026-10-12 on the v0.1.76 download: Create > Lights > Point
   Light (spawns at the camera's focus, range 87.9 m), colour 255/90/20.
   No orange shows on a cube 1.2 m away in daylight, nor on the grass with
@@ -5804,6 +5804,23 @@ shipped that have no invocation path at all.
   against a sun of 1.15 plus sky/IBL ambient under auto-exposure, so
   compare the cube's lit colour with the light on and off. Grass and
   terrain use their own shaders; check they read u_pointLights at all.
+  2026-10-24, reading only: (a) refuted. Engine::setupDemoScene
+  creates the sun and no point lights, so the cap cannot drop the new
+  light. Found instead: (1) only scene.frag.glsl declares u_pointLights;
+  the grass and terrain shaders never read point lights, so no lamp can
+  light them. (2) InspectorPanel::drawPointLight edits diffuse with
+  ColorEdit3 (0..1) and has no intensity control, so a lamp tops out at
+  1.0 against a 1.15 sun plus sky/IBL; orange 255/90/20 has about half
+  white's luminance. (3) The same function rewrites specular and ambient
+  from diffuse every frame, so Advanced Colors edits never stick (also
+  drawSpotLight). On paper a 1.0 lamp at 1.2 m (attenuation ~0.87)
+  should still tint a cube, so the cube case is not yet explained:
+  measure on vs off with a quiet GPU (it read 98% busy today).
+  2026-10-24 shipped: new point lights start at brightness 3; light
+  inspectors split Color and Brightness (engine/editor/light_color.h);
+  Advanced Colors stick. Test LightColor.* (red before: 0.76 vs 1.15).
+  Grass/terrain split to 3D_E-0793. The cube case is closed by the
+  brightness change on paper; no on-screen reading yet (GPU busy).
   **Layman:** Adding a lamp in the editor does not light anything up that you can see.
   Kind: investigate.
   Source: in-session-2026-10-12 (trailer filming).
@@ -6015,6 +6032,9 @@ shipped that have no invocation path at all.
   before the "Advanced Colors" tree, so an Ambient or Specular edit is
   replaced the next frame. Either derive them only when Color changes,
   or drop the Advanced tree.
+  2026-10-24: the Advanced Colors half shipped with 3D_E-0765
+  (drawLightColorControls re-derives specular/ambient only when Color or
+  Brightness changes). Undo for light edits remains.
   **Layman:** Changing a light's colour can't be undone, and the extra colour settings for lights snap back as soon as you change them.
   Kind: fix.
   Source: in-session-2026-10-20 (3D_E-0766 side note).
@@ -6041,6 +6061,81 @@ shipped that have no invocation path at all.
   Kind: fix.
   Source: in-session-2026-10-20 (3D_E-0759 build).
   Lanes: ui.
+
+- 📋 [3D_E-0786] **The profile log's frame row is an average of a 300-frame rolling average, so the 60 FPS floor check cannot see a hitch.**
+  Verified 2026-10-24: profile_log.cpp's "Frame total" comment says
+  getAvgFrameTimeMs() is itself a windowed average, and each ~1 Hz row
+  averages that again. fps is the mean of per-frame 1000/ms, not frames
+  over seconds. tools/fps_floor.py's "an average would hide hitches"
+  premise is defeated. Fix: accumulate raw per-frame ms in
+  ProfileLog::sample; per-frame rows follow the shared frameledger format
+  once agreed.
+  **Layman:** The frame-rate check smooths over about five seconds at a time, so a single stutter never shows.
+  Kind: fix.
+  Source: ut-ants-review-2026-10-24.
+  Lanes: profiler.
+
+- 📋 [3D_E-0787] **MemoryTracker's CPU heap figures are always zero in the running engine.**
+  Verified 2026-10-24: MemoryTracker::recordAlloc is defined and called
+  only from tests; no global operator new/delete override exists. Add the
+  override, or remove the panel rows.
+  **Layman:** The memory panel shows zero for program memory because nothing ever reports it.
+  Kind: fix.
+  Source: ut-ants-review-2026-10-24.
+  Lanes: profiler.
+
+- 📋 [3D_E-0788] **GpuTimer reads timer queries with a blocking GL_QUERY_RESULT and no availability check.**
+  Reported by UT Ants, not yet checked here: gpu_timer.cpp reads
+  GL_QUERY_RESULT without GL_QUERY_RESULT_AVAILABLE. Check availability
+  and skip the sample when not ready.
+  **Layman:** Reading GPU timings can occasionally make the CPU wait for the GPU, distorting the very numbers it measures.
+  Kind: fix.
+  Source: ut-ants-review-2026-10-24.
+  Lanes: profiler.
+
+- 📋 [3D_E-0789] **GPU timings miss whole passes, and Total GPU is the sum of passes, not the frame.**
+  Reported by UT Ants, not yet checked here: the water
+  refraction/reflection re-renders, blitToScreen, in-game UI, ImGui and
+  the editor pick pass open no GPU scope. Add a whole-frame GPU span and
+  report frame minus passes as a named remainder. Also: the CPU frame
+  window includes vsync/cap waits and leaves out input, which skews the
+  CPU-bound/GPU-bound label.
+  **Layman:** Some drawing work (water reflections, UI, editor) is never timed, so the GPU total under-reports.
+  Kind: fix.
+  Source: ut-ants-review-2026-10-24.
+  Lanes: profiler.
+
+- 📋 [3D_E-0790] **Profiler passes cannot nest and more than 16 are dropped silently.**
+  Reported by UT Ants, not yet checked here: a nested beginPass
+  overwrites the outer slot; overflow past 16 passes is silent. Make both
+  loud (static_assert or a log line). See memory note on GpuTimer
+  nesting.
+  **Layman:** Timing sections can overwrite each other or vanish without any warning.
+  Kind: fix.
+  Source: ut-ants-review-2026-10-24.
+  Lanes: profiler.
+
+- 📋 [3D_E-0791] **In --demo-capture the profiler records the fixed 33.3 ms step, not what the frame took.**
+  Reported by UT Ants, not yet checked here: Timer delta is the fixed
+  step in fixed-step mode and time_s is cumulative clamped delta. Measure
+  with steady_clock regardless of the simulation step.
+  **Layman:** When recording a demo video, the timings show the video's frame step instead of real cost.
+  Kind: fix.
+  Source: ut-ants-review-2026-10-24.
+  Lanes: profiler.
+
+- 📋 [3D_E-0792] **README recommends --visual-test for perf_gate baselines; CLAUDE.md prescribes --demo-flythrough.**
+  Reported by UT Ants, not yet checked here: --visual-test times
+  glReadPixels/PNG/report work inside frames. Pick --demo-flythrough
+  --no-vsync and align README. Smaller items from the same review:
+  --isolate-feature=ibl* only zeroes multipliers; SystemRegistry timings
+  have no caller; draw-call counts cover Renderer only; no GPU debug
+  groups despite CODING_STANDARDS section 29; GpuTimer, PerformanceProfiler,
+  ProfileLog and fps_floor.py have no tests.
+  **Layman:** Two documents give different instructions for taking a performance baseline.
+  Kind: doc-fix.
+  Source: ut-ants-review-2026-10-24.
+  Lanes: profiler.
 
 ## 0.3.0 — An editor a builder can use
 
@@ -7833,6 +7928,19 @@ Outdoor landscapes surrounding the Temple complex — hills, valleys, and the Ki
   Kind: research.
   Source: user-request-2026-10-20.
   Lanes: physics, assets.
+
+- 📋 [3D_E-0793] **Grass and terrain ignore point and spot lights.**
+  Split from 3D_E-0765 (user chose 2026-10-24 to ship lamp brightness
+  first). Only scene.frag.glsl declares u_pointLights; the grass and
+  terrain shaders read neither point nor spot lights. GPU placement:
+  per-fragment in the grass and terrain shaders, like scene.frag. Needs
+  a 60 FPS floor reading on the meadow before it ships, since grass
+  covers most of the screen; consider a nearest-N light list per tile
+  rather than looping all eight per grass fragment.
+  **Layman:** A lamp lights objects but never the grass or the ground around them.
+  Kind: feature.
+  Source: 3D_E-0765 split, user decision 2026-10-24.
+  Lanes: renderer.
 
 ## 0.5.0 — Interactivity
 
