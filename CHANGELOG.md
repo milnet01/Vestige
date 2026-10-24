@@ -25,6 +25,14 @@ may change any interface without notice.
 
 ## [Unreleased]
 
+### 2026-10-24 Fixed — The HDRI sky keeps the sun's brightness (3D_E-0772)
+
+Loading an HDRI sky capped every pixel at 50. The meadow's sun peaks near
+60,000, so it came out no brighter than the clouds around it. The sky you
+see now keeps the full brightness. The lighting the sky gives the scene
+is still capped at 50: the sun light already lights the scene, and would
+otherwise count twice.
+
 ### 2026-10-24 Fixed — Settings sidebar highlights stay in their row at a larger interface scale (3D_E-0785)
 
 At 1.5x or 2.0x interface scale, the hover highlight behind a Settings

@@ -335,8 +335,11 @@ bool Skybox::loadEquirectangular(const std::string& path)
                     color = glm::mix(glm::mix(c00, c10, fx), glm::mix(c01, c11, fx), fy);
                 }
 
-                // Clamp to prevent extreme HDR values / NaN from poisoning IBL
-                color = glm::clamp(color, glm::vec3(0.0f), glm::vec3(50.0f));
+                // Keep the sun's full radiance for the visible sky (3D_E-0772);
+                // the IBL capture applies IBL_MAX_RADIANCE itself. The upper
+                // bound is RGB16F's largest finite value, so no texel becomes inf.
+                constexpr float HALF_FLOAT_MAX = 65504.0f;
+                color = glm::clamp(color, glm::vec3(0.0f), glm::vec3(HALF_FLOAT_MAX));
 
                 size_t outIdx = static_cast<size_t>((y * faceSize + x) * 3);
                 faceData[outIdx + 0] = color.r;

@@ -7,6 +7,7 @@
 #include "renderer/fullscreen_quad.h"
 #include "renderer/ibl_capture_sequence.h"
 #include "renderer/ibl_prefilter.h"
+#include "renderer/skybox.h"
 #include "core/logger.h"
 
 #include <glad/gl.h>
@@ -212,6 +213,7 @@ void EnvironmentMap::captureEnvironment(GLuint skyboxCubemap, bool hasCubemap,
     captureShader.use();
     captureShader.setMat4("u_projection", CAPTURE_PROJECTION);
     captureShader.setBool("u_hasCubemap", hasCubemap);
+    captureShader.setFloat("u_maxRadiance", Skybox::IBL_MAX_RADIANCE);
 
     if (hasCubemap)
     {

@@ -43,6 +43,12 @@ public:
     /// @brief Gets the cubemap texture ID.
     GLuint getTextureId() const;
 
+    /// @brief Brightest radiance the IBL capture keeps (3D_E-0772). The sun
+    ///        lights the scene through its directional light, so letting the
+    ///        HDRI's sun into the IBL as well would count it twice and seed
+    ///        fireflies in the prefilter. The visible sky is not capped.
+    static constexpr float IBL_MAX_RADIANCE = 50.0f;
+
 private:
     void createCubeVAO();
 

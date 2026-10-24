@@ -3733,6 +3733,10 @@ void Renderer::renderScene(const SceneRenderData& renderData, const Camera& came
         m_skyboxShader.setMat4("u_projection", m_lastProjection);
         m_skyboxShader.setBool("u_hasCubemap", m_skybox->hasTexture());
         m_skyboxShader.setFloat("u_skyboxFarDepth", geometryOnly ? 0.99999f : 0.0f);
+        // Probe captures feed lighting, so they cap the sun as the IBL does;
+        // the visible sky does not (3D_E-0772).
+        m_skyboxShader.setFloat("u_maxRadiance",
+                                geometryOnly ? Skybox::IBL_MAX_RADIANCE : 0.0f);
 
         if (m_skybox->hasTexture())
         {

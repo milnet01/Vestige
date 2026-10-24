@@ -1,6 +1,6 @@
 <!-- ants-roadmap-format: 1 -->
 <!-- Generated from the Ants Terminal roadmap store. Edit it with roadmap_log; hand edits are discarded by the next write. -->
-<!-- ants-roadmap-id-high-water: 3D_E=799 3D_E#S=989 -->
+<!-- ants-roadmap-id-high-water: 3D_E=800 3D_E#S=989 -->
 
 # Vestige Engine Roadmap
 
@@ -5944,11 +5944,22 @@ shipped that have no invocation path at all.
   Source: in-session-2026-10-19 (0767 screenshot).
   Lanes: renderer.
 
-- 📋 [3D_E-0772] **The meadow sky shows no sun.**
+- ✅ [3D_E-0772] **The meadow sky shows no sun.**
   Reported by the user 2026-10-20 while closing 3D_E-0034. The sun
   was aimed at the HDRI's own sun (47.9 deg) on 2026-10-02. Next: check
   whether a sun disc is drawn at all, and whether the HDRI's sun is
   clipped or hidden by the sky pass or the clouds.
+  2026-10-24: no sun disc is drawn; the sky shows the HDRI's own sun,
+  which is in the file (peak luminance 60,449 against a sky median of
+  0.35). Skybox::loadEquirectangular capped every texel at 50 to keep it
+  out of the IBL, flattening the sun into the clouds. The cap moved to
+  the GPU: skybox.frag.glsl's u_maxRadiance, set to
+  Skybox::IBL_MAX_RADIANCE by the IBL capture and probe captures, 0 for
+  the visible sky. CPU/GPU placement: GPU, because the visible sky and
+  the captures draw the same cubemap through the same shader, and only
+  the shader knows which one is drawing. Tests SkyboxHdrRangeTest.*.
+  Not yet seen on screen: the flythrough never looks 48 deg up. Look
+  from the meadow start toward +X/+Z, 48 deg up, on a quiet GPU.
   **Layman:** The meadow's sky has clouds and light, but you can't see the sun itself anywhere in it.
   Kind: fix.
   Source: user-request-2026-10-20 (3D_E-0034 follow-up).
@@ -6233,6 +6244,21 @@ shipped that have no invocation path at all.
   Kind: fix.
   Source: in-session-2026-10-24 (3D_E-0779 fix).
   Lanes: physics, core.
+
+- 📋 [3D_E-0800] **The profile log's fps column averages per-frame FPS, so a hitch can pass the 60 FPS floor.**
+  engine/profiler/profile_log.cpp sums PerformanceProfiler::getFps()
+  (1000 / that frame's ms) each frame and writes s.fps = m_fpsSum /
+  m_frameCount. That is a mean of rates. 50 frames at 10 ms plus one
+  500 ms frame is 51 frames in one second, but the column reads about
+  98, and tools/fps_floor.py, which CLAUDE.md § Performance names, passes
+  it. frameledger's FLED-0001 INV-8 names this method as the one that
+  hides hitches. Fix: write frames / wall seconds for the sample, with a
+  red test on that case. 3D_E-0786 replaces this path with per-frame
+  capture; fix this first, because the floor check reads it today.
+  **Layman:** The speed log can say a second ran at 98 frames per second when a freeze inside it meant it really ran at 51.
+  Kind: fix.
+  Source: review-2026-10-24 (frameledger FLED-0004 second review).
+  Lanes: profiler.
 
 ## 0.3.0 — An editor a builder can use
 

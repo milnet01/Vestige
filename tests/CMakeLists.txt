@@ -12,6 +12,7 @@ add_executable(vestige_tests
     test_shader_parity_smoke.cpp
     test_ibl_parity.cpp
     test_bloom_parity.cpp
+    test_skybox_hdr_range.cpp
     test_color_grading_parity.cpp
     test_subsurface_parity.cpp
     test_terrain_ggx_parity.cpp
