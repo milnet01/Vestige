@@ -209,20 +209,21 @@ GraphicsSettingsPage buildGraphicsSettingsPage(UICanvas& canvas, const UITheme& 
         page.windowMode->selectedIndex = d.fullscreen ? 1 : 0;
     }));
 
-    // Added bottom row first: an open dropdown list is drawn on top by
-    // UISystem, so order only decides which control a press reaches first.
-    root->addChild(std::move(window));
-    root->addChild(std::move(vsync));
-    root->addChild(std::move(tree));
-    root->addChild(std::move(grass));
-    root->addChild(std::move(foliage));
-    root->addChild(std::move(terrain));
-    root->addChild(std::move(volume));
-    root->addChild(std::move(bloom));
-    root->addChild(std::move(ao));
-    root->addChild(std::move(antiAlias));
-    root->addChild(std::move(scale));
+    // Top to bottom, so Tab walks the rows downwards (3D_E-0784). An open
+    // dropdown list needs no help from this order: UISystem draws it last
+    // and gives it the next press before anything under it.
     root->addChild(std::move(preset));
+    root->addChild(std::move(scale));
+    root->addChild(std::move(antiAlias));
+    root->addChild(std::move(ao));
+    root->addChild(std::move(bloom));
+    root->addChild(std::move(volume));
+    root->addChild(std::move(terrain));
+    root->addChild(std::move(foliage));
+    root->addChild(std::move(grass));
+    root->addChild(std::move(tree));
+    root->addChild(std::move(vsync));
+    root->addChild(std::move(window));
     canvas.addElement(std::move(root));
     return page;
 }

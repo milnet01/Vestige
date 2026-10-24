@@ -6090,13 +6090,18 @@ shipped that have no invocation path at all.
   Source: in-session-2026-10-20 (3D_E-0766 side note).
   Lanes: editor.
 
-- 📋 [3D_E-0784] **Player Settings > Display: Tab walks the options bottom to top.**
+- ✅ [3D_E-0784] **Player Settings > Display: Tab walks the options bottom to top.**
   buildGraphicsSettingsPage adds its controls bottom row first (so an
   open dropdown list sits above the rows below it), and UISystem's tab
   order follows insertion order. The Audio, Controls and Accessibility
   pages (3D_E-0759) add top to bottom. Give the tab order its own
   sequence, or order Display top to bottom if the dropdown overlap no
   longer depends on it (UISystem draws the open list last).
+  2026-10-24: buildGraphicsSettingsPage adds its rows top to bottom.
+  The bottom-first order no longer protected anything:
+  UISystem::handleMousePress gives an open dropdown list the next press
+  before hit-testing. Test SettingsScreen.DisplayTabWalksTopToBottom,
+  red before (first row visited at y 808, last at 236), green after.
   **Layman:** Pressing Tab on the Display settings page jumps to the last option first and moves upwards.
   Kind: fix.
   Source: in-session-2026-10-20 (3D_E-0759 build).

@@ -354,6 +354,23 @@ TEST(SettingsScreen, EachCategoryShowsItsOwnControls)
     EXPECT_EQ(countOf<UIDropdown>(order), 7u);
 }
 
+// 3D_E-0784: Display added its rows bottom first, so Tab walked them upwards.
+TEST(SettingsScreen, DisplayTabWalksTopToBottom)
+{
+    ScreenFixture f;
+    std::vector<float> rowY;
+    for (UIElement* el : tabOrder(f.ui))
+    {
+        if (dynamic_cast<UIButton*>(el) == nullptr)  // skip sidebar and footer
+        {
+            rowY.push_back(el->position.y);
+        }
+    }
+    ASSERT_EQ(rowY.size(), 12u);  // the Display page's twelve rows
+    EXPECT_TRUE(std::is_sorted(rowY.begin(), rowY.end()))
+        << "first row visited at y " << rowY.front() << ", last at y " << rowY.back();
+}
+
 TEST(SettingsScreen, ReopeningStartsOnDisplay)
 {
     ScreenFixture f;

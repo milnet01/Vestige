@@ -25,6 +25,12 @@ may change any interface without notice.
 
 ## [Unreleased]
 
+### 2026-10-24 Fixed — Tab moves down the Display settings, not up (3D_E-0784)
+
+In Settings > Display, Tab went to the last option first and moved
+upwards. It now starts at Quality preset and moves down, as on the other
+settings pages.
+
 ### 2026-10-24 Fixed — Light edits can be undone (3D_E-0783)
 
 Changing a light's direction, colour, brightness, range, cone or shadow
