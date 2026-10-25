@@ -1252,6 +1252,7 @@ bool Engine::initialize(const EngineConfig& config)
     });
 
     m_visualTestMode = config.visualTestMode;
+    m_stills = config.stills;
     m_demoFlythroughMode = config.demoFlythroughMode && !m_visualTestMode;
     if (m_demoFlythroughMode)
     {
@@ -2650,6 +2651,21 @@ void Engine::createTerrainCollider()
                  std::to_string(D) + " height field)");
 }
 
+void Engine::addStillsViewpoints(const std::function<float(float, float)>& groundHeight)
+{
+    for (const StillSpot& spot : m_stills)
+    {
+        glm::vec3 eye = spot.position;
+        if (spot.aboveGround)
+        {
+            eye.y += groundHeight(eye.x, eye.z);
+        }
+        m_visualTestRunner.addViewpoint({spot.name, eye, spot.yaw, spot.pitch, 1, 0.0f});
+    }
+    Logger::info("Stills viewpoints registered: "
+        + std::to_string(m_visualTestRunner.viewpointCount()));
+}
+
 void Engine::setupVisualTestViewpoints()
 {
     // The meadow's ground is 3–7 m up and the heightmap does not exist yet at
@@ -2658,6 +2674,13 @@ void Engine::setupVisualTestViewpoints()
     // fixed-height Tabernacle viewpoints would sit buried under the meadow.
     if (m_meadowSceneActive)
     {
+        return;
+    }
+
+    // No terrain here, so a "~h" spot sits h metres above y = 0.
+    if (!m_stills.empty())
+    {
+        addStillsViewpoints([](float, float) { return 0.0f; });
         return;
     }
 
@@ -3454,7 +3477,11 @@ void Engine::finalizeMeadowTerrain()
     // Registered here, not in setupVisualTestViewpoints(), because they sample
     // the terrain height that only exists now. Each eye sits 1.7 m above the
     // surface so the camera never clips into a hill. start() runs later.
-    if (m_visualTestMode)
+    if (m_visualTestMode && !m_stills.empty())
+    {
+        addStillsViewpoints([&terrain](float x, float z) { return terrain.getHeight(x, z); });
+    }
+    else if (m_visualTestMode)
     {
         const auto eyeOnSurface = [&](float x, float z) {
             return glm::vec3(x, terrain.getHeight(x, z) + 1.7f, z);

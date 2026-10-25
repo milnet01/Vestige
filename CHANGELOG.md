@@ -25,6 +25,14 @@ may change any interface without notice.
 
 ## [Unreleased]
 
+### 2026-10-26 Added — Save pictures from camera spots listed in a file (3D_E-0801)
+
+`vestige --stills FILE` saves one picture for each camera spot in FILE,
+then exits. Each line reads `name x y z yaw pitch`. Write the height as
+`~1.7` to put the eye 1.7 m above the ground at that spot. Pictures go
+to `Testing/visual_tests/run_<time>/`, each with a diagnostic report.
+A bad file is refused at launch, with the line number of the problem.
+
 ### 2026-10-24 Fixed — The profile log's FPS shows a stutter (3D_E-0800)
 
 `--profile-log` wrote each second's FPS as the average of every frame's

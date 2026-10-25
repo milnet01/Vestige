@@ -1,6 +1,6 @@
 <!-- ants-roadmap-format: 1 -->
 <!-- Generated from the Ants Terminal roadmap store. Edit it with roadmap_log; hand edits are discarded by the next write. -->
-<!-- ants-roadmap-id-high-water: 3D_E=800 3D_E#S=989 -->
+<!-- ants-roadmap-id-high-water: 3D_E=802 3D_E#S=989 -->
 
 # Vestige Engine Roadmap
 
@@ -5960,6 +5960,9 @@ shipped that have no invocation path at all.
   the shader knows which one is drawing. Tests SkyboxHdrRangeTest.*.
   Not yet seen on screen: the flythrough never looks 48 deg up. Look
   from the meadow start toward +X/+Z, 48 deg up, on a quiet GPU.
+  Seen on screen 2026-10-26 via --stills (spot 0 ~1.7 0, yaw 34.3, pitch
+  47.9): the sun is a bright disc with a soft glow, where the light
+  direction puts it.
   **Layman:** The meadow's sky has clouds and light, but you can't see the sun itself anywhere in it.
   Kind: fix.
   Source: user-request-2026-10-20 (3D_E-0034 follow-up).
@@ -6268,6 +6271,33 @@ shipped that have no invocation path at all.
   Source: review-2026-10-24 (frameledger FLED-0004 second review).
   Lanes: profiler.
   Splits-from: 3D_E-0786.
+
+- ✅ [3D_E-0801] **Save a picture from any camera spot listed in a file, with no one at the controls (--stills FILE).**
+  One spot per line: `name x y z yaw pitch`; y written `~h` is h
+  metres above the terrain. Reuses VisualTestRunner, one capture per
+  spot, output under Testing/visual_tests/run_<time>/. Unlocks 0773's
+  inventory and the on-screen checks of 0772, 0765, 0780, 0783.
+  CPU / GPU placement: CPU only (file parsing; capture reuses the
+  existing readback).
+  Shipped 2026-10-26. Checked by a real meadow run: two spots, two
+  pictures; tests in test_stills_file.cpp and test_cli_args.cpp.
+  **Layman:** Lets Claude take pictures of exact spots in the meadow without anyone steering the camera, so close-up checks are repeatable.
+  Kind: feature.
+  Source: user-request-2026-10-26 (3D_E-0773 needs stills).
+  Lanes: testing, app.
+
+- 📋 [3D_E-0802] **Clouds near the horizon render as flat colour bands instead of smooth cloud.**
+  Seen 2026-10-26 in a --stills shot from (0, ground+1.7, 0), yaw 0,
+  pitch -5: the sky behind the trees is posterised into flat steps.
+  Looking up at the sun from the same spot (yaw 34.3, pitch 47.9) the
+  sky is smooth, so the banding is in the low sky only. Suspects: an
+  8-bit sky texture or LUT, or the distance haze. Found during 0773's
+  inventory.
+  **Layman:** Low in the sky, the clouds look like a poster with only a few colours instead of soft, smooth cloud.
+  Kind: fix.
+  Source: user-request-2026-10-26 (3D_E-0773 needs stills).
+  Lanes: renderer.
+  Evidence: build/bin/Testing/visual_tests/run_20261026_015818/02_level_east_rot000.png
 
 ## 0.3.0 — An editor a builder can use
 

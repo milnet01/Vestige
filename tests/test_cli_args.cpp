@@ -10,8 +10,12 @@
 #include "../app/cli_args.h"
 #include "core/engine.h"
 
+#include "test_helpers.h"
+
 #include <gtest/gtest.h>
 
+#include <filesystem>
+#include <fstream>
 #include <string>
 #include <vector>
 
@@ -141,7 +145,7 @@ TEST(CliArgs, SceneFlagTakesPathValue)
 
 TEST(CliArgs, OptionMissingItsValueIsAnError)
 {
-    for (const char* option : {"--scene", "--assets", "--bake-acoustics", "--demo-capture"})
+    for (const char* option : {"--scene", "--assets", "--bake-acoustics", "--demo-capture", "--stills"})
     {
         auto r = run({option});
         EXPECT_FALSE(r.ok) << option;
@@ -159,6 +163,34 @@ TEST(CliArgs, TwoSceneOptionsAreAnError)
     auto twice = run({"--scene", "a.scene", "--scene", "b.scene"});
     EXPECT_FALSE(twice.ok);
     EXPECT_EQ(twice.exitCode, 2);
+}
+
+// --- --stills ---------------------------------------------------------------
+
+TEST(CliArgs, StillsReadsTheFileAndTurnsOnVisualTest)
+{
+    const auto path = std::filesystem::temp_directory_path()
+                    / ("vestige_stills_" + Vestige::Testing::vestigeTestStamp() + ".txt");
+    {
+        std::ofstream out(path);
+        out << "rock_a 10 ~1.7 -4 -90 -15\n";
+    }
+    auto r = run({"--stills", path.string()});
+    std::filesystem::remove(path);
+
+    EXPECT_TRUE(r.ok);
+    EXPECT_TRUE(r.config.visualTestMode);
+    ASSERT_EQ(r.config.stills.size(), 1u);
+    EXPECT_EQ(r.config.stills.front().name, "rock_a");
+    EXPECT_TRUE(r.config.stills.front().aboveGround);
+}
+
+TEST(CliArgs, StillsWithABadFileIsAnError)
+{
+    auto r = run({"--stills", "no/such/stills.txt"});
+    EXPECT_FALSE(r.ok);
+    EXPECT_EQ(r.exitCode, 2);
+    EXPECT_FALSE(r.config.visualTestMode);
 }
 
 // --- --isolate-feature ------------------------------------------------------

@@ -76,6 +76,7 @@ add_executable(vestige_tests
     test_grass_lod.cpp
     test_spline_path.cpp
     test_demo_flythrough.cpp
+    test_stills_file.cpp
     test_biome_preset.cpp
     test_selection.cpp
     test_camera.cpp

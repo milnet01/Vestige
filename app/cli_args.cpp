@@ -107,6 +107,11 @@ void printUsage(const char* argv0)
         << "                          by exactly 1/30 s per frame and save\n"
         << "                          every frame to DIR as a numbered PNG,\n"
         << "                          so the video is smooth at any speed.\n"
+        << "  --stills FILE           Save one picture per camera spot in\n"
+        << "                          FILE, then exit. One spot per line:\n"
+        << "                          name x y z yaw pitch. Write y as ~1.7\n"
+        << "                          for 1.7 m above the ground. Pictures\n"
+        << "                          go to Testing/visual_tests/run_<time>/.\n"
         << "  --isolate-feature=NAME  Disable one feature for visual-test\n"
         << "                          bisection. NAME is one of:\n"
         << "                          " << isolateFeatureNameList() << ".\n"
@@ -229,6 +234,25 @@ bool parseArgs(int argc, char* argv[], EngineConfig& config, int& exitCode)
             config.demoFlythroughMode = true;
             config.demoCaptureDir = dir;
             Logger::info("Demo capture enabled: " + config.demoCaptureDir);
+        }
+        else if (std::strcmp(arg, "--stills") == 0)
+        {
+            const char* path = takeValue(argc, argv, i, "a path argument", exitCode);
+            if (path == nullptr)
+            {
+                return false;
+            }
+            const StillsParseResult stills = loadStillsFile(path);
+            if (!stills.error.empty())
+            {
+                std::cerr << "--stills " << path << ": " << stills.error << "\n";
+                exitCode = 2;
+                return false;
+            }
+            config.stills = stills.spots;
+            config.visualTestMode = true;
+            Logger::info("Stills: " + std::to_string(config.stills.size())
+                         + " camera spots from " + path);
         }
         else if (hasPrefix(arg, kIsolateFeaturePrefix))
         {

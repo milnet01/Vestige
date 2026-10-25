@@ -29,6 +29,7 @@
 #include "physics/physics_debug.h"
 #include "physics/terrain_collider_sync.h"
 #include "testing/demo_flythrough.h"
+#include "testing/stills_file.h"
 #include "testing/visual_test_runner.h"
 #include "core/system_registry.h"
 #include "core/job_system.h"
@@ -37,6 +38,7 @@
 
 #include <array>
 #include <filesystem>
+#include <functional>
 #include <memory>
 #include <string>
 #include <vector>
@@ -66,6 +68,7 @@ struct EngineConfig
     bool visualTestMode = false;  ///< Run automated visual test and exit
     bool demoFlythroughMode = false;  ///< Fly a built-in camera path, then exit
     std::string demoCaptureDir;       ///< --demo-capture: write each fly-through frame here
+    std::vector<StillSpot> stills;    ///< --stills: one picture per spot (sets visualTestMode)
 
     /// @brief Diagnostic feature isolation (CLI: --isolate-feature=NAME).
     /// Disables one feature so visual-test runs can mechanically bisect
@@ -198,6 +201,9 @@ private:
     void setupMaterialDemoScene();  ///< Legacy PBR material-test cubes (CLI: --material-demo).
     void setupTabernacleScene();
     void setupVisualTestViewpoints();
+    /// @brief Registers the --stills spots in place of the built-in viewpoints.
+    /// @param groundHeight Terrain height at (x, z), for spots written "~h".
+    void addStillsViewpoints(const std::function<float(float, float)>& groundHeight);
     void drawLightGizmos(Scene& scene, const Selection& selection,
                          bool showAll = false);
     void createPhysicsStaticBodies();
@@ -245,6 +251,7 @@ private:
     std::vector<std::filesystem::path> m_sandboxRoots;
     VisualTestRunner m_visualTestRunner;
     bool m_visualTestMode = false;
+    std::vector<StillSpot> m_stills;     ///< --stills spots; empty = built-in viewpoints.
     DemoFlythrough m_demoFlythrough;     ///< Path is built by the scene setup.
     bool m_demoFlythroughMode = false;
 
