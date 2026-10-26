@@ -151,15 +151,15 @@ void ProfileLog::sample(PerformanceProfiler& profiler, double elapsedSec)
     }
     m_lastSampleSec = elapsedSec;
 
-    // Frame total. getAvgFrameTimeMs() is itself a windowed average; averaging
-    // it again over the interval is a harmless no-op that keeps sample() uniform.
-    // (Profiler getters are float; widen explicitly for the double accumulators.)
-    addSample(ProfileCategory::Frame, "total", 0,
-              static_cast<double>(profiler.getAvgFrameTimeMs()));
-    // fps counts frames that END inside the interval; the first sample only
-    // anchors its start (3D_E-0800).
+    // Frame total and fps count the frames that END inside the interval; the
+    // first sample only anchors its start (3D_E-0800). The ms is this frame's
+    // own time, not getAvgFrameTimeMs(), a 300-frame rolling average that
+    // smoothed a hitch away (3D_E-0786). (Profiler getters are float; widen
+    // explicitly for the double accumulators.)
     if (elapsedSec > m_lastWriteSec)
     {
+        addSample(ProfileCategory::Frame, "total", 0,
+                  static_cast<double>(profiler.getFrameTimeMs()));
         ++m_intervalFrames;
     }
 

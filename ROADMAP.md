@@ -6158,6 +6158,13 @@ shipped that have no invocation path at all.
   2026-10-24: the fps half is fixed by 3D_E-0800 (frames over wall
   time). The frame,total ms column is still an average of the rolling
   average; per-frame capture remains this item's work.
+  2026-10-26: the frame,total ms half is fixed. Each second's ms is now
+  the mean of that second's own frame times (the frames ending inside
+  it, as fps counts them), not an average of the 300-frame rolling
+  average. Test: ProfileLog.FrameMsIsTheIntervalsOwnFramesSoAHitchShows
+  (old code read 31.126, true 19.608). Still open: per-frame rows in the
+  FLED-0001 format with GL timestamp queries, waiting on frameledger's
+  first pinned release.
   **Layman:** The frame-rate check smooths over about five seconds at a time, so a single stutter never shows.
   Kind: fix.
   Source: ut-ants-review-2026-10-24.

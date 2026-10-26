@@ -25,6 +25,14 @@ may change any interface without notice.
 
 ## [Unreleased]
 
+### 2026-10-26 Fixed — The profile log's frame time is that second's own frames (3D_E-0786)
+
+`--profile-log` wrote each second's frame time as an average of the
+profiler's 300-frame rolling average, so a stutter was smoothed across
+five seconds. It is now the mean of the frame times inside that second,
+counted over the same frames as the FPS column. A second of 50 fast
+frames and one half-second freeze reads 19.608 ms, not 31.126.
+
 ### 2026-10-26 Added — Save pictures from camera spots listed in a file (3D_E-0801)
 
 `vestige --stills FILE` saves one picture for each camera spot in FILE,

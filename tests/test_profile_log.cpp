@@ -134,3 +134,47 @@ TEST(ProfileLog, FpsIsFramesOverWallTimeSoAHitchShows)
     EXPECT_EQ(fps[0], "51.0") << "a hitch second must read its real rate";
     EXPECT_EQ(fps[1], "60.0");
 }
+
+// 3D_E-0786: the frame,total ms is the mean of the interval's own frame times,
+// counted over the same frames as fps, not an average of the profiler's
+// 300-frame rolling average. 50 frames at 10 ms plus one 500 ms frame is
+// 1000 ms over 51 frames: 19.608 ms, the same second fps reads as 51.
+TEST(ProfileLog, FrameMsIsTheIntervalsOwnFramesSoAHitchShows)
+{
+    const std::string path = (std::filesystem::temp_directory_path()
+        / ("vestige_profile_log_" + Testing::vestigeTestStamp() + ".csv")).string();
+    PerformanceProfiler profiler;
+    ProfileLog log;
+    ASSERT_TRUE(log.open(path));
+
+    auto frame = [&](float frameSec, double elapsedSec)
+    {
+        profiler.endFrame(frameSec);
+        log.sample(profiler, elapsedSec);
+    };
+
+    frame(0.250f, 0.0);  // the anchor: its time belongs to no interval
+    for (int i = 1; i <= 50; ++i)
+    {
+        frame(0.010f, i * 0.010);
+    }
+    frame(0.500f, 1.0);  // the hitch; ends the first second
+    log.close();
+
+    std::vector<std::string> ms;
+    std::ifstream in(path);
+    for (std::string line; std::getline(in, line);)
+    {
+        const auto at = line.find(",frame,total,0,");
+        if (at != std::string::npos)
+        {
+            const auto start = at + std::string(",frame,total,0,").size();
+            ms.push_back(line.substr(start, line.rfind(',') - start));
+        }
+    }
+    in.close();
+    std::filesystem::remove(path);
+
+    ASSERT_EQ(ms.size(), 1u);
+    EXPECT_EQ(ms[0], "19.608");
+}
