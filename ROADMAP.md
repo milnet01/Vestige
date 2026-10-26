@@ -1,6 +1,6 @@
 <!-- ants-roadmap-format: 1 -->
 <!-- Generated from the Ants Terminal roadmap store. Edit it with roadmap_log; hand edits are discarded by the next write. -->
-<!-- ants-roadmap-id-high-water: 3D_E=814 3D_E#S=989 -->
+<!-- ants-roadmap-id-high-water: 3D_E=815 3D_E#S=989 -->
 
 # Vestige Engine Roadmap
 
@@ -6513,6 +6513,19 @@ shipped that have no invocation path at all.
   Kind: fix.
   Source: 3D_E-0805 fix 2026-10-26.
   Lanes: renderer, editor.
+
+- 📋 [3D_E-0815] **The pre-push gate shares the machine: a job cap and low priority when the hook starts it.**
+  scripts/local-ci.sh sets JOBS to nproc, and the pre-push hook passes
+  no -j, so every push builds with all 12 threads while other sessions
+  build too. The user asked on 2026-10-26 that sessions share
+  resources. Add an env cap the hook honours (e.g. VESTIGE_CI_JOBS,
+  default about half of nproc). Run the gate under nice and ionice -c3.
+  Workaround until then: start the push as
+  `nice -n 15 ionice -c3 git push` (children inherit).
+  **Layman:** The push check uses every CPU thread; it should leave room for the other sessions so the machine doesn't freeze.
+  Kind: chore.
+  Source: user-request-2026-10-26.
+  Lanes: tooling.
 
 ## 0.3.0 — An editor a builder can use
 
