@@ -1,7 +1,7 @@
 // Copyright (c) 2026 Anthony Schemel
 // SPDX-License-Identifier: MIT
 
-/// @file test_terrain_collider_sync.cpp
+/// @file test_collider_sync.cpp
 /// @brief When the terrain's physics collider is rebuilt after an edit
 ///        (3D_E-0780), and the height revision that drives it.
 
@@ -9,21 +9,21 @@
 
 #include "gl_test_fixture.h"
 #include "environment/terrain.h"
-#include "physics/terrain_collider_sync.h"
+#include "physics/collider_sync.h"
 
 using namespace Vestige;
 
-TEST(TerrainColliderSync, NoRebuildWhileNothingChanged)
+TEST(ColliderSync, NoRebuildWhileNothingChanged)
 {
-    TerrainColliderSync sync;
+    ColliderSync sync;
     sync.markBuilt(3);
     EXPECT_FALSE(sync.shouldRebuild(3));
     EXPECT_FALSE(sync.shouldRebuild(3));
 }
 
-TEST(TerrainColliderSync, OneEditRebuildsTheFrameAfter)
+TEST(ColliderSync, OneEditRebuildsTheFrameAfter)
 {
-    TerrainColliderSync sync;
+    ColliderSync sync;
     sync.markBuilt(3);
     EXPECT_FALSE(sync.shouldRebuild(4)) << "the frame of the edit: not yet settled";
     EXPECT_TRUE(sync.shouldRebuild(4)) << "the next frame: settled, so rebuild";
@@ -31,9 +31,9 @@ TEST(TerrainColliderSync, OneEditRebuildsTheFrameAfter)
     EXPECT_FALSE(sync.shouldRebuild(4)) << "rebuilt once, not every frame after";
 }
 
-TEST(TerrainColliderSync, StrokeRebuildsOnceAfterItEnds)
+TEST(ColliderSync, StrokeRebuildsOnceAfterItEnds)
 {
-    TerrainColliderSync sync;
+    ColliderSync sync;
     sync.markBuilt(0);
     int rebuilds = 0;
     // A stroke: the revision moves every frame for ten frames.

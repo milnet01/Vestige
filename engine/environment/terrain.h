@@ -140,7 +140,7 @@ public:
 
     /// @brief Rises whenever the heights change (initialize or
     ///        updateHeightmapRegion). The physics collider rebuilds on it
-    ///        (TerrainColliderSync, 3D_E-0780).
+    ///        (ColliderSync, 3D_E-0780).
     std::uint64_t getHeightRevision() const { return m_heightRevision; }
 
     /// @brief Recomputes normals for a region and uploads to GPU.

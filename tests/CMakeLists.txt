@@ -114,7 +114,8 @@ add_executable(vestige_tests
     test_localization_tables.cpp
     test_physics_character_controller.cpp
     test_terrain_height_field.cpp
-    test_terrain_collider_sync.cpp
+    test_collider_sync.cpp
+    test_static_collider_bodies.cpp
     test_physics_constraint.cpp
     test_cloth_simulator.cpp
     test_cloth_presets.cpp

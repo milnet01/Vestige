@@ -1797,6 +1797,15 @@ void Engine::run()
                 createTerrainCollider();
             }
 
+            // Opening another scene, or adding, moving or deleting a blocking
+            // prop, changes the static boxes; rebuild once the edit settles
+            // (3D_E-0796).
+            if (Scene* scene = m_sceneManager->getActiveScene())
+            {
+                gatherStaticColliders(*scene, m_colliders);
+                m_staticBodies.update(m_physicsWorld, m_colliders);
+            }
+
             // Pre-compute look + velocity once per frame for the
             // physics-controller path. Done before the Jolt step so
             // input is settled when the callback fires.
@@ -2547,6 +2556,16 @@ void Engine::shutdown()
     Logger::closeLogFile();
 }
 
+void Engine::gatherStaticColliders(const Scene& scene, std::vector<AABB>& colliders) const
+{
+    scene.collectColliders(colliders);
+    if (m_foliageManager)
+    {
+        m_foliageManager->appendTreeTrunkColliders(colliders, kTreeTrunkRadius,
+                                                   kTreeTrunkHeight);
+    }
+}
+
 void Engine::createPhysicsStaticBodies()
 {
     if (!m_physicsWorld.isInitialized())
@@ -2560,37 +2579,13 @@ void Engine::createPhysicsStaticBodies()
         return;
     }
 
-    // Convert all scene AABB colliders to static Jolt box bodies, plus the
-    // tree trunks the legacy controller gets each frame.
+    // One static Jolt box per scene collider, plus the tree trunks the legacy
+    // controller gets each frame. The physics step keeps them in step with
+    // later scene loads and prop edits (3D_E-0796).
     std::vector<AABB> colliders;
-    scene->collectColliders(colliders);
-    if (m_foliageManager)
-    {
-        m_foliageManager->appendTreeTrunkColliders(colliders, kTreeTrunkRadius,
-                                                   kTreeTrunkHeight);
-    }
-
-    int count = 0;
-    for (const auto& aabb : colliders)
-    {
-        glm::vec3 center = aabb.getCenter();
-        glm::vec3 size = aabb.getSize();
-        glm::vec3 halfExtents = size * 0.5f;
-
-        // Skip degenerate AABBs — Jolt's default convex radius is 0.05,
-        // so half-extents must be at least that large
-        constexpr float MIN_HALF_EXTENT = 0.05f;
-        if (halfExtents.x < MIN_HALF_EXTENT || halfExtents.y < MIN_HALF_EXTENT ||
-            halfExtents.z < MIN_HALF_EXTENT)
-        {
-            continue;
-        }
-
-        JPH::BoxShape* const shape = new JPH::BoxShape(
-            JPH::Vec3(halfExtents.x, halfExtents.y, halfExtents.z));
-        m_physicsWorld.createStaticBody(shape, center);
-        ++count;
-    }
+    gatherStaticColliders(*scene, colliders);
+    m_staticBodies.rebuild(m_physicsWorld, colliders);
+    const size_t count = m_staticBodies.bodies().size();
 
     // A ground plane at Y 0 for scenes with no terrain; where there is one,
     // createTerrainCollider adds the real surface later.

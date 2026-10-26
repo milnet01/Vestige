@@ -27,7 +27,8 @@
 #include "profiler/profile_log.h"
 #include "physics/physics_world.h"
 #include "physics/physics_debug.h"
-#include "physics/terrain_collider_sync.h"
+#include "physics/collider_sync.h"
+#include "physics/static_collider_bodies.h"
 #include "testing/demo_flythrough.h"
 #include "testing/stills_file.h"
 #include "testing/visual_test_runner.h"
@@ -207,6 +208,9 @@ private:
     void drawLightGizmos(Scene& scene, const Selection& selection,
                          bool showAll = false);
     void createPhysicsStaticBodies();
+    /// @brief The scene's blocking-prop boxes plus the tree trunks: what both
+    ///        walkers collide with.
+    void gatherStaticColliders(const Scene& scene, std::vector<AABB>& colliders) const;
     /// @brief Gives Jolt a height-field collider matching the terrain, so the
     ///        physics walker (P key) stands on the ground (3D_E-0757). Called
     ///        from the post-init block, after the meadow reshapes the heightmap.
@@ -243,7 +247,8 @@ private:
     PhysicsWorld m_physicsWorld;
     PhysicsDebugDraw m_physicsDebugDraw;
     JPH::BodyID m_terrainBodyId;                 ///< The terrain height-field body, if any.
-    TerrainColliderSync m_terrainColliderSync;   ///< When to rebuild it (3D_E-0780).
+    ColliderSync m_terrainColliderSync;   ///< When to rebuild it (3D_E-0780).
+    StaticColliderBodies m_staticBodies;         ///< Prop and trunk boxes (3D_E-0796).
 
     /// Canonicalised asset roots installed into every path sandbox
     /// (ResourceManager, CubeLoader, AudioEngine). Empty means the sandbox

@@ -6245,7 +6245,7 @@ shipped that have no invocation path at all.
   Source: user-decision-2026-10-24.
   Lanes: profiler, renderer.
 
-- 📋 [3D_E-0796] **Physics static bodies are built once at start-up and never rebuilt for a scene opened or edited later.**
+- ✅ [3D_E-0796] **Physics static bodies are built once at start-up and never rebuilt for a scene opened or edited later.**
   Engine::createPhysicsStaticBodies runs once in initialize (after the
   meadow is finalized, 3D_E-0779). Opening another scene in the editor,
   or adding, moving or deleting a blocking prop, leaves Jolt's bodies on
@@ -6253,6 +6253,13 @@ shipped that have no invocation path at all.
   and passes through new ones. Rebuild (or update) the scene's static
   bodies on scene load and on blocking-prop edits; 3D_E-0780 closed the same
   gap for the terrain (TerrainColliderSync is a model).
+  Shipped 2026-10-26. StaticColliderBodies fingerprints the scene's
+  boxes (props + trunks) every physics frame and, once a change has held
+  for a frame (ColliderSync, renamed from TerrainColliderSync), removes
+  the old Jolt boxes and builds new ones. Tests: StaticColliderBodies.*
+  (add, move, delete, empty scene; old bodies removed). Not yet seen on
+  screen: walk the P-key walker into a prop after moving it in the
+  editor.
   **Layman:** In the editor, the physics walk still bumps into things from before you changed the scene, and walks through things you added.
   Kind: fix.
   Source: in-session-2026-10-24 (3D_E-0779 fix).

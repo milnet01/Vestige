@@ -224,6 +224,7 @@ set(ENGINE_SOURCES
     experimental/animation/motion_preprocessor.cpp
     experimental/animation/mirror_generator.cpp
     physics/physics_world.cpp
+    physics/static_collider_bodies.cpp
     physics/rigid_body.cpp
     physics/physics_character_controller.cpp
     physics/terrain_height_field.cpp

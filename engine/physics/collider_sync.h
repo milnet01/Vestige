@@ -1,8 +1,8 @@
 // Copyright (c) 2026 Anthony Schemel
 // SPDX-License-Identifier: MIT
 
-/// @file terrain_collider_sync.h
-/// @brief Decides when the terrain's physics collider must be rebuilt.
+/// @file collider_sync.h
+/// @brief Decides when a physics collider must be rebuilt.
 #pragma once
 
 #include <cstdint>
@@ -10,14 +10,16 @@
 namespace Vestige
 {
 
-/// @brief Rebuild the terrain collider once the heights stop changing.
+/// @brief Rebuild a collider once its source stops changing.
 ///
-/// Fed `Terrain::getHeightRevision()` once a frame. It asks for a rebuild when
-/// the revision differs from the one last built AND has not moved since the
-/// previous frame. A brush stroke changes the heights every frame, so the
-/// collider is rebuilt once, the frame after the stroke ends; an undo or a
-/// panel edit changes them once, so it is rebuilt the frame after (3D_E-0780).
-class TerrainColliderSync
+/// Fed a revision of the collider's source once a frame: the terrain's
+/// `getHeightRevision()` (3D_E-0780), or a hash of the scene's static boxes
+/// (StaticColliderBodies, 3D_E-0796). It asks for a rebuild when the revision
+/// differs from the one last built AND has not moved since the previous frame.
+/// A brush stroke or a drag changes it every frame, so the collider is rebuilt
+/// once, the frame after the edit ends; an undo or a panel edit changes it
+/// once, so it is rebuilt the frame after.
+class ColliderSync
 {
 public:
     /// @brief True when the collider should be rebuilt for @p revision.

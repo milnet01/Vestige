@@ -25,6 +25,14 @@ may change any interface without notice.
 
 ## [Unreleased]
 
+### 2026-10-26 Fixed — The physics walker meets the scene as it is now (3D_E-0796)
+
+The physics walker's collision boxes for props and tree trunks were
+built once at start-up. After opening another scene, or adding, moving
+or deleting a blocking prop in the editor, it still bumped into what was
+gone and walked through what was new. The boxes are now rebuilt the
+frame after such a change settles. A drag rebuilds once, when you let go.
+
 ### 2026-10-26 Fixed — The profile log's frame time is that second's own frames (3D_E-0786)
 
 `--profile-log` wrote each second's frame time as an average of the
