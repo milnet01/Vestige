@@ -6481,13 +6481,21 @@ shipped that have no invocation path at all.
   Source: 3D_E-0773 inventory pass 2 2026-10-26 (--stills run_20261026_025040).
   Lanes: renderer, assets.
 
-- 📋 [3D_E-0812] **Retry the LOLIPOP birch trees now that glTF textures are sampled the right way up.**
+- ✅ [3D_E-0812] **Retry the LOLIPOP birch trees now that glTF textures are sampled the right way up.**
   engine.cpp's meadow tree list drops birch: "every LOLIPOP birch
   variant maps its leaf cards across the whole bark+leaf atlas, so
   its canopy renders as bark". That symptom matches the glTF UV flip
   fixed in 3D_E-0803 (2b2b495): a leaf region at one end of an atlas
   was sampled from the other end. Add one birch back, look with
   --stills, and keep it or update the comment.
+  Shipped 2026-10-26. Confirmed: Birch_Atlas_baseColor has leaves
+  top-right and bottom-left, bark top-left and bottom-right, so the
+  pre-0803 v flip put leaf cards on bark. birch_birch_4 added to the
+  field species; open_meadow rot135/rot180 show green canopies on white
+  trunks (build-release run_20261026_100518, headless). Birch has no
+  _billboard.gltf, so it draws its mesh to max distance. Headless A/B,
+  three runs each: the Tree GPU pass median 0.09-0.36 ms without vs
+  0.12-0.42 ms with birch.
   **Layman:** The birch trees were left out because their leaves showed bark; that may have been the upside-down texture bug fixed in 0803.
   Kind: investigate.
   Source: 3D_E-0803 fix 2026-10-26.
