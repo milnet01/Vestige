@@ -25,6 +25,16 @@ may change any interface without notice.
 
 ## [Unreleased]
 
+### 2026-10-26 Fixed — glTF models sample their textures the right way up (3D_E-0803)
+
+Every glTF model sampled its textures upside down. The engine flips each
+image on load, so its texture origin is the bottom-left. glTF's is the
+top-left, and the loader never converted. A model whose UVs sit in the
+middle of its image looked right by luck. Three of the meadow's six moss
+rocks use the top third of a shared atlas. They sampled its empty bottom
+third instead and rendered as glossy blue-white foil. The loader now
+stores `v` as `1 - v`. Test: `tests/test_gltf_texcoord_origin.cpp`.
+
 ### 2026-10-26 Fixed — The physics walker meets the scene as it is now (3D_E-0796)
 
 The physics walker's collision boxes for props and tree trunks were

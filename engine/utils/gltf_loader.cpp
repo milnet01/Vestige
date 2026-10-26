@@ -563,9 +563,14 @@ static std::vector<MeshPrimRange> loadMeshes(const tinygltf::Model& gltfModel,
                         size_t stride = bufferView.byteStride > 0
                             ? bufferView.byteStride : sizeof(float) * 2;
 
+                        // glTF's UV origin is the image's top-left; Texture
+                        // flips images on load, so the engine's is the
+                        // bottom-left. Without 1 - v every glTF texture is
+                        // sampled upside down (3D_E-0803).
                         for (size_t i = 0; i < std::min(accessor.count, vertices.size()); i++)
                         {
-                            vertices[i].texCoord = readVec2(base + stride * i);
+                            const glm::vec2 uv = readVec2(base + stride * i);
+                            vertices[i].texCoord = glm::vec2(uv.x, 1.0f - uv.y);
                         }
                     }
                 }
