@@ -25,6 +25,13 @@ may change any interface without notice.
 
 ## [Unreleased]
 
+### 2026-10-26 Added — Birch trees are back in the meadow (3D_E-0812)
+
+Birch was left out because its leaves rendered as bark. Its texture
+sheet holds leaves in two corners and bark in the other two. The
+upside-down glTF textures fixed in 3D_E-0803 put the leaves on the
+bark. One birch variant now grows among the meadow's field trees.
+
 ### 2026-10-26 Fixed — Trees mirrored in the pond are no longer blocky (3D_E-0805)
 
 The water's reflection image was always a quarter of the render size,

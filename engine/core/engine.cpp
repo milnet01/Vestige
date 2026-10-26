@@ -3269,10 +3269,8 @@ void Engine::finalizeMeadowTerrain()
                 treeCfg("pine",  "pine_pine_small_2"),
                 treeCfg("maple", "maple_acer_medium_1"),
                 treeCfg("maple", "maple_acer_small_2"),
-                // Birch dropped: every LOLIPOP birch variant maps its leaf cards
-                // across the whole bark+leaf atlas, so its canopy renders as bark
-                // (the maples/pines/firs map to their leaf region correctly).
                 treeCfg("maple", "maple_acer_medium_3"),
+                treeCfg("birch", "birch_birch_4"),
                 treeCfg("fir",   "fir_christmas_tree_2"),
             };
             const std::vector<TreeSpeciesConfig> heroCfgs = {
