@@ -1,6 +1,6 @@
 <!-- ants-roadmap-format: 1 -->
 <!-- Generated from the Ants Terminal roadmap store. Edit it with roadmap_log; hand edits are discarded by the next write. -->
-<!-- ants-roadmap-id-high-water: 3D_E=811 3D_E#S=989 -->
+<!-- ants-roadmap-id-high-water: 3D_E=813 3D_E#S=989 -->
 
 # Vestige Engine Roadmap
 
@@ -6343,12 +6343,18 @@ shipped that have no invocation path at all.
   Lanes: renderer.
   Evidence: build/bin/Testing/visual_tests/run_20261026_015818/02_level_east_rot000.png
 
-- 📋 [3D_E-0803] **A meadow rock renders as glossy blue-white foil instead of mossy stone.**
+- ✅ [3D_E-0803] **A meadow rock renders as glossy blue-white foil instead of mossy stone.**
   Seen in --visual-test pictures 04_open_meadow_rot000, rot045 (centre-left,
   checked by eye), rot180 and rot225: pale blue-white, glossy, with
   no moss or stone colour. Looks like a missing albedo texture or a
   wrong material on one of the rock_moss_set_01 / boulder_01 models.
   First step: find which model and which texture slot.
+  Shipped 2026-10-26 (2b2b495). Cause: the glTF loader never turned
+  glTF's top-left UV origin into the engine's bottom-left one, so every
+  glTF texture was sampled upside down. Rocks 01-03 sampled the empty
+  black bottom third of their atlas. The fix is in the loader and covers
+  every glTF model. Seen after the fix: all seven rock models read as
+  stone.
   **Layman:** One of the rocks in the meadow looks like crumpled shiny foil, not stone.
   Kind: fix.
   Source: 3D_E-0773 inventory 2026-10-26 (--visual-test run_20261026_021955).
@@ -6360,6 +6366,10 @@ shipped that have no invocation path at all.
   round with a notch. These are heaped clumps with noisy, over-sharp
   leaf texture, and the blooms are scattered magenta shards. Model:
   gameready/water/lotus_pads.gltf.
+  2026-10-26: the glTF UV fix (3D_E-0803, 2b2b495) changed the blooms a
+  little, but the pads are still heaped clumps (--visual-test
+  03_pond_surface, before and after). What's left is the model's shape,
+  not texture sampling.
   **Layman:** The water-lily pads on the pond look like piles of lettuce, and the flowers look like scattered pink paper.
   Kind: fix.
   Source: 3D_E-0773 inventory 2026-10-26 (--visual-test run_20261026_021955).
@@ -6409,6 +6419,8 @@ shipped that have no invocation path at all.
   show it dark grey-purple with no green. The fern, nettle, dandelion,
   weed, shrub_03 and sorrel shore plants (10..15) look the same.
   Their burial in the grass is 3D_E-0810.
+  2026-10-26: not caused by the glTF UV flip. shrub_c looks the same
+  before and after 3D_E-0803's fix (--stills).
   **Layman:** Some plants near the pond look grey and shiny, like metal, instead of green.
   Kind: fix.
   Source: 3D_E-0773 inventory 2026-10-26 (--visual-test run_20261026_021955).
@@ -6452,9 +6464,24 @@ shipped that have no invocation path at all.
   15_sorrel the same model about 1 m away shows soft, low-resolution
   bark. First step: check its albedo and roughness textures, their
   resolution, and whether it shares 3D_E-0808's material read fault.
+  2026-10-26: not caused by the glTF UV flip. The log at the sorrel spot
+  and log_a are only mirrored after 3D_E-0803's fix; still dark
+  (--stills).
   **Layman:** The fallen logs look like dark burnt lumps from a distance and smudged up close, not like weathered wood.
   Kind: fix.
   Source: 3D_E-0773 inventory pass 2 2026-10-26 (--stills run_20261026_025040).
+  Lanes: renderer, assets.
+
+- 📋 [3D_E-0812] **Retry the LOLIPOP birch trees now that glTF textures are sampled the right way up.**
+  engine.cpp's meadow tree list drops birch: "every LOLIPOP birch
+  variant maps its leaf cards across the whole bark+leaf atlas, so
+  its canopy renders as bark". That symptom matches the glTF UV flip
+  fixed in 3D_E-0803 (2b2b495): a leaf region at one end of an atlas
+  was sampled from the other end. Add one birch back, look with
+  --stills, and keep it or update the comment.
+  **Layman:** The birch trees were left out because their leaves showed bark; that may have been the upside-down texture bug fixed in 0803.
+  Kind: investigate.
+  Source: 3D_E-0803 fix 2026-10-26.
   Lanes: renderer, assets.
 
 ## 0.3.0 — An editor a builder can use
@@ -11079,3 +11106,18 @@ record, and a real clearance before commercial release needs counsel.
   Kind: refactor.
   Source: user-request-2026-10-24.
   Lanes: formula, tools.
+
+- 📋 [3D_E-0813] **Formula Workbench: parameterised GGX distribution, Smith GGX visibility and Fresnel-Schlick exports for DOOM Ants.**
+  Asked by DOOM Ants for spec DOOM-0103 (B1), not urgent: they build
+  DOOM-0273 first. Their formulas.glsl has ggxDistribution,
+  schlickGeometry and fresnelSchlick with alpha 0.25, k 0.125 and
+  F0 0.02 baked in. Wanted, names ours: D(NdotH, alpha); V(NdotV,
+  NdotL, alpha), height-correlated if the library has it, saying
+  whether 1/(4 NdotV NdotL) is included; F(cosTheta, f0). safeDiv
+  guards. Keep the fixed-parameter versions. When done, tell them the
+  Workbench version and the export command (they run
+  formula_workbench --export-glsl --tier full).
+  **Layman:** DOOM Ants needs three lighting formulas that take roughness and reflectivity as inputs instead of fixed numbers.
+  Kind: feature.
+  Source: doom-ants-31 request 2026-10-26 (DOOM-0103 § 4.1).
+  Lanes: formula_workbench.
