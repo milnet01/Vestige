@@ -1,6 +1,6 @@
 <!-- ants-roadmap-format: 1 -->
 <!-- Generated from the Ants Terminal roadmap store. Edit it with roadmap_log; hand edits are discarded by the next write. -->
-<!-- ants-roadmap-id-high-water: 3D_E=813 3D_E#S=989 -->
+<!-- ants-roadmap-id-high-water: 3D_E=814 3D_E#S=989 -->
 
 # Vestige Engine Roadmap
 
@@ -6375,12 +6375,21 @@ shipped that have no invocation path at all.
   Source: 3D_E-0773 inventory 2026-10-26 (--visual-test run_20261026_021955).
   Lanes: renderer, assets.
 
-- 📋 [3D_E-0805] **Trees mirrored in the pond show as coarse, blocky pixels.**
+- ✅ [3D_E-0805] **Trees mirrored in the pond show as coarse, blocky pixels.**
   Seen in 03_pond_surface_rot000 (checked by eye) and 02_pond_shore
   rot000, rot045, rot315. The sky reflection is smooth; the tree
   reflections are staircase-pixelated, which suggests a low-resolution
   reflection target or point sampling for the trees' part. Check the
   water reflection FBO size and its filter.
+  Shipped 2026-10-26. Cause: the reflection target was a fixed quarter of
+  the render target, single-sample, so alpha-cutout leaf edges became
+  4-pixel steps. reflectionResolutionScale existed but nothing read it.
+  The water pass now sizes the target from it (largest over the
+  surfaces); the meadow pond asks for 0.5. Before/after: pond_surface
+  rot000 (run_20261026_032742 vs build-release run_20261026_080357).
+  Cost, headless, three runs each: GPU median 10.8-11.0 ms at 0.25 vs
+  10.4-11.4 ms at 0.5, no measurable change. Both builds dip below 60
+  FPS at peaks under a busy CPU; not judged here. Follow-up: 3D_E-0814.
   **Layman:** The reflections of trees in the pond look like low-resolution blocks.
   Kind: fix.
   Source: 3D_E-0773 inventory 2026-10-26 (--visual-test run_20261026_021955).
@@ -6483,6 +6492,19 @@ shipped that have no invocation path at all.
   Kind: investigate.
   Source: 3D_E-0803 fix 2026-10-26.
   Lanes: renderer, assets.
+
+- 📋 [3D_E-0814] **The water inspector's reflection mode and refraction switch change nothing on screen.**
+  WaterSurfaceConfig::reflectionMode (None / Planar / Cubemap) and
+  refractionEnabled are saved, loaded and shown in the inspector, but no
+  render code reads them: engine.cpp always runs both planar passes when
+  water is in view. Found while fixing 3D_E-0805, where
+  reflectionResolutionScale had the same gap. Honour both (skip the pass,
+  and feed water.frag.glsl's no-refraction / cubemap branches), or remove
+  them from the inspector.
+  **Layman:** Two water settings in the editor can be changed but the water ignores them.
+  Kind: fix.
+  Source: 3D_E-0805 fix 2026-10-26.
+  Lanes: renderer, editor.
 
 ## 0.3.0 — An editor a builder can use
 
