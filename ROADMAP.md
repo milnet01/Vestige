@@ -1,6 +1,6 @@
 <!-- ants-roadmap-format: 1 -->
 <!-- Generated from the Ants Terminal roadmap store. Edit it with roadmap_log; hand edits are discarded by the next write. -->
-<!-- ants-roadmap-id-high-water: 3D_E=802 3D_E#S=989 -->
+<!-- ants-roadmap-id-high-water: 3D_E=809 3D_E#S=989 -->
 
 # Vestige Engine Roadmap
 
@@ -1329,6 +1329,14 @@ Full spatial audio pipeline with dynamic mixing, occlusion, and adaptive music. 
   (B) only if A convinces, write-spec the generator. Waits on the user:
   the colour fit needs reference photos (the same photos 3D_E-0034 lacks)
   and the go/no-go after A is a judgement by eye.
+  2026-10-26, 3D_E-0773 inventory (--visual-test run_20261026_021955):
+  mid-range pines read as sparse needle cards on a bare straight pole,
+  with card edges visible. The near pine trunk in 04_open_meadow_rot135
+  looks like a smooth, untextured cylinder. Far billboard trees are
+  flat, dark, fog-washed cut-outs with ragged edges, and stand out
+  beside the 3D trees. Near broadleaf canopies (04_open_meadow rot225,
+  rot270) show blocky leaf-card clumps, with a few leaves floating
+  loose.
   **Layman:** Instead of hunting for free plant models online, teach the engine to grow its own plants — trunk, branches, leaves and the leaf pictures too.
   Kind: research.
   Source: user-request-2026-07-31 (raised during 3D_E-0033 T6 lily sourcing).
@@ -5975,6 +5983,14 @@ shipped that have no invocation path at all.
   shore plants, lily pads, trees, terrain edges), one still per element,
   then file each one that falls short. Trees and vegetation already
   have a program: 3D_E-0040 and the realism decisions in memory.
+  2026-10-26, inventory pass 1: a --visual-test run (27 pictures,
+  run_20261026_021955) found and filed 3D_E-0803..0809 (rock material,
+  lily pads, pond reflections, grass blades, wildflowers, metallic shore
+  plants, pond edge). Tree findings went to 3D_E-0040 and sky banding to
+  3D_E-0802. Not seen yet: fallen logs, tree stump, Poly Haven shrubs,
+  reeds, the teal plant_bush and the red mushroom. Every eye-level view
+  sits inside the grass. Pass 2: --stills (3D_E-0801) close-ups from
+  above the grass, at each prop's scatter position.
   **Layman:** Go over the meadow piece by piece and replace anything that still looks blocky or fake.
   Kind: enhancement.
   Source: user-request-2026-10-20 (3D_E-0034 follow-up).
@@ -6307,11 +6323,91 @@ shipped that have no invocation path at all.
   sky is smooth, so the banding is in the low sky only. Suspects: an
   8-bit sky texture or LUT, or the distance haze. Found during 0773's
   inventory.
+  2026-10-26: the banding is not only low in the sky. In
+  01_pond_overview rot090..rot270 and 04_open_meadow rot225, rot270 it
+  covers clouds up to the top of the frame, while other headings are
+  smooth. So it depends on direction, which points at the HDRI's own
+  pixels or its sampling.
   **Layman:** Low in the sky, the clouds look like a poster with only a few colours instead of soft, smooth cloud.
   Kind: fix.
   Source: user-request-2026-10-26 (3D_E-0773 needs stills).
   Lanes: renderer.
   Evidence: build/bin/Testing/visual_tests/run_20261026_015818/02_level_east_rot000.png
+
+- 📋 [3D_E-0803] **A meadow rock renders as glossy blue-white foil instead of mossy stone.**
+  Seen in --visual-test pictures 04_open_meadow_rot000, rot045 (centre-left,
+  checked by eye), rot180 and rot225: pale blue-white, glossy, with
+  no moss or stone colour. Looks like a missing albedo texture or a
+  wrong material on one of the rock_moss_set_01 / boulder_01 models.
+  First step: find which model and which texture slot.
+  **Layman:** One of the rocks in the meadow looks like crumpled shiny foil, not stone.
+  Kind: fix.
+  Source: 3D_E-0773 inventory 2026-10-26 (--visual-test run_20261026_021955).
+  Lanes: renderer, assets.
+
+- 📋 [3D_E-0804] **Lily and lotus pads render as heaped leafy clumps standing off the water, with confetti-like blooms.**
+  Seen in 03_pond_surface_rot000 (checked by eye) and 02_pond_shore
+  rot000, rot045, rot315. Real pads lie flat on the water, each one
+  round with a notch. These are heaped clumps with noisy, over-sharp
+  leaf texture, and the blooms are scattered magenta shards. Model:
+  gameready/water/lotus_pads.gltf.
+  **Layman:** The water-lily pads on the pond look like piles of lettuce, and the flowers look like scattered pink paper.
+  Kind: fix.
+  Source: 3D_E-0773 inventory 2026-10-26 (--visual-test run_20261026_021955).
+  Lanes: renderer, assets.
+
+- 📋 [3D_E-0805] **Trees mirrored in the pond show as coarse, blocky pixels.**
+  Seen in 03_pond_surface_rot000 (checked by eye) and 02_pond_shore
+  rot000, rot045, rot315. The sky reflection is smooth; the tree
+  reflections are staircase-pixelated, which suggests a low-resolution
+  reflection target or point sampling for the trees' part. Check the
+  water reflection FBO size and its filter.
+  **Layman:** The reflections of trees in the pond look like low-resolution blocks.
+  Kind: fix.
+  Source: 3D_E-0773 inventory 2026-10-26 (--visual-test run_20261026_021955).
+  Lanes: renderer.
+
+- 📋 [3D_E-0806] **GPU grass blades are flat, untextured ribbons with visible kinks, one height and one hue.**
+  Seen in every --visual-test picture, worst in 06_grass_lookdown and
+  the foregrounds of 02_pond_shore. Blades have no texture, a few
+  straight segments with sharp bends, the same width and hue, cut-off
+  tips and no self-shadowing. The field reads as one even crop at eye
+  height. Thin far blades break into dotted bright lines (aliasing).
+  Related: 3D_E-S0858 (flower and grass variety).
+  **Layman:** Up close, the grass looks like flat green ribbons that are all the same height and colour.
+  Kind: enhancement.
+  Source: 3D_E-0773 inventory 2026-10-26 (--visual-test run_20261026_021955).
+  Lanes: renderer.
+
+- 📋 [3D_E-0807] **Meadow wildflowers render as flat, too-bright discs.**
+  Yellow discs with brown centres (01_pond_overview rot225 and rot270)
+  and white daisy-like discs (rot180, rot315) look flat-shaded and
+  oversized. The purple spike flowers pass at a distance
+  (04_open_meadow_rot090).
+  **Layman:** The yellow and white flowers look like flat stickers, not flowers.
+  Kind: enhancement.
+  Source: 3D_E-0773 inventory 2026-10-26 (--visual-test run_20261026_021955).
+  Lanes: renderer, assets.
+
+- 📋 [3D_E-0808] **Shore plants and a willow-like shrub have a grey-blue metallic sheen.**
+  Broad-leaf shore plants in 02_pond_shore rot090..rot270 show a
+  bluish-grey metallic sheen with mottled brown patches. A grey-violet
+  willow-like plant (01_pond_overview rot045, rot090; 04_open_meadow
+  rot225, rot270) looks the same way. Suspect metallic or roughness
+  read from the wrong channel, or missing roughness maps.
+  **Layman:** Some plants near the pond look grey and shiny, like metal, instead of green.
+  Kind: fix.
+  Source: 3D_E-0773 inventory 2026-10-26 (--visual-test run_20261026_021955).
+  Lanes: renderer, assets.
+
+- 📋 [3D_E-0809] **The pond's edge shows a milky white smear and a crisp, tidy bank.**
+  Seen in 02_pond_shore rot045, rot270, rot315 and 03_pond_surface.
+  A real pond edge has wet, darker soil, scattered reeds and an
+  uneven grass line.
+  **Layman:** Where the water meets the land, there is a white smudge and the grass stops in a neat line.
+  Kind: enhancement.
+  Source: 3D_E-0773 inventory 2026-10-26 (--visual-test run_20261026_021955).
+  Lanes: renderer.
 
 ## 0.3.0 — An editor a builder can use
 
