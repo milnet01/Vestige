@@ -1560,7 +1560,6 @@ void Engine::run()
             if (vpW > 0 && vpH > 0)
             {
                 m_renderer->resizeRenderTarget(vpW, vpH);
-                m_waterFbo->resize(vpW / 4, vpH / 4, vpW / 4, vpH / 4);
             }
         }
         else
@@ -1571,8 +1570,8 @@ void Engine::run()
             // GPU-bound weak part). See docs/phases/phase_10_tier1_render_scale_and_presets_design.md.
             int rw = m_editor ? m_editor->getPlayModeWidth() : m_window->getWidth();
             int rh = m_editor ? m_editor->getPlayModeHeight() : m_window->getHeight();
-            // One factor scales both the scene+post chain and the water reflection FBO
-            // coherently (§3.1). renderScale is already clamped to [0.25, 2.0] at settings
+            // One factor scales both the scene+post chain and the water FBOs
+            // coherently (§3.1): the water pass sizes them from the render target. renderScale is already clamped to [0.25, 2.0] at settings
             // load; re-clamp defensively. 1.0 rounds back to the exact size (a no-op).
             // Source the LIVE value from the settings editor's pending state — the
             // preset/slider mutate that copy at runtime; m_settings is only the
@@ -1585,7 +1584,6 @@ void Engine::run()
             rw = std::max(1, static_cast<int>(std::lround(static_cast<float>(rw) * renderScale)));
             rh = std::max(1, static_cast<int>(std::lround(static_cast<float>(rh) * renderScale)));
             m_renderer->resizeRenderTarget(rw, rh);
-            m_waterFbo->resize(rw / 4, rh / 4, rw / 4, rh / 4);
         }
 
         // 3e. Editor viewport interaction and camera update
@@ -2140,6 +2138,23 @@ void Engine::run()
 
                 if (anyWaterVisible)
                 {
+                    // 3D_E-0805: size the reflection target from the water surfaces'
+                    // reflectionResolutionScale (the sharpest one wins — one FBO serves
+                    // them all). It was a fixed quarter of the render target, which
+                    // turned alpha-cutout leaf edges into 4-pixel stair-steps in the
+                    // pond. Refraction stays a quarter: it is blurred by the water.
+                    float reflScale = 0.0f;
+                    for (const auto& item : waterItems)
+                    {
+                        reflScale = std::max(reflScale,
+                                             item.component->getConfig().reflectionResolutionScale);
+                    }
+                    const int targetW = m_renderer->getRenderWidth();
+                    const int targetH = m_renderer->getRenderHeight();
+                    const glm::ivec2 reflSize = waterReflectionTargetSize(targetW, targetH, reflScale);
+                    m_waterFbo->resize(reflSize.x, reflSize.y,
+                                       std::max(1, targetW / 4), std::max(1, targetH / 4));
+
                     // Save renderer view state (geometryOnly passes overwrite m_lastProjection etc.)
                     m_renderer->saveViewState();
 
@@ -3058,6 +3073,9 @@ void Engine::finalizeMeadowTerrain()
         // read green-brown, while still mirroring the sky (user request).
         c.turbidity = 0.55f;
         c.reflectionMode = WaterReflectionMode::PLANAR;  // mirrors sky + trees
+        // Half resolution: at the default quarter the mirrored leaf edges read as
+        // coarse blocks (3D_E-0805).
+        c.reflectionResolutionScale = 0.5f;
         c.causticsEnabled = true;
         // Still-unless-windy: the meadow runs at zero base wind, so the pond reads
         // as a flat mirror; ripples only appear if the wind is turned up (user directive).

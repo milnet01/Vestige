@@ -1802,7 +1802,7 @@ void InspectorPanel::drawWaterSurface(Entity& entity)
         if (config.reflectionMode != WaterReflectionMode::NONE)
         {
             float resScale = config.reflectionResolutionScale;
-            bool resChanged = ImGui::SliderFloat("Reflection Resolution", &resScale, 0.1f, 1.0f, "%.0f%%");
+            bool resChanged = ImGui::SliderFloat("Reflection Resolution", &resScale, 0.1f, 1.0f, "%.2f");
             tr.track(resChanged);
             if (resChanged)
             {

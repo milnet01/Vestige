@@ -25,6 +25,16 @@ may change any interface without notice.
 
 ## [Unreleased]
 
+### 2026-10-26 Fixed — Trees mirrored in the pond are no longer blocky (3D_E-0805)
+
+The water's reflection image was always a quarter of the render size,
+with no edge smoothing. Mirrored leaf edges became coarse stair-steps.
+The water inspector's "Reflection Resolution" setting existed, but
+nothing read it. The water pass now sizes the reflection from that
+setting, and the meadow pond uses half resolution. The slider's label
+read "0%" or "1%"; it now shows the fraction. Test:
+`tests/test_water_reflection_size.cpp`.
+
 ### 2026-10-26 Fixed — glTF models sample their textures the right way up (3D_E-0803)
 
 Every glTF model sampled its textures upside down. The engine flips each

@@ -173,6 +173,18 @@ inline AABB waterSurfaceWorldBounds(const WaterSurfaceConfig& config,
     return local.transformed(worldMatrix);
 }
 
+/// @brief Size of the planar-reflection target for a renderW x renderH render
+/// target at a reflectionResolutionScale. The scale is clamped to the editor
+/// slider's 0.1..1 range and each side is at least one pixel. Pure + GL-free so
+/// it is unit-testable.
+inline glm::ivec2 waterReflectionTargetSize(int renderW, int renderH, float scale)
+{
+    const float s = std::clamp(scale, 0.1f, 1.0f);
+    return glm::ivec2(
+        std::max(1, static_cast<int>(std::lround(static_cast<float>(renderW) * s))),
+        std::max(1, static_cast<int>(std::lround(static_cast<float>(renderH) * s))));
+}
+
 /// @brief Entity component that manages a water surface mesh and its parameters.
 class WaterSurfaceComponent : public Component
 {
