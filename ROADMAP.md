@@ -1,6 +1,6 @@
 <!-- ants-roadmap-format: 1 -->
 <!-- Generated from the Ants Terminal roadmap store. Edit it with roadmap_log; hand edits are discarded by the next write. -->
-<!-- ants-roadmap-id-high-water: 3D_E=809 3D_E#S=989 -->
+<!-- ants-roadmap-id-high-water: 3D_E=811 3D_E#S=989 -->
 
 # Vestige Engine Roadmap
 
@@ -5991,6 +5991,15 @@ shipped that have no invocation path at all.
   reeds, the teal plant_bush and the red mushroom. Every eye-level view
   sits inside the grass. Pass 2: --stills (3D_E-0801) close-ups from
   above the grass, at each prop's scatter position.
+  2026-10-26, pass 2: --stills close-ups of logs, stumps, bushes and
+  shore plants, 2-3 m above each prop (run_20261026_025040; spots from
+  the seeded scatter, file build/stills773/spots.txt, not tracked).
+  Filed 3D_E-0810 (props buried in grass) and 3D_E-0811 (dark, blurry
+  log); bush and shore-plant colour added to 3D_E-0808. The teal
+  plant_bush and red mushroom listed above are no longer in the scene:
+  the meadow scatter replaced them with shrub_02 (3D_E-0702). Every
+  prop is now filed; this item closes when 0803..0811 and the 3D_E-0040
+  tree findings are done.
   **Layman:** Go over the meadow piece by piece and replace anything that still looks blocky or fake.
   Kind: enhancement.
   Source: user-request-2026-10-20 (3D_E-0034 follow-up).
@@ -6395,6 +6404,11 @@ shipped that have no invocation path at all.
   willow-like plant (01_pond_overview rot045, rot090; 04_open_meadow
   rot225, rot270) looks the same way. Suspect metallic or roughness
   read from the wrong channel, or missing roughness maps.
+  2026-10-26, 0773 pass 2 (--stills run_20261026_025040): the
+  grey-violet willow-like plant is Poly Haven shrub_02 (a-d); 06..09
+  show it dark grey-purple with no green. The fern, nettle, dandelion,
+  weed, shrub_03 and sorrel shore plants (10..15) look the same.
+  Their burial in the grass is 3D_E-0810.
   **Layman:** Some plants near the pond look grey and shiny, like metal, instead of green.
   Kind: fix.
   Source: 3D_E-0773 inventory 2026-10-26 (--visual-test run_20261026_021955).
@@ -6408,6 +6422,40 @@ shipped that have no invocation path at all.
   Kind: enhancement.
   Source: 3D_E-0773 inventory 2026-10-26 (--visual-test run_20261026_021955).
   Lanes: renderer.
+
+- 📋 [3D_E-0810] **Meadow bushes, shore plants, logs and stumps are buried in the GPU grass.**
+  Seen in --stills close-ups taken 2-3 m above each prop
+  (run_20261026_025040, all 15 pictures). Measured from the glTF
+  bounds: shrub_02 models are 1.17-1.71 m tall, scattered at 0.5-1.0,
+  so about 0.6-1.7 m; the shore plants are 0.22-0.29 m at 1.0-1.6;
+  tree_stump_01 is 0.57 m tall and about 1.5 m wide; dead_tree_trunk
+  is 0.29 m thick. GrassConfig blades are 0.6-1.2 m. So every prop is
+  at or below the grass, and the stump reads as a low mound. The
+  bushes comment in Engine's meadow scatter ("~2 m tall, the only
+  plants tall enough to read above the ~1 m GPU grass") is false and
+  is fixed with this item. Options: a grass clearing around each
+  ground prop (real meadows thin under logs and bushes), shorter grass
+  in the shore band, or larger scatter scales. The colour of the
+  bushes and shore plants is 3D_E-0808, not this item.
+  CPU / GPU placement: CPU builds any clearing list once per scene
+  load at scatter time; GPU grass skips blades inside it, beside the
+  pond exclusion it already applies. Reason: per-load data, per-blade
+  test. Confirm the grass placement path when this is designed.
+  **Layman:** The bushes, small plants, logs and stumps in the meadow are hidden by grass that is as tall as they are, so you barely see them.
+  Kind: enhancement.
+  Source: 3D_E-0773 inventory pass 2 2026-10-26 (--stills run_20261026_025040).
+  Lanes: renderer, assets.
+
+- 📋 [3D_E-0811] **The fallen log renders near-black from a few metres and its bark goes blurry up close.**
+  Seen in --stills 01_log_a and 03_log_c (4.5 m away, 2.4 m up):
+  dead_tree_trunk reads as an almost black, featureless shape. In
+  15_sorrel the same model about 1 m away shows soft, low-resolution
+  bark. First step: check its albedo and roughness textures, their
+  resolution, and whether it shares 3D_E-0808's material read fault.
+  **Layman:** The fallen logs look like dark burnt lumps from a distance and smudged up close, not like weathered wood.
+  Kind: fix.
+  Source: 3D_E-0773 inventory pass 2 2026-10-26 (--stills run_20261026_025040).
+  Lanes: renderer, assets.
 
 ## 0.3.0 — An editor a builder can use
 
