@@ -126,7 +126,7 @@ private:
     Tween() = default;
 
     void applyValue(float easedProgress);
-    void fireEvents(float oldProgress, float newProgress);
+    void fireEvents(float oldProgress, float newProgress, bool loopWrapped);
 
     TargetType m_targetType = TargetType::FLOAT;
     void* m_target = nullptr;

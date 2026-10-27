@@ -260,7 +260,34 @@ TEST(TweenTest, OnLoopFiresOnWrap)
     EXPECT_EQ(loops, 0);
 
     tween.update(0.6f);  // Wraps at 1.0s
-    EXPECT_GE(loops, 1);
+    EXPECT_EQ(loops, 1);
+
+    tween.update(0.1f);  // Still in the second cycle — no new wrap
+    tween.update(0.1f);
+    EXPECT_EQ(loops, 1);
+
+    tween.update(0.8f);  // Wraps at 2.0s
+    EXPECT_EQ(loops, 2);
+}
+
+TEST(TweenTest, LoopWrapFiresOnlyCrossedEvents)
+{
+    float value = 0.0f;
+    int midFired = 0;
+    int endFired = 0;
+
+    auto tween = Tween::floatTween(&value, 0.0f, 10.0f, 1.0f);
+    tween.setPlayback(TweenPlayback::LOOP);
+    tween.addEvent(0.5f, [&midFired]() { midFired++; });
+    tween.addEvent(0.98f, [&endFired]() { endFired++; });
+
+    tween.update(0.6f);   // 0.0 -> 0.6: crosses 0.5
+    EXPECT_EQ(midFired, 1);
+    EXPECT_EQ(endFired, 0);
+
+    tween.update(0.5f);   // 0.6 -> wrap -> 0.1: crosses 0.98, not 0.5
+    EXPECT_EQ(midFired, 1);
+    EXPECT_EQ(endFired, 1);
 }
 
 // ---------------------------------------------------------------------------

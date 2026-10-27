@@ -167,6 +167,7 @@ void Tween::update(float deltaTime)
     float activeTime = m_elapsed - m_delay;
     float oldProgress = m_progress;
     float newProgress = 0.0f;
+    bool loopWrapped = false;
 
     switch (m_playback)
     {
@@ -181,11 +182,15 @@ void Tween::update(float deltaTime)
     }
     case TweenPlayback::LOOP:
     {
-        float rawProgress = activeTime / m_duration;
-        // Detect loop wrap
-        if (m_started && rawProgress >= 1.0f)
+        // A wrap is a change of whole-cycle count since the last update.
+        // (activeTime only grows, so testing activeTime >= m_duration would
+        // report a wrap on every update after the first cycle.)
+        float prevActive = std::max(0.0f, activeTime - deltaTime);
+        loopWrapped = m_started
+            && std::floor(activeTime / m_duration) > std::floor(prevActive / m_duration);
+        if (loopWrapped && m_onLoop)
         {
-            if (m_onLoop) m_onLoop();
+            m_onLoop();
         }
         newProgress = std::fmod(activeTime, m_duration) / m_duration;
         break;
@@ -234,7 +239,7 @@ void Tween::update(float deltaTime)
     applyValue(easedProgress);
 
     // Fire events
-    fireEvents(oldProgress, newProgress);
+    fireEvents(oldProgress, newProgress, loopWrapped);
 
     // Fire onComplete for ONCE mode
     if (m_finished && m_onComplete)
@@ -291,12 +296,18 @@ void Tween::applyValue(float easedProgress)
 // Fire events that were crossed between oldProgress and newProgress
 // ---------------------------------------------------------------------------
 
-void Tween::fireEvents(float oldProgress, float newProgress)
+void Tween::fireEvents(float oldProgress, float newProgress, bool loopWrapped)
 {
     for (auto& evt : m_events)
     {
         bool crossed = false;
-        if (newProgress >= oldProgress)
+        if (loopWrapped)
+        {
+            // LOOP wrap: progress ran to the end and restarted, so the
+            // crossed span is (oldProgress, 1] plus [0, newProgress].
+            crossed = (evt.normalizedTime > oldProgress || evt.normalizedTime <= newProgress);
+        }
+        else if (newProgress >= oldProgress)
         {
             // Forward: fire if event time is in (oldProgress, newProgress]
             crossed = (evt.normalizedTime > oldProgress && evt.normalizedTime <= newProgress);
