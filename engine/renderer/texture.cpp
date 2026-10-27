@@ -125,6 +125,15 @@ bool Texture::loadFromFile(const std::string& filePath, bool linear)
 
     int channels = 0;
     unsigned char* data = stbi_load(filePath.c_str(), &m_width, &m_height, &channels, 0);
+    if (data && channels == 2)
+    {
+        // Grey + alpha has no upload format below; expand to RGBA so the
+        // upload reads the w*h*4 bytes it is told to (GL_RGB would read
+        // w*h*3 from a w*h*2 buffer and drop the alpha).
+        stbi_image_free(data);
+        data = stbi_load(filePath.c_str(), &m_width, &m_height, &channels, 4);
+        channels = 4;
+    }
     if (!data)
     {
         Logger::error("Failed to load texture: " + filePath + " — " + stbi_failure_reason());
@@ -210,6 +219,15 @@ bool Texture::loadFromMemory(const unsigned char* compressedData, size_t dataSiz
     unsigned char* data = stbi_load_from_memory(
         compressedData, static_cast<int>(dataSize),
         &m_width, &m_height, &channels, 0);
+    if (data && channels == 2)
+    {
+        // Grey + alpha: expand to RGBA, as in loadFromFile.
+        stbi_image_free(data);
+        data = stbi_load_from_memory(
+            compressedData, static_cast<int>(dataSize),
+            &m_width, &m_height, &channels, 4);
+        channels = 4;
+    }
     if (!data)
     {
         Logger::error("Failed to decode texture from memory — " + std::string(stbi_failure_reason()));
@@ -326,14 +344,15 @@ bool Texture::loadFromMemory(const unsigned char* rawData, int width, int height
     // the default GL_UNPACK_ALIGNMENT of 4 then shears the upload into diagonal
     // bands — the terrain "corduroy" artefact fixed in 82d0738. That fix reached
     // three of this file's four upload paths; this one feeds
-    // generateNormalFromHeight, which is always 3-channel.
-    if (channels == 3)
+    // generateNormalFromHeight (3-channel). 1-channel rows at a width that is
+    // not a multiple of 4 are unaligned too, so match the other paths.
+    if (channels != 4)
     {
         glPixelStorei(GL_UNPACK_ALIGNMENT, 1);
     }
     glTextureSubImage2D(m_textureId, 0, 0, 0, m_width, m_height,
                         dataFormat, GL_UNSIGNED_BYTE, flipped.data());
-    if (channels == 3)
+    if (channels != 4)
     {
         glPixelStorei(GL_UNPACK_ALIGNMENT, 4);
     }
