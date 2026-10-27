@@ -52,6 +52,10 @@ private:
 
     std::vector<uint32_t> m_cellStart;  ///< Prefix-sum offsets per cell (+1 sentinel)
     std::vector<uint32_t> m_entries;    ///< Particle IDs sorted by cell
+    std::vector<uint32_t> m_cursor;     ///< build() scratch: scatter write cursors
+    /// query() scratch: buckets already scanned. Makes query() unsafe to call
+    /// concurrently on one SpatialHash.
+    mutable std::vector<size_t> m_visitedBuckets;
 
     const glm::vec3* m_positions = nullptr;  ///< Non-owning pointer to current positions
 

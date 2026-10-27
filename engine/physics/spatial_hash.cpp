@@ -70,8 +70,9 @@ void SpatialHash::build(const glm::vec3* positions, size_t count, float cellSize
 
     // Step 3: Scatter particle IDs into entries array
     // We use a working copy of cellStart as write cursors
-    std::vector<uint32_t> cursor(m_cellStart.begin(), m_cellStart.begin() +
-                                 static_cast<ptrdiff_t>(m_tableSize));
+    std::vector<uint32_t>& cursor = m_cursor;
+    cursor.assign(m_cellStart.begin(), m_cellStart.begin() +
+                  static_cast<ptrdiff_t>(m_tableSize));
 
     for (size_t i = 0; i < count; ++i)
     {
@@ -102,10 +103,11 @@ void SpatialHash::query(const glm::vec3& position, float radius, uint32_t selfIn
 
     // Track which hash buckets we've already visited to avoid duplicates
     // from different cell coordinates hashing to the same bucket.
-    // Use a dynamic vector instead of a fixed-size array so that
-    // large-radius queries spanning many cells cannot overflow.
-    std::vector<size_t> visitedBuckets;
-    visitedBuckets.reserve(64);  // Pre-allocate for typical case
+    // A reused member vector (not a fixed-size array) so large-radius
+    // queries spanning many cells cannot overflow, and the per-particle
+    // query loop does not allocate.
+    std::vector<size_t>& visitedBuckets = m_visitedBuckets;
+    visitedBuckets.clear();
 
     for (int cz = minCell.z; cz <= maxCell.z; ++cz)
     {
