@@ -579,8 +579,9 @@ void ScriptingSystem::tickUpdateNodes(float deltaTime)
             static const PinId pinDeltaTime = internPin("deltaTime");
             nodeInst->outputValues[pinDeltaTime] = ScriptValue(deltaTime);
 
+            static const PinId pinTick = internPin("Tick");
             ScriptContext ctx(*instance, m_nodeRegistry, m_engine);
-            ctx.triggerOutput(*nodeInst, "Tick");
+            ctx.triggerOutput(*nodeInst, pinTick);
         }
     }
 }
