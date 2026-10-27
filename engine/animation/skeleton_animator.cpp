@@ -81,18 +81,28 @@ void SkeletonAnimator::advanceAndSample(
         case AnimTargetPath::WEIGHTS:
         {
             // Morph target weight animation: values are packed as N floats per keyframe
-            // where N = number of morph targets. The jointIndex is -1 for WEIGHTS channels.
+            // where N = number of morph targets (3N for CUBICSPLINE: N in-tangents,
+            // N values, N out-tangents). The jointIndex is -1 for WEIGHTS channels.
             if (channel.timestamps.empty() || channel.values.empty())
             {
                 break;
             }
+            const bool cubic = (channel.interpolation == AnimInterpolation::CUBICSPLINE);
+            const size_t elementsPerKey = cubic ? 3 : 1;
             size_t keyCount = channel.timestamps.size();
             size_t totalValues = channel.values.size();
-            int morphCount = static_cast<int>(totalValues / keyCount);
+            int morphCount = static_cast<int>(totalValues / (keyCount * elementsPerKey));
             if (morphCount <= 0)
             {
                 break;
             }
+            const size_t n = static_cast<size_t>(morphCount);
+            // element: 0 = in-tangent, 1 = value, 2 = out-tangent (cubic only)
+            auto at = [&](size_t key, size_t element, size_t m)
+            {
+                return cubic ? channel.values[(key * 3 + element) * n + m]
+                             : channel.values[key * n + m];
+            };
 
             // Resize morph weights if needed
             if (m_morphWeights.size() < static_cast<size_t>(morphCount))
@@ -115,10 +125,9 @@ void SkeletonAnimator::advanceAndSample(
 
             if (channel.interpolation == AnimInterpolation::STEP || k == k1)
             {
-                for (int m = 0; m < morphCount; ++m)
+                for (size_t m = 0; m < n; ++m)
                 {
-                    m_morphWeights[static_cast<size_t>(m)] =
-                        channel.values[k * static_cast<size_t>(morphCount) + static_cast<size_t>(m)];
+                    m_morphWeights[m] = at(k, 1, m);
                 }
             }
             else
@@ -128,11 +137,30 @@ void SkeletonAnimator::advanceAndSample(
                 float alpha = (t1 > t0) ? (time - t0) / (t1 - t0) : 0.0f;
                 alpha = glm::clamp(alpha, 0.0f, 1.0f);
 
-                for (int m = 0; m < morphCount; ++m)
+                if (cubic)
                 {
-                    float v0 = channel.values[k * static_cast<size_t>(morphCount) + static_cast<size_t>(m)];
-                    float v1 = channel.values[k1 * static_cast<size_t>(morphCount) + static_cast<size_t>(m)];
-                    m_morphWeights[static_cast<size_t>(m)] = glm::mix(v0, v1, alpha);
+                    // Cubic Hermite spline (glTF 2.0 Appendix C).
+                    const float dt = t1 - t0;
+                    const float a2 = alpha * alpha;
+                    const float a3 = a2 * alpha;
+                    const float h00 = 2.0f * a3 - 3.0f * a2 + 1.0f;
+                    const float h10 = a3 - 2.0f * a2 + alpha;
+                    const float h01 = -2.0f * a3 + 3.0f * a2;
+                    const float h11 = a3 - a2;
+                    for (size_t m = 0; m < n; ++m)
+                    {
+                        m_morphWeights[m] = h00 * at(k, 1, m)
+                                          + h10 * dt * at(k, 2, m)
+                                          + h01 * at(k1, 1, m)
+                                          + h11 * dt * at(k1, 0, m);
+                    }
+                }
+                else
+                {
+                    for (size_t m = 0; m < n; ++m)
+                    {
+                        m_morphWeights[m] = glm::mix(at(k, 0, m), at(k1, 0, m), alpha);
+                    }
                 }
             }
             break;
