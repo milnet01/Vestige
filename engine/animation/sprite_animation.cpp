@@ -30,10 +30,29 @@ void SpriteAnimation::addClip(SpriteAnimationClip clip)
     // undefined (and on libstdc++ lands in an empty string).
     const std::string key = clip.name;
     const bool existed = m_clips.find(key) != m_clips.end();
-    m_clips[key] = std::move(clip);
+    SpriteAnimationClip& stored = m_clips[key];
+    stored = std::move(clip);
     if (!existed)
     {
         m_clipOrder.push_back(key);
+    }
+
+    // Replacing the playing clip with a shorter one would leave m_frameIndex
+    // past the end, and the next tick() would read out of bounds.
+    if (key == m_currentClipName
+        && m_frameIndex >= static_cast<int>(stored.frames.size()))
+    {
+        m_frameElapsedMs = 0.0f;
+        if (stored.frames.empty())
+        {
+            m_frameIndex = -1;
+            m_currentFrameName.clear();
+        }
+        else
+        {
+            m_frameIndex = 0;
+            m_currentFrameName = stored.frames.front().name;
+        }
     }
 }
 
