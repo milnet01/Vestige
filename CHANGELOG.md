@@ -25,6 +25,21 @@ may change any interface without notice.
 
 ## [Unreleased]
 
+### 2026-10-27 Fixed — Code-review sweep: texture over-reads, tween loops, cubic morph weights
+
+- Grey+alpha PNGs no longer over-read on upload (now expanded to RGBA);
+  odd-width 1-channel raw uploads no longer shear.
+- `atomic_write` reports open/write failures as `TempWriteFailed` and
+  fsync failures as `FsyncFailed` (they were swapped).
+- Looping tweens fire `onLoop` once per wrap (it fired every frame after
+  the first) and fire the events actually crossed on a wrap.
+- CUBICSPLINE morph-weight animations sample values, not in-tangents.
+- Replacing the playing sprite clip with a shorter one no longer reads
+  past its frames.
+- Per-frame allocations removed from cloth self-collision queries
+  (`SpatialHash`), the CPU profiler's frame buffer and the scripting
+  OnUpdate "Tick" pin.
+
 ### 2026-10-26 Added — Birch trees are back in the meadow (3D_E-0812)
 
 Birch was left out because its leaves rendered as bark. Its texture
