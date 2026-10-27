@@ -90,13 +90,13 @@ Status renameAtomic(const fs::path& tmpPath, const fs::path& targetPath)
 #else
 
 // Writes @a contents to @a tmpPath and fsyncs it.
-// Returns true on success. Leaves the file in place on failure so
-// the caller can decide whether to unlink.
+// Returns true on success. On failure, unlinks the temp file and sets
+// @a outFailure to FsyncFailed or TempWriteFailed (open/write/close).
 bool writeTempFileAndFlush(const fs::path& tmpPath,
                            std::string_view contents,
-                           bool& outFsyncOk)
+                           Status& outFailure)
 {
-    outFsyncOk = false;
+    outFailure = Status::TempWriteFailed;
     // O_WRONLY | O_CREAT | O_TRUNC — overwrite any stale .tmp.
     // 0644 — user-readable/writable, group/other read-only.
     int fd = ::open(
@@ -134,10 +134,10 @@ bool writeTempFileAndFlush(const fs::path& tmpPath,
     {
         // Data not durable; close, unlink, report.
         ::close(fd);
+        outFailure = Status::FsyncFailed;
         ::unlink(tmpPath.c_str());
         return false;
     }
-    outFsyncOk = true;
 
     if (::close(fd) != 0)
     {
@@ -245,11 +245,10 @@ Status writeFile(const fs::path& targetPath, std::string_view contents)
     // On Windows, MOVEFILE_WRITE_THROUGH covers the dir-fsync step.
     return Status::Ok;
 #else
-    bool fsyncOk = false;
-    if (!writeTempFileAndFlush(tmpPath, contents, fsyncOk))
+    Status writeFailure = Status::TempWriteFailed;
+    if (!writeTempFileAndFlush(tmpPath, contents, writeFailure))
     {
-        // Distinguish the two failure modes for logging.
-        return fsyncOk ? Status::TempWriteFailed : Status::FsyncFailed;
+        return writeFailure;
     }
 
     // rename(2): atomic on same-filesystem POSIX targets.
