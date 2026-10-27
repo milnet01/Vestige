@@ -28,8 +28,10 @@ void CpuProfiler::endFrame()
     auto now = Clock::now();
     m_lastFrameTimeMs = std::chrono::duration<float, std::milli>(now - m_frameStart).count();
 
-    // Snapshot for display (move avoids heap allocation)
-    m_lastFrame = std::move(m_currentFrame);
+    // Snapshot for display. Swap rather than move: a move leaves
+    // m_currentFrame with no capacity, so every frame would regrow it.
+    // beginFrame() clears the swapped-in buffer and keeps its capacity.
+    m_lastFrame.swap(m_currentFrame);
 }
 
 void CpuProfiler::pushScope(const char* name)
