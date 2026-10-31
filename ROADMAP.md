@@ -1,6 +1,6 @@
 <!-- ants-roadmap-format: 1 -->
 <!-- Generated from the Ants Terminal roadmap store. Edit it with roadmap_log; hand edits are discarded by the next write. -->
-<!-- ants-roadmap-id-high-water: 3D_E=822 3D_E#S=989 -->
+<!-- ants-roadmap-id-high-water: 3D_E=850 3D_E#S=989 -->
 
 # Vestige Engine Roadmap
 
@@ -6700,6 +6700,202 @@ shipped that have no invocation path at all.
   Kind: fix.
   Source: 3D_E-0786 first run file 2026-10-31.
   Lanes: profiler.
+
+- 📋 [3D_E-0823] **Readability review: settings findings and possible bugs to work through.**
+  3 high, 12 medium, 16 low; 7 possible bugs, unchecked. Do not re-review: fold in directly with close-findings. Files, kept outside the public repository because some leads are security relevant: /mnt/Games/Scripts/Linux/Vestige_private/readability-2026-10-31/lane-01-settings.md, leads.md, message-1.md.
+  **Layman:** A cold read of the settings code found comments that mislead and possible bugs to check.
+  Kind: review-fix.
+  Source: review-readability 2026-10-31 at 7b2a81d.
+  Lanes: settings.
+
+- 📋 [3D_E-0824] **Readability review: engine loop findings and possible bugs to work through.**
+  3 high, 17 medium, 13 low; 13 possible bugs, unchecked. Do not re-review: fold in directly with close-findings. Files: Vestige_private/readability-2026-10-31/lane-02-core-loop.md, leads.md, message-1.md.
+  **Layman:** A cold read of the main engine loop found comments that mislead and possible bugs to check.
+  Kind: review-fix.
+  Source: review-readability 2026-10-31 at 7b2a81d.
+  Lanes: core.
+
+- 📋 [3D_E-0825] **Readability review: renderer frame findings and possible bugs to work through.**
+  7 high, 15 medium, 11 low; 11 possible bugs, unchecked. Do not re-review: fold in directly with close-findings. Files: Vestige_private/readability-2026-10-31/lane-03-renderer-frame.md, leads.md, message-1.md.
+  **Layman:** A cold read of the frame rendering code found comments that mislead and possible bugs to check.
+  Kind: review-fix.
+  Source: review-readability 2026-10-31 at 7b2a81d.
+  Lanes: renderer.
+
+- 📋 [3D_E-0826] **Readability review: renderer lighting findings and possible bugs to work through.**
+  5 high, 10 medium, 20 low; 13 possible bugs, unchecked. Do not re-review: fold in directly with close-findings. Files: Vestige_private/readability-2026-10-31/lane-04-renderer-light.md, leads.md, message-1.md.
+  **Layman:** A cold read of the lighting code found comments that mislead and possible bugs to check.
+  Kind: review-fix.
+  Source: review-readability 2026-10-31 at 7b2a81d.
+  Lanes: renderer.
+
+- 📋 [3D_E-0827] **Readability review: renderer content findings and possible bugs to work through.**
+  4 high, 20 medium, 18 low; 13 possible bugs, unchecked. Do not re-review: fold in directly with close-findings. Files: Vestige_private/readability-2026-10-31/lane-05-renderer-content.md, leads.md, message-1.md.
+  **Layman:** A cold read of the mesh, plant, terrain and water drawing code found copies that disagree and possible bugs to check.
+  Kind: review-fix.
+  Source: review-readability 2026-10-31 at 7b2a81d.
+  Lanes: renderer.
+
+- 📋 [3D_E-0828] **Readability review: shader findings and possible bugs to work through.**
+  4 high, 21 medium, 20 low; 13 possible bugs, unchecked. 16 shaders got an outline only and 13 were read in part. Do not re-review: fold in directly with close-findings. Files: Vestige_private/readability-2026-10-31/lane-06-shaders.md, leads.md, message-1.md.
+  **Layman:** A cold read of the shaders found copies that disagree and possible bugs to check.
+  Kind: review-fix.
+  Source: review-readability 2026-10-31 at 7b2a81d.
+  Lanes: shaders.
+
+- 📋 [3D_E-0829] **Readability review: physics findings and possible bugs to work through.**
+  4 high, 18 medium, 15 low; 17 possible bugs, unchecked. Do not re-review: fold in directly with close-findings. Files: Vestige_private/readability-2026-10-31/lane-07-physics.md, leads.md, message-1.md.
+  **Layman:** A cold read of the physics code found comments that mislead and possible bugs to check.
+  Kind: review-fix.
+  Source: review-readability 2026-10-31 at 7b2a81d.
+  Lanes: physics.
+
+- 📋 [3D_E-0830] **Readability review: experimental code findings and possible bugs to work through.**
+  6 high, 23 medium, 14 low; 18 possible bugs, unchecked. Do not re-review: fold in directly with close-findings. Files: Vestige_private/readability-2026-10-31/lane-08-experimental.md, leads.md, message-1.md.
+  **Layman:** A cold read of the experimental code found comments that mislead and possible bugs to check.
+  Kind: review-fix.
+  Source: review-readability 2026-10-31 at 7b2a81d.
+  Lanes: experimental.
+
+- 📋 [3D_E-0831] **Readability review: animation findings and possible bugs to work through.**
+  4 high, 15 medium, 10 low; 15 possible bugs, unchecked. Do not re-review: fold in directly with close-findings. Files: Vestige_private/readability-2026-10-31/lane-09-animation.md, leads.md, message-1.md.
+  **Layman:** A cold read of the animation code found comments that mislead and possible bugs to check.
+  Kind: review-fix.
+  Source: review-readability 2026-10-31 at 7b2a81d.
+  Lanes: animation.
+
+- 📋 [3D_E-0832] **Readability review: audio findings and possible bugs to work through.**
+  8 high, 16 medium, 10 low; 13 possible bugs, unchecked. Do not re-review: fold in directly with close-findings. Files: Vestige_private/readability-2026-10-31/lane-10-audio.md, leads.md, message-1.md.
+  **Layman:** A cold read of the audio code found copies that disagree and possible bugs to check.
+  Kind: review-fix.
+  Source: review-readability 2026-10-31 at 7b2a81d.
+  Lanes: audio.
+
+- 📋 [3D_E-0833] **Readability review: formula code findings and possible bugs to work through.**
+  4 high, 7 medium, 22 low; 13 possible bugs, unchecked. 6 headers not read. Do not re-review: fold in directly with close-findings. Files: Vestige_private/readability-2026-10-31/lane-11-formula.md, leads.md, message-1.md.
+  **Layman:** A cold read of the formula code found comments that mislead and possible bugs to check.
+  Kind: review-fix.
+  Source: review-readability 2026-10-31 at 7b2a81d.
+  Lanes: formula.
+
+- 📋 [3D_E-0834] **Readability review: Formula Workbench findings and possible bugs to work through.**
+  2 high, 20 medium, 20 low; 15 possible bugs, unchecked. Do not re-review: fold in directly with close-findings. Files: Vestige_private/readability-2026-10-31/lane-12-workbench.md, leads.md, message-1.md.
+  **Layman:** A cold read of the Formula Workbench found copies that disagree and possible bugs to check.
+  Kind: review-fix.
+  Source: review-readability 2026-10-31 at 7b2a81d.
+  Lanes: workbench.
+
+- 📋 [3D_E-0835] **Readability review: editor shell findings and possible bugs to work through.**
+  4 high, 11 medium, 17 low; 19 possible bugs, unchecked. Do not re-review: fold in directly with close-findings. Files: Vestige_private/readability-2026-10-31/lane-13-editor-shell.md, leads.md, message-1.md.
+  **Layman:** A cold read of the editor's main code found comments that mislead and possible bugs to check.
+  Kind: review-fix.
+  Source: review-readability 2026-10-31 at 7b2a81d.
+  Lanes: editor.
+
+- 📋 [3D_E-0836] **Readability review: content panels findings and possible bugs to work through.**
+  2 high, 13 medium, 18 low; 12 possible bugs, unchecked. Do not re-review: fold in directly with close-findings. Files: Vestige_private/readability-2026-10-31/lane-14-panels-content.md, leads.md, message-1.md.
+  **Layman:** A cold read of the inspector and asset panels found copies that disagree and possible bugs to check.
+  Kind: review-fix.
+  Source: review-readability 2026-10-31 at 7b2a81d.
+  Lanes: editor.
+
+- 📋 [3D_E-0837] **Readability review: other panels findings and possible bugs to work through.**
+  4 high, 14 medium, 22 low; 18 possible bugs, unchecked. Do not re-review: fold in directly with close-findings. Files: Vestige_private/readability-2026-10-31/lane-15-panels-other.md, leads.md, message-1.md.
+  **Layman:** A cold read of the remaining editor panels found comments that mislead and possible bugs to check.
+  Kind: review-fix.
+  Source: review-readability 2026-10-31 at 7b2a81d.
+  Lanes: editor.
+
+- 📋 [3D_E-0838] **Readability review: editor tools findings and possible bugs to work through.**
+  2 high, 18 medium, 16 low; 13 possible bugs, unchecked. Do not re-review: fold in directly with close-findings. Files: Vestige_private/readability-2026-10-31/lane-16-editor-tools.md, leads.md, message-1.md.
+  **Layman:** A cold read of the editor tools found comments that mislead and possible bugs to check.
+  Kind: review-fix.
+  Source: review-readability 2026-10-31 at 7b2a81d.
+  Lanes: editor.
+
+- 📋 [3D_E-0839] **Readability review: scene and navigation findings and possible bugs to work through.**
+  3 high, 35 medium, 24 low; 12 possible bugs, unchecked. Do not re-review: fold in directly with close-findings. Files: Vestige_private/readability-2026-10-31/lane-17-scene-nav.md, leads.md, message-1.md.
+  **Layman:** A cold read of the scene and navigation code found comments that mislead and possible bugs to check.
+  Kind: review-fix.
+  Source: review-readability 2026-10-31 at 7b2a81d.
+  Lanes: scene, navigation.
+
+- 📋 [3D_E-0840] **Readability review: environment findings and possible bugs to work through.**
+  4 high, 7 medium, 22 low; 12 possible bugs, unchecked. Do not re-review: fold in directly with close-findings. Files: Vestige_private/readability-2026-10-31/lane-18-environment.md, leads.md, message-1.md.
+  **Layman:** A cold read of the terrain and environment code found comments that mislead and possible bugs to check.
+  Kind: review-fix.
+  Source: review-readability 2026-10-31 at 7b2a81d.
+  Lanes: environment.
+
+- 📋 [3D_E-0841] **Readability review: scripting findings and possible bugs to work through.**
+  6 high, 15 medium, 18 low; 11 possible bugs, unchecked. Do not re-review: fold in directly with close-findings. Files: Vestige_private/readability-2026-10-31/lane-19-scripting.md, leads.md, message-1.md.
+  **Layman:** A cold read of the visual scripting code found comments that mislead and possible bugs to check.
+  Kind: review-fix.
+  Source: review-readability 2026-10-31 at 7b2a81d.
+  Lanes: scripting.
+
+- 📋 [3D_E-0842] **Readability review: systems and input findings and possible bugs to work through.**
+  4 high, 14 medium, 13 low; 10 possible bugs, unchecked. Do not re-review: fold in directly with close-findings. Files: Vestige_private/readability-2026-10-31/lane-20-systems.md, leads.md, message-1.md.
+  **Layman:** A cold read of the systems and input code found comments that mislead and possible bugs to check.
+  Kind: review-fix.
+  Source: review-readability 2026-10-31 at 7b2a81d.
+  Lanes: systems, input.
+
+- 📋 [3D_E-0843] **Readability review: UI findings and possible bugs to work through.**
+  2 high, 21 medium, 15 low; 11 possible bugs, unchecked. Do not re-review: fold in directly with close-findings. Files: Vestige_private/readability-2026-10-31/lane-21-ui.md, leads.md, message-1.md.
+  **Layman:** A cold read of the menu, accessibility and translation code found comments that mislead and possible bugs to check.
+  Kind: review-fix.
+  Source: review-readability 2026-10-31 at 7b2a81d.
+  Lanes: ui.
+
+- 📋 [3D_E-0844] **Readability review: utilities and resources findings and possible bugs to work through.**
+  4 high, 16 medium, 15 low; 18 possible bugs, unchecked. Do not re-review: fold in directly with close-findings. Files: Vestige_private/readability-2026-10-31/lane-22-utils-resource.md, leads.md, message-1.md.
+  **Layman:** A cold read of the file loading and resource code found comments that mislead and possible bugs to check.
+  Kind: review-fix.
+  Source: review-readability 2026-10-31 at 7b2a81d.
+  Lanes: utils, resource.
+
+- 📋 [3D_E-0845] **Readability review: update and profiler findings and possible bugs to work through.**
+  3 high, 10 medium, 9 low; 13 possible bugs, unchecked. Do not re-review: fold in directly with close-findings. Files: Vestige_private/readability-2026-10-31/lane-23-update-profiler.md, leads.md, message-1.md.
+  **Layman:** A cold read of the update and profiler code found comments that mislead and possible bugs to check.
+  Kind: review-fix.
+  Source: review-readability 2026-10-31 at 7b2a81d.
+  Lanes: update, profiler.
+
+- 📋 [3D_E-0846] **Readability review: audit tool core findings and possible bugs to work through.**
+  4 high, 20 medium, 10 low; 14 possible bugs, unchecked. Do not re-review: fold in directly with close-findings. Files: Vestige_private/readability-2026-10-31/lane-24-audit-core.md, leads.md, message-1.md.
+  **Layman:** A cold read of the audit tool found copies that disagree and possible bugs to check.
+  Kind: review-fix.
+  Source: review-readability 2026-10-31 at 7b2a81d.
+  Lanes: audit.
+
+- 📋 [3D_E-0847] **Readability review: audit tool tiers findings and possible bugs to work through.**
+  2 high, 20 medium, 24 low; 12 possible bugs, unchecked. Do not re-review: fold in directly with close-findings. Files: Vestige_private/readability-2026-10-31/lane-25-audit-tiers.md, leads.md, message-1.md.
+  **Layman:** A cold read of the audit tool's checks found comments that mislead and possible bugs to check.
+  Kind: review-fix.
+  Source: review-readability 2026-10-31 at 7b2a81d.
+  Lanes: audit.
+
+- 📋 [3D_E-0848] **Readability review: Python tools findings and possible bugs to work through.**
+  0 high, 11 medium, 10 low; 9 possible bugs, unchecked. Do not re-review: fold in directly with close-findings. Files: Vestige_private/readability-2026-10-31/lane-26-tools-python.md, leads.md, message-1.md.
+  **Layman:** A cold read of the Python tools found comments that mislead and possible bugs to check.
+  Kind: review-fix.
+  Source: review-readability 2026-10-31 at 7b2a81d.
+  Lanes: tools.
+
+- 📋 [3D_E-0849] **Readability review: cursor bridge findings and possible bugs to work through.**
+  0 high, 2 medium, 7 low; 7 possible bugs, unchecked. Do not re-review: fold in directly with close-findings. Files: Vestige_private/readability-2026-10-31/lane-27-tools-ts.md, leads.md, message-1.md.
+  **Layman:** A cold read of the cursor bridge tool found small issues and possible bugs to check.
+  Kind: review-fix.
+  Source: review-readability 2026-10-31 at 7b2a81d.
+  Lanes: tools.
+
+- 📋 [3D_E-0850] **Readability review: scripts and build findings and possible bugs to work through.**
+  1 high, 6 medium, 13 low; 7 possible bugs, unchecked. Do not re-review: fold in directly with close-findings. Files: Vestige_private/readability-2026-10-31/lane-28-shell-build.md, leads.md, message-1.md.
+  **Layman:** A cold read of the scripts and build files found comments that mislead and possible bugs to check.
+  Kind: review-fix.
+  Source: review-readability 2026-10-31 at 7b2a81d.
+  Lanes: build.
 
 ## 0.3.0 — An editor a builder can use
 
