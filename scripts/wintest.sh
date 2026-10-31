@@ -24,12 +24,12 @@
 #      logs "4.5.0 NVIDIA 560.94 on NVIDIA GeForce GTX 1050/PCIe/SSE2". A user
 #      must therefore be logged in at the console for a run to work.
 #
-#   2. Six test data directories are baked into the binary at configure time as
-#      absolute paths under ${CMAKE_SOURCE_DIR} — VESTIGE_SHADER_DIR,
-#      VESTIGE_FONT_DIR, VESTIGE_LOCALIZATION_DIR, VESTIGE_AUDIO_FIXTURES_DIR,
-#      VESTIGE_SCENE_FIXTURES_DIR and VESTIGE_REFERENCE_CASES_DIR. On another
-#      machine those paths do not exist and ~90 tests fail on a missing file
-#      rather than on behaviour. Rather than teach every consumer to relocate,
+#   2. Test data paths are baked into the binary at configure time as absolute
+#      paths under ${CMAKE_SOURCE_DIR}: the VESTIGE_*_DIR defines and
+#      VESTIGE_ROOT_CMAKELISTS in tests/CMakeLists.txt. Some tests also read
+#      engine source as text. On another machine those paths do not exist and
+#      tests fail on a missing file rather than on behaviour.
+#      Rather than teach every consumer to relocate,
 #      this MIRRORS the source tree at the matching Windows path: a repo at
 #      /mnt/Games/... is staged to C:\mnt\Games\..., so a baked path resolves
 #      exactly as it does at home. Windows treats a leading "/" as relative to
@@ -83,11 +83,15 @@ TASK_NAME='VestigeTests'
 QUALITY_PRESET="${VESTIGE_WINTEST_QUALITY_PRESET:-medium}"
 BIN_DIR="$REPO_ROOT/build-msvc/bin"
 
-# Source-tree directories the baked VESTIGE_*_DIR defines point into, plus the
-# runtime assets the exe loads relative to its own cwd. Everything else in the
-# repo (models 1.8 G, textures 581 M, source) is deliberately not staged — no
+# Source-tree paths the baked defines point into, plus the source files tests
+# read as text; RUNTIME_ASSETS are what the exe loads relative to its own cwd.
+# Everything else in the repo (models, textures) is deliberately not staged — no
 # test reads it. Add a path here if a test starts needing one.
 SOURCE_DATA=(
+    CMakeLists.txt
+    VERSION
+    engine
+    external/smaa
     assets/shaders
     assets/fonts
     assets/localization
@@ -146,7 +150,7 @@ if [[ $DO_STAGE -eq 1 ]]; then
     trap 'rm -rf "$stage_dir"' EXIT
 
     for rel in "${SOURCE_DATA[@]}"; do
-        [[ -d "$REPO_ROOT/$rel" ]] || die "missing source data dir: $rel"
+        [[ -e "$REPO_ROOT/$rel" ]] || die "missing source data path: $rel"
         mkdir -p "$stage_dir/$(dirname "$rel")"
         cp -r "$REPO_ROOT/$rel" "$stage_dir/$rel"
     done
