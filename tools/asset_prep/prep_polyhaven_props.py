@@ -14,7 +14,7 @@ assets/models/nature_local/gameready/<group>/ through the existing symlink).
 Decimation is per model, not global. Rocks and logs are dense photogrammetry whose
 detail lives in the normal map, so collapse decimation barely shows. The plants
 are NOT decimated: their leaves are alpha-cut cards, and collapse decimation on a
-card canopy destroys the cards (the same finding as split_water_plants.py). The
+card canopy destroys the cards. The
 meadow budgets plants by scatter density instead.
 
 Poly Haven models are authored in real-world metres, so no rescale is applied.

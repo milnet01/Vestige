@@ -63,8 +63,7 @@ def fetch_pack(folder: str, uid: str, page: str, token: str,
                out_root: pathlib.Path = LIB_TREES) -> dict:
     """Resolve the temporary glTF download URL, fetch the zip, extract into the library.
 
-    out_root selects the library category directory — Trees/ by default; the
-    sibling fetch_sketchfab_water_plants.py passes Plants/ and reuses the rest.
+    out_root selects the library category directory — Trees/ by default.
     """
     info = json.loads(_get(DOWNLOAD_API.format(uid), token))
     if "gltf" not in info:

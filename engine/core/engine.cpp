@@ -3411,20 +3411,18 @@ void Engine::finalizeMeadowTerrain()
              "gameready/plants/shrub_sorrel_01_d.gltf"},
             0x8EED50u, reed, 0.0f, false, /*blocksMovement=*/false);
 
-        // Lotus clusters floating on the water surface (inside the pond, no
-        // exclusion disc). T6 part 2 (3D_E-0033): these replace the low-poly
-        // Kenney lily_{large,small}.glb pads with decimated photo-textured
-        // clusters (tools/asset_prep/split_water_plants.py exports them
-        // base-at-origin at real-world metres, ~1 m across), so the tiny +Y
-        // offset only needs to clear z-fighting with the water plane.
+        // Water-lily clusters floating on the water surface (inside the pond, no
+        // exclusion disc). tools/asset_prep/make_water_lilies.py builds them
+        // base-at-origin at real-world metres, about 1-1.7 m across, so the tiny +Y
+        // offset only needs to clear z-fighting with the water plane (3D_E-0804).
         // Pads and flowering clumps scatter separately rather than round-robin
-        // through one group: a pond reads wrong with a lotus bloom on every
-        // pad, so the pads go dense and the blooms stay occasional accents.
+        // through one group: a pond reads wrong with a bloom on every pad, so
+        // the pads go dense and the blooms stay occasional accents.
         // The scatter region is a SQUARE but the water is a disc, so the box is
         // inscribed in the flooded circle (half-side = r/sqrt(2), trimmed a
         // little more for the cluster's own radius). A box sized off POND_SIZE
         // — the sheet extent, which includes the dry edge pad — puts its corners
-        // on the bank, and a lotus growing on dry grass is obvious once the
+        // on the bank, and a water lily growing on dry grass is obvious once the
         // props are this visible.
         const float lilyBox = pondFill.floodRadius * 0.68f;
         ScatterParams lily;
@@ -3436,15 +3434,18 @@ void Engine::finalizeMeadowTerrain()
         lily.minScale = 0.8f;
         lily.maxScale = 1.5f;
         propCount += scatterGroup(
-            {"gameready/water/lotus_pads.gltf"}, 0x111A0u, lily, 0.02f, true, /*blocksMovement=*/false);
+            {"gameready/water/lily_pads_a.gltf", "gameready/water/lily_pads_b.gltf",
+             "gameready/water/lily_pads_c.gltf"},
+            0x111A0u, lily, 0.02f, true, /*blocksMovement=*/false);
 
-        ScatterParams lotusBloom = lily;
-        lotusBloom.cellSize = 6.0f;   // sparse — a few flowering clumps, not a field
-        lotusBloom.minDist = 4.0f;
-        lotusBloom.minScale = 0.7f;
-        lotusBloom.maxScale = 1.1f;
+        ScatterParams lilyBloom = lily;
+        lilyBloom.cellSize = 6.0f;   // sparse — a few flowering clumps, not a field
+        lilyBloom.minDist = 4.0f;
+        lilyBloom.minScale = 0.9f;
+        lilyBloom.maxScale = 1.25f;
         propCount += scatterGroup(
-            {"gameready/water/lotus_flowers.gltf"}, 0xB100Du, lotusBloom, 0.02f, true, /*blocksMovement=*/false);
+            {"gameready/water/lily_flowers_a.gltf", "gameready/water/lily_flowers_b.gltf"},
+            0xB100Du, lilyBloom, 0.02f, true, /*blocksMovement=*/false);
 
         // A fallen log or two near the shore.
         const float logBox = POND_SIZE * 0.5f + 9.0f;
@@ -3505,7 +3506,7 @@ void Engine::finalizeMeadowTerrain()
         // Close to the shore, looking across the water.
         m_visualTestRunner.addViewpoint({"pond_shore",
             eyeOnSurface(px, pz + 12.0f), -90.0f, -4.0f, 8, 45.0f});
-        // Pond surface, pitched down from above the reeds — the lotus/lily check
+        // Pond surface, pitched down from above the reeds — the water-lily check
         // (T6). The eye-level viewpoints above cannot serve it: they sit inside
         // the ~1 m GPU grass and the pond is a ~4.5 m depression, so the water
         // never enters frame. This one is raised clear of the blades and aimed

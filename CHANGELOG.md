@@ -25,6 +25,11 @@ may change any interface without notice.
 
 ## [Unreleased]
 
+### 2026-10-31 Changed — Pond water lilies are flat, notched pads with real flowers (3D_E-0804)
+
+- The pond's lotus clusters stood up to 0.43 m high and looked like heaped lettuce with pink shards. New clusters lie flat on the water: round pads with a notch, veins, a curled rim and a visible edge, plus layered flowers and closed buds.
+- `tools/asset_prep/make_water_lilies.py` builds them in headless Blender from fixed seeds. They are the project's own work, so the CC-BY attribution for the lotus packs is gone from `ASSET_LICENSES.md` and `THIRD_PARTY_NOTICES.md`, and the two scripts that prepared those packs are removed.
+
 ### 2026-10-27 Fixed — Code-review sweep: texture over-reads, tween loops, cubic morph weights
 
 - Grey+alpha PNGs no longer over-read on upload (now expanded to RGBA);

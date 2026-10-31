@@ -6360,7 +6360,7 @@ shipped that have no invocation path at all.
   Source: 3D_E-0773 inventory 2026-10-26 (--visual-test run_20261026_021955).
   Lanes: renderer, assets.
 
-- 📋 [3D_E-0804] **Lily and lotus pads render as heaped leafy clumps standing off the water, with confetti-like blooms.**
+- ✅ [3D_E-0804] **Lily and lotus pads render as heaped leafy clumps standing off the water, with confetti-like blooms.**
   Seen in 03_pond_surface_rot000 (checked by eye) and 02_pond_shore
   rot000, rot045, rot315. Real pads lie flat on the water, each one
   round with a notch. These are heaped clumps with noisy, over-sharp
@@ -6370,6 +6370,15 @@ shipped that have no invocation path at all.
   little, but the pads are still heaped clumps (--visual-test
   03_pond_surface, before and after). What's left is the model's shape,
   not texture sampling.
+  2026-10-31: replaced with new models, not a repair.
+  tools/asset_prep/make_water_lilies.py builds five clusters in headless
+  Blender (10.7-17.7 k triangles each; lotus_pads was 18.2 k). Height
+  0.43 m -> 0.018 m for pads, 0.08 m with flowers. Library copy:
+  Models/Nature/Plants/water_lily/. Seen in --visual-test
+  03_pond_surface before and after, and --stills close-ups. Flythrough
+  floor, two interleaved runs: new worst 73.7 and 70.7 FPS, old 23.4 and
+  60.8, other GPU users active in all of them. CPU / GPU placement:
+  static meshes on the existing prop path; no new runtime work.
   **Layman:** The water-lily pads on the pond look like piles of lettuce, and the flowers look like scattered pink paper.
   Kind: fix.
   Source: 3D_E-0773 inventory 2026-10-26 (--visual-test run_20261026_021955).

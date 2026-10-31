@@ -64,16 +64,9 @@ overrides any of them on a maintainer's machine.
 
 | Files | Source | License | Attribution required |
 |-------|--------|---------|----------------------|
-| `gameready/water/lotus_{pads,flowers}.gltf` — decimated lotus clusters on the meadow pond | Galaxy Abundant on Sketchfab ([leaf cluster](https://sketchfab.com/3d-models/ga-free-201-small-lotus-leaf-cluster--tt-79024211401e4cf1a26f2ef8c71fe1be), [flower cluster](https://sketchfab.com/3d-models/ga-free-151-pink-lotus-flower-cluster-53d081e40cae4b5ebc66c6e06b5f19ef)) | **CC-BY 4.0** | **Yes** — "3D pond-plant models by Galaxy Abundant (sketchfab.com/galaxyabundant), licensed under CC BY 4.0." |
+| `gameready/water/lily_{pads,flowers}_*.gltf`, `water_lily_{albedo,normal}.png` — water-lily clusters on the meadow pond | This project: `tools/asset_prep/make_water_lilies.py` builds them in Blender from nothing but the script (3D_E-0804) | **MIT** (see [LICENSE](LICENSE)) | No |
 
-**Provenance note.** Both packs are **AI-generated** (their materials are named
-`tripo_mat_*`, i.e. produced with Tripo), not photogrammetry scans. They are
-used because they are the most realistic-reading pond foliage available under a
-commercially-usable CC licence — no photoreal CC-licensed water lily was found.
-Recorded here so the distinction is not lost: the CC-BY obligation is unchanged,
-but the assets are not scans of real plants.
-
-Attribution for the trees and pond plants is **required**. Unlike every
+Attribution for the trees is **required**. Unlike every
 CC0 row above, it is a licence condition, not a courtesy.
 
 ### Meadow plants, rocks and logs — `assets/models/nature/gameready/{plants,rocks,logs}/`
