@@ -6439,6 +6439,20 @@ shipped that have no invocation path at all.
   Their burial in the grass is 3D_E-0810.
   2026-10-26: not caused by the glTF UV flip. shrub_c looks the same
   before and after 3D_E-0803's fix (--stills).
+  2026-10-31: cause found, not fixed. Not metallic, roughness, normal
+  maps, tangents, or shadows: forcing metallic to 0, normal maps off and
+  shadows off (scratch shader copy, sky light off) each left the fern
+  and log black. Blender Cycles renders the same fern green, so the
+  textures are fine. scene.frag.glsl and terrain.frag.glsl divide the
+  sun by PI (3D_E-0638); grass.frag.glsl has no PI and was what the
+  meadow sun of 1.15 was tuned against. So props get about a third of
+  the sun and sky light dominates, which is the blue-grey. Multiplying
+  the scene.frag sun by PI (scratch copy, --stills) gave the fern
+  green-yellow leaves and left the lily pads looking right; some blue
+  remains in its shaded leaves, and a rock reads bright. Fix to design:
+  one sun scale for all surfaces, so the meadow sun rises about PI and
+  the shaders without the division gain it, checking grass in other
+  scenes and terrain brightness.
   **Layman:** Some plants near the pond look grey and shiny, like metal, instead of green.
   Kind: fix.
   Source: 3D_E-0773 inventory 2026-10-26 (--visual-test run_20261026_021955).
@@ -6485,6 +6499,10 @@ shipped that have no invocation path at all.
   2026-10-26: not caused by the glTF UV flip. The log at the sorrel spot
   and log_a are only mirrored after 3D_E-0803's fix; still dark
   (--stills).
+  2026-10-31: same cause as 3D_E-0808. With the scene.frag sun
+  multiplied by PI (scratch copy) the log shows clear brown bark at 1 m
+  and from a distance, with the same 1k texture, so the blur may not
+  need new textures. Recheck once 3D_E-0808 is fixed.
   **Layman:** The fallen logs look like dark burnt lumps from a distance and smudged up close, not like weathered wood.
   Kind: fix.
   Source: 3D_E-0773 inventory pass 2 2026-10-26 (--stills run_20261026_025040).
