@@ -25,6 +25,12 @@ may change any interface without notice.
 
 ## [Unreleased]
 
+### 2026-10-31 Changed — The local push check matches GitHub's tools and shares the machine
+
+- **Workflow lint runs in the Ubuntu container with GitHub's shellcheck and pinned actionlint; a gitleaks version other than the workflow's pin makes the run partial**
+
+- **The check uses half the CPU threads by default and runs at low priority** (3D_E-0815)
+
 ### 2026-10-31 Fixed — One sun scale: objects in the meadow are lit as strongly as the grass
 
 Logs, rocks, plants and lily pads received about a third of the sun, which left them dark and blue-grey. Other scenes change very little.

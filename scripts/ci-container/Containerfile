@@ -6,7 +6,7 @@
 # What GitHub's runner uses, from run 36430690624's log and the runner image's
 # software list (ubuntu24/20260920.314):
 #   c++ = GNU 13.3.0 (apt default), CMake 3.31.6 (preinstalled, first on PATH;
-#   apt's 3.28.3 is also installed), cppcheck 2.13.0, clang-tidy 18, ccache 4.9.
+#   apt's 3.28.3 is also installed), cppcheck 2.13.0, clang-tidy 18, ccache 4.9, shellcheck 0.9.0.
 # The apt packages are ci.yml's own lists (tools/ci_apt_packages.py passes them
 # in as APT_PACKAGES), so there is one list, installed WITH recommends as the
 # apt-install action does (that is what brings Mesa's llvmpipe). Not matched: the runner's
@@ -17,7 +17,7 @@ ARG APT_PACKAGES
 RUN test -n "$APT_PACKAGES" \
  && apt-get update \
  && DEBIAN_FRONTEND=noninteractive apt-get install -y \
-        $APT_PACKAGES ccache git ca-certificates curl xauth \
+        $APT_PACKAGES ccache git ca-certificates curl xauth shellcheck \
  && rm -rf /var/lib/apt/lists/*
 
 # The runner's preinstalled CMake, checksum-verified.

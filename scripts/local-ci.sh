@@ -52,7 +52,7 @@
 #                                   # only when msvc-wine/wine is absent.
 #   scripts/local-ci.sh --no-windows # skip the Windows MSVC stage (Linux-only;
 #                                   # reports PARTIAL — not push-verified)
-#   scripts/local-ci.sh --no-cmake-compat # skip the CMake 3.21.0 stage (reports
+#   scripts/local-ci.sh --no-cmake-compat # skip the CMake stages (reports
 #                                   # PARTIAL — not push-verified)
 #   scripts/local-ci.sh --quick     # Debug build+test + gitleaks only (fast smoke,
 #                                   # NOT push-safe: skips the Tier-1 audit + Windows)
@@ -61,7 +61,8 @@
 #                                   # reads doc paths; builds, tests, the audit,
 #                                   # actionlint and cmake-compat read none of them.
 #                                   # .githooks/pre-push selects it (.ants/gate.conf).
-#   scripts/local-ci.sh -j 8        # cap parallel build/test jobs (default: nproc)
+#   scripts/local-ci.sh -j 8        # cap parallel build/test jobs (default: half the
+#                                   # threads, or VESTIGE_CI_JOBS)
 #
 # Every ctest call here passes -LE perf: the wall-clock budget tests are timed
 # against the machine and flake on a loaded box, so they run in ci.yml's nightly
@@ -95,7 +96,8 @@ WINDOWS=1
 # cmake-compat is a required CI job too, so the full mirror runs its 3.21.0 leg by
 # default. It SKIPs cleanly (→ PARTIAL) when the pinned toolchain can't be fetched.
 CMAKE_COMPAT=1
-JOBS="$(nproc)"
+# Half the threads by default: other sessions build on this machine too (3D_E-0815).
+JOBS="${VESTIGE_CI_JOBS:-$(( $(nproc) > 1 ? $(nproc) / 2 : 1 ))}"
 DOCS=0
 while [[ $# -gt 0 ]]; do
     case "$1" in
@@ -110,6 +112,25 @@ while [[ $# -gt 0 ]]; do
     esac
 done
 
+# Low priority for this script and everything it starts, however it was started.
+renice -n 15 -p $$ >/dev/null 2>&1 || true
+ionice -c3 -p $$ >/dev/null 2>&1 || true
+
+# A value a workflow pins in its env: block, such as a tool version.
+workflow_pin() {  # workflow_pin <workflow file> <key>
+    sed -n "s/^ *$2: *\"\(.*\)\"\$/\1/p" ".github/workflows/$1" | head -1
+}
+
+# A different gitleaks has different rules, so its green is not secret-scan.yml's.
+gitleaks_matches_ci() {
+    local want have
+    want="$(workflow_pin secret-scan.yml GITLEAKS_VERSION)"
+    have="$(gitleaks version 2>/dev/null)"
+    [[ -n "$want" && "$have" == "$want" ]] && return 0
+    echo "gitleaks is '$have'; secret-scan.yml pins '$want'. Install that version, or bump the pin." >&2
+    return 1
+}
+
 # --- documentation mode -----------------------------------------------------
 # Runs secret-scan.yml's job and nothing else, because it is the only job that
 # reads documentation paths. Fails closed: with no gitleaks nothing was checked,
@@ -119,6 +140,7 @@ if [[ $DOCS -eq 1 ]]; then
         echo "local-ci --docs: gitleaks not found — nothing was checked (PARTIAL)." >&2
         exit 2
     fi
+    gitleaks_matches_ci || exit 2
     echo ">>> local-ci --docs: gitleaks secret scan (full git history)"
     gitleaks detect --source . --config .gitleaks.toml --redact --exit-code 1 || exit 1
     echo "local-ci --docs: documentation checks passed."
@@ -246,7 +268,8 @@ in_ci() {  # in_ci <tree-name> <bash command> — run in the container, tree at 
 # --- preflight: tool presence + version report ------------------------------
 # Guards against the false-green failure mode: a tool missing → its stage
 # silently does less → local passes while CI fails. The Linux stages' tools are
-# the container's; the host still supplies msvc-wine, gitleaks and actionlint.
+# the container's, actionlint is ci.yml's pin run in it, and the host still
+# supplies msvc-wine and gitleaks.
 CLANG_TIDY_OK=1
 
 ver_line() {  # ver_line <label> <cmd...> -- prints "  label  <first version-ish line>"
@@ -270,19 +293,13 @@ preflight() {
             printf "  %-11s %s\n" cmake "$(cmake --version | head -1)"
             printf "  %-11s %s\n" cppcheck "$(cppcheck --version)"
             printf "  %-11s %s\n" clang-tidy "$(clang-tidy --version | grep -i version | head -1 | sed "s/^ *//")"
-            printf "  %-11s %s\n" glslang "$(glslangValidator --version | head -1)"'
+            printf "  %-11s %s\n" glslang "$(glslangValidator --version | head -1)"
+            printf "  %-11s %s\n" shellcheck "$(shellcheck --version | sed -n 2p)"'
         podman run --rm "$CI_IMAGE" sh -c 'command -v clang-tidy' >/dev/null || CLANG_TIDY_OK=0
     else
         echo "  !! CI image or source copy unavailable — every Linux stage will SKIP (NOT push-verified)."
     fi
     command -v gitleaks >/dev/null 2>&1 && ver_line "gitleaks" gitleaks version || printf '  %-11s %s\n' "gitleaks" "!! MISSING (secret-scan stage will SKIP)"
-    command -v actionlint >/dev/null 2>&1 && ver_line "actionlint" actionlint --version || printf '  %-11s %s\n' "actionlint" "!! MISSING (workflow-lint stage will SKIP)"
-    # actionlint lints each `run:` block by shelling out to the shell linter;
-    # without that tool actionlint still exits 0, so report it separately rather
-    # than let a green actionlint imply the run: blocks were checked.
-    # NB: never begin a comment line with that linter's name + a space — it is
-    # parsed as a directive and errors out with SC1072/SC1073.
-    command -v shellcheck >/dev/null 2>&1 && ver_line "shellcheck" shellcheck --version || printf '  %-11s %s\n' "shellcheck" "!! MISSING (actionlint would skip all run: blocks)"
 }
 
 # ci.yml's Configure step, verbatim.
@@ -533,36 +550,58 @@ fi
 # --- stage 5: gitleaks secret scan ------------------------------------------
 start=$SECONDS
 banner "gitleaks — secret scan (full git history)"
-if command -v gitleaks >/dev/null 2>&1; then
+if command -v gitleaks >/dev/null 2>&1 && gitleaks_matches_ci; then
     if gitleaks detect --source . --config .gitleaks.toml --redact --exit-code 1; then
         record "gitleaks" ok $((SECONDS - start))
     else
         record "gitleaks" fail $((SECONDS - start))
     fi
 else
-    echo "gitleaks not found on PATH — install it to mirror the secret-scan job." >&2
+    echo "gitleaks missing or not secret-scan.yml's version — install that to mirror the job." >&2
     record "gitleaks" skip 0
 fi
 
 # --- stage 6: actionlint — GitHub Actions workflow lint ----------------------
 # Mirrors ci.yml's `workflow-lint` job. actionlint checks workflow schema, expression
 # syntax and action references, and shells each `run:` block out to shellcheck.
-# That shell linter is therefore a HARD requirement, not a bonus: without it
-# actionlint still exits 0 while silently skipping every `run:` block, which is a
-# false pass of exactly the kind this script exists to prevent. Either tool
-# missing → SKIP, which downgrades the run to PARTIAL / not push-verified.
+# It runs in the container, so that linter is Ubuntu 24.04's, as on the runner. If
+# it were missing, actionlint would exit 0 having checked no run: block, so the
+# command fails first. actionlint needs a .git beside .github to find
+# the project and the repository's local actions, and the source copy has none, so
+# it lints a scratch copy. The binary is ci.yml's pin; if it can't be fetched the
+# stage SKIPs, which makes the run PARTIAL.
+ensure_actionlint() {
+    local version sha root bin asset tmp
+    version="$(workflow_pin ci.yml ACTIONLINT_VERSION)"
+    sha="$(workflow_pin ci.yml ACTIONLINT_SHA256)"
+    [[ -n "$version" && -n "$sha" ]] || return 1
+    root="$REPO_ROOT/.ci-tools/actionlint-$version"
+    bin="$root/actionlint"
+    if [[ -x "$bin" ]]; then printf '%s\n' "$bin"; return 0; fi
+    asset="actionlint_${version}_linux_amd64.tar.gz"
+    tmp="$(mktemp -d)" && [[ -n "$tmp" && -d "$tmp" ]] || return 1
+    # shellcheck disable=SC2064  # expand tmp NOW: it is out of scope when the trap fires.
+    trap "rm -rf '$tmp'" RETURN
+    echo "  fetching actionlint $version (once) ..." >&2
+    curl -fsSL --retry 3 -o "$tmp/a.tar.gz" \
+        "https://github.com/rhysd/actionlint/releases/download/v$version/$asset" || return 1
+    echo "$sha  $tmp/a.tar.gz" | sha256sum -c - >/dev/null 2>&1 || { echo "  !! sha256 mismatch on $asset" >&2; return 1; }
+    mkdir -p "$root"
+    tar -xzf "$tmp/a.tar.gz" -C "$root" actionlint || return 1
+    printf '%s\n' "$bin"
+}
+
 start=$SECONDS
-banner "actionlint — GitHub Actions workflow lint"
-if ! command -v actionlint >/dev/null 2>&1; then
-    echo "actionlint not found on PATH — install it to mirror the workflow-lint job." >&2
-    echo "  (no distro package on openSUSE; grab the release binary from" >&2
-    echo "   https://github.com/rhysd/actionlint/releases into ~/.local/bin)" >&2
+banner "actionlint — GitHub Actions workflow lint (Ubuntu 24.04 container)"
+if [[ $CI_IMAGE_OK -eq 0 ]]; then
     record "actionlint" skip 0
-elif ! command -v shellcheck >/dev/null 2>&1; then
-    echo "shellcheck not found — actionlint would silently skip every run: block," >&2
-    echo "  reporting a green that CI will not reproduce. Install shellcheck." >&2
+elif ! actionlint_bin="$(ensure_actionlint)"; then
+    echo "  ci.yml's actionlint could not be fetched (offline?) — stage SKIPped." >&2
     record "actionlint" skip 0
-elif actionlint; then
+elif in_ci debug "shellcheck --version | sed -n 2p
+$actionlint_bin --version | head -1
+d=\$(mktemp -d); cp -r .github \"\$d\"/; cd \"\$d\"; git init -q
+$actionlint_bin -color"; then
     record "actionlint" ok $((SECONDS - start))
 else
     record "actionlint" fail $((SECONDS - start))
@@ -575,8 +614,8 @@ fi
 # under us before (CMP0169), so a configure that works on cmake 4.x says nothing
 # about 3.21. The toolchain is a pinned, checksum-verified Kitware binary kept in
 # .ci-tools/ (gitignored) and downloaded once; a box with no network SKIPs the
-# stage rather than silently passing. The job's `latest` leg needs no separate
-# stage — stage 2 already builds that same Release config with the host cmake.
+# stage rather than silently passing. The job's `latest` leg runs as its own stage
+# below, with the newest CMake release.
 CMAKE_COMPAT_VERSION="3.21.0"
 CMAKE_COMPAT_SHA256="d54ef6909f519740bc85cec07ff54574cd1e061f9f17357d9ace69f61c6291ce"
 

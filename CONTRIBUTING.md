@@ -151,7 +151,8 @@ declared-minimum CMake build — in a single pass before pushing:
 scripts/local-ci.sh                    # full mirror — the push gate
 scripts/local-ci.sh --quick            # Debug build+test + gitleaks (fast smoke)
 scripts/local-ci.sh --no-windows       # skip the MSVC-under-Wine stage
-scripts/local-ci.sh --no-cmake-compat  # skip the CMake 3.21.0 stage
+scripts/local-ci.sh --no-cmake-compat  # skip the CMake stages
+scripts/local-ci.sh -j 8               # parallel jobs (default: half the threads)
 ```
 
 Every job in `.github/workflows/ci.yml` now has a local stage, so a clean run
@@ -166,9 +167,9 @@ means a green push:
 | gitleaks | `secret-scan` |
 | actionlint | `workflow-lint` |
 | CMake 3.21.0 compat | `cmake-compat` (`3.21.0` leg) |
+| CMake latest compat | `cmake-compat` (`latest` leg) |
 
-The `cmake-compat` job's other leg, `latest`, needs no stage of its own — the
-Release stage builds that same config with your host CMake. The pinned 3.21.0
+The pinned 3.21.0
 toolchain is downloaded once, checksum-verified, into the gitignored
 `.ci-tools/`.
 

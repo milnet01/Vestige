@@ -1,6 +1,6 @@
 <!-- ants-roadmap-format: 1 -->
 <!-- Generated from the Ants Terminal roadmap store. Edit it with roadmap_log; hand edits are discarded by the next write. -->
-<!-- ants-roadmap-id-high-water: 3D_E=817 3D_E#S=989 -->
+<!-- ants-roadmap-id-high-water: 3D_E=818 3D_E#S=989 -->
 
 # Vestige Engine Roadmap
 
@@ -6564,7 +6564,7 @@ shipped that have no invocation path at all.
   Source: 3D_E-0805 fix 2026-10-26.
   Lanes: renderer, editor.
 
-- 📋 [3D_E-0815] **The pre-push gate shares the machine: a job cap and low priority when the hook starts it.**
+- ✅ [3D_E-0815] **The pre-push gate shares the machine: a job cap and low priority when the hook starts it.**
   scripts/local-ci.sh sets JOBS to nproc, and the pre-push hook passes
   no -j, so every push builds with all 12 threads while other sessions
   build too. The user asked on 2026-10-26 that sessions share
@@ -6572,6 +6572,10 @@ shipped that have no invocation path at all.
   default about half of nproc). Run the gate under nice and ionice -c3.
   Workaround until then: start the push as
   `nice -n 15 ionice -c3 git push` (children inherit).
+  2026-10-31: local-ci.sh defaults to half the threads (VESTIGE_CI_JOBS
+  or -j overrides) and renices itself to 15, ionice idle, however it was
+  started, so everything it starts inherits that. The nice prefix on git
+  push is no longer needed.
   **Layman:** The push check uses every CPU thread; it should leave room for the other sessions so the machine doesn't freeze.
   Kind: chore.
   Source: user-request-2026-10-26.
@@ -6602,6 +6606,23 @@ shipped that have no invocation path at all.
   Kind: investigate.
   Source: 3D_E-0808 fix 2026-10-31.
   Lanes: renderer, assets.
+
+- ✅ [3D_E-0818] **The local gate's workflow lint and secret scan use GitHub's exact tool versions.**
+  GitHub's log shows shellcheck 0.9.0; the host had 0.11.0. actionlint now
+  runs in the Ubuntu container at ci.yml's pinned, checksum-verified
+  version, with Ubuntu's shellcheck, on a scratch copy holding a .git so
+  local actions are checked as on the runner. gitleaks must match
+  secret-scan.yml's pin, or the run is PARTIAL. Proved: passes on the real
+  workflows, fails on an added unquoted run: line (SC2086). Stated
+  differences that remain: Windows builds with Ninja under Wine and leaves
+  out the host-Python tests, because Wine mangles their exit codes; local
+  compat legs run 19 ctest entries against GitHub's 17, since the container
+  has glslang; a push with no build file skips the compat legs locally.
+  Nightly perf tests run on GitHub only, by design.
+  **Layman:** The check run before each push now lints with the same tool versions GitHub uses, so the two give the same answer.
+  Kind: chore.
+  Source: user-request-2026-10-31.
+  Lanes: tooling.
 
 ## 0.3.0 — An editor a builder can use
 
