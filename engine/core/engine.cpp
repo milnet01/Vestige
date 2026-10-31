@@ -44,6 +44,7 @@
 #include "renderer/foliage_renderer.h"
 #include "renderer/tree_renderer.h"
 #include "renderer/terrain_renderer.h"
+#include "environment/grass_placement.h"
 #include "environment/environment_forces.h"
 #include "environment/foliage_manager.h"
 #include "environment/terrain.h"
@@ -3094,18 +3095,15 @@ void Engine::finalizeMeadowTerrain()
     // layer + slope + the pond exclusion disc. Built once here (terrain + pond in scope);
     // the render loop draws it per chunk, shaded + wind-swayed (G4) at a quality tier (G5).
     // This IS the meadow grass now — the billboard-grass block was retired above (G5).
-    if (m_grassRenderer)
-    {
-        GrassConfig grassCfg;                       // tall & wild defaults (§5.2a)
-        grassCfg.exclusionCenter = pondCenterXZ;
-        // No hard disc: floodRadius is the pond's LARGEST reach, so a disc that
-        // clears the water everywhere left a bare strip wherever the shore is
-        // nearer. The shore band follows the real waterline instead and grows
-        // reed-like blades up to it (3D_E-0702).
-        grassCfg.shoreRadius = pondFill.floodRadius + 4.0f;
-        grassCfg.shoreWaterY = waterLevelY;
-        m_grassRenderer->buildField(terrain, grassCfg);
-    }
+    GrassConfig grassCfg;                       // tall & wild defaults (§5.2a)
+    grassCfg.exclusionCenter = pondCenterXZ;
+    // No hard disc: floodRadius is the pond's LARGEST reach, so a disc that
+    // clears the water everywhere left a bare strip wherever the shore is
+    // nearer. The shore band follows the real waterline instead and grows
+    // reed-like blades up to it (3D_E-0702).
+    grassCfg.shoreRadius = pondFill.floodRadius + 4.0f;
+    grassCfg.shoreWaterY = waterLevelY;
+    // The field itself is built below, once the props have added their clearings.
 
     // --- Wildflowers (3D_E-0038 C3) ------------------------------------------
     // Clustered billboard wildflowers: real meadows grow flowers in species
@@ -3225,6 +3223,12 @@ void Engine::finalizeMeadowTerrain()
                 if (!blocksMovement)
                 {
                     setBlocksMovementRecursive(*e, false);
+                }
+                if (!onWater)
+                {
+                    const AABB bounds = models[i % models.size()]->getBounds();
+                    grassCfg.clearings.push_back(grassClearingForProp(
+                        {p.x, p.z}, p.yawDeg, p.scale, bounds.min, bounds.max));
                 }
                 ++placed;
             }
@@ -3358,8 +3362,9 @@ void Engine::finalizeMeadowTerrain()
              "gameready/rocks/boulder_01.gltf"},
             0x0B0DE5u, rock, 0.0f, false, /*blocksMovement=*/true);
 
-        // Bushes — Poly Haven shrub_02 photoscans (3D_E-0702), ~2 m tall, the
-        // only plants tall enough to read above the ~1 m GPU grass. They replace
+        // Bushes — Poly Haven shrub_02 photoscans (3D_E-0702), about 0.6-1.7 m tall
+        // as scattered, no taller than the GPU grass, so the clearing each prop
+        // adds is what shows them (3D_E-0810). They replace
         // the Kenney teal plant_bush and the cartoon red mushroom (no realistic
         // CC0 mushroom exists). Formerly: mushrooms + bushes, the dense small
         // ground cover that breaks up the flat green. T6 (3D_E-0033): the three low-poly Kenney flower_*A.glb
@@ -3461,6 +3466,11 @@ void Engine::finalizeMeadowTerrain()
                                    "gameready/logs/tree_stump_01.gltf"}, 0x106u, logs, 0.0f, false, /*blocksMovement=*/true);
 
         Logger::info("Meadow props: " + std::to_string(propCount) + " instances placed");
+    }
+
+    if (m_grassRenderer)
+    {
+        m_grassRenderer->buildField(terrain, grassCfg);
     }
 
     // --- Camera vantage ------------------------------------------------------

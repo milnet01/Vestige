@@ -63,6 +63,54 @@ TEST(GrassPlacement, ExclusionDisc_G2)
     EXPECT_FALSE(grassInExclusionDisc(10.0f, -4.0f, center, 0.0f));  // disabled
 }
 
+// 3D_E-0810: no blades within the radius of the line, full density past the fade.
+TEST(GrassPlacement, ClearingThinsAroundALine)
+{
+    const GrassClearing strip{{0.0f, 0.0f}, {4.0f, 0.0f}, 0.5f, 1.0f};
+    EXPECT_FLOAT_EQ(grassClearingKeepChance(2.0f, 0.0f, strip), 0.0f);   // on the line
+    EXPECT_FLOAT_EQ(grassClearingKeepChance(2.0f, 0.4f, strip), 0.0f);   // inside the radius
+    EXPECT_FLOAT_EQ(grassClearingKeepChance(2.0f, 1.0f, strip), 0.5f);   // half way across the fade
+    EXPECT_FLOAT_EQ(grassClearingKeepChance(2.0f, 2.0f, strip), 1.0f);   // past the fade
+    EXPECT_FLOAT_EQ(grassClearingKeepChance(5.0f, 0.0f, strip), 0.5f);   // beyond an end: from that end
+}
+
+// A clearing with both ends the same is a disc, not a division by zero.
+TEST(GrassPlacement, ClearingWithEqualEndsIsADisc)
+{
+    const GrassClearing disc{{1.0f, 1.0f}, {1.0f, 1.0f}, 1.0f, 1.0f};
+    EXPECT_FLOAT_EQ(grassClearingKeepChance(1.0f, 1.0f, disc), 0.0f);
+    EXPECT_FLOAT_EQ(grassClearingKeepChance(1.0f, 2.5f, disc), 0.5f);
+}
+
+// A chunk only keeps clearings whose reach overlaps it.
+TEST(GrassPlacement, ClearingReachSelectsChunks)
+{
+    const GrassClearing disc{{0.0f, 0.0f}, {0.0f, 0.0f}, 1.0f, 1.0f};
+    EXPECT_TRUE(grassClearingTouchesRect(disc, {1.5f, -1.0f}, {5.0f, 1.0f}));
+    EXPECT_FALSE(grassClearingTouchesRect(disc, {2.5f, -1.0f}, {5.0f, 1.0f}));
+}
+
+// A long prop gets a line down its long side, turned by its yaw and scaled; the width is
+// its short side plus the margin.
+TEST(GrassPlacement, PropClearingFollowsTheLongSide)
+{
+    const GrassClearing c = grassClearingForProp({10.0f, 20.0f}, 90.0f, 2.0f,
+                                                 {-2.0f, 0.0f, -0.5f}, {2.0f, 1.0f, 0.5f});
+    // Half sizes at scale 2: 4 x 1, so the line reaches 3 either way along model +X,
+    // which a yaw of 90 degrees turns to world -Z.
+    EXPECT_NEAR(c.a.x, 10.0f, 1e-4f);
+    EXPECT_NEAR(c.a.y, 23.0f, 1e-4f);
+    EXPECT_NEAR(c.b.x, 10.0f, 1e-4f);
+    EXPECT_NEAR(c.b.y, 17.0f, 1e-4f);
+    EXPECT_FLOAT_EQ(c.radius, 1.25f);
+    EXPECT_FLOAT_EQ(c.fade, 0.75f);
+
+    // A small plant gets a short fade, so a close-set shore keeps its reeds.
+    const GrassClearing small = grassClearingForProp({0.0f, 0.0f}, 0.0f, 1.0f,
+                                                     {-0.1f, 0.0f, -0.1f}, {0.1f, 0.3f, 0.1f});
+    EXPECT_FLOAT_EQ(small.fade, 0.3f);
+}
+
 // The same scatter key reproduces the same blade, and every hash-derived factor lands in
 // its configured tall/wild range.
 TEST(GrassPlacement, BladeSeedDeterministicAndInRange_G2)

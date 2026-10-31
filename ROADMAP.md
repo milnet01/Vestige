@@ -1,6 +1,6 @@
 <!-- ants-roadmap-format: 1 -->
 <!-- Generated from the Ants Terminal roadmap store. Edit it with roadmap_log; hand edits are discarded by the next write. -->
-<!-- ants-roadmap-id-high-water: 3D_E=818 3D_E#S=989 -->
+<!-- ants-roadmap-id-high-water: 3D_E=819 3D_E#S=989 -->
 
 # Vestige Engine Roadmap
 
@@ -6485,7 +6485,7 @@ shipped that have no invocation path at all.
   Source: 3D_E-0773 inventory 2026-10-26 (--visual-test run_20261026_021955).
   Lanes: renderer.
 
-- 📋 [3D_E-0810] **Meadow bushes, shore plants, logs and stumps are buried in the GPU grass.**
+- ✅ [3D_E-0810] **Meadow bushes, shore plants, logs and stumps are buried in the GPU grass.**
   Seen in --stills close-ups taken 2-3 m above each prop
   (run_20261026_025040, all 15 pictures). Measured from the glTF
   bounds: shrub_02 models are 1.17-1.71 m tall, scattered at 0.5-1.0,
@@ -6503,6 +6503,16 @@ shipped that have no invocation path at all.
   load at scatter time; GPU grass skips blades inside it, beside the
   pond exclusion it already applies. Reason: per-load data, per-blade
   test. Confirm the grass placement path when this is designed.
+  2026-10-31: each ground prop adds a clearing: no blades along a line
+  down its long side, fading back to full density. Blades 1,046,254 to
+  1,019,045. FPS floor on the Release flythrough, two runs: worst 66.6
+  and 70.8, none below 60, GPU 24 % busy before the runs. Stills show
+  log, stump, ferns and rock in the open, with reeds kept along the
+  shore. CPU / GPU placement: CPU, once per scene load in
+  GrassRenderer::buildField, because blades are generated there and not
+  on the GPU, so the earlier guess of a GPU test per blade did not hold.
+  It adds no per-frame cost. Bushes remain sparse by their own model:
+  about 0.6-1.7 m of thin stems.
   **Layman:** The bushes, small plants, logs and stumps in the meadow are hidden by grass that is as tall as they are, so you barely see them.
   Kind: enhancement.
   Source: 3D_E-0773 inventory pass 2 2026-10-26 (--stills run_20261026_025040).
@@ -6623,6 +6633,17 @@ shipped that have no invocation path at all.
   Kind: chore.
   Source: user-request-2026-10-31.
   Lanes: tooling.
+
+- 📋 [3D_E-0819] **A black patch sits on the ground under some shore ferns.**
+  Seen in --stills at the fern spot (build/sun808/c810/meadow/05_fern), and
+  also before 3D_E-0808, so the sun scale did not cause it; the clearing
+  only exposed it. It is darker and harder-edged than the shadows beside it.
+  Cause not looked at. First checks: whether it is the model's own low
+  geometry, its shadow or SSAO, by turning those off in turn.
+  **Layman:** Some ferns near the pond have a dark blot under them that looks like a hole in the ground.
+  Kind: investigate.
+  Source: 3D_E-0810 stills 2026-10-31.
+  Lanes: renderer, assets.
 
 ## 0.3.0 — An editor a builder can use
 

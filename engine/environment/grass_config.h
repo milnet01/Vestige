@@ -14,8 +14,21 @@
 
 #include <glm/glm.hpp>
 
+#include <vector>
+
 namespace Vestige
 {
+
+/// @brief Where grass thins out around something on the ground (3D_E-0810): real meadows
+///        thin under logs and bushes, and blades as tall as a prop would hide it. A line
+///        from `a` to `b` with a width, so a long log gets a long strip; a == b is a disc.
+struct GrassClearing
+{
+    glm::vec2 a{0.0f};    ///< One end of the centre line (world XZ).
+    glm::vec2 b{0.0f};    ///< The other end.
+    float radius = 0.0f;  ///< No blades within this distance of the line (m).
+    float fade = 0.0f;    ///< Blades return to full density over this much further (m).
+};
 
 /// @brief Rule set for procedural blade placement + clumping. One struct per meadow.
 struct GrassConfig
@@ -29,6 +42,7 @@ struct GrassConfig
                                   ///< border candidate would over-spawn (§5.2).
     glm::vec2 exclusionCenter{0.0f}; ///< Pond/water disc centre (world XZ).
     float exclusionRadius = 0.0f;    ///< No blades inside this disc (0 = disabled).
+    std::vector<GrassClearing> clearings; ///< Thinned ground around props (3D_E-0810).
 
     // --- shore reed band (3D_E-0702) ---
     // Inside `shoreRadius` of `exclusionCenter` the field follows the real waterline

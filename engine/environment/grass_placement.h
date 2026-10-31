@@ -52,6 +52,65 @@ inline bool grassInExclusionDisc(float worldX, float worldZ, glm::vec2 center, f
     return (dx * dx + dz * dz) < (radius * radius);
 }
 
+/// @brief Chance a candidate at world XZ survives @p clearing: 0 inside its radius, rising
+///        evenly to 1 across its fade.
+inline float grassClearingKeepChance(float worldX, float worldZ, const GrassClearing& clearing)
+{
+    const glm::vec2 p(worldX, worldZ);
+    const glm::vec2 line = clearing.b - clearing.a;
+    const float lineLen2 = glm::dot(line, line);
+    const float t = lineLen2 > 0.0f
+        ? glm::clamp(glm::dot(p - clearing.a, line) / lineLen2, 0.0f, 1.0f)
+        : 0.0f;
+    const float distance = glm::length(p - (clearing.a + t * line));
+    if (distance <= clearing.radius)
+    {
+        return 0.0f;
+    }
+    if (distance >= clearing.radius + clearing.fade)
+    {
+        return 1.0f;
+    }
+    return (distance - clearing.radius) / clearing.fade;
+}
+
+/// @brief True if @p clearing can reach the world XZ rectangle, so a chunk only tests the
+///        clearings near it.
+inline bool grassClearingTouchesRect(const GrassClearing& clearing, glm::vec2 rectMin, glm::vec2 rectMax)
+{
+    const float reach = clearing.radius + clearing.fade;
+    const glm::vec2 lo = glm::min(clearing.a, clearing.b) - reach;
+    const glm::vec2 hi = glm::max(clearing.a, clearing.b) + reach;
+    return lo.x <= rectMax.x && hi.x >= rectMin.x && lo.y <= rectMax.y && hi.y >= rectMin.y;
+}
+
+/// @brief The clearing for a prop placed at @p position (world XZ), from its model bounds:
+///        a line down its longer side, as wide as its shorter side plus a margin.
+///        Hand-set by eye against --stills. TODO: revisit via Formula Workbench
+inline GrassClearing grassClearingForProp(glm::vec2 position, float yawDeg, float scale,
+                                          const glm::vec3& boundsMin, const glm::vec3& boundsMax)
+{
+    constexpr float MARGIN = 0.25f;
+
+    const glm::vec2 half = glm::vec2(boundsMax.x - boundsMin.x, boundsMax.z - boundsMin.z) * 0.5f * scale;
+    const glm::vec2 centre = glm::vec2(boundsMax.x + boundsMin.x, boundsMax.z + boundsMin.z) * 0.5f * scale;
+    const float shortHalf = glm::min(half.x, half.y);
+    // Small plants fade quickly: at shore spacing, wide fades would merge and clear the reeds.
+    const float fade = glm::clamp(shortHalf, 0.3f, 0.75f);
+    const glm::vec2 lineHalf = half.x > half.y ? glm::vec2(half.x - shortHalf, 0.0f)
+                                               : glm::vec2(0.0f, half.y - shortHalf);
+
+    // A yaw about +Y takes model (x, z) to world (x cos + z sin, -x sin + z cos).
+    const float yaw = glm::radians(yawDeg);
+    const auto toWorld = [&](glm::vec2 v)
+    {
+        return glm::vec2(v.x * std::cos(yaw) + v.y * std::sin(yaw),
+                         -v.x * std::sin(yaw) + v.y * std::cos(yaw));
+    };
+    const glm::vec2 mid = position + toWorld(centre);
+    return GrassClearing{mid - toWorld(lineHalf), mid + toWorld(lineHalf), shortHalf + MARGIN, fade};
+}
+
 /// @brief True if world XZ is inside the shore band's reach (`shoreRadius` of the
 ///        exclusion centre). Disabled when `shoreRadius <= 0`.
 inline bool grassInShoreReach(float worldX, float worldZ, const GrassConfig& cfg)

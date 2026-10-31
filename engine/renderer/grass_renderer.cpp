@@ -109,6 +109,15 @@ void GrassRenderer::buildField(const Terrain& terrain, const GrassConfig& cfg)
 
             const std::uint32_t chunkId = grassCellHash(cx, cz, 0x9AB10001u);
 
+            std::vector<const GrassClearing*> nearbyClearings;
+            for (const GrassClearing& clearing : cfg.clearings)
+            {
+                if (grassClearingTouchesRect(clearing, {cxMin, czMin}, {cxMax, czMax}))
+                {
+                    nearbyClearings.push_back(&clearing);
+                }
+            }
+
             std::vector<GrassBlade> chunkBlades;
             float minY = 1.0e30f, maxY = -1.0e30f;
 
@@ -131,6 +140,16 @@ void GrassRenderer::buildField(const Terrain& terrain, const GrassConfig& cfg)
                     if (grassInExclusionDisc(wx, wz, cfg.exclusionCenter, cfg.exclusionRadius))
                     {
                         continue;   // inside the pond
+                    }
+
+                    float keepChance = 1.0f;
+                    for (const GrassClearing* clearing : nearbyClearings)
+                    {
+                        keepChance = std::min(keepChance, grassClearingKeepChance(wx, wz, *clearing));
+                    }
+                    if (grassU32ToUnit(grassHashU32(key ^ 0x00000044u)) >= keepChance)
+                    {
+                        continue;   // thinned around a prop
                     }
 
                     const float wy = terrain.getHeight(wx, wz);

@@ -25,6 +25,10 @@ may change any interface without notice.
 
 ## [Unreleased]
 
+### 2026-10-31 Changed — Grass thins out around logs, stumps, rocks and plants so they can be seen
+
+- **Each ground prop in the meadow now has a clearing shaped to it, built once when the scene loads** (3D_E-0810)
+
 ### 2026-10-31 Changed — The local push check matches GitHub's tools and shares the machine
 
 - **Workflow lint runs in the Ubuntu container with GitHub's shellcheck and pinned actionlint; a gitleaks version other than the workflow's pin makes the run partial**
