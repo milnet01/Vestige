@@ -140,12 +140,10 @@ void WaterRenderer::render(const std::vector<WaterRenderItem>& waterItems,
     if (environmentCubemap != 0)
     {
         glBindTextureUnit(2, environmentCubemap);
-        m_waterShader.setBool("u_hasEnvironmentMap", true);
     }
     else
     {
         glBindTextureUnit(2, m_fallbackCubemap);
-        m_waterShader.setBool("u_hasEnvironmentMap", false);
     }
     m_waterShader.setInt("u_environmentMap", 2);
 
@@ -162,7 +160,6 @@ void WaterRenderer::render(const std::vector<WaterRenderItem>& waterItems,
     bool hasReflection = (reflectionTex != 0);
     glBindTextureUnit(3, hasReflection ? reflectionTex : fallback2D);
     m_waterShader.setInt("u_reflectionTex", 3);
-    m_waterShader.setBool("u_hasReflectionTex", hasReflection);
 
     // Bind refraction texture + depth (texture units 4, 5)
     bool hasRefraction = (refractionTex != 0 && refractionDepthTex != 0);
@@ -170,7 +167,6 @@ void WaterRenderer::render(const std::vector<WaterRenderItem>& waterItems,
     glBindTextureUnit(5, hasRefraction ? refractionDepthTex : fallback2D);
     m_waterShader.setInt("u_refractionTex", 4);
     m_waterShader.setInt("u_refractionDepthTex", 5);
-    m_waterShader.setBool("u_hasRefractionTex", hasRefraction);
 
     // Bind foam texture (texture unit 6)
     bool hasFoam = (m_defaultFoamTexture != 0);
@@ -196,6 +192,13 @@ void WaterRenderer::render(const std::vector<WaterRenderItem>& waterItems,
 
         // Model matrix
         m_waterShader.setMat4("u_model", item.worldMatrix);
+
+        // This surface's reflection mode and refraction switch (3D_E-0814).
+        const WaterSurfaceSources sources = waterSurfaceSources(
+            config, hasReflection, environmentCubemap != 0, hasRefraction);
+        m_waterShader.setBool("u_hasReflectionTex", sources.reflectionTexture);
+        m_waterShader.setBool("u_hasEnvironmentMap", sources.environmentMap);
+        m_waterShader.setBool("u_hasRefractionTex", sources.refractionTexture);
 
         // Flat-unless-windy: on wind-driven surfaces (the meadow pond) fade the wave
         // amplitude AND the surface distortion (below) from a still mirror in calm air

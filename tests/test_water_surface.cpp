@@ -368,3 +368,95 @@ TEST(WaterTurbidityTest, ClampsOutOfRangeTurbidity)
     EXPECT_FLOAT_EQ(waterAbsorptionCoefficients(7.0f).b,
                     waterAbsorptionCoefficients(1.0f).b);
 }
+
+// --- 3D_E-0814: the reflection mode and refraction switch take effect ---------
+
+namespace
+{
+
+WaterSurfaceConfig waterConfig(WaterReflectionMode mode, bool refraction, float scale = 0.25f)
+{
+    WaterSurfaceConfig config;
+    config.reflectionMode = mode;
+    config.refractionEnabled = refraction;
+    config.reflectionResolutionScale = scale;
+    return config;
+}
+
+} // namespace
+
+TEST(WaterPlanarPasses, OnlyAPlanarSurfaceAsksForTheReflectionRender)
+{
+    WaterPlanarPasses passes;
+    passes.add(waterConfig(WaterReflectionMode::NONE, false));
+    passes.add(waterConfig(WaterReflectionMode::CUBEMAP, false));
+    EXPECT_FALSE(passes.reflection);
+    EXPECT_FALSE(passes.refraction);
+
+    passes.add(waterConfig(WaterReflectionMode::PLANAR, false));
+    EXPECT_TRUE(passes.reflection);
+    EXPECT_FALSE(passes.refraction);
+}
+
+TEST(WaterPlanarPasses, OneSurfaceAskingForRefractionIsEnough)
+{
+    WaterPlanarPasses passes;
+    passes.add(waterConfig(WaterReflectionMode::NONE, false));
+    passes.add(waterConfig(WaterReflectionMode::NONE, true));
+    EXPECT_TRUE(passes.refraction);
+}
+
+TEST(WaterPlanarPasses, SharpestPlanarScaleWinsAndOtherModesDoNotCount)
+{
+    WaterPlanarPasses passes;
+    passes.add(waterConfig(WaterReflectionMode::PLANAR, true, 0.5f));
+    passes.add(waterConfig(WaterReflectionMode::PLANAR, true, 0.25f));
+    passes.add(waterConfig(WaterReflectionMode::CUBEMAP, true, 1.0f));
+    EXPECT_FLOAT_EQ(passes.reflectionScale, 0.5f);
+}
+
+TEST(WaterSurfaceSources, NoneSamplesNoReflectionEvenWhenBothExist)
+{
+    const auto s = waterSurfaceSources(waterConfig(WaterReflectionMode::NONE, true),
+                                       true, true, true);
+    EXPECT_FALSE(s.reflectionTexture);
+    EXPECT_FALSE(s.environmentMap);
+    EXPECT_TRUE(s.refractionTexture);
+}
+
+TEST(WaterSurfaceSources, CubemapUsesTheEnvironmentNotAnotherSurfacesPlanarTexture)
+{
+    const auto s = waterSurfaceSources(waterConfig(WaterReflectionMode::CUBEMAP, true),
+                                       true, true, true);
+    EXPECT_FALSE(s.reflectionTexture);
+    EXPECT_TRUE(s.environmentMap);
+}
+
+TEST(WaterSurfaceSources, PlanarUsesItsTextureAndKeepsTheEnvironmentFallback)
+{
+    const auto s = waterSurfaceSources(waterConfig(WaterReflectionMode::PLANAR, true),
+                                       true, true, true);
+    EXPECT_TRUE(s.reflectionTexture);
+    EXPECT_TRUE(s.environmentMap);
+
+    const auto noTexture = waterSurfaceSources(waterConfig(WaterReflectionMode::PLANAR, true),
+                                               false, true, true);
+    EXPECT_FALSE(noTexture.reflectionTexture);
+    EXPECT_TRUE(noTexture.environmentMap);
+}
+
+TEST(WaterSurfaceSources, RefractionOffIgnoresAnotherSurfacesRefractionTexture)
+{
+    const auto s = waterSurfaceSources(waterConfig(WaterReflectionMode::PLANAR, false),
+                                       true, true, true);
+    EXPECT_FALSE(s.refractionTexture);
+}
+
+TEST(WaterSurfaceSources, MissingTexturesAreNeverSampled)
+{
+    const auto s = waterSurfaceSources(waterConfig(WaterReflectionMode::CUBEMAP, true),
+                                       false, false, false);
+    EXPECT_FALSE(s.reflectionTexture);
+    EXPECT_FALSE(s.environmentMap);
+    EXPECT_FALSE(s.refractionTexture);
+}

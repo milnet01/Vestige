@@ -2223,15 +2223,16 @@ void Engine::run()
                     // them all). It was a fixed quarter of the render target, which
                     // turned alpha-cutout leaf edges into 4-pixel stair-steps in the
                     // pond. Refraction stays a quarter: it is blurred by the water.
-                    float reflScale = 0.0f;
+                    // 3D_E-0814: a re-render runs only if a visible surface wants it.
+                    WaterPlanarPasses planarPasses;
                     for (const auto& item : waterItems)
                     {
-                        reflScale = std::max(reflScale,
-                                             item.component->getConfig().reflectionResolutionScale);
+                        planarPasses.add(item.component->getConfig());
                     }
                     const int targetW = m_renderer->getRenderWidth();
                     const int targetH = m_renderer->getRenderHeight();
-                    const glm::ivec2 reflSize = waterReflectionTargetSize(targetW, targetH, reflScale);
+                    const glm::ivec2 reflSize = waterReflectionTargetSize(targetW, targetH,
+                                                                    planarPasses.reflectionScale);
                     m_waterFbo->resize(reflSize.x, reflSize.y,
                                        std::max(1, targetW / 4), std::max(1, targetH / 4));
 
@@ -2239,6 +2240,7 @@ void Engine::run()
                     m_renderer->saveViewState();
 
                     // --- Refraction pass: render scene below water ---
+                    if (planarPasses.refraction)
                     {
                         VESTIGE_PROFILE_SCOPE("WaterRefraction");
                         glm::vec4 refrClipPlane(0.0f, -1.0f, 0.0f, waterY + 0.1f);
@@ -2257,6 +2259,7 @@ void Engine::run()
                     }
 
                     // --- Reflection pass: render scene above water with reflected camera ---
+                    if (planarPasses.reflection)
                     {
                         VESTIGE_PROFILE_SCOPE("WaterReflection");
                         glm::vec4 reflClipPlane(0.0f, 1.0f, 0.0f, -waterY + 0.1f);

@@ -6572,7 +6572,7 @@ shipped that have no invocation path at all.
   Source: 3D_E-0803 fix 2026-10-26.
   Lanes: renderer, assets.
 
-- 📋 [3D_E-0814] **The water inspector's reflection mode and refraction switch change nothing on screen.**
+- ✅ [3D_E-0814] **The water inspector's reflection mode and refraction switch change nothing on screen.**
   WaterSurfaceConfig::reflectionMode (None / Planar / Cubemap) and
   refractionEnabled are saved, loaded and shown in the inspector, but no
   render code reads them: engine.cpp always runs both planar passes when
@@ -6580,6 +6580,15 @@ shipped that have no invocation path at all.
   reflectionResolutionScale had the same gap. Honour both (skip the pass,
   and feed water.frag.glsl's no-refraction / cubemap branches), or remove
   them from the inspector.
+  2026-10-31: both settings honoured per surface. A scene re-render runs
+  only if a visible surface wants it. Cubemap means the sky's existing
+  environment map: it reflects sky only, and the enum comment's "dynamic
+  cubemap, 1 face/frame" was never built, so the comment and tooltip now
+  say what it does. CPU / GPU placement: the choice is made on the CPU
+  per surface; the shader's existing branches run on the GPU. Proof:
+  pond_shore stills in all four settings show the mirror, flat sky
+  colour, clouds without trees, and no pond bed. New tests:
+  WaterPlanarPasses, WaterSurfaceSources.
   **Layman:** Two water settings in the editor can be changed but the water ignores them.
   Kind: fix.
   Source: 3D_E-0805 fix 2026-10-26.

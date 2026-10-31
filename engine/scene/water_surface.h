@@ -21,9 +21,9 @@ namespace Vestige
 /// @brief Water reflection rendering method.
 enum class WaterReflectionMode
 {
-    NONE,     ///< No reflections (Fresnel + color blend only) — cheapest
+    NONE,     ///< No reflections: a flat sky colour — cheapest
     PLANAR,   ///< Planar reflection FBO — accurate but re-renders scene
-    CUBEMAP   ///< Dynamic cubemap (1 face/frame) — cheaper, lower quality
+    CUBEMAP   ///< The sky's environment cubemap — no scene render, reflects only sky
 };
 
 /// @brief Configuration for a water surface — all tweakable parameters.
@@ -183,6 +183,52 @@ inline glm::ivec2 waterReflectionTargetSize(int renderW, int renderH, float scal
     return glm::ivec2(
         std::max(1, static_cast<int>(std::lround(static_cast<float>(renderW) * s))),
         std::max(1, static_cast<int>(std::lround(static_cast<float>(renderH) * s))));
+}
+
+/// @brief Which scene re-renders this frame's visible water surfaces need. One
+/// target serves them all, so one surface asking is enough, and the sharpest
+/// reflection scale asked for wins. Pure + GL-free so it is unit-testable.
+struct WaterPlanarPasses
+{
+    bool reflection = false;
+    bool refraction = false;
+    float reflectionScale = 0.0f;
+
+    void add(const WaterSurfaceConfig& config)
+    {
+        if (config.reflectionMode == WaterReflectionMode::PLANAR)
+        {
+            reflection = true;
+            reflectionScale = std::max(reflectionScale, config.reflectionResolutionScale);
+        }
+        refraction = refraction || config.refractionEnabled;
+    }
+};
+
+/// @brief What one surface's shader samples, given what this frame has. Passes
+/// are shared, so a surface must not sample one another surface asked for.
+struct WaterSurfaceSources
+{
+    bool reflectionTexture = false;
+    bool environmentMap = false;
+    bool refractionTexture = false;
+};
+
+/// @brief Applies a surface's settings to the sources available. PLANAR falls
+/// back to the environment map while its texture does not exist yet, as CUBEMAP
+/// always uses it; NONE uses neither, so the shader's flat sky colour shows.
+inline WaterSurfaceSources waterSurfaceSources(const WaterSurfaceConfig& config,
+                                               bool hasReflectionTexture,
+                                               bool hasEnvironmentMap,
+                                               bool hasRefractionTexture)
+{
+    WaterSurfaceSources sources;
+    sources.reflectionTexture =
+        config.reflectionMode == WaterReflectionMode::PLANAR && hasReflectionTexture;
+    sources.environmentMap =
+        config.reflectionMode != WaterReflectionMode::NONE && hasEnvironmentMap;
+    sources.refractionTexture = config.refractionEnabled && hasRefractionTexture;
+    return sources;
 }
 
 /// @brief Entity component that manages a water surface mesh and its parameters.

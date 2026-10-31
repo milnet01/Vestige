@@ -1795,11 +1795,11 @@ void InspectorPanel::drawWaterSurface(Entity& entity)
         {
             config.reflectionMode = static_cast<WaterReflectionMode>(reflMode);
         }
-        ImGui::SetItemTooltip("None: cheapest (no reflection)\n"
+        ImGui::SetItemTooltip("None: cheapest (a flat sky colour)\n"
                               "Planar: accurate (re-renders scene)\n"
-                              "Cubemap: cheaper (1 face/frame, lower quality)");
+                              "Cubemap: cheaper (reflects the sky only)");
 
-        if (config.reflectionMode != WaterReflectionMode::NONE)
+        if (config.reflectionMode == WaterReflectionMode::PLANAR)
         {
             float resScale = config.reflectionResolutionScale;
             bool resChanged = ImGui::SliderFloat("Reflection Resolution", &resScale, 0.1f, 1.0f, "%.2f");
@@ -1813,7 +1813,8 @@ void InspectorPanel::drawWaterSurface(Entity& entity)
         // --- Refraction ---
         tr.track(ImGui::Checkbox("Refraction (Beer's Law)", &config.refractionEnabled));
         ImGui::SetItemTooltip("Depth-based underwater coloring.\n"
-                              "Disabling saves a full scene render pass.");
+                              "Disabling saves a full scene render pass,\n"
+                              "and removes shore foam and soft shore edges.");
 
         tr.track(ImGui::SliderFloat("Turbidity", &config.turbidity, 0.0f, 1.0f, "%.2f"));
         ImGui::SetItemTooltip("Suspended silt and organics.\n"

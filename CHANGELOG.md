@@ -25,6 +25,10 @@ may change any interface without notice.
 
 ## [Unreleased]
 
+### 2026-10-31 Fixed — The water inspector's reflection mode and refraction switch now work
+
+- **Reflection mode and the refraction switch now change the water, per surface** (3D_E-0814). Water that does not need a scene re-render no longer pays for one. Cubemap reflects the sky only; its old description of a dynamic cubemap described something never built.
+
 ### 2026-10-31 Added — A per-frame timing log, so one slow frame can be seen
 
 - **`--frame-log=PATH` writes every frame's timings in the format the shared frameledger tool reads** (3D_E-0786). `--profile-log` averages each second, which cannot show a single slow frame. The first run file meets the format under frameledger 0.1.0's `check`, with no rows dropped, and its `report` named a 410.386 ms frame.
