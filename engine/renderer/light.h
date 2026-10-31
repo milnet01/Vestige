@@ -15,6 +15,9 @@ struct DirectionalLight
 {
     glm::vec3 direction = glm::vec3(-0.2f, -1.0f, -0.3f);
     glm::vec3 ambient   = glm::vec3(0.1f, 0.1f, 0.1f);
+    /// Light colour x strength. Every surface shader lights with
+    /// colour / PI x this, so a white surface facing the sun reads this / PI
+    /// (3D_E-0808).
     glm::vec3 diffuse   = glm::vec3(0.8f, 0.8f, 0.8f);
     glm::vec3 specular  = glm::vec3(1.0f, 1.0f, 1.0f);
 

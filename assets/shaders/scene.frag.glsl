@@ -710,7 +710,7 @@ vec3 calcDirectionalLight(vec3 norm, vec3 viewDir, vec3 baseColor)
     }
 
     vec3 ambient  = u_dirLight_ambient * baseColor;
-    vec3 diffuse  = u_dirLight_diffuse * diff * baseColor;
+    vec3 diffuse  = u_dirLight_diffuse * diff * baseColor / PI;
     vec3 specular = u_dirLight_specular * spec * u_materialSpecular;
 
     // Ambient is never shadowed; diffuse and specular are
@@ -745,7 +745,7 @@ vec3 calcPointLight(int i, vec3 norm, vec3 viewDir, vec3 baseColor)
     }
 
     vec3 ambient  = u_pointLights_ambient[i] * baseColor;
-    vec3 diffuse  = u_pointLights_diffuse[i] * diff * baseColor;
+    vec3 diffuse  = u_pointLights_diffuse[i] * diff * baseColor / PI;
     vec3 specular = u_pointLights_specular[i] * spec * u_materialSpecular;
 
     return (ambient + (1.0 - shadow) * (diffuse + specular)) * attenuation;
@@ -776,7 +776,7 @@ vec3 calcSpotLight(int i, vec3 norm, vec3 viewDir, vec3 baseColor)
     float intensity = clamp((theta - u_spotLights_outerCutoff[i]) / epsilon, 0.0, 1.0);
 
     vec3 ambient  = u_spotLights_ambient[i] * baseColor;
-    vec3 diffuse  = u_spotLights_diffuse[i] * diff * baseColor;
+    vec3 diffuse  = u_spotLights_diffuse[i] * diff * baseColor / PI;
     vec3 specular = u_spotLights_specular[i] * spec * u_materialSpecular;
 
     return (ambient + (diffuse + specular) * intensity) * attenuation;
@@ -1445,7 +1445,7 @@ void main()
         caustics *= depthFade;
 
         // Scale by directional light intensity (caustics are refracted sunlight)
-        float lightScale = u_hasDirLight ? length(u_dirLight_diffuse) * 0.5 : 0.25;
+        float lightScale = u_hasDirLight ? length(u_dirLight_diffuse) * 0.5 / PI : 0.25;
         fragColor.rgb += caustics * lightScale;
     }
 

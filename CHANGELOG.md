@@ -25,6 +25,16 @@ may change any interface without notice.
 
 ## [Unreleased]
 
+### 2026-10-31 Fixed — One sun scale: objects in the meadow are lit as strongly as the grass
+
+Logs, rocks, plants and lily pads received about a third of the sun, which left them dark and blue-grey. Other scenes change very little.
+
+- **Every surface shader now uses one sun scale, and the meadow sun was raised to suit** (3D_E-0808)
+
+- **The fallen log shows brown bark instead of a near-black shape** (3D_E-0811)
+
+- **Workaround: meadow ground roughness is lifted half way to fully rough, set by eye, because the ground glinted through the grass under the stronger sun; cause not yet found** (3D_E-0816)
+
 ### 2026-10-31 Changed — Pond water lilies are flat, notched pads with real flowers (3D_E-0804)
 
 - The pond's lotus clusters stood up to 0.43 m high and looked like heaped lettuce with pink shards. New clusters lie flat on the water: round pads with a notch, veins, a curled rim and a visible edge, plus layered flowers and closed buds.

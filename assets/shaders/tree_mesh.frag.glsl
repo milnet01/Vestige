@@ -38,6 +38,8 @@ uniform vec3 u_lightDirection;
 uniform vec3 u_lightColor;
 uniform vec3 u_ambientColor;
 
+const float PI = 3.14159265359;
+
 // Cascaded shadow mapping (unit 3)
 uniform bool u_hasShadows;
 uniform sampler2DArray u_cascadeShadowMap;
@@ -196,8 +198,8 @@ void main()
         float shadow = u_hasShadows ? calcTreeShadow() : 0.0;
 
         vec3 ambient = base * u_ambientColor;
-        vec3 direct = base * NdotL * u_lightColor;
-        vec3 transmission = base * trans * u_lightColor;
+        vec3 direct = base / PI * NdotL * u_lightColor;
+        vec3 transmission = base / PI * trans * u_lightColor;
         finalColor = ambient + (direct + transmission) * (1.0 - shadow * 0.65);
     }
     else

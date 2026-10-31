@@ -2849,9 +2849,7 @@ void Engine::setupDemoScene()
 
     // --- Renderer configuration: bright outdoor meadow with HDRI sky ---
     // Skybox + IBL are on (the material demo disables them). The clear colour is
-    // only the fallback shown if the HDRI fails to load. Exposure is raised to
-    // balance the bright sky HDRI in the ACES tonemapper (matches the Tabernacle
-    // outdoor scene's approach).
+    // only the fallback shown if the HDRI fails to load.
     m_renderer->setSkyboxEnabled(true);
     m_renderer->setClearColor(glm::vec3(0.53f, 0.68f, 0.86f));
     m_renderer->setAutoExposure(false);
@@ -2882,7 +2880,7 @@ void Engine::setupDemoScene()
     auto* dirLight = sun->addComponent<DirectionalLightComponent>();
     dirLight->light.direction = glm::vec3(-0.554f, -0.742f, -0.378f);
     dirLight->light.ambient = glm::vec3(0.20f, 0.22f, 0.26f);
-    dirLight->light.diffuse = glm::vec3(1.15f, 1.10f, 1.00f);  // toned down — 1.9 blew out the grass + sand
+    dirLight->light.diffuse = glm::vec3(3.61f, 3.46f, 3.14f);  // 3D_E-0808: 1.15, 1.10, 1.00 x PI; surfaces divide by PI
     dirLight->light.specular = glm::vec3(0.6f);
 
     // The rolling terrain and carved pond depend on the terrain heightmap, which

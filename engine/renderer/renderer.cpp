@@ -1360,7 +1360,9 @@ void Renderer::endFrame(float deltaTime)
         // `direction` is the travel direction, so negate before transforming.
         fp.sunDirViewSpace = glm::normalize(
             glm::mat3(m_lastView) * (-m_directionalLight.direction));
-        fp.sunRadiance     = m_directionalLight.diffuse;
+        // A surface facing the sun reads diffuse / PI (3D_E-0808); haze scatters on
+        // that same scale.
+        fp.sunRadiance     = m_directionalLight.diffuse / glm::pi<float>();
         fp.ambient         = m_directionalLight.ambient;
 
         // Authored froxel medium + density-noise look (slice 11.10 — the Fog

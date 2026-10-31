@@ -21,6 +21,8 @@ uniform vec3 u_lightDirection;
 uniform vec3 u_lightColor;
 uniform vec3 u_ambientColor;
 
+const float PI = 3.14159265359;
+
 // Cascaded shadow mapping
 uniform bool u_hasShadows;
 uniform sampler2DArray u_cascadeShadowMap;
@@ -143,8 +145,8 @@ void main()
 
         // Combine lighting
         vec3 ambient = baseColor * u_ambientColor;
-        vec3 direct = baseColor * NdotL * u_lightColor;
-        vec3 trans = baseColor * translucency * u_lightColor;
+        vec3 direct = baseColor / PI * NdotL * u_lightColor;
+        vec3 trans = baseColor / PI * translucency * u_lightColor;
 
         // Shadow darkens direct light and partially attenuates translucency
         float shadowStrength = 0.65;

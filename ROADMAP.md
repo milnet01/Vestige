@@ -1,6 +1,6 @@
 <!-- ants-roadmap-format: 1 -->
 <!-- Generated from the Ants Terminal roadmap store. Edit it with roadmap_log; hand edits are discarded by the next write. -->
-<!-- ants-roadmap-id-high-water: 3D_E=815 3D_E#S=989 -->
+<!-- ants-roadmap-id-high-water: 3D_E=817 3D_E#S=989 -->
 
 # Vestige Engine Roadmap
 
@@ -6426,7 +6426,7 @@ shipped that have no invocation path at all.
   Source: 3D_E-0773 inventory 2026-10-26 (--visual-test run_20261026_021955).
   Lanes: renderer, assets.
 
-- 📋 [3D_E-0808] **Shore plants and a willow-like shrub have a grey-blue metallic sheen.**
+- ✅ [3D_E-0808] **Shore plants and a willow-like shrub have a grey-blue metallic sheen.**
   Broad-leaf shore plants in 02_pond_shore rot090..rot270 show a
   bluish-grey metallic sheen with mottled brown patches. A grey-violet
   willow-like plant (01_pond_overview rot045, rot090; 04_open_meadow
@@ -6453,6 +6453,24 @@ shipped that have no invocation path at all.
   one sun scale for all surfaces, so the meadow sun rises about PI and
   the shaders without the division gain it, checking grass in other
   scenes and terrain brightness.
+  2026-10-31: fixed. One unit for all surfaces: diffuse light is surface
+  colour / PI x light colour. grass, foliage, tree_mesh and scene.frag's
+  Blinn-Phong paths gained the division; meadow sun rose PI x to 3.61,
+  3.46, 3.14; new lamps 3 to 9.5. Water highlight, caustics and haze
+  divide too, to keep their look. Measured: test_sun_scale_parity red on
+  9 lit lines and 3 water/caustic checks, then green. Stills mean grey,
+  before to after: meadow views up 10-19 of 255, Tabernacle down at most
+  3.2, material demo down at most 0.9. FPS, same binary, old and new
+  shaders alternated: new worst 65.4 and 67.7, none below 60; old 50.2
+  and 67.1, showing the spread under a shared GPU (7-25 % busy before
+  each run). CPU / GPU placement: GPU, per-fragment, a constant division
+  in existing shaders; no CPU work added. Blue-grey on shaded fern
+  leaves and silver on shrub_02 remain in part: see 3D_E-0817. Ground
+  glint workaround: 3D_E-0816. Not changed: material_preview's fixed
+  light, which is not the sun, and the RSM flux, which is pinned as
+  albedo x radiance x NdotL. The inspector's Brightness edit still
+  derives sun ambient as diffuse x 0.1, so editing the meadow sun now
+  gives ambient 0.36, not 0.115.
   **Layman:** Some plants near the pond look grey and shiny, like metal, instead of green.
   Kind: fix.
   Source: 3D_E-0773 inventory 2026-10-26 (--visual-test run_20261026_021955).
@@ -6490,7 +6508,7 @@ shipped that have no invocation path at all.
   Source: 3D_E-0773 inventory pass 2 2026-10-26 (--stills run_20261026_025040).
   Lanes: renderer, assets.
 
-- 📋 [3D_E-0811] **The fallen log renders near-black from a few metres and its bark goes blurry up close.**
+- ✅ [3D_E-0811] **The fallen log renders near-black from a few metres and its bark goes blurry up close.**
   Seen in --stills 01_log_a and 03_log_c (4.5 m away, 2.4 m up):
   dead_tree_trunk reads as an almost black, featureless shape. In
   15_sorrel the same model about 1 m away shows soft, low-resolution
@@ -6503,6 +6521,11 @@ shipped that have no invocation path at all.
   multiplied by PI (scratch copy) the log shows clear brown bark at 1 m
   and from a distance, with the same 1k texture, so the blur may not
   need new textures. Recheck once 3D_E-0808 is fixed.
+  2026-10-31: fixed by 3D_E-0808. Rechecked with --stills: a patch of
+  log_a's log at 4.5 m went from mean grey 69 to 94 of 255, and at about
+  1.5 m brown bark and its splits are visible on the same 1k texture, so
+  no new texture is needed. From a distance it is still a dark wood, by
+  its own texture.
   **Layman:** The fallen logs look like dark burnt lumps from a distance and smudged up close, not like weathered wood.
   Kind: fix.
   Source: 3D_E-0773 inventory pass 2 2026-10-26 (--stills run_20261026_025040).
@@ -6553,6 +6576,32 @@ shipped that have no invocation path at all.
   Kind: chore.
   Source: user-request-2026-10-26.
   Lanes: tooling.
+
+- 📋 [3D_E-0816] **Find why the meadow ground glints, and remove the hand-set roughness lift in terrain.frag.**
+  3D_E-0808 raised the meadow sun about 3.14 x. Terrain specular then
+  showed as pale patches through the grass (--stills, spec off in a
+  scratch shader copy removed them). The shipped workaround moves ground
+  roughness half way to 1.0. The maps average 0.46-0.69. Not established:
+  whether those maps are too glossy for soil, or whether the cause is
+  missing specular occlusion from the grass canopy. Settle which, fix
+  that, and drop the lift.
+  **Layman:** Bare ground looked wet in strong sun, so it was made more matt by eye; the real reason still needs finding.
+  Kind: investigate.
+  Source: 3D_E-0808 fix 2026-10-31.
+  Lanes: renderer, assets.
+
+- 📋 [3D_E-0817] **Glossy leaves read more silver in the engine than in Cycles.**
+  Seen on Poly Haven shrub_02 after 3D_E-0808. metallicFactor is 0 and the
+  ARM map's blue channel averages about 0, so it is not metal. Roughness
+  averages 0.56. A Cycles CPU render with the same HDRI and a sun of the
+  same strength shows dark grey-green leaves with a slight sheen, so most
+  of the look is the model's own. Not measured: how much the rest comes
+  from sky reflection (specularIBL in scene.frag). Compare with
+  u_iblSpecularScale first.
+  **Layman:** The willow-like bush has silvery leaves in the game and duller grey-green ones in a reference render.
+  Kind: investigate.
+  Source: 3D_E-0808 fix 2026-10-31.
+  Lanes: renderer, assets.
 
 ## 0.3.0 — An editor a builder can use
 

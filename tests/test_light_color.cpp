@@ -66,7 +66,7 @@ TEST(LightColor, ReconcileResplitsWhenTheLightChangedElsewhere)
 TEST(LightColor, NewEditorPointLightOutshinesTheMeadowSunAtTwoMetres)
 {
     // 3D_E-0765: a lamp added from Create > Lights lit nothing visible in
-    // daylight. The meadow sun's diffuse is 1.15 (Engine::setupDemoScene);
+    // daylight. The meadow sun's diffuse is 3.61 (Engine::setupDemoScene);
     // a lamp 2 m from a surface should reach at least that.
     Scene scene("LightColorTest");
     Entity* e = EntityFactory::createPointLight(scene, glm::vec3(0.0f));
@@ -78,5 +78,5 @@ TEST(LightColor, NewEditorPointLightOutshinesTheMeadowSunAtTwoMetres)
     const float d = 2.0f;
     const float attenuation = 1.0f / (pl.constant + pl.linear * d + pl.quadratic * d * d);
     const float brightest = std::max({pl.diffuse.r, pl.diffuse.g, pl.diffuse.b});
-    EXPECT_GE(brightest * attenuation, 1.15f);
+    EXPECT_GE(brightest * attenuation, 3.61f);
 }

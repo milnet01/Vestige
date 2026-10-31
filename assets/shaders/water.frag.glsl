@@ -39,6 +39,8 @@ uniform float u_specularPower;
 uniform vec3 u_lightDirection;
 uniform vec3 u_lightColor;
 
+const float PI = 3.14159265359;
+
 uniform bool u_hasNormalMap;
 uniform bool u_hasDudvMap;
 uniform bool u_hasEnvironmentMap;
@@ -277,7 +279,7 @@ void main()
     vec3 halfDir = normalize(viewDir + lightDir);
     float specAngle = max(dot(normal, halfDir), 0.0);
     float specular = pow(specAngle, u_specularPower);
-    vec3 specularColor = u_lightColor * specular * 0.6;
+    vec3 specularColor = u_lightColor * specular * 0.6 / PI;
 
     // Final: blend refraction and reflection using Fresnel, add specular
     vec3 finalColor = mix(refractionColor, reflectionColor, fresnel);

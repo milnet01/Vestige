@@ -437,7 +437,11 @@ void main()
         // Subtle large-scale brightness variation to break exact tiling repeats.
         albedo          = outAlbedo * tilingDetail(v_worldPos.xz * 0.15);
         groundAO        = outAO;
-        groundRoughness = outRough;
+        // The maps average 0.46-0.69, which glints like wet ground under the full
+        // sun and shows through the grass as pale patches (3D_E-0808). Half way to
+        // fully rough restores a matt look. Hand-set by eye against --stills.
+        // TODO: revisit via Formula Workbench
+        groundRoughness = mix(outRough, 1.0, 0.5);
         N               = worldN;
     }
     else if (u_triplanarEnabled && u_textureTiling > 0.0)
@@ -537,9 +541,9 @@ void main()
     vec3 ambient = albedo * u_ambientColor * groundAO;
     // Lambert. The 1/PI normalisation and the kD split are what make this
     // share an energy budget with the Cook-Torrance specular above, and what
-    // put terrain on the same scale as every other surface — without them the
-    // ground was ~PI x brighter than scene.frag.glsl's, which applies both
-    // (3D_E-0638). On the flat-colour fallback kD is 1 and the division is the
+    // put terrain on the same scale as every other surface (3D_E-0808) — without
+    // them the ground was ~PI x brighter than scene.frag.glsl's, which applies
+    // both (3D_E-0638). On the flat-colour fallback kD is 1 and the division is the
     // whole change, which is correct: that path was equally over-bright.
     vec3 diffuse = (kD * albedo / PI) * NdotL * u_lightColor;
 
@@ -595,7 +599,7 @@ void main()
         float depthFade = 1.0 - smoothstep(0.0, 5.0, depthBelowWater);
         caustics *= depthFade;
 
-        float lightScale = length(u_lightColor) * 0.25;
+        float lightScale = length(u_lightColor) * 0.25 / PI;
         color += caustics * lightScale;
     }
 
