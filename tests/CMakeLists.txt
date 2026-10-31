@@ -84,6 +84,7 @@ add_executable(vestige_tests
     test_cpu_profiler.cpp
     test_memory_tracker.cpp
     test_profile_log.cpp
+    test_frame_ledger_log.cpp
     test_obj_loader.cpp
     test_skeleton.cpp
     test_animation_sampler.cpp
@@ -436,6 +437,21 @@ foreach(_shard RANGE ${_vestige_last_shard})
 endforeach()
 add_test(NAME vestige_perf_budgets COMMAND vestige_tests "--gtest_filter=${VESTIGE_PERF_TESTS}")
 set_tests_properties(vestige_perf_budgets PROPERTIES LABELS perf)
+
+# 3D_E-0786 — frameledger.h at the strictest warning level, as C++17. Not linked
+# to the engine, so the engine's own SYSTEM include cannot hide a warning.
+add_executable(frameledger_header_check frameledger_header_check.cpp)
+target_include_directories(frameledger_header_check PRIVATE
+    ${CMAKE_SOURCE_DIR}/external/frameledger)
+target_compile_features(frameledger_header_check PRIVATE cxx_std_17)
+set_target_properties(frameledger_header_check PROPERTIES CXX_EXTENSIONS OFF)
+if(MSVC)
+    target_compile_options(frameledger_header_check PRIVATE /W4 /WX)
+else()
+    target_compile_options(frameledger_header_check PRIVATE -Wall -Wextra -Wpedantic -Werror)
+    target_link_libraries(frameledger_header_check PRIVATE m)
+endif()
+add_test(NAME frameledger_header_check COMMAND frameledger_header_check)
 
 # --- Phase 10 Localization L6 — string-coverage lint (design § 5.7) ----------
 # The audit is a standalone Python regex line-scan, so it runs as its own ctest

@@ -52,6 +52,7 @@ bool hasPrefix(const char* arg, std::string_view prefix)
 
 constexpr std::string_view kIsolateFeaturePrefix = "--isolate-feature=";
 constexpr std::string_view kProfileLogPrefix     = "--profile-log=";
+constexpr std::string_view kFrameLogPrefix       = "--frame-log=";
 
 bool isIsolateFeatureName(const std::string& name)
 {
@@ -120,6 +121,8 @@ void printUsage(const char* argv0)
         << "                          (default: vestige_profile_<ts>.csv in the\n"
         << "                          current directory). For bottleneck\n"
         << "                          analysis of the benchmark scene.\n"
+        << "  --frame-log=PATH        Write every frame's timings to PATH, in\n"
+        << "                          frameledger's run file format.\n"
         << "  --no-vsync              Disable vertical sync so the frame rate runs\n"
         << "                          uncapped. For benchmarking: with vsync on,\n"
         << "                          FPS reports the display's refresh rate, not\n"
@@ -283,6 +286,16 @@ bool parseArgs(int argc, char* argv[], EngineConfig& config, int& exitCode)
                 return false;
             }
             Logger::info("Profiler CSV logging enabled: " + config.profileLogPath);
+        }
+        else if (hasPrefix(arg, kFrameLogPrefix))
+        {
+            config.frameLogPath = arg + kFrameLogPrefix.size();
+            if (config.frameLogPath.empty())
+            {
+                std::cerr << "--frame-log= requires a non-empty path\n";
+                exitCode = 2;
+                return false;
+            }
         }
         else if (std::strcmp(arg, "--no-vsync") == 0)
         {

@@ -36,6 +36,12 @@ public:
     /// @return Elapsed time in seconds.
     double getElapsedTime() const;
 
+    /// @brief Real seconds since the timer was created, even in fixed-step mode.
+    double getRealTimeSeconds() const;
+
+    /// @brief Real clock reading taken by the last update(), never clamped.
+    double getFrameStartSeconds() const { return m_lastFrameTime; }
+
     /// @brief Sets the target frame rate cap (0 = uncapped).
     void setFrameRateCap(int fps);
 

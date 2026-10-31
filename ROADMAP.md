@@ -1,6 +1,6 @@
 <!-- ants-roadmap-format: 1 -->
 <!-- Generated from the Ants Terminal roadmap store. Edit it with roadmap_log; hand edits are discarded by the next write. -->
-<!-- ants-roadmap-id-high-water: 3D_E=819 3D_E#S=989 -->
+<!-- ants-roadmap-id-high-water: 3D_E=822 3D_E#S=989 -->
 
 # Vestige Engine Roadmap
 
@@ -6167,7 +6167,7 @@ shipped that have no invocation path at all.
   Source: in-session-2026-10-20 (3D_E-0759 build).
   Lanes: ui.
 
-- 📋 [3D_E-0786] **The profile log's frame row is an average of a 300-frame rolling average, so the 60 FPS floor check cannot see a hitch.**
+- ✅ [3D_E-0786] **The profile log's frame row is an average of a 300-frame rolling average, so the 60 FPS floor check cannot see a hitch.**
   Verified 2026-10-24: profile_log.cpp's "Frame total" comment says
   getAvgFrameTimeMs() is itself a windowed average, and each ~1 Hz row
   averages that again. fps is the mean of per-frame 1000/ms, not frames
@@ -6190,6 +6190,17 @@ shipped that have no invocation path at all.
   (old code read 31.126, true 19.608). Still open: per-frame rows in the
   FLED-0001 format with GL timestamp queries, waiting on frameledger's
   first pinned release.
+  2026-10-31: per-frame rows shipped as --frame-log=PATH in FLED-0001's
+  format, frameledger v0.1.0 vendored. First run: 1329 frames, check
+  exit 0 (one warning, inputs_empty), 0 rows dropped; report named frame
+  524 at 410.386 ms. ctest frameledger_header_check compiles the header
+  as C++17 at /W4 /WX or -Wpedantic -Werror. Not done, because its
+  condition has not arisen: setup-python 3.12 in the Windows job, owed
+  once the analyser runs there; nothing runs it in CI yet. CPU / GPU
+  placement: formatting and file writes on the CPU, between frames; the
+  GPU adds only two timestamp queries per frame. Follow-ups: 3D_E-0820,
+  3D_E-0821, 3D_E-0822. FPS floor not read for this change: the GPU was
+  82% busy from other work.
   **Layman:** The frame-rate check smooths over about five seconds at a time, so a single stutter never shows.
   Kind: fix.
   Source: ut-ants-review-2026-10-24.
@@ -6644,6 +6655,42 @@ shipped that have no invocation path at all.
   Kind: investigate.
   Source: 3D_E-0810 stills 2026-10-31.
   Lanes: renderer, assets.
+
+- 📋 [3D_E-0820] **The profiler's gpu_mb is the whole graphics card's memory, not Vestige's, and reads nothing on Windows.**
+  memory_tracker.cpp reads amdgpu's mem_info_vram_used, which is card-wide,
+  and has no branch outside Linux. Measured in one flythrough: 6768 MB at
+  frame 200, about 6100 MB by frame 800, 4787 MB just after exit. Measure the
+  process's own VRAM instead; DRM fdinfo per-process figures are the first
+  thing to try, untested. Blocks retiring tools/perf_gate.py for
+  frameledger compare, which fails at 3 percent (FLED-0018).
+  **Layman:** The memory figure counts other programs too, so a browser tab can look like the engine using more memory.
+  Kind: fix.
+  Source: 3D_E-0786 first run file 2026-10-31.
+  Lanes: profiler.
+
+- 📋 [3D_E-0821] **The run file's header has no inputs or machine-load fields, so frameledger compare needs an override and cannot warn about a busy GPU.**
+  FLED-0001 optional and required fields left empty by 3D_E-0786: inputs is
+  [] (check warns inputs_empty; compare treats two empty lists as unknown);
+  load, gpu_busy_pct and gpu_clock_mhz are absent. Each of those three needs
+  a start before the engine loads and an end after the last frame, but the
+  writer emits the header first, so the end value needs a design.
+  File headers also lack the quality tier.
+  **Layman:** Run files do not yet say what content ran or how busy the machine was.
+  Kind: enhancement.
+  Source: 3D_E-0786 first run file 2026-10-31.
+  Lanes: profiler.
+
+- 📋 [3D_E-0822] **The profile log's time and frame rows use the clamped frame time, so a hitch over 250 ms is under-counted.**
+  Engine::run adds Timer::update()'s delta to m_profileElapsedSec, and that
+  delta is clamped to 0.25 s, so a longer frame shortens the interval that
+  fps divides by. From reading the code; no measurement with a hitch over
+  250 ms in this log yet. The first frame's raw delta includes start-up time,
+  so a fix must skip it. The --frame-log run file uses the unclamped clock
+  and does not have this fault. Measured there: frame 524 took 410.386 ms.
+  **Layman:** The per-second log can report a higher frame rate than the game had when a very long stutter happens.
+  Kind: fix.
+  Source: 3D_E-0786 first run file 2026-10-31.
+  Lanes: profiler.
 
 ## 0.3.0 — An editor a builder can use
 

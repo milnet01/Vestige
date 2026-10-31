@@ -25,6 +25,17 @@ may change any interface without notice.
 
 ## [Unreleased]
 
+### 2026-10-31 Added — A per-frame timing log, so one slow frame can be seen
+
+- **`--frame-log=PATH` writes every frame's timings in the format the shared frameledger tool reads** (3D_E-0786). `--profile-log` averages each second, which cannot show a single slow frame. The first run file meets the format under frameledger 0.1.0's `check`, with no rows dropped, and its `report` named a 410.386 ms frame.
+- The GPU timer now also times each whole frame, so GPU work outside any named pass shows up.
+- `frameledger.h` 0.1.0 is vendored in `external/frameledger/`; a new test compiles it as C++17 with warnings as errors.
+- The build records its commit, build type and whether the tree had uncommitted changes. Only one small generated file rebuilds when those change.
+
+### 2026-10-31 Fixed — The Windows test script copies the files newer tests read
+
+- **`scripts/wintest.sh` now stages `engine/`, `external/smaa`, `CMakeLists.txt` and `VERSION`.** Five tests failed on the Windows box only because those files were missing. The run is now 3966 passed, 9 skipped, 0 failed on the GTX 1050.
+
 ### 2026-10-31 Changed — Grass thins out around logs, stumps, rocks and plants so they can be seen
 
 - **Each ground prop in the meadow now has a clearing shaped to it, built once when the scene loads** (3D_E-0810)

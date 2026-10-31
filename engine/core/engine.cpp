@@ -66,6 +66,7 @@
 #include "utils/frustum.h"
 #include "editor/tools/brush_tool.h"
 #include "editor/scene_serializer.h"
+#include "profiler/build_stamp.h"
 #include "profiler/cpu_profiler.h"
 #include "utils/cube_loader.h"
 
@@ -76,6 +77,9 @@
 #include <array>
 #include <cmath>
 #include <ctime>
+#include <random>
+#include <cstring>
+#include <cstdlib>
 #include <cstdio>
 #include <filesystem>
 
@@ -271,6 +275,23 @@ bool Engine::initialize(const EngineConfig& config)
         else
         {
             Logger::warning("Failed to open profiler CSV log: " + logPath);
+        }
+    }
+
+    // Per-frame run file (--frame-log=PATH). run() opens it, because the header
+    // records the resolution and vsync that settings may still change.
+    if (!config.frameLogPath.empty())
+    {
+        m_profiler.setEnabled(true);
+        m_frameLogPath = config.frameLogPath;
+        m_frameLogScene = !config.startupScene.empty()
+                              ? std::filesystem::path(config.startupScene).stem().string()
+                          : config.biblicalDemo ? "tabernacle"
+                          : config.materialDemo ? "material-demo"
+                                                : "meadow";
+        if (config.demoFlythroughMode)
+        {
+            m_frameLogScene += "-flythrough";
         }
     }
 
@@ -1443,6 +1464,62 @@ bool Engine::bakeActiveSceneAcoustics()
     return result.ok;
 }
 
+void Engine::openFrameLog()
+{
+    if (m_frameLogPath.empty())
+    {
+        return;
+    }
+    const auto glText = [](GLenum name)
+    {
+        const GLubyte* text = glGetString(name);
+        return text ? std::string(reinterpret_cast<const char*>(text)) : std::string("unknown");
+    };
+    GLint glMajor = 0;
+    GLint glMinor = 0;
+    glGetIntegerv(GL_MAJOR_VERSION, &glMajor);
+    glGetIntegerv(GL_MINOR_VERSION, &glMinor);
+
+    const std::time_t now = std::time(nullptr);
+    char started[32] = "";
+    std::strftime(started, sizeof(started), "%Y-%m-%dT%H:%M:%SZ", std::gmtime(&now));
+
+    FrameLedgerRunInfo info;
+    std::random_device random;
+    info.runId = "vestige-" + std::to_string(static_cast<long long>(now)) + "-"
+                 + std::to_string(random() % 100000);
+    info.toolVersion = VESTIGE_ENGINE_VERSION;
+    info.buildType = buildStampType();
+    info.commit = buildStampCommit();
+    info.dirty = buildStampDirty();
+    info.renderer = glText(GL_RENDERER);
+    info.device = frameLedgerDeviceName(info.renderer);
+    info.driver = glText(GL_VENDOR) + " " + glText(GL_VERSION);
+    info.api = "opengl-" + std::to_string(glMajor) + "." + std::to_string(glMinor);
+    info.width = m_window->getWidth();
+    info.height = m_window->getHeight();
+    info.renderScale = static_cast<double>(m_settings.display.renderScale);
+    info.vsync = m_window->isVsyncEnabled();
+    const char* backends = std::getenv("WLR_BACKENDS");
+    info.display = (backends && std::strcmp(backends, "headless") == 0) ? "headless" : "onscreen";
+    info.scene = m_frameLogScene;
+    info.startedUtc = started;
+#ifdef _WIN32
+    info.os = "windows";
+#else
+    info.os = "linux";
+#endif
+
+    if (m_frameLedgerLog.open(m_frameLogPath, info.runId, frameLedgerHeaderJson(info)))
+    {
+        Logger::info("Frame log opened: " + m_frameLogPath);
+    }
+    else
+    {
+        Logger::warning("Failed to open frame log: " + m_frameLogPath);
+    }
+}
+
 void Engine::run()
 {
     Logger::info("Entering main loop...");
@@ -1502,6 +1579,8 @@ void Engine::run()
             }
         }
     }
+
+    openFrameLog();
 
     while (m_isRunning)
     {
@@ -2484,7 +2563,11 @@ void Engine::run()
         }
 
         // 9. Window — swap buffers (flushes GPU work, making query results available)
+        m_profiler.getGpuTimer().markFrameEnd();
+        const bool logFrame = m_frameLedgerLog.isOpen();
+        const double preSwapSec = logFrame ? m_timer->getRealTimeSeconds() : 0.0;
         m_window->swapBuffers();
+        const double postSwapSec = logFrame ? m_timer->getRealTimeSeconds() : 0.0;
 
         // 10. Frame rate cap (busy-wait for target frame time if capped)
         m_timer->waitForFrameCap();
@@ -2499,6 +2582,15 @@ void Engine::run()
         {
             m_profileElapsedSec += static_cast<double>(deltaTime);
             m_profileLog.sample(m_profiler, m_profileElapsedSec);
+        }
+
+        // 13. Per-frame run file (no-op unless --frame-log opened it).
+        if (logFrame)
+        {
+            const double frameStartSec = m_timer->getFrameStartSeconds();
+            m_frameLedgerLog.sample(m_profiler,
+                                    {frameStartSec, (preSwapSec - frameStartSec) * 1000.0,
+                                     (postSwapSec - preSwapSec) * 1000.0});
         }
     }
 
@@ -2553,6 +2645,7 @@ void Engine::shutdown()
 
     // Shut down remaining engine-owned subsystems
     m_profileLog.close();  // flushes the final partial interval, if any
+    m_frameLedgerLog.close();
     m_profiler.shutdown();
     m_physicsWorld.shutdown();
     m_debugDraw.cleanup();

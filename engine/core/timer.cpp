@@ -40,6 +40,11 @@ Timer::Timer()
 {
 }
 
+double Timer::getRealTimeSeconds() const
+{
+    return elapsedSecondsSince(m_origin);
+}
+
 float Timer::update()
 {
     double currentTime = elapsedSecondsSince(m_origin);

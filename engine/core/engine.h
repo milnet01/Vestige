@@ -24,6 +24,7 @@
 #include "renderer/debug_draw.h"
 #include "formula/quality_manager.h"
 #include "profiler/performance_profiler.h"
+#include "profiler/frame_ledger_log.h"
 #include "profiler/profile_log.h"
 #include "physics/physics_world.h"
 #include "physics/physics_debug.h"
@@ -145,6 +146,10 @@ struct EngineConfig
     /// `vestige_profile_<unix_ts>.csv` default at open time.
     std::string profileLogPath;
 
+    /// @brief Optional per-frame run file path (CLI: --frame-log=PATH), in
+    ///        frameledger's format. Empty = off (3D_E-0786).
+    std::string frameLogPath;
+
     /// @brief Sentinel value of `profileLogPath` for the bare `--profile-log`
     ///        form (no `=PATH`). `Engine::initialize()` resolves it to a
     ///        timestamped `vestige_profile_<unix_ts>.csv` path at open time.
@@ -180,6 +185,9 @@ public:
 
     /// @brief Shuts down all subsystems and releases resources.
     void shutdown();
+
+    /// @brief Opens the --frame-log run file, once settings are applied.
+    void openFrameLog();
 
 private:
     /// @brief True while a game menu takes the keyboard and mouse: the root
@@ -243,6 +251,9 @@ private:
     FormulaQualityManager m_formulaQuality;
     PerformanceProfiler m_profiler;
     ProfileLog m_profileLog;             ///< Off unless --profile-log opened it.
+    FrameLedgerLog m_frameLedgerLog;     ///< Off unless --frame-log opened it.
+    std::string m_frameLogPath;          ///< Opened by run(), once settings are applied.
+    std::string m_frameLogScene;         ///< The scene name the run file records.
     double m_profileElapsedSec = 0.0;    ///< Cumulative time_s passed to sample().
     PhysicsWorld m_physicsWorld;
     PhysicsDebugDraw m_physicsDebugDraw;

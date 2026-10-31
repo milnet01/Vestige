@@ -49,6 +49,11 @@ public:
     /// @brief Ends the current GPU pass timing.
     void endPass();
 
+    /// @brief Ends the frame's whole-frame span. Call after the frame's last GL
+    ///        work and before the swap. Passes miss work outside any pass; this
+    ///        does not.
+    void markFrameEnd();
+
     /// @brief Collects results and swaps buffers. Call at frame end.
     void endFrame();
 
@@ -61,11 +66,24 @@ public:
     /// @brief Whether the timer has valid results (needs 3 frames to warm up).
     bool hasResults() const { return m_frameCount >= BUFFER_COUNT; }
 
-private:
-    static constexpr int MAX_PASSES = 16;
+    /// @brief Whether getFrameSpanMs() holds a measurement for the results.
+    bool hasFrameSpan() const { return m_hasFrameSpan; }
+
+    /// @brief GPU time from the frame's start to markFrameEnd(), in ms.
+    double getFrameSpanMs() const { return m_frameSpanMs; }
+
     static constexpr int BUFFER_COUNT = 3;
 
+    /// @brief How many frames before the latest endFrame() the results were
+    ///        submitted: they are read from the oldest buffer.
+    static constexpr int RESULT_LATENCY_FRAMES = BUFFER_COUNT - 1;
+
+private:
+    static constexpr int MAX_PASSES = 16;
+
     GLuint m_queries[BUFFER_COUNT][MAX_PASSES * 2] = {};  // start+end per pass
+    GLuint m_spanQueries[BUFFER_COUNT][2] = {};  // whole-frame start+end
+    bool m_spanEnded[BUFFER_COUNT] = {};  // markFrameEnd() ran for this buffer
     const char* m_passNames[BUFFER_COUNT][MAX_PASSES] = {};  // per-buffer pass names
     int m_passCount = 0;
     int m_bufferPassCount[BUFFER_COUNT] = {};  // passes recorded per buffer
@@ -75,6 +93,8 @@ private:
     bool m_initialized = false;
 
     std::vector<GpuPassTiming> m_results;
+    double m_frameSpanMs = 0.0;
+    bool m_hasFrameSpan = false;
 };
 
 } // namespace Vestige

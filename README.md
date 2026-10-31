@@ -216,6 +216,7 @@ tree:
 ./build/bin/vestige-editor --scene path/to/my.scene
 ./build/bin/vestige-editor --material-demo     # the older material-test scene
 ./build/bin/vestige-editor --profile-log=run.csv  # log per-pass timings once a second
+./build/bin/vestige --demo-flythrough --frame-log=run.csv  # log every frame, for the frameledger tool
 ./build/bin/vestige-editor --help   # full CLI reference
 ```
 

@@ -263,6 +263,7 @@ set(ENGINE_SOURCES
     profiler/memory_tracker.cpp
     profiler/performance_profiler.cpp
     profiler/profile_log.cpp
+    profiler/frame_ledger_log.cpp
     editor/panels/performance_panel.cpp
     editor/panels/validation_panel.cpp
     editor/panels/script_editor_panel.cpp
@@ -429,6 +430,9 @@ target_include_directories(vestige_engine SYSTEM PUBLIC
 
 # SMAA reference lookup tables (vendored AreaTex.h / SearchTex.h, MIT), read
 # only by renderer/smaa.cpp. SYSTEM for the same -Werror reason.
+target_include_directories(vestige_engine SYSTEM PUBLIC
+    ${CMAKE_SOURCE_DIR}/external/frameledger
+)
 target_include_directories(vestige_engine SYSTEM PRIVATE
     ${CMAKE_SOURCE_DIR}/external/smaa
 )
@@ -625,6 +629,25 @@ if(NOT _vestige_stamp MATCHES "^[0-9]+\\.[0-9]+\\.[0-9]+([-+][0-9A-Za-z.-]+)?$")
 endif()
 target_compile_definitions(vestige_engine PUBLIC
     VESTIGE_ENGINE_VERSION="${_vestige_stamp}")
+
+# 3D_E-0786 — the commit and build type a run file records. A separate target
+# so only this one small file rebuilds when the commit changes; a compile
+# definition would rebuild the engine on every commit.
+set(_vestige_stamp_cpp "${CMAKE_BINARY_DIR}/generated/build_stamp.cpp")
+add_custom_target(vestige_build_stamp
+    COMMAND ${CMAKE_COMMAND}
+        -DOUTPUT=${_vestige_stamp_cpp}
+        -DSOURCE_DIR=${CMAKE_SOURCE_DIR}
+        -DBUILD_TYPE=$<CONFIG>
+        -P ${CMAKE_SOURCE_DIR}/cmake/write_build_stamp.cmake
+    BYPRODUCTS ${_vestige_stamp_cpp}
+    COMMENT "Stamping the build's commit"
+    VERBATIM)
+target_sources(vestige_engine PRIVATE ${_vestige_stamp_cpp})
+set_source_files_properties(${_vestige_stamp_cpp} PROPERTIES
+    GENERATED TRUE
+    SKIP_PRECOMPILE_HEADERS TRUE)
+add_dependencies(vestige_engine vestige_build_stamp)
 
 # Which release package this build is (3D_E-0729, spec §4.6): release.yml sets
 # "linux" (one build feeds the tarball and the AppImage) or "windows-zip".

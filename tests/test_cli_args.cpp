@@ -101,6 +101,20 @@ TEST(CliArgs, ProfileLogWithPathTakesThePath)
     EXPECT_EQ(r.config.profileLogPath, "/tmp/run42.csv");
 }
 
+TEST(CliArgs, FrameLogTakesThePath)
+{
+    auto r = run({"--frame-log=/tmp/run42.csv"});
+    EXPECT_TRUE(r.ok);
+    EXPECT_EQ(r.config.frameLogPath, "/tmp/run42.csv");
+}
+
+TEST(CliArgs, FrameLogWithEmptyPathIsAnError)
+{
+    auto r = run({"--frame-log="});
+    EXPECT_FALSE(r.ok);
+    EXPECT_EQ(r.exitCode, 2);
+}
+
 TEST(CliArgs, ProfileLogWithEmptyPathIsAnError)
 {
     auto r = run({"--profile-log="});
