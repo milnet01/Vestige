@@ -121,17 +121,17 @@ public:
     // -- Menu preview ---------------------------------------------------
 
     /// @brief Selects which menu prefab the `Menus` tab previews.
-    ///        Triggers a canvas rebuild via `refreshMenuPreview` so the
-    ///        preview canvas always reflects the latest selection.
+    ///        Only stores the selection. It does NOT rebuild the canvas:
+    ///        the caller must call `refreshMenuPreview` afterwards.
     void setMenuPreview(UIRuntimePanelMenu menu);
 
     /// @brief Currently selected menu preview.
     UIRuntimePanelMenu menuPreview() const { return m_menuPreview; }
 
     /// @brief Rebuilds the preview canvas against @a theme using the
-    ///        menu prefab matching `menuPreview()`. Called automatically
-    ///        on `setMenuPreview`; tests and the panel's draw path may
-    ///        call it to force a rebuild (e.g. after a theme change).
+    ///        menu prefab matching `menuPreview()`. NOT called by
+    ///        `setMenuPreview`; call it after changing the selection or
+    ///        the theme to force a rebuild.
     ///
     /// `textRenderer` may be null — the menu prefabs tolerate a null
     /// renderer by skipping glyph draws; the structural element tree

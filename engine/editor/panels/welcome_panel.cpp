@@ -25,11 +25,12 @@ void WelcomePanel::initialize(const std::string& configDir)
     // keyboard-shortcut reference reachable via Help → Welcome Screen
     // (Q3 resolution in docs/phases/phase_10_5_first_run_wizard_design.md).
     //
-    // The legacy flag file is no longer read here — its role moved
-    // to Settings::loadFromDisk, which promotes its presence into
-    // `onboarding.hasCompletedFirstRun` and deletes it (slice 14.1).
-    // Retained as state so the Help → Welcome Screen action stays
-    // idempotent across re-opens.
+    // The legacy flag file is still read here and still written by
+    // markAsShown (Close or "Don't show on startup"). It no longer
+    // opens the panel. Settings::loadFromDisk promotes its presence into
+    // `onboarding.hasCompletedFirstRun` and deletes it (slice 14.1), so
+    // closing this panel can mark first run complete on the next launch
+    // and suppress the wizard.
     m_shownBefore = std::filesystem::exists(m_flagPath);
 }
 
