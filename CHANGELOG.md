@@ -25,6 +25,10 @@ may change any interface without notice.
 
 ## [Unreleased]
 
+### 2026-11-01 Fixed — The material preview leaves the depth test as it found it
+
+- **Drawing the material preview no longer leaves depth testing switched on for whatever draws next.** (3D_E-0835)
+
 ### 2026-11-01 Fixed — A script action that schedules another action no longer reads freed memory
 
 - **A per-frame script callback that schedules a new latent action no longer touches a list that was just moved in memory.** (3D_E-0841)

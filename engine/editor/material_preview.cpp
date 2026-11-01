@@ -85,6 +85,7 @@ void MaterialPreview::render(const Material& material)
     glGetIntegerv(GL_VIEWPORT, prevViewport);
     GLint prevFbo;
     glGetIntegerv(GL_FRAMEBUFFER_BINDING, &prevFbo);
+    const GLboolean prevDepthTest = glIsEnabled(GL_DEPTH_TEST);
 
     // Bind preview FBO
     m_fbo->bind();
@@ -143,6 +144,10 @@ void MaterialPreview::render(const Material& material)
     m_sphere.unbind();
 
     // Restore previous state
+    if (!prevDepthTest)
+    {
+        glDisable(GL_DEPTH_TEST);
+    }
     glBindFramebuffer(GL_FRAMEBUFFER, static_cast<GLuint>(prevFbo));
     glViewport(prevViewport[0], prevViewport[1],
                prevViewport[2], prevViewport[3]);
