@@ -13,7 +13,9 @@ namespace Vestige
 
 /// @brief Tracks CPU heap allocation stats and GPU VRAM usage.
 ///
-/// CPU tracking uses atomic counters incremented by custom new/delete overrides.
+/// CPU tracking uses atomic counters fed by `recordAlloc` / `recordFree`.
+/// No global new/delete override in the engine calls them, so outside tests
+/// the CPU figures stay at zero.
 /// GPU VRAM is read from AMD sysfs (amortized — every 60 frames).
 class MemoryTracker
 {
@@ -32,10 +34,10 @@ public:
     /// @brief Peak CPU allocation since start.
     static size_t getCpuPeakBytes();
 
-    /// @brief Called by global operator new.
+    /// @brief Records an allocation. Nothing in the engine calls this yet.
     static void recordAlloc(size_t bytes);
 
-    /// @brief Called by global operator delete.
+    /// @brief Records a free. Nothing in the engine calls this yet.
     static void recordFree(size_t bytes);
 
     // --- GPU stats ---

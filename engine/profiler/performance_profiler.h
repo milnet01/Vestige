@@ -74,7 +74,8 @@ public:
     /// @brief Whether profiling is enabled.
     bool isEnabled() const { return m_enabled; }
 
-    /// @brief Enable/disable profiling. When disabled, GPU queries are skipped.
+    /// @brief Enable/disable profiling. Only gates the VRAM read; the GPU timer
+    ///        and CPU profiler run every frame regardless.
     void setEnabled(bool enabled) { m_enabled = enabled; }
 
 private:

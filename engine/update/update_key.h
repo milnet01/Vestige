@@ -8,7 +8,10 @@
 /// which release.yml signs with. release.yml reads this file to verify its own
 /// signatures before upload (INV-3), so a rotated secret without a matching
 /// change here fails the release instead of shipping updates nobody can install.
-/// Keep the hex on one line inside the quotes: release.yml parses it.
+/// The key is held twice: the `update-public-key:` comment line below, which
+/// tools/sign_release.py reads, and the `kUpdatePublicKey` array, which the
+/// engine compiles. Both must hold the same key. Keep the comment's hex on one
+/// line in that format. Nothing checks that the two agree.
 #pragma once
 
 #include "update/update_signature.h"
