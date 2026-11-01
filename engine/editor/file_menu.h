@@ -103,6 +103,23 @@ public:
     /// @brief Returns true if the scene has unsaved changes.
     bool isDirty() const;
 
+    /// @brief Writes an autosave at @a autoSavePath: scene, foliage, terrain
+    ///        side files and music through the one scene save path (3D_E-0851).
+    ///        Stale terrain side files for the same stem are removed after a
+    ///        successful write; a failed write leaves the previous autosave
+    ///        untouched.
+    static SceneSerializerResult writeAutoSave(
+        const Scene& scene,
+        const std::filesystem::path& autoSavePath,
+        const ResourceManager& resources,
+        const FoliageManager* foliage,
+        const Terrain* terrain,
+        const MusicSceneSettings* music);
+
+    /// @brief Removes the autosave file, its `.path` sidecar and its terrain
+    ///        side files (`<stem>.heightmap.*.r32`, `<stem>.splatmap.*.splat`).
+    static void removeAutoSaveFiles(const std::filesystem::path& autoSavePath);
+
     /// @brief Gets the current scene file path (empty if untitled).
     const std::filesystem::path& getCurrentScenePath() const;
 

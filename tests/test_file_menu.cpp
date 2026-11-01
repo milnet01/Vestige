@@ -9,12 +9,17 @@
 #include "scene/scene.h"
 #include "editor/selection.h"
 #include "editor/scene_serializer.h"
+#include "environment/terrain.h"
+#include "gl_test_fixture.h"
+#include "resource/resource_manager.h"
 
 #include <nlohmann/json.hpp>
 #include <gtest/gtest.h>
 
 #include <filesystem>
+#include <chrono>
 #include <fstream>
+#include <iostream>
 
 #include "test_helpers.h"
 #include "posix_env_shim.h"  // portable setenv/unsetenv (MSVC)
@@ -175,6 +180,167 @@ TEST_F(FileMenuTest, UpdateWindowTitleNoWindowDoesNotCrash)
     FileMenu menu;
     // No window set — should just return without crashing
     EXPECT_NO_THROW(menu.updateWindowTitle("Test"));
+}
+
+// ---------------------------------------------------------------------------
+// Autosave writes the whole scene (3D_E-0851)
+// ---------------------------------------------------------------------------
+
+namespace
+{
+
+/// @brief Counts files in @a dir whose name starts with @a prefix.
+int countFilesWithPrefix(const fs::path& dir, const std::string& prefix)
+{
+    int n = 0;
+    for (const auto& e : fs::directory_iterator(dir))
+    {
+        if (e.path().filename().string().rfind(prefix, 0) == 0)
+        {
+            ++n;
+        }
+    }
+    return n;
+}
+
+MusicSceneSettings makeMusic()
+{
+    MusicSceneSettings music;
+    MusicLayerEntry entry;
+    entry.layer = MusicLayer::Ambient;
+    entry.clipPath = "audio/test_ambient.ogg";
+    music.layers.push_back(entry);
+    music.loopAll = false;
+    return music;
+}
+
+}  // namespace
+
+class AutoSaveGlTest : public ::Vestige::Test::GLTestFixture
+{
+protected:
+    void SetUp() override
+    {
+        GLTestFixture::SetUp();
+        if (IsSkipped())
+        {
+            return;
+        }
+        m_dir = fs::temp_directory_path()
+              / ("vestige_test_autosave_" + Testing::vestigeTestStamp());
+        fs::create_directories(m_dir);
+    }
+
+    void TearDown() override
+    {
+        std::error_code ec;
+        fs::remove_all(m_dir, ec);
+    }
+
+    fs::path m_dir;
+};
+
+TEST_F(AutoSaveGlTest, RecoversTerrainAndMusicAndKeepsOneSetOfSideFiles_0851)
+{
+    Scene scene("Crashed");
+    scene.createEntity("Survivor");
+    ResourceManager resources;
+    Terrain terrain;
+    ASSERT_TRUE(terrain.initialize(TerrainConfig{}));
+    terrain.setRawHeight(4, 4, 7.5f);
+    const MusicSceneSettings music = makeMusic();
+    const fs::path path = m_dir / "autosave.scene";
+
+    // Two autosaves in a row: the second must not leave the first's files.
+    const auto t0 = std::chrono::steady_clock::now();
+    ASSERT_TRUE(FileMenu::writeAutoSave(scene, path, resources, nullptr, &terrain, &music).success);
+    const auto t1 = std::chrono::steady_clock::now();
+    ASSERT_TRUE(FileMenu::writeAutoSave(scene, path, resources, nullptr, &terrain, &music).success);
+    std::cout << "[autosave] terrain write (" << terrain.getWidth() << "x"
+              << terrain.getDepth() << "): "
+              << std::chrono::duration<double, std::milli>(t1 - t0).count() << " ms\n";
+
+    EXPECT_EQ(countFilesWithPrefix(m_dir, "autosave.heightmap."), 1);
+    EXPECT_EQ(countFilesWithPrefix(m_dir, "autosave.splatmap."), 1);
+
+    // Recovery: the same loadScene call the recovery dialog makes.
+    Scene restored("Empty");
+    Terrain restoredTerrain;
+    MusicSceneSettings restoredMusic;
+    SceneSerializerResult loaded = SceneSerializer::loadScene(
+        restored, path, resources, nullptr, &restoredTerrain, &restoredMusic);
+    ASSERT_TRUE(loaded.success) << loaded.errorMessage;
+    EXPECT_NE(restored.findEntity("Survivor"), nullptr);
+    ASSERT_TRUE(restoredTerrain.isInitialized());
+    EXPECT_FLOAT_EQ(restoredTerrain.getRawHeight(4, 4), 7.5f);
+    ASSERT_EQ(restoredMusic.layers.size(), 1u);
+    EXPECT_EQ(restoredMusic.layers[0].clipPath, "audio/test_ambient.ogg");
+    EXPECT_FALSE(restoredMusic.loopAll);
+}
+
+TEST_F(AutoSaveGlTest, DroppingTheTerrainRemovesItsOldSideFiles_0851)
+{
+    Scene scene("Crashed");
+    ResourceManager resources;
+    Terrain terrain;
+    ASSERT_TRUE(terrain.initialize(TerrainConfig{}));
+    const fs::path path = m_dir / "autosave.scene";
+    ASSERT_TRUE(FileMenu::writeAutoSave(scene, path, resources, nullptr, &terrain, nullptr).success);
+    ASSERT_EQ(countFilesWithPrefix(m_dir, "autosave.heightmap."), 1);
+
+    // The scene no longer has terrain (File New, say).
+    ASSERT_TRUE(FileMenu::writeAutoSave(scene, path, resources, nullptr, nullptr, nullptr).success);
+
+    EXPECT_EQ(countFilesWithPrefix(m_dir, "autosave.heightmap."), 0);
+    EXPECT_EQ(countFilesWithPrefix(m_dir, "autosave.splatmap."), 0);
+}
+
+TEST_F(AutoSaveGlTest, RemoveAutoSaveFilesTakesTheSideFilesToo_0851)
+{
+    Scene scene("Crashed");
+    ResourceManager resources;
+    Terrain terrain;
+    ASSERT_TRUE(terrain.initialize(TerrainConfig{}));
+    const fs::path path = m_dir / "autosave.scene";
+    ASSERT_TRUE(FileMenu::writeAutoSave(scene, path, resources, nullptr, &terrain, nullptr).success);
+    std::ofstream(m_dir / "autosave.path") << "/some/where.scene";
+    std::ofstream(m_dir / "keepme.heightmap.1-1.r32") << "x";  // another scene's file
+
+    FileMenu::removeAutoSaveFiles(path);
+
+    EXPECT_FALSE(fs::exists(path));
+    EXPECT_FALSE(fs::exists(m_dir / "autosave.path"));
+    EXPECT_EQ(countFilesWithPrefix(m_dir, "autosave."), 0);
+    EXPECT_TRUE(fs::exists(m_dir / "keepme.heightmap.1-1.r32"));
+}
+
+TEST_F(AutoSaveGlTest, FailedAutoSaveLeavesThePreviousOneUsable_0851)
+{
+    Scene scene("Crashed");
+    scene.createEntity("First");
+    ResourceManager resources;
+    Terrain terrain;
+    ASSERT_TRUE(terrain.initialize(TerrainConfig{}));
+    const fs::path path = m_dir / "autosave.scene";
+    ASSERT_TRUE(FileMenu::writeAutoSave(scene, path, resources, nullptr, &terrain, nullptr).success);
+
+    // Block the next heightmap write by occupying its name is not possible
+    // (the epoch is unique), so make the directory read-only instead.
+    fs::permissions(m_dir, fs::perms::owner_read | fs::perms::owner_exec);
+    const bool failed = !FileMenu::writeAutoSave(scene, path, resources, nullptr, &terrain, nullptr).success;
+    fs::permissions(m_dir, fs::perms::owner_all);
+    if (!failed)
+    {
+        GTEST_SKIP() << "directory permissions not enforced here (running as root?)";
+    }
+
+    Scene restored("Empty");
+    Terrain restoredTerrain;
+    SceneSerializerResult loaded = SceneSerializer::loadScene(
+        restored, path, resources, nullptr, &restoredTerrain, nullptr);
+    ASSERT_TRUE(loaded.success) << loaded.errorMessage;
+    EXPECT_NE(restored.findEntity("First"), nullptr);
+    EXPECT_TRUE(restoredTerrain.isInitialized());
 }
 
 // ---------------------------------------------------------------------------

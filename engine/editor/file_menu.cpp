@@ -730,25 +730,60 @@ void FileMenu::tickAutoSave(const Scene* scene)
     }
 }
 
-void FileMenu::performAutoSave(const Scene& scene)
+SceneSerializerResult FileMenu::writeAutoSave(
+    const Scene& scene,
+    const fs::path& autoSavePath,
+    const ResourceManager& resources,
+    const FoliageManager* foliage,
+    const Terrain* terrain,
+    const MusicSceneSettings* music)
 {
-    std::string content = SceneSerializer::serializeToString(scene, *m_resources);
-    if (content.empty())
+    // The one scene save path: it stages terrain side files first, commits
+    // the scene file atomically, then removes the older side files. A failure
+    // before the commit leaves the previous autosave as it was.
+    SceneSerializerResult result = SceneSerializer::saveScene(
+        scene, autoSavePath, resources, foliage, terrain, music);
+
+    // With no terrain, saveScene sweeps nothing; clear any left by an earlier
+    // autosave that had terrain.
+    if (result.success && !(terrain && terrain->isInitialized()))
     {
-        Logger::warning("Auto-save: serialization failed");
-        return;
+        SceneSerializer::garbageCollectEpochFiles(
+            autoSavePath.parent_path(), autoSavePath.stem().string(), {}, {});
+    }
+    return result;
+}
+
+void FileMenu::removeAutoSaveFiles(const fs::path& autoSavePath)
+{
+    std::error_code ec;
+    if (fs::exists(autoSavePath))
+    {
+        fs::remove(autoSavePath, ec);
     }
 
+    // Also remove the sidecar path file
+    fs::path pathFile = autoSavePath;
+    pathFile.replace_extension(".path");
+    if (fs::exists(pathFile))
+    {
+        fs::remove(pathFile, ec);
+    }
+
+    // And the terrain side files the scene file named.
+    SceneSerializer::garbageCollectEpochFiles(
+        autoSavePath.parent_path(), autoSavePath.stem().string(), {}, {});
+}
+
+void FileMenu::performAutoSave(const Scene& scene)
+{
     fs::path autoSavePath = getAutoSavePath();
 
-    // Durable write via the canonical helper (creates parent dirs,
-    // fsync + rename + fsync-dir). F7 replaces the earlier ad-hoc
-    // tmp+rename dance that omitted fsync.
-    AtomicWrite::Status s = AtomicWrite::writeFile(autoSavePath, content);
-    if (s != AtomicWrite::Status::Ok)
+    SceneSerializerResult saved = writeAutoSave(
+        scene, autoSavePath, *m_resources, m_foliageManager, m_terrain, &m_sceneMusic);
+    if (!saved.success)
     {
-        Logger::warning(std::string("Auto-save: ") + AtomicWrite::describe(s)
-                        + " for " + autoSavePath.string());
+        Logger::warning("Auto-save: " + saved.errorMessage + " for " + autoSavePath.string());
         return;
     }
 
@@ -769,23 +804,12 @@ void FileMenu::performAutoSave(const Scene& scene)
 
 void FileMenu::deleteAutoSave()
 {
-    std::error_code ec;
-    fs::path autoSavePath = getAutoSavePath();
-    if (fs::exists(autoSavePath))
+    const fs::path autoSavePath = getAutoSavePath();
+    const bool existed = fs::exists(autoSavePath);
+    removeAutoSaveFiles(autoSavePath);
+    if (existed && !fs::exists(autoSavePath))
     {
-        fs::remove(autoSavePath, ec);
-        if (!ec)
-        {
-            Logger::info("Deleted autosave file");
-        }
-    }
-
-    // Also remove the sidecar path file
-    fs::path pathFile = autoSavePath;
-    pathFile.replace_extension(".path");
-    if (fs::exists(pathFile))
-    {
-        fs::remove(pathFile, ec);
+        Logger::info("Deleted autosave file");
     }
 }
 

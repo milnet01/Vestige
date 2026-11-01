@@ -25,6 +25,10 @@ may change any interface without notice.
 
 ## [Unreleased]
 
+### 2026-11-01 Fixed — Autosave recovery brings back terrain, foliage and music
+
+- **Autosave now saves the whole scene, so recovering after a crash restores terrain, foliage and music as well as objects; old terrain autosave files are cleaned up and Discard removes them.** (3D_E-0851)
+
 ### 2026-11-01 Security — Removing a camera component no longer leaves a dangling active camera
 
 - **The scene now remembers which entity owns the active camera and looks the camera up when asked, so removing just the camera component gives no camera instead of a freed one.** (3D_E-0852)
