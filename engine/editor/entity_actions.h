@@ -114,7 +114,8 @@ enum class AlignAnchor
 };
 
 /// @brief Aligns all selected entities along the given axis and anchor.
-/// Uses world-space positions. Creates an undoable command.
+/// Uses local positions (transform.position), not world-space ones.
+/// Creates an undoable command.
 /// @param scene The active scene.
 /// @param selection Current selection (must have 2+ entities).
 /// @param history Command history for undo support.

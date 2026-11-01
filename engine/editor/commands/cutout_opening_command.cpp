@@ -16,9 +16,9 @@ void CutoutOpeningCommand::apply(const std::shared_ptr<Mesh>& mesh,
                                  const std::string& name)
 {
     // Both pointers are borrowed, not owned. An entity deleted while this
-    // command sits on the undo stack would leave them dangling, so guard
-    // rather than assume — the same shape every other borrowing command here
-    // takes.
+    // command sits on the undo stack would leave them dangling. The null
+    // checks below only cover a null constructor argument; they cannot detect
+    // a dangling pointer. Other commands look entities up by id instead.
     if (m_renderer != nullptr)
     {
         m_renderer->setMesh(mesh);

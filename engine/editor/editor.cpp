@@ -1336,7 +1336,8 @@ void Editor::drawPanels(Renderer* renderer, Scene* scene, Camera* camera,
                 case FirstRunWizardSceneOp::ApplyEmpty:
                     applyEmptyScene(*scene, *m_resourceManager);
                     // Phase 10.9 Slice 12 Ed7: scene wholesale-replaced;
-                    // history was cleared by the apply path. Use the
+                    // the undo history is NOT cleared here (applyEmptyScene
+                    // takes no history). Use the
                     // sticky "unsaved change" signal so the user is
                     // prompted to save before quitting, without the
                     // FileMenu::m_isDirty dual SoT.
@@ -1353,6 +1354,9 @@ void Editor::drawPanels(Renderer* renderer, Scene* scene, Camera* camera,
                     break;
                 case FirstRunWizardSceneOp::ApplyTemplate:
                 {
+                    // The wizard's index counts its availability-filtered
+                    // lists, but `all` is unfiltered. The two agree only while
+                    // no template is hidden (no template sets requiredAssets).
                     const auto all = allWizardTemplates();
                     const int idx  = m_firstRunWizard.selectedTemplateIndex();
                     if (idx >= 0 && idx < static_cast<int>(all.size()))

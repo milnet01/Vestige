@@ -56,7 +56,8 @@ public:
     ///        differing from disk without pushing an actual command.
     ///        Used for non-undoable scene loads (wizard apply, template
     ///        apply) where the scene wholesale-replaced its contents:
-    ///        history is cleared, but `isDirty()` still needs to
+    ///        the wizard paths do not clear the history (only the
+    ///        file menu does), and `isDirty()` still needs to
     ///        report true so the user is prompted to save before
     ///        quitting.
     ///
