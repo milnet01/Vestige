@@ -56,7 +56,8 @@ inline constexpr int MAX_SOLVER_ITERS = 16;
 
 /// @brief Chebyshev acceleration delay `S` (Phase 10.9 Cl9).
 ///
-/// The Chebyshev combine is applied only on outer iterations `n > S` — the
+/// The Chebyshev combine (not yet implemented; `Chebyshev` runs as SOR) is
+/// meant to apply only on outer iterations `n > S` — the
 /// first few nonlinear-PBD iterations don't yet behave like the linear system
 /// the recurrence assumes, so combining early oscillates. While a convergence
 /// mode is active the solver-iteration count is clamped to `>= S + 1` so at
@@ -72,13 +73,14 @@ inline constexpr int CLOTH_SLEEP_FRAME_COUNT = 3;
 /// The GPU's coloured-parallel Gauss-Seidel sweep propagates a pin clamp only a
 /// bounded hop per sweep, so a stiff pinned drape under-converges versus the
 /// CPU's sequential sweep. The accelerator runs several outer iterations per
-/// substep and (for `Chebyshev`) blends successive iterates to converge an order
-/// of magnitude faster per iteration (Wang 2015). `None` keeps one plain sweep.
+/// substep. `Chebyshev` is meant to blend successive iterates (Wang 2015), but
+/// that combine is not written yet: it currently behaves as `SOR`
+/// (see gpu_cloth_simulator.cpp). `None` keeps one plain sweep.
 enum class ClothConvergenceMode
 {
     None      = 0,   ///< One coloured-GS sweep per substep (default; unchanged).
     SOR       = 1,   ///< Fixed over-relaxation of the positional correction.
-    Chebyshev = 2,   ///< Chebyshev semi-iterative acceleration of the outer loop.
+    Chebyshev = 2,   ///< Intended Chebyshev acceleration; currently the same as SOR.
 };
 
 /// @brief Per-frame simulation contract shared by every cloth-solver backend.

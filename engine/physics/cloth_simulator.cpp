@@ -408,6 +408,9 @@ void ClothSimulator::simulate(float deltaTime)
                 m_velocities[i] = glm::vec3(0.0f);
                 continue;
             }
+            // This overwrites every velocity edit applyCollisions made above
+            // (friction, inward-velocity removal, self-collision damping).
+            // Only the position change survives into the next substep.
             m_velocities[i] = (m_positions[i] - m_prevPositions[i]) / dtSub;
             m_velocities[i] *= dampFactor;
         }
@@ -1001,7 +1004,7 @@ float ClothSimulator::getDihedralBendCompliance() const
 void ClothSimulator::setSolverIterations(int iterations)
 {
     // mode == None: floor 1 (today's default). mode != None: floor S+1 so at
-    // least one Chebyshev-accelerated iteration runs (Cl9 invariant
+    // least one accelerated iteration runs (Cl9 invariant
     // S < solverIterations). See cloth_solver_backend.h.
     const int floorIters = (m_convergenceMode == ClothConvergenceMode::None)
                                ? 1

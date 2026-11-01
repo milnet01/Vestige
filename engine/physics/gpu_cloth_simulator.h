@@ -300,7 +300,7 @@ private:
     mutable bool m_normalsDirty   = false;
     std::vector<uint32_t> m_indices;
     std::vector<glm::vec2> m_texCoords;
-    std::vector<float>    m_invMassMirror;  ///< 1 = free, 0 = pinned. Source of truth for pin state.
+    std::vector<float>    m_invMassMirror;  ///< Inverse mass; 0 = pinned, free = 1 / particleMass. Source of truth for pin state.
 
     /// @brief Phase 10.9 Cl5 — immutable rest-pose snapshot consumed by
     ///        `reset()`. Captured at the end of `buildInitialGrid()` and
@@ -377,9 +377,9 @@ private:
     float m_kineticFriction = 0.3f;   ///< Phase 10.9 Sh3 — matches CPU default.
     bool  m_collidersDirty  = true;
 
-    // Pin + LRA state (Step 9). Pin set is tracked as a sorted unique vector
-    // of particle indices. The CPU position mirror's `w` channel is the
-    // single source of truth for pinned-vs-free; the GPU positions SSBO is
+    // Pin + LRA state (Step 9). `m_pinIndices` lists pinned particle indices
+    // (appended by pinParticle). `m_invMassMirror` (0 = pinned) is the
+    // source of truth for pinned-vs-free; the GPU positions SSBO is
     // re-uploaded when pin state changes.
     std::vector<uint32_t>           m_pinIndices;
     /// Where each pinned particle is held, indexed by particle (last

@@ -1292,8 +1292,8 @@ void GpuClothSimulator::createBuffers()
 {
     // Positions, prev positions, velocities, normals all use vec4 layout
     // (xyz + w padding / inverse mass) to satisfy std430's vec3-array padding
-    // semantics. Encoding an inverse-mass channel is a Step 4 concern; for
-    // now the w channel is initialised to 1.0 (signalling "free particle").
+    // semantics. The w channel is initialised from m_invMassMirror
+    // (inverse mass; 0 = pinned).
     std::vector<glm::vec4> initialVec4(m_particleCount);
     for (uint32_t i = 0; i < m_particleCount; ++i)
     {
