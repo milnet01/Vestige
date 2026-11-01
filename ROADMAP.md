@@ -6947,43 +6947,57 @@ shipped that have no invocation path at all.
   Source: review-readability 2026-10-31 at 7b2a81d.
   Lanes: build.
 
-- 📋 [3D_E-0851] **Autosave recovery restores terrain, foliage and music, not only scene objects.**
+- ✅ [3D_E-0851] **Autosave recovery restores terrain, foliage and music, not only scene objects.**
   Autosave writes entities only, so recovery loses them. User decided 2026-11-01 that recovery brings them back. Side files must be cleaned up with the autosave.
+  4f67e5f: autosave goes through the full scene save, with terrain,
+  foliage and music, and cleans its side files. Measured 1 to 2 ms on a
+  default terrain; larger terrains not measured. Recovery not tried by
+  hand in the running editor.
   **Layman:** After a crash, recovering your work should also bring back terrain and music.
   Kind: fix.
   Source: user decision 2026-11-01.
   Lanes: editor.
 
-- 📋 [3D_E-0852] **Scene ownership of the active camera needs a safe lifetime rule.**
+- ✅ [3D_E-0852] **Scene ownership of the active camera needs a safe lifetime rule.**
   Needs a design. Detail in Vestige_private/readability-2026-10-31/batches/leads-risk-result.md, entity.h entry. Kept brief until fixed.
+  d4ee6d8: Scene keeps the camera's owner id and looks it up, so a
+  removed component reads as no camera.
   **Layman:** A rule is needed for what happens to the current camera when its component is removed.
   Kind: security.
   Source: review-readability 2026-10-31 at 7b2a81d.
   Lanes: scene.
 
-- 📋 [3D_E-0853] **Don't Save then a cancelled Open browser leaves an edited scene marked clean.**
+- ✅ [3D_E-0853] **Don't Save then a cancelled Open browser leaves an edited scene marked clean.**
   file_menu.cpp marks clean before the browser opens.
+  71482fd: Don't Save no longer marks the scene clean before the action
+  succeeds. ImGui path: no red run, not tried by hand.
   **Layman:** Cancelling after choosing Don't Save can lose the warning about unsaved work.
   Kind: fix.
   Source: review-readability 2026-10-31 at 7b2a81d.
   Lanes: editor.
 
-- 📋 [3D_E-0854] **Loading a scene with no environment or terrain block keeps the previous scene's data.**
+- ✅ [3D_E-0854] **Loading a scene with no environment or terrain block keeps the previous scene's data.**
   scene_serializer.cpp needs a reset policy, shared with File New.
+  7369e49: a scene with no environment or terrain block clears the
+  previous scene's.
   **Layman:** Opening some scenes can show leftovers from the one before.
   Kind: fix.
   Source: review-readability 2026-10-31 at 7b2a81d.
   Lanes: editor.
 
-- 📋 [3D_E-0855] **Grouping under a rotated or scaled parent changes an object's orientation and size.**
+- ✅ [3D_E-0855] **Grouping under a rotated or scaled parent changes an object's orientation and size.**
   entity_actions.cpp group command keeps world position only.
+  8384771: grouping keeps the whole world transform where it can be
+  held; a sheared world matrix takes the closest form.
   **Layman:** Grouping objects can visibly change them.
   Kind: fix.
   Source: review-readability 2026-10-31 at 7b2a81d.
   Lanes: editor.
 
-- 📋 [3D_E-0856] **Recovery dialog re-reads autosave details every frame.**
+- ✅ [3D_E-0856] **Recovery dialog re-reads autosave details every frame.**
   file_menu.cpp; cache the metadata.
+  5741b37: the recovery dialog reads the timestamp once. ImGui path: no
+  red run.
   **Layman:** The recovery dialog does disk work on every frame it is open.
   Kind: perf.
   Source: review-readability 2026-10-31 at 7b2a81d.
