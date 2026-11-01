@@ -23,8 +23,8 @@ class ScriptComponent
 {
 public:
     /// @brief Add a script by graph asset path.
-    /// The graph is not loaded here — ScriptingSystem handles loading
-    /// during onSceneLoad().
+    /// The graph is not loaded here. Not wired yet: ScriptingSystem::onSceneLoad
+    /// only logs and nothing reads ScriptComponent, so the script does not run.
     void addScript(const std::string& graphAssetPath);
 
     /// @brief Remove a script by index.
@@ -33,7 +33,7 @@ public:
     /// @brief Get the list of graph asset paths.
     const std::vector<std::string>& scriptPaths() const { return m_scriptPaths; }
 
-    /// @brief Get the runtime instances (populated by ScriptingSystem).
+    /// @brief Get the runtime instances (not populated yet: ScriptingSystem does not fill it).
     std::vector<ScriptInstance>& instances() { return m_instances; }
     const std::vector<ScriptInstance>& instances() const { return m_instances; }
 

@@ -24,13 +24,18 @@ namespace
 /// @brief Safety cap for WhileLoop iteration to prevent runaway scripts.
 /// 10,000 lets legitimate bounded loops (e.g. iterating through entities in
 /// a scene) run comfortably while terminating infinite conditions in milliseconds.
+/// A second limit applies first: ScriptContext::MAX_NODES_PER_CHAIN (1000)
+/// stops executeNode for the whole chain, so past about 1000 executed nodes
+/// the Body nodes and the node wired to Completed are skipped with only a log
+/// error, and the loop's own cap is never reached.
 /// The cap is hit silently with a warning in the logs — consider expanding to
 /// a dedicated "Aborted" output pin if designers ask for in-graph visibility.
 constexpr int MAX_WHILE_ITERATIONS = 10000;
 
 /// @brief Safety cap for ForLoop iteration count. Same reasoning as
 /// MAX_WHILE_ITERATIONS; surfaces through the node's "Clamped" output pin
-/// so designers can branch on the truncation (audit M3).
+/// so designers can branch on the truncation (audit M3). The chain limit
+/// MAX_NODES_PER_CHAIN (1000) applies first, as described above.
 constexpr int MAX_FOR_ITERATIONS = 10000;
 
 /// @brief Get the mutable runtime state map for a node. Keyed by PinId
@@ -203,7 +208,9 @@ void registerFlowNodeTypes(NodeTypeRegistry& registry)
 
     // -----------------------------------------------------------------------
     // WhileLoop — repeats Body while Condition is true. Condition is
-    // re-evaluated each iteration (pulled from a connected pure node).
+    // re-evaluated each iteration only when it is pulled directly from a
+    // non-memoizable pure node. A memoizable node (e.g. CompareLess) is cached
+    // per (nodeId, pin) for the whole chain, so its first answer sticks.
     // Bounded by MAX_WHILE_ITERATIONS as a hard safety rail.
     //
     // AUDIT Sc8 — surface a "Clamped" boolean output when the cap fires so

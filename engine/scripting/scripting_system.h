@@ -20,7 +20,8 @@ namespace Vestige
 ///
 /// Responsibilities:
 /// - Registers built-in node types at initialization
-/// - Loads script graphs and creates instances on scene load
+/// - Loads script graphs and creates instances on scene load (not wired yet:
+///   onSceneLoad only logs; instances come from registerInstance)
 /// - Subscribes event nodes to the EventBus
 /// - Ticks OnUpdate nodes and latent actions each frame
 /// - Manages scene and application blackboards

@@ -83,13 +83,14 @@ void registerLatentNodeTypes(NodeTypeRegistry& registry)
 
     // -----------------------------------------------------------------------
     // Timeline — animates a float Alpha from 0..1 over Duration seconds.
-    // Fires "Update" every frame with the current Alpha, then "Finished".
+    // Writes the current Alpha to its output pin each frame, then fires
+    // "Finished". "Update" is never fired (see the note in the tick callback).
     // -----------------------------------------------------------------------
     registry.registerNode({
         "Timeline",
         "Timeline",
         "Flow Control",
-        "Animates Alpha from 0 to 1 over Duration seconds. Fires Update each frame.",
+        "Animates Alpha from 0 to 1 over Duration seconds. The Alpha output tracks progress; Finished fires at the end. Update is not fired.",
         {
             {PinKind::EXECUTION, "Exec", ScriptDataType::BOOL, {}},
             {PinKind::DATA, "Duration", ScriptDataType::FLOAT, ScriptValue(1.0f)},
@@ -145,9 +146,9 @@ void registerLatentNodeTypes(NodeTypeRegistry& registry)
                     // Note: we intentionally do NOT re-trigger "Update" from
                     // the onTick callback to avoid needing a ScriptContext
                     // here. The Alpha pin reflects current progress and is
-                    // read by whatever pure nodes pull it. Designers using
-                    // Timeline wire the Update pin from a polling path;
-                    // alternatively, the Finished pin signals completion.
+                    // read by whatever pure nodes pull it. The Update pin is
+                    // an output and nothing fires it; the Finished pin
+                    // signals completion.
                 };
 
             inst->addLatentAction(std::move(action));
