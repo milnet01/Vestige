@@ -639,6 +639,49 @@ TEST(NodeGraph_ExprTree, AddTwoVariables)
     EXPECT_EQ(expr->children[1]->name, "b");
 }
 
+TEST(NodeGraph_ExprTree, SharedSourceFeedingTwoInputsConverts)
+{
+    // 3D_E-0833: x feeds both inputs of the add (a diamond, not a cycle).
+    NodeGraph graph;
+    NodeId xId = graph.addNode(NodeGraph::createVariableNode("x"));
+    NodeId addId = graph.addNode(NodeGraph::createMathNode("+"));
+    NodeId outId = graph.addNode(NodeGraph::createOutputNode());
+
+    const Node* x = graph.getNode(xId);
+    const Node* add = graph.getNode(addId);
+    const Node* out = graph.getNode(outId);
+
+    graph.connect(xId, x->outputs[0].id, addId, add->inputs[0].id);
+    graph.connect(xId, x->outputs[0].id, addId, add->inputs[1].id);
+    graph.connect(addId, add->outputs[0].id, outId, out->inputs[0].id);
+
+    auto expr = graph.toExpressionTree(outId);
+    ASSERT_NE(expr, nullptr);
+    ASSERT_EQ(expr->children.size(), 2u);
+    EXPECT_EQ(expr->children[0]->name, "x");
+    EXPECT_EQ(expr->children[1]->name, "x");
+}
+
+TEST(NodeGraph_ExprTree, CycleClosingEdgeIsRefused)
+{
+    // add feeds sin, sin feeds add: a real cycle must never convert.
+    NodeGraph graph;
+    NodeId addId = graph.addNode(NodeGraph::createMathNode("+"));
+    NodeId sinId = graph.addNode(NodeGraph::createFunctionNode("sin"));
+    NodeId outId = graph.addNode(NodeGraph::createOutputNode());
+
+    const Node* add = graph.getNode(addId);
+    const Node* sinN = graph.getNode(sinId);
+    const Node* out = graph.getNode(outId);
+
+    graph.connect(addId, add->outputs[0].id, sinId, sinN->inputs[0].id);
+    // The graph refuses the edge that would close the loop, so no cyclic
+    // graph can reach toExpressionTree.
+    EXPECT_EQ(graph.connect(sinId, sinN->outputs[0].id, addId, add->inputs[0].id), 0u);
+    graph.connect(addId, add->outputs[0].id, outId, out->inputs[0].id);
+    EXPECT_NE(graph.toExpressionTree(outId), nullptr);
+}
+
 TEST(NodeGraph_ExprTree, SinOfVariable)
 {
     // Build graph: sin(x) -> output

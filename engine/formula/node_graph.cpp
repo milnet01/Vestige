@@ -528,6 +528,15 @@ std::unique_ptr<ExprNode> NodeGraph::nodeToExpr(NodeId nodeId,
     }
     visited[nodeId] = true;
 
+    // `visited` marks the current path only. Unmark on every exit so a node
+    // feeding two inputs (a diamond) is not mistaken for a cycle.
+    struct PathMark
+    {
+        std::vector<bool>& marks;
+        NodeId id;
+        ~PathMark() { marks[id] = false; }
+    } pathMark{visited, nodeId};
+
     const Node* node = getNode(nodeId);
     if (!node)
     {

@@ -25,6 +25,10 @@ may change any interface without notice.
 
 ## [Unreleased]
 
+### 2026-11-01 Fixed — Formula graph with a shared input
+
+- **A formula graph where one node feeds two inputs (such as x + x) now converts to an expression instead of failing** (3D_E-0833)
+
 ### 2026-11-01 Fixed — Stale scene pointer after a frame
 
 - **The renderer no longer keeps a pointer to the last frame's scene data outside TAA mode, so nothing can read it after the scene changes** (3D_E-0825)
