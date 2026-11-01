@@ -9,8 +9,9 @@
 #   3. a clean-slate CMake configure + build + ctest
 #
 # Default mode (LAUNCH_MODE, see below) treats the audit tool's findings
-# as ADVISORY — the audit tool always returns non-zero when ANY findings
-# exist, which is correct for a developer workflow ("eyeball every new
+# as ADVISORY — run without --ci, the audit tool returns non-zero (2) only
+# when a CRITICAL finding exists, so lower findings do not change its exit
+# code. That is correct for a developer workflow ("eyeball every new
 # finding") but wrong for a launch sweep whose job is "surface
 # regressions since the last known-clean baseline." Step 2 aborts only
 # on a genuine regression: the build broke, tests fail that didn't fail
@@ -27,7 +28,8 @@
 #   SKIP_GITLEAKS=1   -- skip step 1 (e.g. if gitleaks isn't installed yet)
 #   SKIP_AUDIT=1      -- skip step 2
 #   SKIP_BUILD=1      -- skip step 3 (fastest iteration for re-running 1+2)
-#   STRICT_MODE=1     -- restore the old "any audit finding fails" gate.
+#   STRICT_MODE=1     -- restore the old "any CRITICAL audit finding fails" gate
+#                        (the audit exits non-zero only on CRITICAL).
 #                        Useful for "is everything clean from scratch?"
 #                        experiments, but not how a launch sweep is
 #                        supposed to run — the audit tool's baseline is
@@ -140,9 +142,9 @@ else
         # Legacy "any-findings fails" behaviour. Used for "does the audit
         # return completely clean?" experiments, not launch sweeps.
         if [[ $audit_rc -ne 0 ]]; then
-            fail "STRICT_MODE: audit tool reported findings (exit=$audit_rc). Review docs/AUTOMATED_AUDIT_REPORT.md, remediate, and re-run."
+            fail "STRICT_MODE: audit tool reported CRITICAL findings (exit=$audit_rc). Review docs/AUTOMATED_AUDIT_REPORT.md, remediate, and re-run."
         fi
-        ok "Audit tool clean (STRICT_MODE)."
+        ok "Audit tool: no CRITICAL findings (STRICT_MODE); lower severities are not checked."
     else
         # Launch-mode — compare this run's snapshot against the most
         # recent PRIOR snapshot and abort only on a real regression.
@@ -326,9 +328,9 @@ for msg in data["regressions"]:
         # audit_rc != 0 in launch-mode is expected (baseline findings
         # exist). Surface it so it doesn't silently hide a genuine crash.
         if [[ $audit_rc -ne 0 ]]; then
-            ok "Audit tool: no regressions vs comparable prior snapshot. Findings exist (exit=$audit_rc) but are baseline — human review recommended via docs/AUTOMATED_AUDIT_REPORT.md before go-live."
+            ok "Audit tool: no regressions vs comparable prior snapshot. CRITICAL findings exist (exit=$audit_rc) but are baseline — human review recommended via docs/AUTOMATED_AUDIT_REPORT.md before go-live."
         else
-            ok "Audit tool clean (no findings)."
+            ok "Audit tool: no CRITICAL findings (lower severities are not checked)."
         fi
     fi
 fi
