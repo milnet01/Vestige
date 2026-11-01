@@ -35,11 +35,14 @@ struct SceneRenderData;
 ///                   components) and any other "prime the frame" work the
 ///                   default-Update systems will read.
 /// - `Update`      — default phase. Most domain systems sit here.
-/// - `PostCamera`  — runs after the camera has been stepped. Use for
+/// - `PostCamera`  — runs after the other phases that precede it. Use for
 ///                   systems that consume camera world transform / view
 ///                   matrix in their update — `AudioSystem` reads camera
 ///                   pos+forward+up to update the OpenAL listener (Slice
 ///                   11 W6 closes the dependency).
+///                   `Engine::run` calls `updateAll` before the legacy
+///                   camera controller moves the camera, so on that path
+///                   this phase sees the previous frame's camera.
 /// - `PostPhysics` — runs after physics-driven systems have written their
 ///                   post-step state. Reserved for Phase 11A consumers
 ///                   that need post-integration body data (replay record /
@@ -73,6 +76,11 @@ enum class UpdatePhase : int
 /// - onSceneLoad()       -- React to scene changes
 /// - onSceneUnload()     -- Cleanup scene-specific state
 /// - drawDebug()         -- Debug visualization
+///
+/// `Engine::run` calls only `SystemRegistry::updateAll`. The registry's
+/// `fixedUpdateAll`, `submitRenderDataAll` and `drawDebugAll` have no
+/// caller outside tests, so `fixedUpdate`, `submitRenderData` and
+/// `drawDebug` are not dispatched in the running engine.
 class ISystem
 {
 public:

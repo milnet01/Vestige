@@ -38,7 +38,8 @@ struct SystemMetrics
 /// Systems are registered during engine initialization and updated each frame.
 /// The registry handles:
 /// - Lifecycle management (initialize, shutdown in reverse order)
-/// - Per-frame dispatch (update, fixedUpdate, submitRenderData)
+/// - Per-frame dispatch (update, fixedUpdate, submitRenderData); the
+///   engine loop calls only updateAll, the other two are not called
 /// - Auto-activation based on scene component types
 /// - Performance monitoring (per-system timing)
 ///
