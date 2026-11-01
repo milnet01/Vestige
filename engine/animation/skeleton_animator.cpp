@@ -448,6 +448,10 @@ const std::shared_ptr<Skeleton>& SkeletonAnimator::getSkeleton() const
 // ---------------------------------------------------------------------------
 void SkeletonAnimator::addClip(std::shared_ptr<AnimationClip> clip)
 {
+    if (!clip)
+    {
+        return;  // every later lookup by name dereferences the clip
+    }
     m_clips.push_back(std::move(clip));
 }
 

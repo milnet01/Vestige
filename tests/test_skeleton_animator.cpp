@@ -491,3 +491,15 @@ TEST(SkeletonAnimatorTest, NonLoopingClipKeepsBonesAfterCompletion)
     // The held pose is the clip's last frame, not the bind pose.
     EXPECT_NEAR(animator.getBoneMatrices()[0][3][0], 5.0f, 0.1f);
 }
+
+TEST(SkeletonAnimatorTest, NullClipIsIgnoredByAddClip)
+{
+    SkeletonAnimator animator;
+    animator.addClip(nullptr);
+    animator.addClip(makeSimpleClip());
+
+    EXPECT_EQ(animator.getClipCount(), 1);
+    EXPECT_NO_THROW(animator.play("Walk"));
+    EXPECT_NO_THROW(animator.crossfadeTo("Walk", 0.2f));
+    EXPECT_TRUE(animator.isPlaying());
+}

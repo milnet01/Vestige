@@ -25,6 +25,12 @@ may change any interface without notice.
 
 ## [Unreleased]
 
+### 2026-11-01 Fixed — Null animation clip and large cloth grids
+
+- **Adding a null clip to a skeleton animator is ignored instead of crashing later when a clip is played by name.** (3D_E-0831)
+
+- **The cloth backend choice counts particles in 64 bits, so a very large grid no longer wraps to zero and picks the CPU.** (3D_E-0829)
+
 ### 2026-11-01 Fixed — Reparenting an entity spawned during an update
 
 - **Reparenting an entity that was spawned during an update, and not yet attached, is now refused instead of crashing.** (3D_E-0839)

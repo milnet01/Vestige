@@ -94,3 +94,12 @@ TEST(ClothBackendFactory, ThresholdConstantMatchesDoc)
     // the design doc fails loudly.
     EXPECT_EQ(GPU_AUTO_SELECT_THRESHOLD, 1024u);
 }
+
+TEST(ClothBackendFactory, ChooseAutoCountsParticlesWithoutWrapping)
+{
+    ClothConfig cfg;
+    cfg.width = 65536;   // 65536 x 65536 wraps to 0 in 32 bits
+    cfg.height = 65536;
+    EXPECT_EQ(chooseClothBackend(cfg, ClothBackendPolicy::AUTO, /*gpuSupported=*/true),
+              ClothBackendChoice::GPU);
+}

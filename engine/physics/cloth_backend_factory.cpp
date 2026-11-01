@@ -29,7 +29,8 @@ ClothBackendChoice chooseClothBackend(const ClothConfig& config,
 
         case ClothBackendPolicy::AUTO:
         {
-            const uint32_t particles = config.width * config.height;
+            const uint64_t particles =
+                static_cast<uint64_t>(config.width) * config.height;
             if (!gpuSupported)               return ClothBackendChoice::CPU;
             if (particles < GPU_AUTO_SELECT_THRESHOLD)
                                               return ClothBackendChoice::CPU;
