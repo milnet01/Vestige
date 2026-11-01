@@ -299,23 +299,24 @@ MotionSearchResult MotionDatabase::search(const float* query, uint32_t tagMask,
         normalizedQuery[static_cast<size_t>(d)] *= std::sqrt(weights[static_cast<size_t>(d)]);
     }
 
-    // Gather frame tags for tag filtering
-    std::vector<uint32_t> tags;
-    if (tagMask != 0)
+    // Gather frame tags for the KD search. NO_ENTRY frames are excluded on
+    // every path: the tree only filters when its mask is non-zero, so an
+    // unmasked search uses a reserved "any" bit that NO_ENTRY frames lack.
+    constexpr uint32_t kAnyFrameBit = 0x80000000u;
+    const uint32_t searchMask = (tagMask != 0) ? tagMask : kAnyFrameBit;
+    std::vector<uint32_t> tags(m_frameInfo.size());
+    for (size_t i = 0; i < m_frameInfo.size(); ++i)
     {
-        tags.resize(m_frameInfo.size());
-        for (size_t i = 0; i < m_frameInfo.size(); ++i)
-        {
-            tags[i] = m_frameInfo[i].tags;
-            // Mark NO_ENTRY frames as tag 0 so they're excluded
-            if (m_frameInfo[i].tags & MotionTags::NO_ENTRY)
-                tags[i] = 0;
-        }
+        if (m_frameInfo[i].tags & MotionTags::NO_ENTRY)
+            tags[i] = 0;
+        else
+            tags[i] = (tagMask != 0) ? m_frameInfo[i].tags
+                                     : (m_frameInfo[i].tags | kAnyFrameBit);
     }
 
     // Search
     KDSearchResult kdResult = m_kdTree.findNearest(
-        normalizedQuery.data(), tagMask,
+        normalizedQuery.data(), searchMask,
         tags.empty() ? nullptr : tags.data());
 
     // If we need to exclude nearby frames, do a brute-force re-search

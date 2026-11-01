@@ -65,7 +65,8 @@ void MotionMatcher::performSearch()
     auto startTime = std::chrono::high_resolution_clock::now();
 
     // Search with exclusion of current frame neighborhood
-    int excludeRadius = static_cast<int>(m_searchInterval * 30.0f); // ~3 frames at 30Hz
+    const float dbSampleRate = m_database->getSampleRate();
+    int excludeRadius = static_cast<int>(m_searchInterval * dbSampleRate); // ~3 frames at 30Hz
     MotionSearchResult result = m_database->search(
         m_queryBuffer.data(), m_tagMask, m_currentFrame, excludeRadius);
 
@@ -100,7 +101,7 @@ void MotionMatcher::performSearch()
         if (differentClip || frameDist > excludeRadius)
         {
             if (result.cost < m_transitionCostThreshold ||
-                m_framesSinceTransition > 30) // Force re-evaluation after 1 second
+                m_framesSinceTransition > static_cast<int>(dbSampleRate)) // Force re-evaluation after 1 second
             {
                 shouldTransition = true;
             }
@@ -134,7 +135,7 @@ void MotionMatcher::performSearch()
     else
     {
         // Advance current frame estimate based on elapsed time
-        float sampleRate = 30.0f;
+        const float sampleRate = m_database->getSampleRate();
         int frameAdvance = static_cast<int>(m_currentFrameTime * sampleRate);
         if (frameAdvance > 0 && m_currentFrame >= 0)
         {

@@ -107,6 +107,9 @@ public:
     /// @brief Whether the database has been built.
     bool isBuilt() const;
 
+    /// @brief Frames per second the clips were sampled at (set by build()).
+    float getSampleRate() const { return m_sampleRate; }
+
     /// @brief Adds mirrored frames to the database (doubles frame count).
     /// @param leftRightPairs Bone index pairs (left, right) for mirroring.
     void addMirroredFrames(const std::vector<std::pair<int, int>>& leftRightPairs);

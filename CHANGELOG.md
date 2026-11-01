@@ -25,6 +25,12 @@ may change any interface without notice.
 
 ## [Unreleased]
 
+### 2026-11-01 Fixed — Motion matching respects NO_ENTRY and the database sample rate
+
+- **A search with no tag filter could land on frames marked NO_ENTRY. They are now skipped on every path.** (3D_E-0830)
+
+- **The matcher assumed 30 frames per second; it now uses the rate the database was built with.** (3D_E-0830)
+
 ### 2026-11-01 Fixed — Grab highlight and grab now agree
 
 - **Looking at an object highlighted it by distance only, and grabbing checked type only. Both now use one rule: a grab-type object within its grab distance.** (3D_E-0830)

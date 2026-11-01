@@ -620,6 +620,34 @@ TEST_F(MotionDatabaseFixtureTest, BuildFromClip)
     EXPECT_EQ(db.getFeatureCount(), 27);
 }
 
+TEST_F(MotionDatabaseFixtureTest, SampleRateGetterReportsBuildRate)
+{
+    buildDb(1.0f);
+    EXPECT_FLOAT_EQ(db.getSampleRate(), 30.0f);
+}
+
+TEST_F(MotionDatabaseFixtureTest, NoEntryFramesNeverReturnedWithoutTagMask)
+{
+    // Clip 0 is marked NO_ENTRY, clip 1 is ordinary. With no tag mask the
+    // search must still skip clip 0 (identical features would tie to it).
+    FeatureSchema schema = FeatureSchema::createDefault(1, 2, 0);
+    std::vector<AnimClipEntry> clips;
+    AnimClipEntry blocked;
+    blocked.clip = createWalkClip(1.0f);
+    blocked.defaultTags = MotionTags::NO_ENTRY;
+    clips.push_back(blocked);
+    AnimClipEntry open;
+    open.clip = createWalkClip(1.0f);
+    open.defaultTags = 0;
+    clips.push_back(open);
+    db.build(schema, clips, *skeleton, 30.0f);
+
+    std::vector<float> query(27, 0.0f);
+    auto result = db.search(query.data());
+    ASSERT_GE(result.frameIndex, 0);
+    EXPECT_EQ(result.clipIndex, 1);
+}
+
 TEST_F(MotionDatabaseFixtureTest, SearchReturnsValidFrame)
 {
     buildDb(2.0f);
