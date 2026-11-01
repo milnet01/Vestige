@@ -209,6 +209,18 @@ TEST(GpuClothSimulator, SetDihedralComplianceUpdatesGetter_Cl4)
     EXPECT_FLOAT_EQ(sim.getDihedralBendCompliance(), 0.0f);
 }
 
+TEST(GpuClothSimulator, SetDampingUpdatesConfigAndClampsLikeCpu)
+{
+    // 3D_E-0829: getConfig().damping must follow setDamping, clamped to [0, 1].
+    GpuClothSimulator sim;
+    sim.setDamping(0.25f);
+    EXPECT_FLOAT_EQ(sim.getConfig().damping, 0.25f);
+    sim.setDamping(-1.0f);
+    EXPECT_FLOAT_EQ(sim.getConfig().damping, 0.0f);
+    sim.setDamping(5.0f);
+    EXPECT_FLOAT_EQ(sim.getConfig().damping, 1.0f);
+}
+
 TEST(GpuClothSimulator, SetDihedralComplianceClampsNegativeToZero_Cl4)
 {
     // Mirrors ClothSimulator::setDihedralBendCompliance — negative input

@@ -25,6 +25,10 @@ may change any interface without notice.
 
 ## [Unreleased]
 
+### 2026-11-01 Fixed — GPU cloth damping setting
+
+- **Setting damping on the GPU cloth simulator now updates its reported configuration and clamps to 0 to 1 like the CPU version** (3D_E-0829)
+
 ### 2026-11-01 Fixed — Default HUD slots on screen
 
 - **The notification stack and interaction-prompt slot of the default HUD now sit inside the screen instead of off the right and bottom edges** (3D_E-0843)

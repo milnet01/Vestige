@@ -26,6 +26,7 @@
 #include "physics/cloth_wind_model.h"  // Shared gust + FBM/turbulence precompute (Sh4b)
 #include "renderer/shader.h"
 
+#include <algorithm>
 #include <glad/gl.h>
 
 #include <string>
@@ -133,7 +134,11 @@ public:
     void setWindVelocity(const glm::vec3& v) { m_windModel.setWind(v, glm::length(v)); }
 
     /// @brief Sets per-step velocity damping (0 = none, 0.99 = heavy).
-    void setDamping(float damping) override { m_damping = damping; }
+    void setDamping(float damping) override
+    {
+        m_damping = std::max(0.0f, std::min(damping, 1.0f));  // As on the CPU.
+        m_config.damping = m_damping;
+    }
 
     /// @brief Probes the current GL context for compute-shader support.
     /// @return true if GL ≥ 4.3 with compute + SSBO; false otherwise (or no context).
