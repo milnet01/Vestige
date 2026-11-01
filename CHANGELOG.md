@@ -25,6 +25,11 @@ may change any interface without notice.
 
 ## [Unreleased]
 
+### 2026-11-01 Fixed — Saving a scene in the editor keeps its music
+
+- **Save and Save As no longer drop a scene's music settings** (3D_E-0835)
+  The editor loaded the music block and then forgot it, so the next save removed it from the file.
+
 ### 2026-11-01 Fixed — Editor undo, dirty tracking and failed saves
 
 - **Ctrl+G in the Hierarchy panel and Paste Transform can now be undone, and they mark the scene as changed.** (3D_E-0835)

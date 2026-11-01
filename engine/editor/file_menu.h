@@ -6,6 +6,7 @@
 #pragma once
 
 #include "editor/recent_files.h"
+#include "editor/scene_serializer.h"
 
 #include <imgui.h>
 #include <imfilebrowser.h>
@@ -144,6 +145,10 @@ private:
     FoliageManager* m_foliageManager = nullptr;
     Terrain* m_terrain = nullptr;
     AudioMusicPlayer* m_musicPlayer = nullptr;
+
+    /// The open scene's music block. Nothing edits it yet, so saving writes back
+    /// what was loaded instead of dropping it.
+    MusicSceneSettings m_sceneMusic;
 
     std::filesystem::path m_currentScenePath;
     std::filesystem::path m_pendingRecentPath;

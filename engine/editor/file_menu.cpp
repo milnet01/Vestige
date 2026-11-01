@@ -459,6 +459,7 @@ void FileMenu::newScene(Scene* scene, Selection& selection)
     scene->setName("Untitled Scene");
     selection.clearSelection();
     m_currentScenePath.clear();
+    m_sceneMusic = MusicSceneSettings{};
     if (m_commandHistory)
     {
         m_commandHistory->clear();
@@ -489,7 +490,8 @@ void FileMenu::saveScene(Scene* scene)
     }
 
     SceneSerializerResult result = SceneSerializer::saveScene(
-        *scene, m_currentScenePath, *m_resources, m_foliageManager, m_terrain);
+        *scene, m_currentScenePath, *m_resources, m_foliageManager, m_terrain,
+        &m_sceneMusic);
 
     if (result.success)
     {
@@ -536,6 +538,7 @@ void FileMenu::handleOpenResult(Scene* scene, Selection& selection)
 
     if (result.success)
     {
+        m_sceneMusic = music;
         if (m_musicPlayer)
         {
             applyMusicSceneSettings(*m_musicPlayer, music);
@@ -581,7 +584,8 @@ void FileMenu::handleSaveResult(Scene* scene, Selection& selection)
     scene->setName(selectedPath.stem().string());
 
     SceneSerializerResult result = SceneSerializer::saveScene(
-        *scene, m_currentScenePath, *m_resources, m_foliageManager, m_terrain);
+        *scene, m_currentScenePath, *m_resources, m_foliageManager, m_terrain,
+        &m_sceneMusic);
 
     if (result.success)
     {
@@ -662,6 +666,7 @@ void FileMenu::openRecentScene(Scene* scene, Selection& selection)
 
     if (result.success)
     {
+        m_sceneMusic = music;
         if (m_musicPlayer)
         {
             applyMusicSceneSettings(*m_musicPlayer, music);
@@ -820,6 +825,7 @@ void FileMenu::drawRecoveryModal(Scene* scene, Selection& selection)
 
                 if (result.success)
                 {
+                    m_sceneMusic = music;
                     if (m_musicPlayer)
                     {
                         applyMusicSceneSettings(*m_musicPlayer, music);
