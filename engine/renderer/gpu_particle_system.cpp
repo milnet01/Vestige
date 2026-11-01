@@ -47,7 +47,8 @@ struct GPUParticleGPU
 static_assert(sizeof(GPUParticleGPU) == 64, "GPUParticle must be 64 bytes for cache alignment");
 
 // Behavior entry layout for UBO (matches GLSL std140)
-// std140 requires vec4 alignment for arrays, so we pad accordingly
+// Tight 32-byte entry (two uint32 plus six floats), no padding. The
+// size is pinned by the static_assert below.
 struct BehaviorEntryGPU
 {
     uint32_t type;
