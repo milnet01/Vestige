@@ -679,6 +679,37 @@ TEST(NodeGraph_ExprTree, SharedSourceFeedingTwoInputsConverts)
     EXPECT_EQ(expr->children[1]->name, "x");
 }
 
+// A chain of adds, each using the previous link twice: the tree doubles per link.
+static std::unique_ptr<ExprNode> doublingChainExpression(int links)
+{
+    NodeGraph graph;
+    NodeId previous = graph.addNode(NodeGraph::createVariableNode("x"));
+    for (int i = 0; i < links; ++i)
+    {
+        NodeId addId = graph.addNode(NodeGraph::createMathNode("+"));
+        const Node* source = graph.getNode(previous);
+        const Node* add = graph.getNode(addId);
+        graph.connect(previous, source->outputs[0].id, addId, add->inputs[0].id);
+        graph.connect(previous, source->outputs[0].id, addId, add->inputs[1].id);
+        previous = addId;
+    }
+    NodeId outId = graph.addNode(NodeGraph::createOutputNode());
+    graph.connect(previous, graph.getNode(previous)->outputs[0].id,
+                  outId, graph.getNode(outId)->inputs[0].id);
+    return graph.toExpressionTree(outId);
+}
+
+TEST(NodeGraph_ExprTree, DoublingChainWithinTheLimitConverts)
+{
+    EXPECT_NE(doublingChainExpression(10), nullptr);
+}
+
+// No red run: the symptom is the harm, a tree too large for memory.
+TEST(NodeGraph_ExprTree, DoublingChainPastTheLimitIsRefused)
+{
+    EXPECT_EQ(doublingChainExpression(60), nullptr);
+}
+
 TEST(NodeGraph_ExprTree, CycleClosingEdgeIsRefused)
 {
     // add feeds sin, sin feeds add: a real cycle must never convert.

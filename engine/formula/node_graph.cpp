@@ -499,8 +499,17 @@ static constexpr int kMaxNodeToExprDepth = 256;
 
 std::unique_ptr<ExprNode> NodeGraph::nodeToExpr(NodeId nodeId,
                                                  std::vector<bool>& visited,
+                                                 size_t& visitsLeft,
                                                  int depth) const
 {
+    // The tree copies a shared node once per use, so chained shared nodes double
+    // its size at each link. A graph can come from a file, so limit the work.
+    if (visitsLeft == 0)
+    {
+        return nullptr;
+    }
+    --visitsLeft;
+
     if (depth > kMaxNodeToExprDepth)
     {
         return nullptr;  // depth-cap reached — same nullptr semantics as
@@ -568,7 +577,7 @@ std::unique_ptr<ExprNode> NodeGraph::nodeToExpr(NodeId nodeId,
         {
             if (c.targetNode == nodeId && c.targetPort == inputPort.id)
             {
-                return nodeToExpr(c.sourceNode, visited, depth + 1);
+                return nodeToExpr(c.sourceNode, visited, visitsLeft, depth + 1);
             }
         }
         // Unconnected: use default
@@ -576,14 +585,14 @@ std::unique_ptr<ExprNode> NodeGraph::nodeToExpr(NodeId nodeId,
     }
 
     // Helper lambda: resolve an input port to an expression
-    auto resolveInput = [this, nodeId, &visited, depth](const Port& port)
+    auto resolveInput = [this, nodeId, &visited, &visitsLeft, depth](const Port& port)
         -> std::unique_ptr<ExprNode>
     {
         for (const auto& c : m_connections)
         {
             if (c.targetNode == nodeId && c.targetPort == port.id)
             {
-                return nodeToExpr(c.sourceNode, visited, depth + 1);
+                return nodeToExpr(c.sourceNode, visited, visitsLeft, depth + 1);
             }
         }
         return ExprNode::literal(port.defaultValue);
@@ -642,8 +651,10 @@ std::unique_ptr<ExprNode> NodeGraph::toExpressionTree(NodeId outputNodeId) const
         return nullptr;
     }
 
+    constexpr size_t MAX_EXPRESSION_NODES = 100000;
     std::vector<bool> visited;
-    return nodeToExpr(outputNodeId, visited, 0);
+    size_t visitsLeft = MAX_EXPRESSION_NODES;
+    return nodeToExpr(outputNodeId, visited, visitsLeft, 0);
 }
 
 /// @brief Internal helper to recursively build nodes from an expression tree.

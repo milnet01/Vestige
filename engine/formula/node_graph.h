@@ -184,6 +184,7 @@ private:
                      std::vector<bool>& visited) const;
     std::unique_ptr<ExprNode> nodeToExpr(NodeId nodeId,
                                           std::vector<bool>& visited,
+                                          size_t& visitsLeft,
                                           int depth = 0) const;
 };
 
