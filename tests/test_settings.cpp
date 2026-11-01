@@ -320,6 +320,23 @@ TEST(Settings, FromJsonWithMissingSectionsKeepsDefaults)
     EXPECT_FLOAT_EQ(s.audio.occlusionSourceRadius, 0.5f);      // AX1 default
 }
 
+// validate() clamps the loudness target to a sane LUFS range.
+TEST(Settings, LoudnessTargetIsClampedByValidate)
+{
+    Settings s;
+    s.audio.loudnessTargetLufs = 100.0f;    // hand-edited, absurd
+    EXPECT_FALSE(validate(s));
+    EXPECT_LE(s.audio.loudnessTargetLufs, 0.0f);
+
+    s.audio.loudnessTargetLufs = -500.0f;
+    EXPECT_FALSE(validate(s));
+    EXPECT_GE(s.audio.loudnessTargetLufs, -70.0f);
+
+    s.audio.loudnessTargetLufs = -16.0f;    // the default stays untouched
+    EXPECT_TRUE(validate(s));
+    EXPECT_FLOAT_EQ(s.audio.loudnessTargetLufs, -16.0f);
+}
+
 // AX1 — validate() clamps out-of-range occlusion fields (a hand-edited
 // settings.json cannot push a bad ray count / negative distance downstream).
 TEST(Settings, OcclusionFieldsAreClampedByValidate)
@@ -937,6 +954,46 @@ TEST(SettingsOnboarding, LegacyFlagPromotionDeletesFlagFile)
     EXPECT_EQ(status, LoadStatus::FileMissing);
     EXPECT_TRUE(s.onboarding.hasCompletedFirstRun);
     EXPECT_FALSE(fs::exists(flagPath));
+}
+
+TEST(SettingsOnboarding, LegacyFlagPromotedWhenSettingsFileIsCorrupt)
+{
+    // An upgrader whose settings.json is unreadable must not see the
+    // wizard again just because of that.
+    TmpDir tmp;
+    fs::path settingsPath = tmp.path() / "settings.json";
+    fs::path flagPath     = tmp.path() / "welcome_shown";
+    {
+        std::ofstream f(settingsPath);
+        f << "{ this is not json";
+    }
+    {
+        std::ofstream f(flagPath);
+        f << "1";
+    }
+
+    auto [s, status] = Settings::loadFromDisk(settingsPath);
+    EXPECT_EQ(status, LoadStatus::ParseError);
+    EXPECT_TRUE(s.onboarding.hasCompletedFirstRun);
+}
+
+TEST(SettingsOnboarding, LegacyFlagPromotedWhenSettingsRootIsWrongType)
+{
+    TmpDir tmp;
+    fs::path settingsPath = tmp.path() / "settings.json";
+    fs::path flagPath     = tmp.path() / "welcome_shown";
+    {
+        std::ofstream f(settingsPath);
+        f << "[1, 2, 3]";
+    }
+    {
+        std::ofstream f(flagPath);
+        f << "1";
+    }
+
+    auto [s, status] = Settings::loadFromDisk(settingsPath);
+    EXPECT_EQ(status, LoadStatus::MigrationError);
+    EXPECT_TRUE(s.onboarding.hasCompletedFirstRun);
 }
 
 TEST(SettingsOnboarding, PromotionSkippedWhenStructAlreadyComplete)

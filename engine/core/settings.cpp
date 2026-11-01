@@ -15,6 +15,7 @@
 #include <nlohmann/json.hpp>
 
 #include <algorithm>
+#include <cmath>
 #include <system_error>
 
 namespace fs = std::filesystem;
@@ -767,6 +768,18 @@ bool validate(Settings& s)
         clamped = true;
     }
 
+    // Loudness target is a LUFS value: 0 LUFS is full scale and -70 LUFS is
+    // the silence gate, so anything outside is a hand-edit. NaN falls back
+    // to the default.
+    const float ltOrig = s.audio.loudnessTargetLufs;
+    s.audio.loudnessTargetLufs = std::isfinite(ltOrig)
+        ? std::clamp(ltOrig, -70.0f, 0.0f)
+        : -16.0f;
+    if (s.audio.loudnessTargetLufs != ltOrig)
+    {
+        clamped = true;
+    }
+
     // AX2 R4 — reverb wet-gain ceiling is a [0, 1] fraction; a hand-edited
     // settings.json out of range is clamped, not trusted.
     const float wcOrig = s.audio.reverbWetCap;
@@ -1058,6 +1071,7 @@ std::pair<Settings, LoadStatus> Settings::loadFromDisk(const fs::path& path)
                 "Settings: parse failed; corrupt file saved as "
                 + corruptPath.string());
         }
+        promoteLegacyOnboardingFlag(result, path);
         return {result, LoadStatus::ParseError};
     }
 
@@ -1074,7 +1088,9 @@ std::pair<Settings, LoadStatus> Settings::loadFromDisk(const fs::path& path)
             std::string("Settings: file has a value of the wrong type (")
             + e.what() + "); using defaults. Leaving " + path.string()
             + " untouched.");
-        return {Settings{}, LoadStatus::MigrationError};
+        Settings defaults;
+        promoteLegacyOnboardingFlag(defaults, path);
+        return {defaults, LoadStatus::MigrationError};
     }
     if (!migrated)
     {
@@ -1082,7 +1098,9 @@ std::pair<Settings, LoadStatus> Settings::loadFromDisk(const fs::path& path)
         Logger::warning(
             "Settings: migration failed; using defaults. Leaving "
             + path.string() + " untouched.");
-        return {Settings{}, LoadStatus::MigrationError};
+        Settings defaults;
+        promoteLegacyOnboardingFlag(defaults, path);
+        return {defaults, LoadStatus::MigrationError};
     }
 
     promoteLegacyOnboardingFlag(result, path);

@@ -25,6 +25,12 @@ may change any interface without notice.
 
 ## [Unreleased]
 
+### 2026-11-01 Fixed — Settings load: loudness target clamped, first-run flag kept on a bad file
+
+- **A hand-edited loudness target outside the 0 to -70 LUFS range is now clamped on load.** (3D_E-0823)
+
+- **An upgrader whose settings.json was unreadable no longer sees the first-run wizard again; the old welcome flag is still honoured.** (3D_E-0823)
+
 ### 2026-11-01 Security — Saved formula graphs are checked on load
 
 - **Loading a formula graph now rejects a connection that points at a missing node or port, and raises the port and connection counters above every loaded id.** (3D_E-0833)
