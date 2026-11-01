@@ -25,6 +25,8 @@ version="$3"
 
 # Only run when there's something staged. Empty commits / hook-only
 # invocations should pass.
+# ACMR leaves out deletions, so a deletion-only commit passes. It needs a
+# CHANGELOG entry only when a user could notice (decided for 3D_E-0850).
 staged="$(git diff --cached --name-only --diff-filter=ACMR || true)"
 if [[ -z "$staged" ]]; then
     exit 0
