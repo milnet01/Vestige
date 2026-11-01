@@ -4796,10 +4796,12 @@ void Renderer::resizeRenderTarget(int width, int height)
     if (m_resolveDepthFbo) m_resolveDepthFbo->resize(width, height);
     if (m_ssaoFbo) m_ssaoFbo->resize(width, height);
     if (m_ssaoBlurFbo) m_ssaoBlurFbo->resize(width, height);
+    if (m_contactShadowFbo) m_contactShadowFbo->resize(width, height);
     if (m_godRaysFbo) m_godRaysFbo->resize(std::max(1, width / 2), std::max(1, height / 2));
 
     // Resize TAA FBOs
     if (m_taaSceneFbo) m_taaSceneFbo->resize(width, height);
+    if (m_prevNormalFbo) m_prevNormalFbo->resize(width, height);
     if (m_taa) m_taa->resize(width, height);
 
     // Resize SMAA FBOs

@@ -25,6 +25,10 @@ may change any interface without notice.
 
 ## [Unreleased]
 
+### 2026-11-01 Fixed — Render targets follow window resize
+
+- **The contact-shadow and previous-frame-normal buffers now resize with the window instead of staying at their startup size** (3D_E-0825)
+
 ### 2026-11-01 Fixed — Cubemap skybox loading
 
 - **Cubemap faces that are grey or grey-plus-alpha no longer make the loader read past the image buffer, and a face whose size differs from the first is rejected** (3D_E-0825)
