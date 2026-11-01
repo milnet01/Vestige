@@ -18,8 +18,8 @@
 ///      child process (auto-escalates to SIGKILL after a grace
 ///      period if the child ignores the polite signal).
 ///   5. Once ``Done``, the caller invokes ``takeResult()`` once to
-///      retrieve the captured output (including any chunks not yet
-///      drained), which also resets the job to ``Idle`` so a fresh
+///      retrieve the captured output (the full stream, including
+///      chunks already drained), which also resets the job to ``Idle`` so a fresh
 ///      ``start()`` can be issued.
 ///
 /// Scope boundaries:
@@ -95,9 +95,9 @@ public:
     ///
     /// Returns an empty string when the worker hasn't produced new
     /// output yet (common for short idle frames during a PySR run).
-    /// Bytes drained by this call are NOT included in the stdout_text
-    /// of ``takeResult()``, so callers who mix streaming with the
-    /// final result must concatenate themselves.
+    /// Bytes drained by this call ARE still included in the stdout_text
+    /// of ``takeResult()``, which holds the full stream. Do not
+    /// concatenate the two, or the output is doubled.
     std::string drainStdoutChunk();
 
     /// @brief Send SIGTERM to the child process. Non-blocking.

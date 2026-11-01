@@ -69,8 +69,9 @@ InformationCriteria computeAicBic(float rmse, int nPoints, int paramCount);
 ///
 /// First row is a header. Last column is the observed value; the
 /// rest are input variables. Returns ``std::nullopt`` on read / parse
-/// errors, with an error message in *errorOut*. Factored out of the
-/// Workbench's ``importCsv`` so benchmark mode doesn't need the GUI.
+/// errors, with an error message in *errorOut*. A separate copy of the
+/// Workbench's ``importCsv`` so benchmark mode doesn't need the GUI; the
+/// two do not share code and differ on bad cells and extra cells.
 std::optional<std::vector<DataPoint>>
 loadCsvDataset(const std::string& path, std::string& errorOut);
 

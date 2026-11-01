@@ -54,7 +54,10 @@ InformationCriteria computeAicBic(float rmse, int nPoints, int paramCount)
 }
 
 // ---------------------------------------------------------------------------
-// CSV loader — factored from Workbench::importCsv (same RFC 4180 rules)
+// CSV loader — a separate copy of Workbench::importCsv, not shared with it.
+// The two differ: a bad cell drops the row here but is stored as 0 there,
+// and a row with extra cells takes the last cell as observed here but the
+// header's last column there.
 // ---------------------------------------------------------------------------
 
 namespace

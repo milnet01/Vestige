@@ -2708,11 +2708,10 @@ void Workbench::renderPySRPanel()
     {
         const auto result = m_pysrJob.takeResult();
         // Make sure any final chunk emitted between the last drain
-        // and Done lands in the panel. drainStdoutChunk + result's
-        // stdout_text don't overlap — the result holds the COMPLETE
-        // stream, the chunk channel held only what hadn't been
-        // drained yet. Use whichever is longer so partial-drain and
-        // full-capture paths both converge on the same display.
+        // and Done lands in the panel. The result's stdout_text holds
+        // the COMPLETE stream, including what was already drained, so
+        // it replaces the panel text when longer rather than being
+        // appended to it.
         if (result.stdout_text.size() > m_pysrStreamingOutput.size())
             m_pysrStreamingOutput = result.stdout_text;
 

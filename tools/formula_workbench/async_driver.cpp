@@ -128,9 +128,9 @@ void AsyncDriverJob::workerMain(DriverProcess proc, std::string stdinContents)
 
     // Drain stdout to EOF. Each chunk is appended to both the
     // streaming buffer (drainStdoutChunk consumers) and the final
-    // stdout_text (takeResult consumers). The two views are
-    // deliberately non-overlapping: what the main thread drains via
-    // drainStdoutChunk is NOT later re-delivered via takeResult.
+    // stdout_text (takeResult consumers). The two views overlap:
+    // stdout_text always holds the whole stream, including what the
+    // main thread already drained via drainStdoutChunk.
     char buf[4096];
     while (true)
     {
