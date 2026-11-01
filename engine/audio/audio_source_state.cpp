@@ -33,8 +33,8 @@ AudioSourceAlState composeAudioSourceAlState(
     // Attenuation parameters go through untouched — the AL call site
     // pushes these as AL_REFERENCE_DISTANCE / AL_MAX_DISTANCE /
     // AL_ROLLOFF_FACTOR. The attenuationModel + spatial flag carry
-    // through so the engine layer can pick the right
-    // alDistanceModel / AL_SOURCE_RELATIVE configuration per source.
+    // through. The model has no effect on playback today (alDistanceModel
+    // is engine-wide); the spatial flag drives AL_SOURCE_RELATIVE.
     state.referenceDistance = comp.minDistance;
     state.maxDistance       = comp.maxDistance;
     state.rolloffFactor     = comp.rolloffFactor;

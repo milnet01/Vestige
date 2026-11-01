@@ -66,10 +66,10 @@ float computeAmbientZoneVolume(const AmbientZone& zone, float distanceToListener
 ///        crossfades don't hard-cut.
 enum class TimeOfDayWindow
 {
-    Dawn,      ///< ~04:00 – ~08:00, peak ~06:00.
-    Day,       ///< ~08:00 – ~18:00, peak ~13:00.
-    Dusk,      ///< ~18:00 – ~22:00, peak ~20:00.
-    Night,     ///< ~22:00 – ~04:00, peak ~01:00.
+    Dawn,      ///< Peak 06:00; non-zero 23:00 – 13:00 (half-width 7 h).
+    Day,       ///< Peak 13:00; non-zero 06:00 – 20:00 (half-width 7 h).
+    Dusk,      ///< Peak 20:00; non-zero 13:00 – 03:00 (half-width 7 h).
+    Night,     ///< Peak 01:00; non-zero 20:00 – 06:00 (half-width 5 h).
 };
 
 /// @brief Continuous weighting across the four windows so that the

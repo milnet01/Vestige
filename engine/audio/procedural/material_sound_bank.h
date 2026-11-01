@@ -30,7 +30,9 @@ namespace Vestige::Procedural
 {
 
 /// @brief Number of `SurfaceMaterial` enumerators (Default … Glass). Derived
-///        from the enum so it tracks any append-only addition automatically.
+///        from `Glass`, the last enumerator: appending a member after `Glass`
+///        does not change it, so update this line then. A second, hand-kept
+///        `kSurfaceMaterialCount` lives in engine/physics/surface_material.h.
 inline constexpr std::size_t kSurfaceMaterialCount =
     static_cast<std::size_t>(SurfaceMaterial::Glass) + 1;
 

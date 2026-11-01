@@ -55,20 +55,18 @@ TimeOfDayWeights computeTimeOfDayWeights(float hourOfDay)
     float h = std::fmod(hourOfDay, 24.0f);
     if (h < 0.0f) h += 24.0f;
 
-    // Window peaks and half-widths chosen so every hour sums to 1.0
-    // within floating-point tolerance: peaks spaced 7/6/7/4 hours
-    // apart (dawn→day→dusk→night→dawn) with matching half-widths so
-    // adjacent windows always meet at the 0.5 crossover point.
+    // Peaks are spaced 7/7/5/5 hours apart (dawn→day→dusk→night→dawn)
+    // and the half-widths (7/7/7/5) do not match that spacing, so the
+    // raw triangles do not sum to 1.0 (about 1.57 at 01:00). The
+    // normalisation below is required, not defensive.
     TimeOfDayWeights w;
     w.dawn  = triangleWeight(h,  6.0f, 7.0f);
     w.day   = triangleWeight(h, 13.0f, 7.0f);
     w.dusk  = triangleWeight(h, 20.0f, 7.0f);
     w.night = triangleWeight(h,  1.0f, 5.0f);
 
-    // Normalise so the four weights sum to exactly 1.0 — the
-    // triangle envelopes are constructed to come close, but a
-    // defensive normalisation keeps downstream multipliers stable
-    // under future tuning of the peak positions.
+    // Normalise so the four weights sum to exactly 1.0. The raw
+    // triangles overlap and sum to more than 1.0 at some hours.
     const float sum = w.dawn + w.day + w.dusk + w.night;
     if (sum > 1e-6f)
     {

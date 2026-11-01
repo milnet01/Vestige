@@ -145,10 +145,10 @@ public:
 
     /// @brief Releases every cached buffer (`alDeleteBuffers` per entry)
     ///        and clears the recency list. Intended for per-scene
-    ///        unload — currently-playing voices keep their already-bound
-    ///        buffer handles, so eviction here does NOT cut them off
-    ///        mid-playback (OpenAL retains the buffer data for active
-    ///        sources). New `loadBuffer` calls re-decode from disk.
+    ///        unload. OpenAL refuses to delete a buffer still attached to a
+    ///        source (AL_INVALID_OPERATION), so a buffer bound to a playing
+    ///        voice is not freed here; stop those voices first. New
+    ///        `loadBuffer` calls re-decode from disk.
     void flushBufferCache();
 
     /// @brief Default buffer-cache cap. 256 entries comfortably covers
@@ -308,8 +308,10 @@ public:
     ///
     /// Passing 0 (the failure return from `playSound*`) is a no-op so
     /// the call is safe even if the caller did not check the return.
-    /// Passing a stale or already-released handle is a no-op (`alIsSource`
-    /// gate inside the implementation drops it silently).
+    /// Passing an already-released handle is a no-op only while no later sound
+    /// has reused that pool source. There is no `alIsSource` check: the source
+    /// is matched by name, so a stale handle can stop the new owner. Compare
+    /// `playbackTicket` before calling if the handle may be old.
     void stopSound(unsigned int source) { releaseSource(source); }
 
     // -- Procedural material-aware audio (AX4 S5) -------------------------

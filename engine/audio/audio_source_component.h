@@ -64,7 +64,8 @@ public:
     ///        sharper falloff; 0.0 flattens the curve entirely.
     float rolloffFactor = 1.0f;
 
-    /// @brief Distance-attenuation curve this source follows.
+    /// @brief Distance-attenuation curve this source is meant to follow.
+    /// No effect on playback today: OpenAL's distance model is engine-wide.
     ///
     /// Defaults to `InverseDistance` to match the engine-wide Phase
     /// 9C behaviour, so existing scenes sound identical until they

@@ -38,10 +38,9 @@ namespace Vestige
 
 /// @brief Distance-attenuation model selector.
 ///
-/// Stored per-source (`AudioSourceComponent::attenuationModel`) and
-/// applied to the corresponding OpenAL source. The engine-wide
-/// distance model (`AudioEngine::setDistanceModel`) must match for
-/// native OpenAL playback to follow the curve; for CPU-side sorting
+/// Stored per-source (`AudioSourceComponent::attenuationModel`) but not
+/// uploaded to OpenAL today: it has no effect on playback. OpenAL's distance
+/// model is engine-wide (`AudioEngine::setDistanceModel`); for CPU-side sorting
 /// / virtual-voice decisions the `computeAttenuation` function
 /// reproduces the same math.
 enum class AttenuationModel

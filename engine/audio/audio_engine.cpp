@@ -553,9 +553,9 @@ unsigned int AudioEngine::loadBuffer(const std::string& filePath)
     // LRU tail until cache size is at-or-below the configured cap.
     // Unlike ResourceManager, we don't have a use_count gate because
     // OpenAL buffer handles are unsigned ints, not shared_ptrs — but
-    // dropping a cache entry while a source is still bound is safe:
-    // alSourcePlay holds a reference to the buffer and the data
-    // survives until the source releases it. Future `loadBuffer`
+    // dropping a cache entry while a source is still bound is NOT safe
+    // to rely on: OpenAL refuses to delete an attached buffer
+    // (AL_INVALID_OPERATION), so that buffer is not freed. Future `loadBuffer`
     // calls will re-decode and create a fresh OpenAL buffer, which
     // is the same trade ResourceManager's eviction makes (re-decode
     // beats unbounded growth).
@@ -594,9 +594,9 @@ void AudioEngine::setBufferCacheLimit(size_t maxEntries)
 void AudioEngine::flushBufferCache()
 {
     // Phase 10.9 Slice 8 W8: per-scene flush — release every cached
-    // buffer's OpenAL handle and clear the recency list. Active voices
-    // keep their bound buffer's data alive until they finish (OpenAL
-    // semantics), so this is safe to call mid-frame between scenes.
+    // buffer's OpenAL handle and clear the recency list. OpenAL refuses to
+    // delete a buffer still attached to a source, so buffers bound to active
+    // voices are not freed; stop those voices before flushing.
     for (auto& [path, buffer] : m_bufferCache)
     {
         if (m_available && buffer != 0)
