@@ -25,6 +25,10 @@ may change any interface without notice.
 
 ## [Unreleased]
 
+### 2026-11-01 Fixed — Undoing a gizmo drag returns to the true starting position
+
+- **Undo after a gizmo drag now restores the exact starting transform, not the position after the first frame of the drag.** (3D_E-0835)
+
 ### 2026-11-01 Fixed — Subtitle line breaks no longer split a letter
 
 - **A long subtitle word, or a cut-off last line, is no longer broken in the middle of a multi-byte letter such as Greek or Hebrew.** (3D_E-0843)

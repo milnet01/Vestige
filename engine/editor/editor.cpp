@@ -2137,6 +2137,16 @@ void Editor::drawGizmo(Camera* camera, Scene* scene)
         useSnap ? snap : nullptr
     );
 
+    // Drag begins — snapshot the transform BEFORE the first frame's result is
+    // applied below, so the undo step returns to the true starting state.
+    if (!m_wasGizmoUsing && ImGuizmo::IsUsing())
+    {
+        m_gizmoStartEntityId = entity->getId();
+        m_gizmoStartPosition = entity->transform.position;
+        m_gizmoStartRotation = entity->transform.rotation;
+        m_gizmoStartScale = entity->transform.scale;
+    }
+
     // Apply the manipulated transform back to the entity
     if (ImGuizmo::IsUsing())
     {
@@ -2174,15 +2184,7 @@ void Editor::drawGizmo(Camera* camera, Scene* scene)
 
     // Gizmo begin/end bracketing for undo — capture old transform on drag start,
     // record TransformCommand on drag end. One drag = one undo step.
-    if (!m_wasGizmoUsing && isUsing)
-    {
-        // Drag begins — snapshot the current transform
-        m_gizmoStartEntityId = entity->getId();
-        m_gizmoStartPosition = entity->transform.position;
-        m_gizmoStartRotation = entity->transform.rotation;
-        m_gizmoStartScale = entity->transform.scale;
-    }
-    else if (m_wasGizmoUsing && !isUsing)
+    if (m_wasGizmoUsing && !isUsing)
     {
         // Drag ends — record a TransformCommand if the transform actually changed
         if (scene && m_gizmoStartEntityId != 0)
