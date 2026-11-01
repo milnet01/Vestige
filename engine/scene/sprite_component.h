@@ -72,7 +72,7 @@ public:
     int orderInLayer = 0;
 
     /// @brief When true, SpriteSystem breaks ties within a layer using
-    /// the entity's world-space `y` (smaller y = further back, draws
+    /// the entity's world-space `y` (larger y = further back, draws
     /// first). Standard top-down / isometric behaviour.
     bool sortByY = false;
 
