@@ -136,7 +136,9 @@ void FeatureExtractor::extract(const FeatureSchema& schema,
 
         if (bf.position && bi < pose.positions.size())
         {
-            // Position relative to root, rotated to model space
+            // Pose position rotated about Y by the inverse root rotation.
+            // The root position is not subtracted (the rootPosition
+            // parameter is unused).
             const glm::vec3& p = pose.positions[bi];
             output[idx++] = cosY * p.x + sinY * p.z;
             output[idx++] = p.y;

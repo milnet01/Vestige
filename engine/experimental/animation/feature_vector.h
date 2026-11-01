@@ -21,7 +21,7 @@ struct AnimationChannel;
 struct BoneFeature
 {
     int boneIndex = -1;
-    bool position = true;      ///< 3 floats (model-space relative to root)
+    bool position = true;      ///< 3 floats (pose position rotated to model space; root not subtracted)
     bool velocity = true;      ///< 3 floats (model-space)
     float weight = 1.0f;
 };

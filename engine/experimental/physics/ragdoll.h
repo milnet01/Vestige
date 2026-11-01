@@ -55,7 +55,8 @@ public:
     /// @param world The physics world to add bodies to.
     /// @param skeleton The Vestige skeleton (bone hierarchy).
     /// @param preset Defines shapes, masses, and joint limits for each bone.
-    /// @param boneWorldMatrices Current world-space bone transforms (from SkeletonAnimator).
+    /// @param boneWorldMatrices Raw global joint transforms, one per joint. Not the
+    ///        skinning matrices that SkeletonAnimator::getBoneMatrices returns.
     /// @return True if creation succeeded.
     bool create(PhysicsWorld& world, const Skeleton& skeleton,
                 const RagdollPreset& preset,
