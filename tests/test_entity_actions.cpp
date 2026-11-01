@@ -158,3 +158,16 @@ TEST(EntityActionsBuildDeleteCommand, TwoDisjointTreesProduceComposite_Ed3)
     ASSERT_NE(cmd, nullptr);
     EXPECT_EQ(cmd->getDescription(), "Delete 2 entities");
 }
+
+TEST(EntityActionsNaming, HugeSuffixOnSiblingDoesNotThrow)
+{
+    Scene scene("naming");
+    Entity* parent = scene.createEntity("Parent");
+    scene.createEntity("Cube");
+    Entity* sibling = scene.createEntity("Cube (99999999999)");
+    scene.reparentEntity(sibling->getId(), parent->getId());
+
+    std::string name;
+    EXPECT_NO_THROW(name = EntityActions::generateDuplicateName("Cube", parent));
+    EXPECT_FALSE(name.empty());
+}

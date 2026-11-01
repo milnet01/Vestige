@@ -75,7 +75,8 @@ std::string generateDuplicateName(const std::string& originalName, const Entity*
             {
                 std::string numStr = cn.substr(
                     baseName.size() + 2, cn.size() - baseName.size() - 3);
-                bool allDigits = !numStr.empty();
+                // At most nine digits, so stoi cannot overflow on a long name.
+                bool allDigits = !numStr.empty() && numStr.size() <= 9;
                 for (char c : numStr)
                 {
                     if (!std::isdigit(static_cast<unsigned char>(c)))

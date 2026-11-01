@@ -25,6 +25,10 @@ may change any interface without notice.
 
 ## [Unreleased]
 
+### 2026-11-01 Fixed — Duplicating an entity next to a very long numbered name
+
+- **Duplicating an entity no longer throws when a sibling is named like Cube (99999999999).** (3D_E-0835)
+
 ### 2026-11-01 Security — Colour-grading LUT files and glTF skin attributes
 
 - **A .cube LUT file with a bare TITLE or LUT_3D_SIZE line no longer throws, and an unquoted title no longer keeps a Windows line ending.** (3D_E-0844)
