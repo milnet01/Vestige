@@ -25,6 +25,10 @@ may change any interface without notice.
 
 ## [Unreleased]
 
+### 2026-11-01 Security — Removing a camera component no longer leaves a dangling active camera
+
+- **The scene now remembers which entity owns the active camera and looks the camera up when asked, so removing just the camera component gives no camera instead of a freed one.** (3D_E-0852)
+
 ### 2026-11-01 Fixed — Experimental animation and dismemberment edge cases
 
 - **Starting an inertialization blend with a destination pose shorter than the source no longer reads past its end.** (3D_E-0830)

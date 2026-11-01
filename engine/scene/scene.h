@@ -159,7 +159,8 @@ public:
     /// @param camera Pointer to a CameraComponent in this scene (nullptr to clear).
     void setActiveCamera(CameraComponent* camera);
 
-    /// @brief Gets the active camera component (nullptr if none set).
+    /// @brief Gets the active camera component (nullptr if none set, or if its
+    ///        entity or component has been removed).
     CameraComponent* getActiveCamera() const;
 
     /// @brief Empties the scene on construction and announces the new
@@ -305,7 +306,7 @@ private:
     std::string m_sourcePath;  ///< Path last loaded from; empty if in-memory (AX3 B4).
     std::unique_ptr<Entity> m_root;
     std::unordered_map<uint32_t, Entity*> m_entityIndex;
-    CameraComponent* m_activeCamera = nullptr;
+    uint32_t m_activeCameraEntityId = 0;  ///< Owner of the active camera; 0 = none (3D_E-0852).
 
     /// @brief Bus for scene-change events; null unless this is the active scene.
     EventBus* m_eventBus = nullptr;

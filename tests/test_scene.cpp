@@ -232,6 +232,23 @@ TEST(SceneEntityLifecycle, RemoveUnrelatedEntityDoesNotAffectActiveCamera_S1)
            "pointer intact";
 }
 
+TEST(SceneEntityLifecycle, RemoveCameraComponentNullsActiveCamera_0852)
+{
+    // The entity stays; only its CameraComponent goes. The scene must not
+    // hand back the freed component.
+    Scene scene("RemoveCameraComponent");
+    Entity* cam = scene.createEntity("Camera");
+    auto* camComp = cam->addComponent<CameraComponent>();
+    scene.setActiveCamera(camComp);
+    ASSERT_EQ(scene.getActiveCamera(), camComp);
+
+    cam->removeComponent<CameraComponent>();
+
+    EXPECT_EQ(scene.getActiveCamera(), nullptr)
+        << "the active camera component was freed; the scene must look it "
+           "up again rather than return a dangling pointer";
+}
+
 TEST(SceneEntityLifecycle, ClearEntitiesNullsActiveCamera_S1)
 {
     // clearEntities already nulls m_activeCamera (scene.cpp:125). This

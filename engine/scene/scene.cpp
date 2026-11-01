@@ -201,12 +201,23 @@ void Scene::setName(const std::string& name)
 
 void Scene::setActiveCamera(CameraComponent* camera)
 {
-    m_activeCamera = camera;
+    // Store the owner's id, not the pointer: the component can be removed
+    // from its entity without the scene hearing about it (3D_E-0852).
+    const Entity* owner = camera ? camera->getOwner() : nullptr;
+    m_activeCameraEntityId = owner ? owner->getId() : 0;
 }
 
 CameraComponent* Scene::getActiveCamera() const
 {
-    return m_activeCamera;
+    // Looked up on every call, so a removed entity or component gives
+    // nullptr instead of a dangling pointer. Cost: one hash lookup and one
+    // component-map lookup.
+    if (m_activeCameraEntityId == 0)
+    {
+        return nullptr;
+    }
+    auto it = m_entityIndex.find(m_activeCameraEntityId);
+    return (it != m_entityIndex.end()) ? it->second->getComponent<CameraComponent>() : nullptr;
 }
 
 Scene::Replacement::Replacement(Scene& scene)
@@ -231,7 +242,7 @@ Scene::Replacement::~Replacement()
 
 void Scene::clearEntities()
 {
-    m_activeCamera = nullptr;
+    m_activeCameraEntityId = 0;
     m_root = std::make_unique<Entity>("Root");
     m_entityIndex.clear();
     m_entityIndex[m_root->getId()] = m_root.get();
@@ -594,17 +605,11 @@ void Scene::unregisterEntityRecursive(Entity* entity)
 {
     if (!entity) return;
 
-    // Phase 10.9 Slice 3 S1 — null the active-camera pointer if this
-    // entity owns it. m_activeCamera is a raw CameraComponent* with
-    // no ownership; destroying the owning entity without nulling the
-    // pointer would leave renderer code dereferencing freed memory
-    // every frame.
-    if (auto* cam = entity->getComponent<CameraComponent>())
+    // Forget the active camera if this entity owns it, so the id cannot
+    // match again.
+    if (entity->getId() == m_activeCameraEntityId)
     {
-        if (cam == m_activeCamera)
-        {
-            m_activeCamera = nullptr;
-        }
+        m_activeCameraEntityId = 0;
     }
 
     m_entityIndex.erase(entity->getId());
