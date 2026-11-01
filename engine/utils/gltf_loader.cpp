@@ -665,7 +665,9 @@ static std::vector<MeshPrimRange> loadMeshes(const tinygltf::Model& gltfModel,
             // --- Read JOINTS_0 (bone indices per vertex) ---
             {
                 auto it = primitive.attributes.find("JOINTS_0");
-                if (it != primitive.attributes.end())
+                if (it != primitive.attributes.end()
+                    && it->second >= 0
+                    && static_cast<size_t>(it->second) < gltfModel.accessors.size())
                 {
                     const auto& accessor = gltfModel.accessors[static_cast<size_t>(it->second)];
 
@@ -707,7 +709,9 @@ static std::vector<MeshPrimRange> loadMeshes(const tinygltf::Model& gltfModel,
             // --- Read WEIGHTS_0 (bone weights per vertex) ---
             {
                 auto it = primitive.attributes.find("WEIGHTS_0");
-                if (it != primitive.attributes.end())
+                if (it != primitive.attributes.end()
+                    && it->second >= 0
+                    && static_cast<size_t>(it->second) < gltfModel.accessors.size())
                 {
                     const auto& accessor = gltfModel.accessors[static_cast<size_t>(it->second)];
 

@@ -104,14 +104,19 @@ CubeData CubeLoader::load(const std::string& filePath)
             }
             else
             {
-                result.title = line.substr(6);
+                // "TITLE" alone has nothing after it; strip a Windows line ending.
+                result.title = line.size() > 6 ? line.substr(6) : std::string{};
+                while (!result.title.empty() && result.title.back() == '\r')
+                {
+                    result.title.pop_back();
+                }
             }
             continue;
         }
 
         if (line.rfind("LUT_3D_SIZE", 0) == 0)
         {
-            std::istringstream iss(line.substr(12));
+            std::istringstream iss(line.size() > 12 ? line.substr(12) : std::string{});
             iss >> lutSize;
             if (lutSize < 2 || lutSize > 128)
             {

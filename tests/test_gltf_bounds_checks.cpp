@@ -22,6 +22,7 @@
 #include <fstream>
 #include <string>
 
+#include "gl_test_fixture.h"
 #include "test_helpers.h"
 
 namespace fs = std::filesystem;
@@ -286,6 +287,60 @@ TEST_F(GltfBoundsChecksTest, AccessorOneElementPastTheBufferIsRejected)
     auto model = GltfLoader::load(m_gltfPath.string(), rm);
     ASSERT_NE(model, nullptr);
     EXPECT_TRUE(model->m_primitives.empty());
+}
+
+// -- A skin attribute may name an accessor that does not exist. The loader must
+// check the index before it reads the accessor to pick an element size.
+
+static std::string gltfWithSkinAttribute(const std::string& attribute)
+{
+    return R"({
+        "asset": {"version": "2.0"},
+        "buffers": [{"byteLength": 12,
+                     "uri": "data:application/octet-stream;base64,AAAAAAAAAAAAAAAA"}],
+        "bufferViews": [{"buffer": 0, "byteLength": 12}],
+        "accessors": [{"bufferView": 0, "componentType": 5126, "type": "VEC3", "count": 1}],
+        "meshes": [{"primitives": [{"attributes": {"POSITION": 0, ")" + attribute + R"(": 99}}]}],
+        "nodes": [{"mesh": 0}],
+        "scenes": [{"nodes": [0]}],
+        "scene": 0
+    })";
+}
+
+class GltfSkinIndexTest : public ::Vestige::Test::GLTestFixture
+{
+protected:
+    fs::path m_path;
+
+    void SetUp() override
+    {
+        GLTestFixture::SetUp();
+        if (IsSkipped()) { return; }
+        m_path = fs::temp_directory_path()
+               / ("vestige_gltf_skin_" + Testing::vestigeTestStamp() + ".gltf");
+    }
+
+    void TearDown() override
+    {
+        std::error_code ec;
+        fs::remove(m_path, ec);
+    }
+};
+
+TEST_F(GltfSkinIndexTest, JointsAccessorIndexOutOfRangeIsIgnored)
+{
+    std::ofstream{m_path} << gltfWithSkinAttribute("JOINTS_0");
+    ResourceManager rm;
+    auto model = GltfLoader::load(m_path.string(), rm);
+    EXPECT_NE(model, nullptr);
+}
+
+TEST_F(GltfSkinIndexTest, WeightsAccessorIndexOutOfRangeIsIgnored)
+{
+    std::ofstream{m_path} << gltfWithSkinAttribute("WEIGHTS_0");
+    ResourceManager rm;
+    auto model = GltfLoader::load(m_path.string(), rm);
+    EXPECT_NE(model, nullptr);
 }
 
 }  // namespace Vestige::GltfBoundsChecks::Test

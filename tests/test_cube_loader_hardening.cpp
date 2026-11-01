@@ -111,4 +111,29 @@ TEST_F(CubeLoaderHardeningTest, NoSandboxConfiguredAcceptsAnyPath_D3)
     EXPECT_TRUE(CubeLoader::getSandboxRoots().empty());
 }
 
+TEST_F(CubeLoaderHardeningTest, BareTitleLineDoesNotThrow)
+{
+    const fs::path path = m_root / "assets" / "bare_title.cube";
+    std::ofstream{path} << "TITLE\nLUT_3D_SIZE 2\n";
+    EXPECT_NO_THROW(CubeLoader::load(path.string()));
+}
+
+TEST_F(CubeLoaderHardeningTest, BareSizeLineDoesNotThrow)
+{
+    const fs::path path = m_root / "assets" / "bare_size.cube";
+    std::ofstream{path} << "LUT_3D_SIZE";
+    CubeData data;
+    EXPECT_NO_THROW(data = CubeLoader::load(path.string()));
+    EXPECT_EQ(data.size, 0);
+}
+
+TEST_F(CubeLoaderHardeningTest, UnquotedTitleKeepsNoLineEnding)
+{
+    const fs::path path = m_root / "assets" / "crlf.cube";
+    std::ofstream{path, std::ios::binary} << "TITLE plain\r\nLUT_3D_SIZE 2\r\n"
+        "0 0 0\r\n1 0 0\r\n0 1 0\r\n1 1 0\r\n0 0 1\r\n1 0 1\r\n0 1 1\r\n1 1 1\r\n";
+    CubeData data = CubeLoader::load(path.string());
+    EXPECT_EQ(data.title, "plain");
+}
+
 }  // namespace Vestige::CubeLoaderHardening::Test

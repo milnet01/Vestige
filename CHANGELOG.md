@@ -25,6 +25,12 @@ may change any interface without notice.
 
 ## [Unreleased]
 
+### 2026-11-01 Security — Colour-grading LUT files and glTF skin attributes
+
+- **A .cube LUT file with a bare TITLE or LUT_3D_SIZE line no longer throws, and an unquoted title no longer keeps a Windows line ending.** (3D_E-0844)
+
+- **A glTF file whose JOINTS_0 or WEIGHTS_0 names a missing accessor no longer reads past the accessor list.** (3D_E-0844)
+
 ### 2026-11-01 Security — Sprite atlas with a wrongly typed field
 
 - **A sprite atlas file with a wrongly typed field, such as a string where a number belongs, now fails to load cleanly instead of throwing.** (3D_E-0827)
