@@ -14,6 +14,7 @@ namespace Vestige
 {
 
 std::shared_ptr<SpriteAtlas> SpriteAtlas::loadFromJson(const std::string& jsonPath)
+try
 {
     std::ifstream file(jsonPath);
     if (!file.is_open())
@@ -159,6 +160,13 @@ std::shared_ptr<SpriteAtlas> SpriteAtlas::loadFromJson(const std::string& jsonPa
     Logger::info("[SpriteAtlas] Loaded " + std::to_string(atlas->m_frames.size()) +
                  " frames from " + jsonPath);
     return atlas;
+}
+catch (const nlohmann::json::exception& e)
+{
+    // A field of the wrong type (a string where a number belongs) lands here.
+    Logger::error(std::string("[SpriteAtlas] Malformed field in ") + jsonPath +
+                  ": " + e.what());
+    return nullptr;
 }
 
 const SpriteAtlasFrame* SpriteAtlas::find(const std::string& name) const

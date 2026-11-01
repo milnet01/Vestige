@@ -25,6 +25,10 @@ may change any interface without notice.
 
 ## [Unreleased]
 
+### 2026-11-01 Security — Sprite atlas with a wrongly typed field
+
+- **A sprite atlas file with a wrongly typed field, such as a string where a number belongs, now fails to load cleanly instead of throwing.** (3D_E-0827)
+
 ### 2026-11-01 Fixed — Settings file with a wrongly typed value
 
 - **A hand-edited settings file with a wrongly typed value, or a root that is not an object, no longer throws out of the load. The engine uses defaults and leaves the file in place.** (3D_E-0823)

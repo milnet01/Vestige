@@ -132,6 +132,28 @@ TEST(SpriteAtlas, MalformedJsonReturnsNull)
     EXPECT_FALSE(atlas);
 }
 
+TEST(SpriteAtlas, WrongTypedFieldReturnsNull)
+{
+    const auto path = writeTempFile("wrong_type.json", R"JSON({
+      "frames": [{"filename":"x","frame":{"x":"left","y":0,"w":8,"h":8}}],
+      "meta": {"image": "x.png", "size": {"w": 64, "h": 64}}
+    })JSON");
+    std::shared_ptr<SpriteAtlas> atlas;
+    EXPECT_NO_THROW(atlas = SpriteAtlas::loadFromJson(path));
+    EXPECT_FALSE(atlas);
+}
+
+TEST(SpriteAtlas, NonObjectSizeReturnsNull)
+{
+    const auto path = writeTempFile("size_array.json", R"JSON({
+      "frames": [{"filename":"x","frame":{"x":0,"y":0,"w":8,"h":8}}],
+      "meta": {"image": "x.png", "size": [64, 64]}
+    })JSON");
+    std::shared_ptr<SpriteAtlas> atlas;
+    EXPECT_NO_THROW(atlas = SpriteAtlas::loadFromJson(path));
+    EXPECT_FALSE(atlas);
+}
+
 TEST(SpriteAtlas, MissingMetaSizeReturnsNull)
 {
     const auto path = writeTempFile("no_size.json", R"JSON({
