@@ -81,8 +81,9 @@ public:
     /// Empty string while no clip has ever been played.
     const std::string& currentFrameName() const { return m_currentFrameName; }
 
-    /// @brief Name of the currently playing clip (empty if stopped or never
-    /// started).
+    /// @brief Name of the most recently played clip (empty if never started).
+    /// The name stays after stop() or a one-shot clip finishing; use
+    /// isPlaying() to test for playback.
     const std::string& currentClipName() const { return m_currentClipName; }
 
     /// @brief Whether playback is active (a clip is selected and not stopped).

@@ -23,7 +23,7 @@ namespace Vestige
 enum class RootMotionMode
 {
     IGNORE,              ///< Root motion discarded; game code controls movement
-    APPLY_TO_TRANSFORM   ///< Delta applied directly to entity position/rotation
+    APPLY_TO_TRANSFORM   ///< Delta is computed and exposed; the caller must apply it (nothing here moves the entity)
 };
 
 /// @brief Component that drives skeletal animation playback on an entity.

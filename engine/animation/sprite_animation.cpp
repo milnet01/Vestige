@@ -226,8 +226,11 @@ void SpriteAnimation::advanceFrame(const SpriteAnimationClip& clip)
                     ((m_pingPongStep == 1 && m_frameIndex == 0) ||
                      (m_pingPongStep == -1 && m_frameIndex == count - 1)))
                 {
-                    // Completed a full ping-pong cycle without loop — stop
-                    // on the endpoint we just returned to.
+                    // Intended: stop after a full ping-pong cycle without loop.
+                    // Unreachable for clips of two or more frames: the index
+                    // was just moved off the endpoint, so it never equals the
+                    // endpoint tested here. A non-looping PingPong clip keeps
+                    // playing.
                     m_playing = false;
                     m_frameElapsedMs = 0.0f;
                 }
