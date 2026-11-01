@@ -56,7 +56,7 @@ uniform bool      u_sunInscatterEnabled;
 uniform vec3      u_sunInscatterColour;    // Linear-RGB sun-direction tint
 uniform float     u_sunInscatterExponent;  // Cosine-lobe tightness
 uniform float     u_sunInscatterStart;     // Zero below this view distance
-uniform vec3      u_sunDirection;          // Unit world-space dir from scene toward sun
+uniform vec3      u_sunDirection;          // Light travel direction, sun toward scene (negated below)
 
 uniform sampler2D u_fogDepthTexture;       // Unit 12 — reverse-Z depth
 uniform mat4      u_fogInvViewProj;        // Inverse view-projection (world-space reconstruction)

@@ -375,7 +375,8 @@ void main()
         else if (bType == BH_KILL_COLL)
         {
             // Kill on any collision event (handled after collision behaviors)
-            // This is processed after ground/sphere collision detection above
+            // Nothing to do here. Only the depth-buffer collision below sets
+            // killParticle; BH_GROUND and BH_SPHERE_COLL do not.
         }
     }
 
