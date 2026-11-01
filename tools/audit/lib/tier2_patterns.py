@@ -108,13 +108,14 @@ def run(config: Config) -> list[Finding]:
         severity_str = pat_def.get("severity", "low")
         description = pat_def.get("description", "")
         skip_comments = pat_def.get("skip_comments", False)
+        multiline = pat_def.get("multiline", False)
 
         matching_files = _filter_files(all_files, globs)
 
         for fpath in matching_files:
             if cat_count >= max_per_cat:
                 break
-            hits = _scan_file(fpath, regex, exclude_re, skip_comments)
+            hits = _scan_file(fpath, regex, exclude_re, skip_comments, multiline)
             for line_num, line_text in hits:
                 if cat_count >= max_per_cat:
                     break

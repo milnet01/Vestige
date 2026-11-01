@@ -254,3 +254,34 @@ class TestTier2Run:
         cfg = Config(raw=raw, root=tmp_path)
         findings = run(cfg)
         assert len(findings) == max_cap
+
+
+class TestTier2MultilineOption:
+    """A pattern with ``multiline: true`` must reach the multiline scanner."""
+
+    def test_multiline_pattern_matches_across_lines(self, tmp_path: Path):
+        raw = _deep_merge(DEFAULTS, {
+            "project": {
+                "name": "Multi",
+                "root": str(tmp_path),
+                "source_dirs": ["src/"],
+                "exclude_dirs": [],
+            },
+            "patterns": {
+                "style": [{
+                    "name": "if_then_empty_block",
+                    "pattern": r"if \(x\)\s*\{\s*\}",
+                    "severity": "low",
+                    "description": "empty if body",
+                    "file_glob": "*.cpp",
+                    "multiline": True,
+                }],
+            },
+        })
+        src = tmp_path / "src"
+        src.mkdir()
+        (src / "a.cpp").write_text("void f()\n{\n    if (x)\n    {\n    }\n}\n")
+        cfg = Config(raw=raw, root=tmp_path)
+        findings = run(cfg)
+        assert [f.pattern_name for f in findings] == ["if_then_empty_block"]
+        assert findings[0].line == 3
