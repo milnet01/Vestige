@@ -209,6 +209,13 @@ bool GpuTimer::buffersReady(int buf) const
     return available == GL_TRUE;
 }
 
+double GpuTimer::getUnattributedMs() const
+{
+    return m_hasFrameSpan
+        ? unattributedMs(m_frameSpanMs, static_cast<double>(getTotalGpuTimeMs()))
+        : 0.0;
+}
+
 float GpuTimer::getTotalGpuTimeMs() const
 {
     float total = 0.0f;

@@ -130,8 +130,13 @@ void PerformancePanel::drawOverviewTab(PerformanceProfiler& profiler,
     ImGui::Separator();
 
     // CPU vs GPU breakdown
-    float cpuMs = profiler.getCpuProfiler().getTotalCpuTimeMs();
-    float gpuMs = profiler.getGpuTimer().getTotalGpuTimeMs();
+    // CPU: the frame's own work, without the swap and frame-cap wait. GPU: the
+    // whole-frame span when there is one, else the sum of the passes.
+    // 3D_E-0789.
+    float cpuMs = profiler.getCpuProfiler().getWorkTimeMs();
+    const GpuTimer& gpuTimer = profiler.getGpuTimer();
+    float gpuMs = gpuTimer.hasFrameSpan() ? static_cast<float>(gpuTimer.getFrameSpanMs())
+                                          : gpuTimer.getTotalGpuTimeMs();
     bool gpuBound = gpuMs > cpuMs;
 
     ImGui::Text("CPU: %.2f ms  GPU: %.2f ms",
@@ -191,7 +196,11 @@ void PerformancePanel::drawGpuTab(PerformanceProfiler& profiler)
     }
 
     const auto& results = profiler.getGpuTimer().getResults();
-    float totalGpu = profiler.getGpuTimer().getTotalGpuTimeMs();
+    const GpuTimer& gpuTimer = profiler.getGpuTimer();
+    const float unattributed = static_cast<float>(gpuTimer.getUnattributedMs());
+    // Whole frame when measured: passes plus what no pass covers (water
+    // re-renders, blit, UI, ImGui). 3D_E-0789.
+    float totalGpu = gpuTimer.getTotalGpuTimeMs() + unattributed;
 
     ImGui::Text("Total GPU: %.2f ms", static_cast<double>(totalGpu));
     ImGui::Separator();
@@ -230,6 +239,10 @@ void PerformancePanel::drawGpuTab(PerformanceProfiler& profiler)
 
             xOffset += width;
         }
+        drawList->AddRectFilled(
+            ImVec2(barPos.x + xOffset, barPos.y),
+            ImVec2(barPos.x + barWidth, barPos.y + barHeight),
+            IM_COL32(120, 120, 120, 200));  // Grey: unattributed
     }
 
     // Border
@@ -265,6 +278,17 @@ void PerformancePanel::drawGpuTab(PerformanceProfiler& profiler)
             ImGui::TableSetColumnIndex(2);
             float pct = (totalGpu > 0.0f) ? (results[i].timeMs / totalGpu * 100.0f) : 0.0f;
             ImGui::Text("%.0f%%", static_cast<double>(pct));
+        }
+
+        if (unattributed > 0.0f)
+        {
+            ImGui::TableNextRow();
+            ImGui::TableSetColumnIndex(0);
+            ImGui::TextDisabled("(unattributed)");
+            ImGui::TableSetColumnIndex(1);
+            ImGui::Text("%.3f", static_cast<double>(unattributed));
+            ImGui::TableSetColumnIndex(2);
+            ImGui::Text("%.0f%%", static_cast<double>(unattributed / totalGpu * 100.0f));
         }
 
         ImGui::EndTable();

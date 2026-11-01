@@ -2567,6 +2567,7 @@ void Engine::run()
 
         // 9. Window — swap buffers (flushes GPU work, making query results available)
         m_profiler.getGpuTimer().markFrameEnd();
+        m_profiler.getCpuProfiler().markWorkEnd();
         const bool logFrame = m_frameLedgerLog.isOpen();
         const double preSwapSec = logFrame ? m_timer->getRealTimeSeconds() : 0.0;
         m_window->swapBuffers();

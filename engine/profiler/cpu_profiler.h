@@ -35,6 +35,11 @@ public:
     /// @brief Marks the end of a frame. Snapshots data for display.
     void endFrame();
 
+    /// @brief Marks the end of the frame's work, before the swap and any
+    ///        frame-cap wait. Optional; without it getWorkTimeMs() equals
+    ///        getTotalCpuTimeMs() (3D_E-0789).
+    void markWorkEnd();
+
     /// @brief Pushes a named scope onto the profiling stack.
     void pushScope(const char* name);
 
@@ -47,6 +52,11 @@ public:
     /// @brief Total CPU frame time (from beginFrame to endFrame).
     float getTotalCpuTimeMs() const { return m_lastFrameTimeMs; }
 
+    /// @brief CPU time from beginFrame to markWorkEnd: the frame's own work,
+    ///        without vsync or frame-cap waits. Use this, not the total, to
+    ///        decide CPU-bound against GPU-bound.
+    float getWorkTimeMs() const { return m_lastWorkTimeMs; }
+
 private:
     using Clock = std::chrono::high_resolution_clock;
     using TimePoint = Clock::time_point;
@@ -55,7 +65,10 @@ private:
     std::vector<ProfileEntry> m_currentFrame;
     std::vector<ProfileEntry> m_lastFrame;
     std::vector<int> m_scopeStack;  ///< Index stack for parent tracking.
+    TimePoint m_workEnd;
+    bool m_workEndMarked = false;
     float m_lastFrameTimeMs = 0.0f;
+    float m_lastWorkTimeMs = 0.0f;
 };
 
 /// @brief RAII helper — pushes scope on construct, pops on destruct.

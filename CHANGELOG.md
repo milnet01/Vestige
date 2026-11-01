@@ -25,6 +25,10 @@ may change any interface without notice.
 
 ## [Unreleased]
 
+### 2026-11-01 Fixed — Performance panel: GPU total covers the whole frame, CPU label ignores waits
+
+- **The Performance panel's Total GPU now measures the whole frame and lists the time no timed pass covers (water re-renders, UI, ImGui, blit) as a named (unattributed) row. The CPU-bound or GPU-bound label now uses CPU work time up to the swap, so vsync and frame-cap waits no longer push it toward CPU bound. The --profile-log and perf_gate numbers (Total GPU as the sum of passes, CPU total through the frame cap) are unchanged, and so is the --frame-log format. Input handling is still outside the CPU window.** (3D_E-0789)
+
 ### 2026-11-01 Fixed — GPU timing sections that nest or overflow now say so
 
 - **A GPU timing section begun inside another is now refused and logged once, and the outer section keeps its time. More than 16 sections in a frame are also logged once and counted. Before, both failed silently. No file format changes.** (3D_E-0790)

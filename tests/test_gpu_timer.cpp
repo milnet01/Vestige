@@ -106,3 +106,21 @@ TEST_F(GpuTimerTest, FlatPassesRaiseNoViolations)
     EXPECT_EQ(timer.getNestingViolations(), 0);
     EXPECT_EQ(timer.getDroppedPasses(), 0);
 }
+
+// 3D_E-0789: the remainder is the frame span minus the passes, never negative.
+TEST(GpuTimerRemainder, SpanMinusPasses)
+{
+    EXPECT_DOUBLE_EQ(GpuTimer::unattributedMs(10.0, 7.5), 2.5);
+}
+
+TEST(GpuTimerRemainder, NeverNegative)
+{
+    EXPECT_DOUBLE_EQ(GpuTimer::unattributedMs(5.0, 5.2), 0.0);
+}
+
+TEST_F(GpuTimerTest, UnattributedIsZeroBeforeAnySpan)
+{
+    GpuTimer timer;
+    timer.init();
+    EXPECT_DOUBLE_EQ(timer.getUnattributedMs(), 0.0);
+}

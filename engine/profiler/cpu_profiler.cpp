@@ -21,12 +21,22 @@ void CpuProfiler::beginFrame()
     m_currentFrame.clear();
     m_scopeStack.clear();
     m_frameStart = Clock::now();
+    m_workEndMarked = false;
+}
+
+void CpuProfiler::markWorkEnd()
+{
+    m_workEnd = Clock::now();
+    m_workEndMarked = true;
 }
 
 void CpuProfiler::endFrame()
 {
     auto now = Clock::now();
     m_lastFrameTimeMs = std::chrono::duration<float, std::milli>(now - m_frameStart).count();
+    m_lastWorkTimeMs = m_workEndMarked
+        ? std::chrono::duration<float, std::milli>(m_workEnd - m_frameStart).count()
+        : m_lastFrameTimeMs;
 
     // Snapshot for display. Swap rather than move: a move leaves
     // m_currentFrame with no capacity, so every frame would regrow it.

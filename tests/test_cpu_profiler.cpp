@@ -205,3 +205,28 @@ TEST(CpuProfilerTest, DeeplyNestedScopes)
         }
     }
 }
+
+// 3D_E-0789: the work time stops at markWorkEnd, so a wait after it (vsync or
+// the frame cap) does not count toward CPU-bound.
+TEST(CpuProfilerTest, WorkTimeExcludesTheWaitAfterMarkWorkEnd)
+{
+    CpuProfiler profiler;
+    profiler.beginFrame();
+    std::this_thread::sleep_for(std::chrono::milliseconds(5));
+    profiler.markWorkEnd();
+    std::this_thread::sleep_for(std::chrono::milliseconds(40));
+    profiler.endFrame();
+
+    EXPECT_GT(profiler.getTotalCpuTimeMs(), 40.0f);
+    EXPECT_LT(profiler.getWorkTimeMs(), 30.0f);
+    EXPECT_GT(profiler.getWorkTimeMs(), 0.5f);
+}
+
+TEST(CpuProfilerTest, WorkTimeEqualsTotalWithoutMarkWorkEnd)
+{
+    CpuProfiler profiler;
+    profiler.beginFrame();
+    std::this_thread::sleep_for(std::chrono::milliseconds(5));
+    profiler.endFrame();
+    EXPECT_FLOAT_EQ(profiler.getWorkTimeMs(), profiler.getTotalCpuTimeMs());
+}

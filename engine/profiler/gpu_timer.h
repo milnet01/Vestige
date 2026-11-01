@@ -80,6 +80,17 @@ public:
     ///        frame, since init(). Logged once (3D_E-0790).
     int getDroppedPasses() const { return m_droppedPasses; }
 
+    /// @brief Frame span minus the sum of the passes, never below zero: GPU
+    ///        work that no pass covers (water re-renders, UI, blit, ImGui).
+    ///        Zero when there is no span.
+    double getUnattributedMs() const;
+
+    /// @brief The arithmetic behind getUnattributedMs().
+    static double unattributedMs(double spanMs, double passSumMs)
+    {
+        return spanMs > passSumMs ? spanMs - passSumMs : 0.0;
+    }
+
     /// @brief Whether getFrameSpanMs() holds a measurement for the results.
     bool hasFrameSpan() const { return m_hasFrameSpan; }
 
