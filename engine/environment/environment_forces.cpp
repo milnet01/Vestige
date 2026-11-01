@@ -77,7 +77,8 @@ float EnvironmentForces::spatialWindFactor(const glm::vec3& worldPos) const
 }
 
 // ============================================================================
-// Gust state machine (migrated from ClothSimulator::updateGustState)
+// Gust state machine (copied from ClothSimulator::updateGustState; cloth
+// still runs its own copy in ClothWindModel::updateGustState)
 // ============================================================================
 
 void EnvironmentForces::updateGustState(float dt)

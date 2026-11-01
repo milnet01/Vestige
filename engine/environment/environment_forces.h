@@ -4,8 +4,10 @@
 /// @file environment_forces.h
 /// @brief Centralized environmental force queries for wind, weather, and buoyancy.
 ///
-/// All physics/rendering systems query this instead of maintaining their own
-/// wind state. Updated once per frame in the main loop. Uses a noise-modulated
+/// Foliage, particles and water query this. Cloth does not: it keeps its own
+/// gust and direction state in `ClothWindModel` (physics/cloth_wind_model.h),
+/// so tuning gusts here leaves cloth unchanged. Updated once per frame in the
+/// main loop. Uses a noise-modulated
 /// wind field inspired by Ghost of Tsushima (GDC 2020).
 #pragma once
 
@@ -31,8 +33,8 @@ struct WeatherState
 ///
 /// Provides position-dependent wind, weather, and buoyancy queries.
 /// Owns a gust state machine that drives blow/calm cycles globally
-/// so all consumers (cloth, foliage, particles, water) experience
-/// consistent wind.
+/// so its consumers (foliage, particles, water) experience consistent
+/// wind. Cloth runs its own copy of this state machine in `ClothWindModel`.
 class EnvironmentForces
 {
 public:

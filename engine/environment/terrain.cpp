@@ -1026,6 +1026,9 @@ void Terrain::generateAutoTexture(const AutoTextureConfig& config)
             // Layer weights: R=grass, G=rock, B=dirt, A=sand
             float grass = 1.0f;
             float rock = smoothstep(config.slopeGrassEnd, config.slopeRockStart, perturbedSlope);
+            // Edges are deliberately reversed (SandEnd 0.08 > SandStart 0.02):
+            // the weight is 1 below SandStart and falls to 0 at SandEnd.
+            // Do not swap the arguments.
             float sand = smoothstep(config.altitudeSandEnd, config.altitudeSandStart, perturbedHeight);
             float dirt = smoothstep(config.altitudeDirtStart, config.altitudeDirtEnd, perturbedHeight);
 
