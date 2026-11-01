@@ -8,6 +8,7 @@
 #include "physics/physics_world.h"
 #include "renderer/camera.h"
 #include "scene/entity.h"
+#include "scene/interactable_component.h"
 
 #include <Jolt/Physics/Body/BodyID.h>
 
@@ -62,6 +63,12 @@ public:
 
     /// @brief Returns the distance to the looked-at entity.
     float getLookAtDistance() const { return m_lookAtDistance; }
+
+    /// @brief The one rule for "this object can be grabbed from here": it must
+    /// be a GRAB interactable and within its own grab distance. Look-at
+    /// highlighting and tryGrab both use it, so the highlight never promises a
+    /// grab that tryGrab refuses (or the reverse).
+    static bool canGrab(const InteractableComponent& interactable, float distance);
 
     /// @brief Maximum ray distance for look-at detection.
     float maxLookDistance = 5.0f;

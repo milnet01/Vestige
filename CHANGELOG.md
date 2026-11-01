@@ -25,6 +25,10 @@ may change any interface without notice.
 
 ## [Unreleased]
 
+### 2026-11-01 Fixed — Grab highlight and grab now agree
+
+- **Looking at an object highlighted it by distance only, and grabbing checked type only. Both now use one rule: a grab-type object within its grab distance.** (3D_E-0830)
+
 ### 2026-11-01 Fixed — Dynamic GI no longer reads a stale cache on low quality
 
 - **On low quality the scene shader could still read the dynamic GI cache while the update pass was switched off. Both now share one rule.** (3D_E-0825)

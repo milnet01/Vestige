@@ -74,7 +74,7 @@ bool GrabSystem::tryGrab(PhysicsWorld& world, const Camera& camera, Scene& scene
     if (!interactable)
         return false;
 
-    if (interactable->type != InteractionType::GRAB)
+    if (!canGrab(*interactable, maxLookDistance * hitFraction))
         return false;
 
     // Check mass limit
@@ -119,6 +119,12 @@ bool GrabSystem::tryGrab(PhysicsWorld& world, const Camera& camera, Scene& scene
 
     Logger::info("Grabbed entity '" + hitEntity->getName() + "'");
     return true;
+}
+
+bool GrabSystem::canGrab(const InteractableComponent& interactable, float distance)
+{
+    return interactable.type == InteractionType::GRAB
+        && distance <= interactable.grabDistance;
 }
 
 void GrabSystem::release(PhysicsWorld& world)
@@ -194,7 +200,7 @@ void GrabSystem::updateLookAt(PhysicsWorld& world, const Camera& camera, Scene& 
         return;
 
     float distance = maxLookDistance * hitFraction;
-    if (distance > interactable->grabDistance)
+    if (!canGrab(*interactable, distance))
         return;
 
     m_lookedAtEntity = hitEntity;

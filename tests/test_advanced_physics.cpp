@@ -349,6 +349,17 @@ TEST_F(GrabSystemTest, DefaultState)
     EXPECT_EQ(system.getLookedAtEntity(), nullptr);
 }
 
+TEST_F(GrabSystemTest, CanGrabNeedsGrabTypeAndDistance)
+{
+    InteractableComponent c;
+    c.type = InteractionType::GRAB;
+    c.grabDistance = 3.0f;
+    EXPECT_TRUE(GrabSystem::canGrab(c, 2.0f));
+    EXPECT_FALSE(GrabSystem::canGrab(c, 4.0f));
+    c.type = InteractionType::PUSH;
+    EXPECT_FALSE(GrabSystem::canGrab(c, 2.0f));
+}
+
 TEST_F(GrabSystemTest, MaxLookDistance)
 {
     GrabSystem system;
