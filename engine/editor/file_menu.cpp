@@ -217,7 +217,16 @@ void FileMenu::drawDialogs(Scene* scene, Selection& selection)
         if (ImGui::Button("Don't Save", ImVec2(buttonW, 0)))
         {
             ImGui::CloseCurrentPopup();
-            markClean();
+            // Stay dirty until the action really replaces the scene: a
+            // cancelled Open browser or a failed load must not leave edited
+            // work marked clean (3D_E-0853). New, Open and Open Recent each
+            // mark clean on success. Quit and the callback path end in an
+            // exit, which asks again while dirty, so they clear it here.
+            if (m_pendingAction == PendingAction::QUIT
+                || m_pendingAction == PendingAction::CALLBACK)
+            {
+                markClean();
+            }
             proceedWithPendingAction(scene, selection);
         }
 
