@@ -473,7 +473,7 @@ enum class LoadStatus
     Ok,                  ///< Parsed, migrated, validated. Clamping is not reported.
     FileMissing,         ///< No file at the given path. Defaults returned.
     ParseError,          ///< JSON malformed — `.corrupt` sidecar written, defaults returned.
-    MigrationError,      ///< Migration chain aborted — defaults returned.
+    MigrationError,      ///< Migration aborted, or a value had the wrong type — defaults returned, file left in place.
 };
 
 /// @brief Result of a save attempt.

@@ -1061,7 +1061,22 @@ std::pair<Settings, LoadStatus> Settings::loadFromDisk(const fs::path& path)
         return {result, LoadStatus::ParseError};
     }
 
-    if (!result.fromJson(*parsed))
+    bool migrated = false;
+    try
+    {
+        migrated = result.fromJson(*parsed);
+    }
+    catch (const nlohmann::json::exception& e)
+    {
+        // A hand-edited file can hold a value of the wrong type, or a root
+        // that is not an object. Fall back to defaults, as for a corrupt file.
+        Logger::warning(
+            std::string("Settings: file has a value of the wrong type (")
+            + e.what() + "); using defaults. Leaving " + path.string()
+            + " untouched.");
+        return {Settings{}, LoadStatus::MigrationError};
+    }
+    if (!migrated)
     {
         // Migration failed (future version / unknown step).
         Logger::warning(

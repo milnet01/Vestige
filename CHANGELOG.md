@@ -25,6 +25,10 @@ may change any interface without notice.
 
 ## [Unreleased]
 
+### 2026-11-01 Fixed — Settings file with a wrongly typed value
+
+- **A hand-edited settings file with a wrongly typed value, or a root that is not an object, no longer throws out of the load. The engine uses defaults and leaves the file in place.** (3D_E-0823)
+
 ### 2026-11-01 Fixed — First-run wizard applies the template you picked
 
 - **The first-run wizard now applies the template you chose even when some templates are hidden for missing assets; before, it could apply a different one** (3D_E-0836)

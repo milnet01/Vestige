@@ -587,6 +587,34 @@ TEST(SettingsDisk, MissingFileReturnsDefaults)
     EXPECT_EQ(s, Settings{});
 }
 
+TEST(SettingsDisk, WrongTypedValueDoesNotThrow)
+{
+    TmpDir tmp;
+    fs::path path = tmp.path() / "settings.json";
+    {
+        std::ofstream out(path);
+        out << R"({"schemaVersion": 1, "display": {"windowWidth": "big"}})";
+    }
+
+    std::pair<Settings, LoadStatus> loaded;
+    EXPECT_NO_THROW(loaded = Settings::loadFromDisk(path));
+    EXPECT_NE(loaded.second, LoadStatus::Ok);
+}
+
+TEST(SettingsDisk, NonObjectRootDoesNotThrow)
+{
+    TmpDir tmp;
+    fs::path path = tmp.path() / "settings.json";
+    {
+        std::ofstream out(path);
+        out << "[1, 2, 3]";
+    }
+
+    std::pair<Settings, LoadStatus> loaded;
+    EXPECT_NO_THROW(loaded = Settings::loadFromDisk(path));
+    EXPECT_NE(loaded.second, LoadStatus::Ok);
+}
+
 TEST(SettingsDisk, SaveAndReloadIsEqual)
 {
     TmpDir tmp;
