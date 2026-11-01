@@ -580,6 +580,14 @@ void Editor::drawPanels(Renderer* renderer, Scene* scene, Camera* camera,
                 m_panelRegistry.drawMenuToggle(m_audioPanel);
                 m_panelRegistry.drawMenuToggle(m_uiLayoutPanel);
                 m_panelRegistry.drawMenuToggle(m_uiRuntimePanel);
+                if (ImGui::MenuItem("Sprite Atlas", nullptr, m_spritePanel.isVisible()))
+                {
+                    m_spritePanel.toggleVisible();
+                }
+                if (ImGui::MenuItem("Tilemap", nullptr, m_tilemapPanel.isVisible()))
+                {
+                    m_tilemapPanel.toggleVisible();
+                }
                 ImGui::MenuItem("Console", nullptr, &m_showConsole);
                 ImGui::MenuItem("Statistics", nullptr, &m_showStatistics);
                 m_panelRegistry.drawMenuToggle(m_scriptEditorPanel);
