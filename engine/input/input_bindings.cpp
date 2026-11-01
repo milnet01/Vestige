@@ -183,13 +183,14 @@ bool InputActionMap::resetActionToDefaults(const std::string& id)
 
 namespace
 {
-// AUDIT I1 — keyboard display path is two-stage:
-//  1. `glfwGetKeyName(GLFW_KEY_UNKNOWN, scancode)` returns the layout-aware
-//     printable-character name ("W" on QWERTY, "Z" on AZERTY for the same
-//     physical key). This is what we want for letters / digits / punctuation.
-//  2. For non-printable keys (Space, Shift, F-row, numpad, system keys)
-//     `glfwGetKeyName` returns nullptr. We fall back to a scancode-keyed
-//     table built once by walking GLFW_KEY_* through `glfwGetKeyScancode`.
+// AUDIT I1 — keyboard display path is two-stage, in this order:
+//  1. Look the scancode up in the curated table built below from
+//     `keyboardKeycodeToName`. It holds letters, digits, punctuation,
+//     Space, Shift, the F-row, numpad and system keys, so it names every
+//     key it covers with a fixed (QWERTY) label.
+//  2. Only a scancode outside that table reaches
+//     `glfwGetKeyName(GLFW_KEY_UNKNOWN, scancode)`, which returns the
+//     layout-aware name. Otherwise it returns nullptr.
 //
 // `keyboardKeycodeToName` keeps the keycode→string mapping that the I6 work
 // established (numpad, F13–F25, world keys, etc.). The lazy fallback table
@@ -446,10 +447,10 @@ std::string bindingDisplayLabel(const InputBinding& binding)
             // returns a useless literal " " for Space and printable
             // glyphs for some locale keys (WORLD_1/2 on certain layouts),
             // which would clobber the rebind UI. The fallback table
-            // covers every non-printable key the I6 work named. Fall
-            // through to `glfwGetKeyName` for the printable letters /
-            // digits / punctuation that NEED to be layout-aware
-            // ("W" on QWERTY, "Z" on AZERTY for the same physical key).
+            // also holds the letters, digits and punctuation, so those
+            // get a fixed QWERTY label here. Only a scancode missing from
+            // the table falls through to the layout-aware
+            // `glfwGetKeyName`.
             const auto& fallback = scancodeToNameMap();
             auto it = fallback.find(binding.code);
             if (it != fallback.end()) return it->second;

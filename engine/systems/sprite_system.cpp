@@ -158,8 +158,8 @@ void SpriteSystem::sortDrawList(std::vector<SpriteDrawEntry>& entries)
             if (a.sortingLayer != b.sortingLayer) return a.sortingLayer < b.sortingLayer;
             if (a.orderInLayer != b.orderInLayer) return a.orderInLayer < b.orderInLayer;
 
-            // Y-sort: only apply when both sprites opt in. Lower y draws
-            // first (further back on screen in top-down / isometric).
+            // Y-sort: only apply when both sprites opt in. Larger y draws
+            // first (further back in top-down / isometric).
             const bool ys = a.component && a.component->sortByY &&
                             b.component && b.component->sortByY;
             if (ys && a.yForSort != b.yForSort)

@@ -12,7 +12,8 @@
 /// works against both 2D and 3D objects — you can drop a 2D character
 /// onto a 3D slab in a mixed scene if you need to.
 ///
-/// Events emitted on the shared EventBus:
+/// Planned events for the shared EventBus (not implemented: no event type
+/// exists and nothing emits them yet):
 ///   - `CollisionEnter2D(entityA, entityB, contact)`
 ///   - `CollisionExit2D(entityA, entityB)`
 ///   - `TriggerEnter2D(entityA, entityB)`

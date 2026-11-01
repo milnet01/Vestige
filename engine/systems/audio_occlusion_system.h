@@ -28,9 +28,10 @@ class JobSystem;
 class AudioEngine;
 
 /// @brief Upper bound on rays cast per source, and the size of the offset
-///        table. Single source of truth shared by the offset table
-///        (`occlusionRayOffsets`), the §4.5 per-frame ray budget (S4), and the
-///        §5 settings clamp (S5) — bump it here and all three follow.
+///        table (`occlusionRayOffsets`). The settings clamp in `settings.cpp`
+///        and the slider in `settings_editor_panel.cpp` use a literal 16, and
+///        `kMaxOcclusionRaysPerFrame` is a literal 512; none follow this
+///        constant, so update those sites by hand when you change it.
 inline constexpr int kMaxOcclusionRayCount = 16;
 
 /// @brief Hard ceiling on rays cast per frame across all sources (§4.5). The
