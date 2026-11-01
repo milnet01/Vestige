@@ -641,7 +641,7 @@ private:
     std::unordered_map<uint32_t, glm::mat4> m_prevWorldMatrices;
     /// @brief Most recent SceneRenderData pointer set by renderScene(),
     /// consumed by endFrame()'s prev-world-matrix cache update. endFrame
-    /// nulls it only in TAA mode; in other modes it keeps the last value.
+    /// nulls it in every mode once the update is done.
     const SceneRenderData* m_currentRenderData = nullptr;
     Shader m_idBufferShader;
     Shader m_outlineShader;

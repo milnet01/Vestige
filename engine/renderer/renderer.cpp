@@ -1682,14 +1682,10 @@ void Renderer::endFrame(float deltaTime)
                                        m_currentRenderData->transparentItems);
     }
 
-    // The pointer is cleared only under TAA (non-TAA modes leave it set).
-    if (isTAA)
-    {
-        // Clear the cached pointer — it must not be dereferenced after
-        // endFrame returns since the scene may be mutated before the
-        // next renderScene call.
-        m_currentRenderData = nullptr;
-    }
+    // Clear the cached pointer in every mode — it must not be dereferenced
+    // after endFrame returns since the scene may be mutated before the
+    // next renderScene call.
+    m_currentRenderData = nullptr;
 
     glEnable(GL_DEPTH_TEST);
 }

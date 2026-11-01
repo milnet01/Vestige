@@ -25,6 +25,10 @@ may change any interface without notice.
 
 ## [Unreleased]
 
+### 2026-11-01 Fixed — Stale scene pointer after a frame
+
+- **The renderer no longer keeps a pointer to the last frame's scene data outside TAA mode, so nothing can read it after the scene changes** (3D_E-0825)
+
 ### 2026-11-01 Fixed — Render targets follow window resize
 
 - **The contact-shadow and previous-frame-normal buffers now resize with the window instead of staying at their startup size** (3D_E-0825)
