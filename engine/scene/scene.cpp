@@ -325,6 +325,11 @@ bool Scene::reparentEntity(uint32_t entityId, uint32_t newParentId)
     }
 
     Entity* oldParent = entity->getParent();
+    if (!oldParent)
+    {
+        // A spawn made during an update is indexed but not yet attached.
+        return false;
+    }
     if (oldParent == newParent)
     {
         return false;

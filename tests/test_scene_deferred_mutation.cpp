@@ -314,3 +314,17 @@ TEST(SceneDeferredMutation, RemoveChildDuringDeepForEachSafe_S2)
     EXPECT_EQ(scene.findEntityById(childId), nullptr);
     EXPECT_NE(scene.findEntityById(parent->getId()), nullptr);
 }
+
+TEST(SceneDeferredMutation, ReparentOfPendingSpawnIsRefused)
+{
+    Scene scene;
+    Entity* target = scene.createEntity("Target");
+
+    scene.beginUpdate();
+    Entity* spawned = scene.createEntity("Spawned");   // still queued
+    bool moved = true;
+    EXPECT_NO_THROW(moved = scene.reparentEntity(spawned->getId(), target->getId()));
+    scene.endUpdate();
+
+    EXPECT_FALSE(moved);
+}

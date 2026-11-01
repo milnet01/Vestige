@@ -25,6 +25,10 @@ may change any interface without notice.
 
 ## [Unreleased]
 
+### 2026-11-01 Fixed — Reparenting an entity spawned during an update
+
+- **Reparenting an entity that was spawned during an update, and not yet attached, is now refused instead of crashing.** (3D_E-0839)
+
 ### 2026-11-01 Fixed — Duplicating an entity next to a very long numbered name
 
 - **Duplicating an entity no longer throws when a sibling is named like Cube (99999999999).** (3D_E-0835)
