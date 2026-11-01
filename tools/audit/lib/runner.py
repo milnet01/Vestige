@@ -109,9 +109,11 @@ class AuditRunner:
         # Pipeline ordering:
         #   1. deduplicate    — collapse same-dedup_key entries
         #   2. corroborate    — tag/promote/demote based on multi-source signal (D2, 2.4.0)
-        #   3. overrides      — user's explicit severity choices win
-        #   4. verified tags  — apply human-review signal (D3, 2.5.0), tag only (no filter)
-        #   5. suppressions   — last-mile filter
+        #   3. overrides      — user's explicit severity choices
+        #   4. auto-demotion  — lowers severity of noisy rules; runs after the
+        #                       overrides and does not skip overridden findings
+        #   5. verified tags  — apply human-review signal (D3, 2.5.0), tag only (no filter)
+        #   6. suppressions   — last-mile filter
         # Dedup is idempotent; ReportBuilder.build() calling it again is
         # harmless but avoids regressions if future callers bypass the
         # runner pipeline.
@@ -131,9 +133,9 @@ class AuditRunner:
         # Reads the (previous runs') .audit_stats.json; the CURRENT
         # run's results don't influence this pass (they'll be written
         # to stats at the end of this pipeline, affecting the NEXT
-        # run). User severity_overrides above run first and take
-        # precedence — an explicit user choice is never overridden
-        # by the auto-demoter.
+        # run). User severity_overrides above run first, but
+        # apply_auto_demotions does not skip overridden findings, so it can
+        # still lower a severity the user set.
         try:
             from .findings import apply_auto_demotions
             from .stats import compute_demotions, load_stats
