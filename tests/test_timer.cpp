@@ -108,3 +108,27 @@ TEST(TimerTest, FixedStepOffReturnsToRealTime)
     std::this_thread::sleep_for(std::chrono::milliseconds(10));
     EXPECT_GT(timer.getElapsedTime() - before, 0.001);
 }
+
+// 3D_E-0791: in fixed-step capture the simulation advances by the step, but the
+// real frame time (what the profiler must record) is what the frame took.
+TEST(TimerTest, RealDeltaIsWallTimeInFixedStepMode)
+{
+    Vestige::Timer timer;
+    timer.setFixedStep(1.0);  // far from the real frame time below
+    timer.update();
+    std::this_thread::sleep_for(std::chrono::milliseconds(20));
+    timer.update();
+
+    EXPECT_FLOAT_EQ(timer.getDeltaTime(), 1.0f);
+    EXPECT_GT(timer.getRealDeltaTime(), 0.015f);
+    EXPECT_LT(timer.getRealDeltaTime(), 0.5f);
+}
+
+TEST(TimerTest, RealDeltaIsNotClampedLikeSimulationDelta)
+{
+    Vestige::Timer timer;
+    timer.update();
+    std::this_thread::sleep_for(std::chrono::milliseconds(20));
+    timer.update();
+    EXPECT_NEAR(timer.getRealDeltaTime(), timer.getDeltaTime(), 1e-6f);
+}

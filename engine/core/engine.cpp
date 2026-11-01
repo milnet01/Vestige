@@ -2577,14 +2577,16 @@ void Engine::run()
         m_timer->waitForFrameCap();
 
         // 11. End profiler frame (collect GPU results after swap ensures queries are complete)
-        m_profiler.endFrame(deltaTime);
+        // Real frame time, not the fixed step of --demo-capture (3D_E-0791).
+        const float realDeltaTime = m_timer->getRealDeltaTime();
+        m_profiler.endFrame(realDeltaTime);
 
         // 12. Profiler CSV logging (throttles internally to ~1 Hz; no-op unless
         //     --profile-log opened it). Sampled after endFrame so GPU/CPU/mem
         //     results are from the just-completed frame.
         if (m_profileLog.isOpen())
         {
-            m_profileElapsedSec += static_cast<double>(deltaTime);
+            m_profileElapsedSec += static_cast<double>(realDeltaTime);
             m_profileLog.sample(m_profiler, m_profileElapsedSec);
         }
 

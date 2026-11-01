@@ -50,6 +50,7 @@ float Timer::update()
     double currentTime = elapsedSecondsSince(m_origin);
     double rawDelta = currentTime - m_lastFrameTime;
     m_lastFrameTime = currentTime;
+    m_realDeltaTime = static_cast<float>(rawDelta);
 
     if (m_fixedStep > 0.0)
     {
@@ -78,6 +79,11 @@ float Timer::update()
     }
 
     return m_deltaTime;
+}
+
+float Timer::getRealDeltaTime() const
+{
+    return m_realDeltaTime;
 }
 
 float Timer::getDeltaTime() const

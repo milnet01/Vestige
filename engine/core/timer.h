@@ -28,6 +28,11 @@ public:
     /// @return Delta time in seconds.
     float getDeltaTime() const;
 
+    /// @brief Real seconds the last frame took, whatever the simulation step:
+    ///        not the fixed step of an offline capture and not clamped. The
+    ///        profiler measures with this (3D_E-0791).
+    float getRealDeltaTime() const;
+
     /// @brief Gets the current frames per second (updated once per second).
     /// @return The FPS count.
     int getFps() const;
@@ -69,6 +74,7 @@ private:
     Clock::time_point m_origin;      ///< Reference point for all elapsed-time queries.
     double m_lastFrameTime;          ///< Seconds since m_origin at the last update().
     float m_deltaTime;
+    float m_realDeltaTime = 0.0f;
     int m_fps;
     int m_frameCount;
     double m_fpsTimer;
