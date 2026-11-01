@@ -1,6 +1,6 @@
 <!-- ants-roadmap-format: 1 -->
 <!-- Generated from the Ants Terminal roadmap store. Edit it with roadmap_log; hand edits are discarded by the next write. -->
-<!-- ants-roadmap-id-high-water: 3D_E=850 3D_E#S=989 -->
+<!-- ants-roadmap-id-high-water: 3D_E=874 3D_E#S=989 -->
 
 # Vestige Engine Roadmap
 
@@ -6847,11 +6847,7 @@ shipped that have no invocation path at all.
 - 🚧 [3D_E-0839] **Readability review: scene and navigation findings and possible bugs to work through.**
   3 high, 35 medium, 24 low; 12 possible bugs, unchecked. Do not re-review: fold in directly with close-findings. Files: Vestige_private/readability-2026-10-31/lane-17-scene-nav.md, leads.md, message-1.md.
   2026-11-01: HIGH single-edit comments fixed. Rest of the list open.
-  Waiting-on: user (Should autosave recovery also bring back terrain and
-  music? It holds scene objects only today, so a recovered scene loses
-  them. Recommend yes: write them beside the autosave, because losing
-  terrain after a crash is the worst case autosave exists to prevent.
-  2026-11-01)
+  User decided 2026-11-01: autosave recovery brings back terrain and music too.
   **Layman:** A cold read of the scene and navigation code found comments that mislead and possible bugs to check.
   Kind: review-fix.
   Source: review-readability 2026-10-31 at 7b2a81d.
@@ -6936,9 +6932,7 @@ shipped that have no invocation path at all.
 
 - 📋 [3D_E-0849] **Readability review: cursor bridge findings and possible bugs to work through.**
   0 high, 2 medium, 7 low; 7 possible bugs, unchecked. Do not re-review: fold in directly with close-findings. Files: Vestige_private/readability-2026-10-31/lane-27-tools-ts.md, leads.md, message-1.md.
-  Waiting-on: user (Should the cursor bridge normalise file paths? Needs
-  a VS Code host to test. Recommend leaving it until the bridge is next
-  worked on: no reported fault. 2026-11-01)
+  User decided 2026-11-01: leave path normalising until the bridge is next worked on.
   **Layman:** A cold read of the cursor bridge tool found small issues and possible bugs to check.
   Kind: review-fix.
   Source: review-readability 2026-10-31 at 7b2a81d.
@@ -6947,13 +6941,174 @@ shipped that have no invocation path at all.
 - 🚧 [3D_E-0850] **Readability review: scripts and build findings and possible bugs to work through.**
   1 high, 6 medium, 13 low; 7 possible bugs, unchecked. Do not re-review: fold in directly with close-findings. Files: Vestige_private/readability-2026-10-31/lane-28-shell-build.md, leads.md, message-1.md.
   2026-11-01: HIGH single-edit comments fixed. Rest of the list open.
-  Waiting-on: user (Should a commit that only deletes code need a
-  CHANGELOG entry? Recommend yes when a user could notice the removal,
-  no otherwise, matching the rule for other changes. 2026-11-01)
+  User decided 2026-11-01: a deletion-only commit needs a CHANGELOG entry only when a user could notice the removal.
   **Layman:** A cold read of the scripts and build files found comments that mislead and possible bugs to check.
   Kind: review-fix.
   Source: review-readability 2026-10-31 at 7b2a81d.
   Lanes: build.
+
+- 📋 [3D_E-0851] **Autosave recovery restores terrain, foliage and music, not only scene objects.**
+  Autosave writes entities only, so recovery loses them. User decided 2026-11-01 that recovery brings them back. Side files must be cleaned up with the autosave.
+  **Layman:** After a crash, recovering your work should also bring back terrain and music.
+  Kind: fix.
+  Source: user decision 2026-11-01.
+  Lanes: editor.
+
+- 📋 [3D_E-0852] **Scene ownership of the active camera needs a safe lifetime rule.**
+  Needs a design. Detail in Vestige_private/readability-2026-10-31/batches/leads-risk-result.md, entity.h entry. Kept brief until fixed.
+  **Layman:** A rule is needed for what happens to the current camera when its component is removed.
+  Kind: security.
+  Source: review-readability 2026-10-31 at 7b2a81d.
+  Lanes: scene.
+
+- 📋 [3D_E-0853] **Don't Save then a cancelled Open browser leaves an edited scene marked clean.**
+  file_menu.cpp marks clean before the browser opens.
+  **Layman:** Cancelling after choosing Don't Save can lose the warning about unsaved work.
+  Kind: fix.
+  Source: review-readability 2026-10-31 at 7b2a81d.
+  Lanes: editor.
+
+- 📋 [3D_E-0854] **Loading a scene with no environment or terrain block keeps the previous scene's data.**
+  scene_serializer.cpp needs a reset policy, shared with File New.
+  **Layman:** Opening some scenes can show leftovers from the one before.
+  Kind: fix.
+  Source: review-readability 2026-10-31 at 7b2a81d.
+  Lanes: editor.
+
+- 📋 [3D_E-0855] **Grouping under a rotated or scaled parent changes an object's orientation and size.**
+  entity_actions.cpp group command keeps world position only.
+  **Layman:** Grouping objects can visibly change them.
+  Kind: fix.
+  Source: review-readability 2026-10-31 at 7b2a81d.
+  Lanes: editor.
+
+- 📋 [3D_E-0856] **Recovery dialog re-reads autosave details every frame.**
+  file_menu.cpp; cache the metadata.
+  **Layman:** The recovery dialog does disk work on every frame it is open.
+  Kind: perf.
+  Source: review-readability 2026-10-31 at 7b2a81d.
+  Lanes: editor.
+
+- 📋 [3D_E-0857] **Spot lights do not follow their object's rotation.**
+  **Layman:** Turning an object with a spot light does not turn the light.
+  Kind: fix.
+  Source: review-readability 2026-10-31 at 7b2a81d.
+  Lanes: scene.
+
+- 📋 [3D_E-0858] **Terrain border normals treat the outside of the grid as height zero.**
+  terrain.cpp; decide on clamp-to-edge.
+  **Layman:** Terrain edges can be lit wrongly.
+  Kind: fix.
+  Source: review-readability 2026-10-31 at 7b2a81d.
+  Lanes: environment.
+
+- 📋 [3D_E-0859] **Root motion has no loop-wrap handling.**
+  skeleton_animator.cpp; needs a decision on wrap rules.
+  **Layman:** A looping animation can jump its character at the loop point.
+  Kind: fix.
+  Source: review-readability 2026-10-31 at 7b2a81d.
+  Lanes: animation.
+
+- 📋 [3D_E-0860] **Ping-pong tween turnaround can miss events.**
+  tween.cpp, the last span of one update.
+  **Layman:** Events on a back-and-forth animation can be skipped.
+  Kind: fix.
+  Source: review-readability 2026-10-31 at 7b2a81d.
+  Lanes: animation.
+
+- 📋 [3D_E-0861] **Pure script node wired into a WhileLoop condition never re-evaluates.**
+  **Layman:** Some script loops can never end correctly because their condition is remembered.
+  Kind: fix.
+  Source: review-readability 2026-10-31 at 7b2a81d.
+  Lanes: scripting.
+
+- 📋 [3D_E-0862] **Script chain node limit stops a loop before its iteration cap.**
+  MAX_NODES_PER_CHAIN and the WhileLoop iteration cap disagree.
+  **Layman:** Long script loops stop early and skip what follows them.
+  Kind: fix.
+  Source: review-readability 2026-10-31 at 7b2a81d.
+  Lanes: scripting.
+
+- 📋 [3D_E-0863] **importCsv and loadCsvDataset disagree on bad and extra cells.**
+  **Layman:** Two ways of loading the same data file can give different results.
+  Kind: fix.
+  Source: review-readability 2026-10-31 at 7b2a81d.
+  Lanes: formula.
+
+- 📋 [3D_E-0864] **Audit build-output cap must keep the end of the output.**
+  run_shell_cmd is uncapped; tier1_build.py reads the tail, so the cap needs head and tail.
+  **Layman:** The audit tool's output limit must not cut off the test summary it reads.
+  Kind: fix.
+  Source: review-readability 2026-10-31 at 7b2a81d.
+  Lanes: audit.
+
+- 📋 [3D_E-0865] **Settings editor re-applies the window mode on every change.**
+  settings_editor.cpp pushPendingToSinks needs change detection.
+  **Layman:** Changing any setting can make the window flicker or resize.
+  Kind: fix.
+  Source: review-readability 2026-10-31 at 7b2a81d.
+  Lanes: settings.
+
+- 📋 [3D_E-0866] **Reverting settings can leave a rebound key in place.**
+  settings_editor.cpp; decide whether rebinds are revertible.
+  **Layman:** Cancel may not undo a key rebind.
+  Kind: fix.
+  Source: review-readability 2026-10-31 at 7b2a81d.
+  Lanes: settings.
+
+- 📋 [3D_E-0867] **Settings panel note and gamepad rebinding gaps.**
+  settings_editor_panel.cpp: where the note shows, and a gamepad capture design.
+  **Layman:** A note disappears as it appears, and gamepad buttons cannot be rebound with a gamepad.
+  Kind: fix.
+  Source: review-readability 2026-10-31 at 7b2a81d.
+  Lanes: settings.
+
+- 📋 [3D_E-0868] **One table per settings wire-string set.**
+  **Layman:** Each settings list is hand-kept in four places and could drift apart.
+  Kind: refactor.
+  Source: review-readability 2026-10-31 at 7b2a81d.
+  Lanes: settings.
+
+- 📋 [3D_E-0869] **One shared start-a-sound sequence.**
+  **Layman:** Five slightly different copies of the code that starts a sound should become one.
+  Kind: refactor.
+  Source: review-readability 2026-10-31 at 7b2a81d.
+  Lanes: audio.
+
+- 📋 [3D_E-0870] **Shared helpers for duplicated renderer code.**
+  Lighting uniforms across four renderers (terrain_renderer.cpp), texture upload (texture.cpp), and capture code (environment_map.cpp vs light_probe.cpp, whose far planes differ).
+  **Layman:** Several copied rendering blocks should become one each.
+  Kind: refactor.
+  Source: review-readability 2026-10-31 at 7b2a81d.
+  Lanes: renderer.
+
+- 📋 [3D_E-0871] **One material save and load, with a path policy as input.**
+  material_library.cpp and entity_serializer.cpp.
+  **Layman:** Material saving has two copies that have already drifted apart.
+  Kind: refactor.
+  Source: review-readability 2026-10-31 at 7b2a81d.
+  Lanes: utils.
+
+- 📋 [3D_E-0872] **Inspector transform edits use the shared undo helpers.**
+  inspector_panel.cpp drawTransform to EditTracker/DragUndo.
+  **Layman:** The transform section keeps its own undo logic, which leaves an entry open after a click with no edit.
+  Kind: refactor.
+  Source: review-readability 2026-10-31 at 7b2a81d.
+  Lanes: editor.
+
+- 📋 [3D_E-0873] **Correct the cloth solver's friction documentation.**
+  cloth_solver_backend.h.
+  **Layman:** A comment describes cloth friction wrongly.
+  Kind: doc-fix.
+  Source: review-readability 2026-10-31 at 7b2a81d.
+  Lanes: physics.
+
+- 📋 [3D_E-0874] **Check the remaining readability possible bugs and MEDIUM findings.**
+  Per-subsystem lists: Vestige_private/readability-2026-10-31/batches/leads-rest-1.md, -2, -3 and each lane file; progress in leads-rest-1-result.md. 3D_E-0823..0850 stay open as their index. User chose 2026-11-01 to check each when its subsystem is next worked on; a later priority list includes backlog, so they sit last in the fix order.
+  **Layman:** About 290 lower-risk possible bugs and the medium findings are still unchecked.
+  Kind: review-fix.
+  Source: review-readability 2026-10-31 at 7b2a81d.
+  Lanes: engine.
 
 ## 0.3.0 — An editor a builder can use
 
