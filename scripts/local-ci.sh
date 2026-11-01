@@ -593,8 +593,8 @@ ensure_actionlint() {
 
 start=$SECONDS
 banner "actionlint — GitHub Actions workflow lint (Ubuntu 24.04 container)"
-if [[ $CI_IMAGE_OK -eq 0 ]]; then
-    record "actionlint" skip 0
+if [[ $CI_IMAGE_OK -eq 0 || $QUICK -eq 1 ]]; then
+    record "actionlint" skip 0   # --quick is Debug build+test and gitleaks only
 elif ! actionlint_bin="$(ensure_actionlint)"; then
     echo "  ci.yml's actionlint could not be fetched (offline?) — stage SKIPped." >&2
     record "actionlint" skip 0
