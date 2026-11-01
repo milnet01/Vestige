@@ -124,8 +124,17 @@ else
     # Capture the set of trend_snapshot files BEFORE this run so we can
     # identify the prior baseline (anything newer is the snapshot this
     # run just wrote). We use an associative array of existing paths.
+    # The audit writes snapshots next to its report, so ask its config where
+    # that is rather than assuming docs/.
+    snapshot_dir="$(python3 -I - <<'PY_DIR'
+import sys
+sys.path.insert(0, "tools/audit")
+from lib.config import load_config
+print(load_config("tools/audit/audit_config.yaml", ".").report_path.parent)
+PY_DIR
+)" || fail "Could not read the audit report folder from tools/audit/audit_config.yaml."
     declare -A prior_snapshots=()
-    for f in docs/trend_snapshot_*.json; do
+    for f in "$snapshot_dir"/trend_snapshot_*.json; do
         [[ -e "$f" ]] || continue
         prior_snapshots["$f"]=1
     done
@@ -149,7 +158,7 @@ else
         # Launch-mode — compare this run's snapshot against the most
         # recent PRIOR snapshot and abort only on a real regression.
         current_snapshot=""
-        for f in docs/trend_snapshot_*.json; do
+        for f in "$snapshot_dir"/trend_snapshot_*.json; do
             [[ -e "$f" ]] || continue
             if [[ -z "${prior_snapshots[$f]:-}" ]]; then
                 current_snapshot="$f"

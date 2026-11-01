@@ -25,6 +25,10 @@ may change any interface without notice.
 
 ## [Unreleased]
 
+### 2026-11-01 Fixed — The launch sweep finds the audit's trend snapshots
+
+- **scripts/final_launch_sweep.sh looked for trend snapshots in docs/ while the audit writes them beside its report, so the default sweep always stopped with "found none".** (3D_E-0850)
+
 ### 2026-11-01 Fixed — File, New starts from an empty scene
 
 - **File, New now stops the old scene's music and clears its terrain and foliage, so the next Save no longer writes them into the new scene.** (3D_E-0835)
