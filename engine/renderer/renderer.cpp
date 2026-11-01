@@ -1424,10 +1424,9 @@ void Renderer::endFrame(float deltaTime)
     // writes m_giTex; swapped at end-of-frame below. Active only in TAA/SMAA
     // (att3 + the GI cache live on the non-MSAA scene FBO); when off the dispatch
     // is skipped entirely ⇒ zero GPU cost.
-    const bool giActive = m_postProcessAccessibility.dynamicGiEnabled
-        && m_qualityHeavyPostEnabled
-        && m_volumetricFogPass.isInitialized()
-        && (isTAA || isSMAA) && m_resolveDepthFbo;
+    const bool giActive = dynamicGiActive(m_postProcessAccessibility.dynamicGiEnabled,
+        m_qualityHeavyPostEnabled, m_volumetricFogPass.isInitialized(),
+        isTAA || isSMAA, static_cast<bool>(m_resolveDepthFbo));
     if (giActive)
     {
         VolumetricFogPass::GiFrameParams gp;
@@ -3471,10 +3470,12 @@ void Renderer::renderScene(const SceneRenderData& renderData, const Camera& came
     // initialised. The cache texture is ALWAYS bound (unit 24 — free in the scene
     // pass) so the declared sampler stays complete for Mesa even when GI is off;
     // u_dynamicGiEnabled gates the actual read so "off" is byte-identical to pre-R4.
-    const bool giSceneActive = m_postProcessAccessibility.dynamicGiEnabled
-        && m_volumetricFogPass.isInitialized()
-        && (m_antiAliasMode == AntiAliasMode::TAA || m_antiAliasMode == AntiAliasMode::SMAA)
-        && m_taaSceneFbo;
+    const bool giSceneAa =
+        (m_antiAliasMode == AntiAliasMode::TAA && m_taa && m_taaSceneFbo)
+        || (m_antiAliasMode == AntiAliasMode::SMAA && m_smaa && m_taaSceneFbo);
+    const bool giSceneActive = dynamicGiActive(m_postProcessAccessibility.dynamicGiEnabled,
+        m_qualityHeavyPostEnabled, m_volumetricFogPass.isInitialized(),
+        giSceneAa, static_cast<bool>(m_resolveDepthFbo));
     const FroxelGridConfig& giCfg = m_volumetricFogPass.config();
     glBindTextureUnit(24, m_volumetricFogPass.giReadTexture());
     m_sceneShader.setInt("u_giTexture", 24);

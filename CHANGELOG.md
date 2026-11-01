@@ -25,6 +25,10 @@ may change any interface without notice.
 
 ## [Unreleased]
 
+### 2026-11-01 Fixed — Dynamic GI no longer reads a stale cache on low quality
+
+- **On low quality the scene shader could still read the dynamic GI cache while the update pass was switched off. Both now share one rule.** (3D_E-0825)
+
 ### 2026-11-01 Fixed — The launch sweep finds the audit's trend snapshots
 
 - **scripts/final_launch_sweep.sh looked for trend snapshots in docs/ while the audit writes them beside its report, so the default sweep always stopped with "found none".** (3D_E-0850)

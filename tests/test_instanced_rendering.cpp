@@ -248,3 +248,14 @@ TEST(InstanceBatchTest, StaticMeshesStillGroupAfterRoutingFix_R2)
     ASSERT_EQ(batches.size(), 1u);
     EXPECT_EQ(batches[0].modelMatrices.size(), 2u);
 }
+
+TEST(DynamicGiPredicateTest, EveryConditionIsRequired)
+{
+    EXPECT_TRUE(Renderer::dynamicGiActive(true, true, true, true, true));
+    EXPECT_FALSE(Renderer::dynamicGiActive(false, true, true, true, true));
+    // Low quality turns the heavy passes off: the scene must not read the cache.
+    EXPECT_FALSE(Renderer::dynamicGiActive(true, false, true, true, true));
+    EXPECT_FALSE(Renderer::dynamicGiActive(true, true, false, true, true));
+    EXPECT_FALSE(Renderer::dynamicGiActive(true, true, true, false, true));
+    EXPECT_FALSE(Renderer::dynamicGiActive(true, true, true, true, false));
+}

@@ -594,6 +594,17 @@ public:
     static std::vector<InstanceBatch> buildInstanceBatchesStatic(
         const std::vector<SceneRenderData::RenderItem>& items);
 
+    /// @brief The one rule for "dynamic GI is running this frame". The update
+    /// pass and the scene shader's read must both use it, or the scene samples
+    /// a cache nobody is refreshing.
+    static constexpr bool dynamicGiActive(bool accessibilityEnabled, bool heavyPostEnabled,
+                                          bool fogPassReady, bool taaOrSmaaReady,
+                                          bool hasResolveDepth)
+    {
+        return accessibilityEnabled && heavyPostEnabled && fogPassReady
+            && taaOrSmaaReady && hasResolveDepth;
+    }
+
     /// @brief Minimum instances in a batch before the draw loop takes the
     /// instanced path (`count >= MIN_INSTANCE_BATCH_SIZE`); smaller batches
     /// fall back to per-item draws. Public so tests can pin a batch size
