@@ -72,6 +72,14 @@ public:
     ///        results then still hold the previous sample (3D_E-0788).
     bool hasFreshResults() const { return m_resultsFresh; }
 
+    /// @brief Passes begun while another was open, plus unmatched endPass
+    ///        calls, since init(). Each is ignored and logged once (3D_E-0790).
+    int getNestingViolations() const { return m_nestingViolations; }
+
+    /// @brief Passes dropped because more than MAX_PASSES were begun in one
+    ///        frame, since init(). Logged once (3D_E-0790).
+    int getDroppedPasses() const { return m_droppedPasses; }
+
     /// @brief Whether getFrameSpanMs() holds a measurement for the results.
     bool hasFrameSpan() const { return m_hasFrameSpan; }
 
@@ -102,6 +110,15 @@ private:
     double m_frameSpanMs = 0.0;
     bool m_hasFrameSpan = false;
     bool m_resultsFresh = false;
+
+    // Pass nesting guard (3D_E-0790). The timer is flat: a nested pair would
+    // overwrite the outer slot, so it is refused and counted instead.
+    int m_depth = 0;               ///< beginPass calls not yet matched by endPass
+    bool m_openPassDropped = false;  ///< the open outer pass hit MAX_PASSES
+    int m_nestingViolations = 0;
+    int m_droppedPasses = 0;
+    bool m_loggedNesting = false;
+    bool m_loggedDropped = false;
 
     /// True when the GPU has finished the queries of buffer `buf`, so reading
     /// them cannot make the CPU wait. Timestamps finish in order, so the last

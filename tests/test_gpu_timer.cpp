@@ -56,3 +56,53 @@ TEST_F(GpuTimerTest, ColdTimerHasNoFreshResults)
     runFrame(timer, 1);
     EXPECT_FALSE(timer.hasFreshResults());
 }
+
+// 3D_E-0790: a pass begun inside another is refused loudly, and the outer
+// pass still reports as one pass.
+TEST_F(GpuTimerTest, NestedPassIsCountedAndOuterPassSurvives)
+{
+    GpuTimer timer;
+    timer.init();
+    for (int i = 0; i < GpuTimer::BUFFER_COUNT + 1; ++i)
+    {
+        timer.beginFrame();
+        timer.beginPass("Outer");
+        timer.beginPass("Inner");
+        timer.endPass();
+        timer.endPass();
+        timer.markFrameEnd();
+        timer.endFrame();
+        glFinish();
+    }
+    EXPECT_EQ(timer.getNestingViolations(), GpuTimer::BUFFER_COUNT + 1);
+    ASSERT_EQ(timer.getResults().size(), 1u);
+    EXPECT_EQ(timer.getResults()[0].name, "Outer");
+}
+
+// 3D_E-0790: the 17th pass in a frame is counted, not lost silently, and the
+// first 16 still report.
+TEST_F(GpuTimerTest, PassesBeyondTheLimitAreCounted)
+{
+    GpuTimer timer;
+    timer.init();
+    for (int i = 0; i < GpuTimer::BUFFER_COUNT + 1; ++i)
+    {
+        runFrame(timer, 17);
+        glFinish();
+    }
+    EXPECT_EQ(timer.getDroppedPasses(), GpuTimer::BUFFER_COUNT + 1);
+    EXPECT_EQ(timer.getResults().size(), 16u);
+}
+
+// Flat, in-limit use stays clean.
+TEST_F(GpuTimerTest, FlatPassesRaiseNoViolations)
+{
+    GpuTimer timer;
+    timer.init();
+    for (int i = 0; i < GpuTimer::BUFFER_COUNT + 1; ++i)
+    {
+        runFrame(timer, 16);
+    }
+    EXPECT_EQ(timer.getNestingViolations(), 0);
+    EXPECT_EQ(timer.getDroppedPasses(), 0);
+}

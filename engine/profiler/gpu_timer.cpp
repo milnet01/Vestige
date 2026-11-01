@@ -5,6 +5,8 @@
 /// @brief GpuTimer implementation — triple-buffered GL_TIMESTAMP queries.
 #include "profiler/gpu_timer.h"
 
+#include "core/logger.h"
+
 namespace Vestige
 {
 
@@ -24,6 +26,12 @@ void GpuTimer::init()
     }
 
     m_initialized = true;
+    m_depth = 0;
+    m_openPassDropped = false;
+    m_nestingViolations = 0;
+    m_droppedPasses = 0;
+    m_loggedNesting = false;
+    m_loggedDropped = false;
     m_frameCount = 0;
     m_writeBuffer = 0;
 }
@@ -51,6 +59,8 @@ void GpuTimer::shutdown()
 void GpuTimer::beginFrame()
 {
     m_passCount = 0;
+    m_depth = 0;
+    m_openPassDropped = false;
     if (!m_initialized) return;
 
     m_spanEnded[m_writeBuffer] = false;
@@ -67,7 +77,33 @@ void GpuTimer::markFrameEnd()
 
 void GpuTimer::beginPass(const char* name)
 {
-    if (!m_initialized || m_passCount >= MAX_PASSES) return;
+    if (!m_initialized) return;
+
+    ++m_depth;
+    if (m_depth > 1)
+    {
+        // Nested: recording it would overwrite the outer pass's slot.
+        ++m_nestingViolations;
+        if (!m_loggedNesting)
+        {
+            m_loggedNesting = true;
+            Logger::warning(std::string("GpuTimer: pass \"") + (name ? name : "?")
+                            + "\" begun inside another pass; the nested pass is not timed.");
+        }
+        return;
+    }
+    if (m_passCount >= MAX_PASSES)
+    {
+        ++m_droppedPasses;
+        m_openPassDropped = true;
+        if (!m_loggedDropped)
+        {
+            m_loggedDropped = true;
+            Logger::warning(std::string("GpuTimer: more than ") + std::to_string(MAX_PASSES)
+                            + " passes in one frame; the extra passes are not timed.");
+        }
+        return;
+    }
 
     m_passNames[m_writeBuffer][m_passCount] = name;
     glQueryCounter(m_queries[m_writeBuffer][m_passCount * 2], GL_TIMESTAMP);
@@ -75,8 +111,27 @@ void GpuTimer::beginPass(const char* name)
 
 void GpuTimer::endPass()
 {
-    if (!m_initialized || m_passCount >= MAX_PASSES) return;
+    if (!m_initialized) return;
 
+    if (m_depth == 0)
+    {
+        // endPass with no open pass.
+        ++m_nestingViolations;
+        if (!m_loggedNesting)
+        {
+            m_loggedNesting = true;
+            Logger::warning("GpuTimer: endPass with no open pass; ignored.");
+        }
+        return;
+    }
+    --m_depth;
+    if (m_depth > 0) return;  // closes a nested pass that was refused
+
+    if (m_openPassDropped)
+    {
+        m_openPassDropped = false;
+        return;
+    }
     glQueryCounter(m_queries[m_writeBuffer][m_passCount * 2 + 1], GL_TIMESTAMP);
     ++m_passCount;
 }

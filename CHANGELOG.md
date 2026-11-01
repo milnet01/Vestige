@@ -25,6 +25,10 @@ may change any interface without notice.
 
 ## [Unreleased]
 
+### 2026-11-01 Fixed — GPU timing sections that nest or overflow now say so
+
+- **A GPU timing section begun inside another is now refused and logged once, and the outer section keeps its time. More than 16 sections in a frame are also logged once and counted. Before, both failed silently. No file format changes.** (3D_E-0790)
+
 ### 2026-11-01 Fixed — GPU timings no longer make the CPU wait for the GPU
 
 - **The GPU timer now checks that a timing query has finished before reading it, and skips that sample if not. Before, a late GPU made the CPU stall inside the profiler. A skipped sample is left out of the --profile-log GPU rows and the --frame-log GPU rows; the file formats are unchanged. perf_gate numbers keep their meaning.** (3D_E-0788)
