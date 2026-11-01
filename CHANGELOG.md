@@ -25,6 +25,10 @@ may change any interface without notice.
 
 ## [Unreleased]
 
+### 2026-11-01 Fixed — Opening a scene without terrain or foliage no longer shows the last scene's
+
+- **Loading a scene file that has no environment or terrain data now clears the previous scene's foliage and terrain, as File New does.** (3D_E-0854)
+
 ### 2026-11-01 Fixed — Cancelling Open after Don't Save keeps the unsaved-work warning
 
 - **Choosing Don't Save and then cancelling the Open browser no longer marks an edited scene as saved.** (3D_E-0853)

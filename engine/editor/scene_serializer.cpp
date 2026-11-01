@@ -768,6 +768,12 @@ SceneSerializerResult SceneSerializer::loadScene(
     {
         environment->deserialize(sceneJson["environment"]);
     }
+    else if (environment)
+    {
+        // No block: the scene has no foliage. Keep nothing of the last one
+        // (3D_E-0854); File New does the same.
+        environment->clear();
+    }
 
     if (terrain && sceneJson.contains("terrain") && sceneJson["terrain"].is_object())
     {
@@ -810,6 +816,11 @@ SceneSerializerResult SceneSerializer::loadScene(
         {
             terrain->loadSplatmap(splatmapPath);
         }
+    }
+    else if (terrain && terrain->isInitialized())
+    {
+        // No block: the scene has no terrain (3D_E-0854).
+        terrain->shutdown();
     }
 
     return result;

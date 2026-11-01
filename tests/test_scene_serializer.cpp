@@ -6,6 +6,9 @@
 #include "editor/scene_serializer.h"
 #include "core/event_bus.h"
 #include "core/system_events.h"
+#include "environment/foliage_manager.h"
+#include "environment/terrain.h"
+#include "gl_test_fixture.h"
 #include "resource/resource_manager.h"
 #include "scene/scene.h"
 #include "scene/entity.h"
@@ -195,6 +198,79 @@ TEST_F(SceneSerializerTest, RejectedLoadPublishesNothing_INV7)
     EXPECT_EQ(events, 0);
     EXPECT_NE(scene.findEntityById(keptId), nullptr);
     EXPECT_EQ(scene.getName(), "Kept");
+}
+
+// 3D_E-0854: a scene file with no environment or terrain block describes a
+// scene without them, so loading it must not keep the previous scene's. A
+// v1 file (no such blocks) must still load.
+class SceneSerializerResetGlTest : public ::Vestige::Test::GLTestFixture
+{
+protected:
+    void SetUp() override
+    {
+        GLTestFixture::SetUp();
+        if (IsSkipped())
+        {
+            return;
+        }
+        m_dir = fs::temp_directory_path()
+              / ("vestige_test_reset_" + Testing::vestigeTestStamp());
+        fs::create_directories(m_dir);
+    }
+
+    void TearDown() override
+    {
+        std::error_code ec;
+        fs::remove_all(m_dir, ec);
+    }
+
+    fs::path writeBareScene(int formatVersion)
+    {
+        nlohmann::json j;
+        j["vestige_scene"]["format_version"] = formatVersion;
+        j["vestige_scene"]["name"] = "Bare";
+        j["entities"] = nlohmann::json::array();
+        const fs::path path = m_dir / "bare.scene";
+        std::ofstream out(path);
+        out << j.dump(4);
+        return path;
+    }
+
+    fs::path m_dir;
+};
+
+static size_t treeCount(const FoliageManager& foliage)
+{
+    std::vector<AABB> trunks;
+    foliage.appendTreeTrunkColliders(trunks, 0.3f, 6.0f);
+    return trunks.size();
+}
+
+TEST_F(SceneSerializerResetGlTest, BlocklessSceneClearsPreviousTerrainAndFoliage_0854)
+{
+    ResourceManager resources;
+    FoliageManager foliage;
+    TreeInstance tree;
+    tree.position = glm::vec3(1.0f, 0.0f, 1.0f);
+    foliage.placeTree(tree, 0.0f);
+    ASSERT_EQ(treeCount(foliage), 1u);
+    Terrain terrain;
+    ASSERT_TRUE(terrain.initialize(TerrainConfig{}));
+
+    for (int version : {1, SceneSerializer::CURRENT_FORMAT_VERSION})
+    {
+        Scene scene("Previous");
+        SceneSerializerResult result = SceneSerializer::loadScene(
+            scene, writeBareScene(version), resources, &foliage, &terrain, nullptr);
+
+        ASSERT_TRUE(result.success) << "version " << version << ": " << result.errorMessage;
+        EXPECT_EQ(treeCount(foliage), 0u) << "version " << version;
+        EXPECT_FALSE(terrain.isInitialized()) << "version " << version;
+
+        // Put the previous scene's data back for the next round.
+        foliage.placeTree(tree, 0.0f);
+        ASSERT_TRUE(terrain.initialize(TerrainConfig{}));
+    }
 }
 
 TEST_F(SceneSerializerTest, LoadRejectsNonexistentFile)
