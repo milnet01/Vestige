@@ -25,6 +25,10 @@ may change any interface without notice.
 
 ## [Unreleased]
 
+### 2026-11-01 Fixed — README and CLAUDE.md agree on how to take a perf_gate baseline
+
+- **The README told people to record perf_gate baselines with --visual-test, which times screenshot and report work inside its frames. It now says --demo-flythrough --no-vsync, as CLAUDE.md does, and why.** (3D_E-0792)
+
 ### 2026-11-01 Fixed — The profiler records real frame time in --demo-capture
 
 - **While recording a demo video, the profiler and --profile-log recorded the fixed capture step instead of what each frame took. They now use the real frame time. In normal play the number is the same, except that a frame longer than 250 ms is no longer cut to 250 ms in the profiler. perf_gate baselines from normal runs keep their meaning.** (3D_E-0791)

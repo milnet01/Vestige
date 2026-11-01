@@ -306,15 +306,18 @@ docs/              Design notes, research documents, automated audit reports
   own, then compare later runs against it:
   ```bash
   # 1. record a reference run on YOUR hardware (do this once)
-  ./build/bin/vestige --visual-test --profile-log=baseline-run.csv
+  ./build/bin/vestige --demo-flythrough --no-vsync --profile-log=baseline-run.csv
   python3 tools/perf_gate.py --update-baseline --current baseline-run.csv \
       --out my-baseline.json --hardware "RX 6600"
 
   # 2. after a change, capture again and check it against that baseline
-  ./build/bin/vestige --visual-test --profile-log=run.csv
+  ./build/bin/vestige --demo-flythrough --no-vsync --profile-log=run.csv
   python3 tools/perf_gate.py --baseline my-baseline.json --current run.csv
   ```
-  Discard the first capture of a session — it runs cold and reads slow.
+  Use `--demo-flythrough --no-vsync`, not `--visual-test`: the visual-test
+  harness reads pixels and writes PNGs and a report inside its frames, so its
+  timings are not the engine's. Use a Release build. Discard the first capture
+  of a session — it runs cold and reads slow.
   A self-test over committed fixtures (`tests/fixtures/perf_gate/`) runs
   as part of `ctest`, so the gate itself is covered even on CI's software
   renderer.
