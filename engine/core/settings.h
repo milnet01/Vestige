@@ -470,7 +470,7 @@ bool shouldAskAboutUpdateChecks(const UpdateSettings& updates, bool firstRunComp
 ///        the engine's bootstrap logs + decides fallback.
 enum class LoadStatus
 {
-    Ok,                  ///< Parsed, migrated, validated cleanly.
+    Ok,                  ///< Parsed, migrated, validated. Clamping is not reported.
     FileMissing,         ///< No file at the given path. Defaults returned.
     ParseError,          ///< JSON malformed — `.corrupt` sidecar written, defaults returned.
     MigrationError,      ///< Migration chain aborted — defaults returned.
@@ -518,8 +518,9 @@ struct Settings
     nlohmann::json toJson() const;
 
     /// @brief Parses from an already-loaded json tree. Runs the
-    ///        migration + validation chain. Returns whether any
-    ///        fields were clamped / dropped during validation.
+    ///        migration + validation chain. Returns false only when
+    ///        migration fails. Returns true otherwise; clamping done
+    ///        by validation is not reported.
     bool fromJson(const nlohmann::json& j);
 
     bool operator==(const Settings& o) const;

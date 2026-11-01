@@ -690,14 +690,9 @@ private:
 /// @brief Convert every registered action in `map` to its wire form
 ///        for serialisation. Wire order matches `map.actions()`.
 ///
-/// **Wire format note:** the wire `scancode` field currently carries
-/// the GLFW *key code* from `InputBinding::code`, not a true
-/// scan code. Layout-preserving scancode translation (WASD stable
-/// across AZERTY / Dvorak — the design-doc intent) requires GLFW's
-/// `glfwGetKeyScancode` + a reverse lookup, and lands in a follow-on
-/// slice. Stored-value-same-as-in-memory keeps 13.4's round-trip
-/// testable without a GLFW context and matches what the user will
-/// see if they hand-edit `settings.json`.
+/// The wire `scancode` field is the value stored in the in-memory
+/// binding, copied unchanged. For keyboards that is a scan code; see
+/// `input/input_bindings_wire.h` for the meaning per device.
 std::vector<ActionBindingWire> extractInputBindings(
     const InputActionMap& map);
 
