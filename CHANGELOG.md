@@ -25,6 +25,10 @@ may change any interface without notice.
 
 ## [Unreleased]
 
+### 2026-11-01 Fixed — Audit web page finds its reports
+
+- **The audit tool's web page now reads reports from the folder set in the audit config instead of docs/, where nothing is written any more** (3D_E-0846)
+
 ### 2026-11-01 Fixed — Non-looping ping-pong sprite clips stop
 
 - **A sprite clip set to ping-pong without looping now stops when it is back on its first frame instead of playing forever** (3D_E-0831)

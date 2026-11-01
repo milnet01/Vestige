@@ -186,3 +186,26 @@ def test_api_run_rejects_bad_tiers(client, web_app):
 
 # NVD API key shape-validation tests live in test_tier5_nvd.py (same
 # _resolve_api_key function); keeping them close to the unit under test.
+
+
+def test_report_endpoints_follow_configured_report_path(web_app, tmp_path, monkeypatch):
+    """3D_E-0846: reports are read from the config's report_path directory."""
+    monkeypatch.setattr(web_app, "DEFAULT_ROOT", str(tmp_path))
+    out = tmp_path / "docs" / "archive" / "audits"
+    out.mkdir(parents=True)
+    (out / "AUTOMATED_AUDIT_REPORT.md").write_text("latest copy")
+    (out / "AUTOMATED_AUDIT_REPORT_2026-01-01_000000.md").write_text("stamped")
+
+    client = web_app.app.test_client()
+
+    assert client.get("/api/report").get_data(as_text=True) == "latest copy"
+
+    listing = client.get("/api/reports").get_json()
+    assert [r["filename"] for r in listing["reports"]] == [
+        "AUTOMATED_AUDIT_REPORT_2026-01-01_000000.md"
+    ]
+    assert Path(listing["directory"]) == out
+    assert Path(listing["report_path"]) == out / "AUTOMATED_AUDIT_REPORT.md"
+
+    got = client.get("/api/reports/AUTOMATED_AUDIT_REPORT_2026-01-01_000000.md")
+    assert got.get_data(as_text=True) == "stamped"

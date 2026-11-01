@@ -251,10 +251,16 @@ def api_detect():
         return jsonify({"error": str(e)}), 500
 
 
+def _configured_report_path() -> Path:
+    """The latest-report path the audit writes, taken from the config's report_path."""
+    from lib.config import load_config
+    return load_config(DEFAULT_CONFIG, DEFAULT_ROOT).report_path
+
+
 @app.route("/api/report")
 def api_report():
     """Return the generated markdown report."""
-    report_path = Path(DEFAULT_ROOT) / "docs" / "AUTOMATED_AUDIT_REPORT.md"
+    report_path = _configured_report_path()
 
     # Allow override via query param, but only inside allowed roots
     # (AUDIT.md §H1): previously no check → arbitrary file read.
@@ -330,7 +336,7 @@ def api_config_save():
 @app.route("/api/reports")
 def api_reports():
     """List all timestamped audit reports."""
-    report_dir = Path(DEFAULT_ROOT) / "docs"
+    report_dir = _configured_report_path().parent
     reports = []
     for f in sorted(report_dir.glob("AUTOMATED_AUDIT_REPORT_*.md"), reverse=True):
         stat = f.stat()
@@ -340,13 +346,17 @@ def api_reports():
             "size": stat.st_size,
             "modified": stat.st_mtime,
         })
-    return jsonify({"reports": reports[:50]})
+    return jsonify({
+        "reports": reports[:50],
+        "directory": str(report_dir),
+        "report_path": str(_configured_report_path()),
+    })
 
 
 @app.route("/api/reports/<path:filename>")
 def api_report_file(filename: str):
     """Return a specific timestamped report."""
-    report_dir = Path(DEFAULT_ROOT) / "docs"
+    report_dir = _configured_report_path().parent
     path = (report_dir / filename).resolve()
     try:
         path.relative_to(report_dir.resolve())
