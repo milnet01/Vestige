@@ -2,7 +2,7 @@
 // SPDX-License-Identifier: MIT
 
 /// @file welcome_panel.h
-/// @brief Welcome / getting started panel shown on first launch.
+/// @brief Welcome / getting started panel, opened from Help > Welcome Screen.
 #pragma once
 
 #include <string>
@@ -12,11 +12,14 @@ namespace Vestige
 
 /// @brief Displays a welcome screen with keyboard shortcuts and workflow tips.
 ///
-/// Shows automatically on first launch. Can be re-opened via Help > Welcome Screen.
+/// Does not open automatically (the first-run wizard owns first launch).
+/// Opened via Help > Welcome Screen. Closing it writes the legacy
+/// `welcome_shown` flag file, which Settings promotes to
+/// `onboarding.hasCompletedFirstRun` on the next load.
 class WelcomePanel
 {
 public:
-    /// @brief Initializes the panel, checking if it should auto-show.
+    /// @brief Initializes the panel and reads the legacy flag file's presence.
     /// @param configDir Directory for config files (e.g., ~/.config/vestige).
     void initialize(const std::string& configDir);
 

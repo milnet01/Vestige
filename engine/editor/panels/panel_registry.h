@@ -19,8 +19,10 @@ class IPanel;
 /// `bool xxxOpen = m_xxxPanel.isOpen(); if (ImGui::MenuItem(...)) m_xxxPanel.setOpen(xxxOpen);`
 /// block in `editor.cpp`. With the registry, panels register themselves at editor
 /// initialise time and the Window-menu loop is one `drawMenuToggle(panel)` call
-/// per entry. New togglable panels just inherit `IPanel`, get registered in
-/// `Editor::initialize`, and pick up the menu entry for free.
+/// per entry. The loop is not written yet: each Window-menu entry is a
+/// hand-written `drawMenuToggle` line in `editor.cpp`. A new togglable panel
+/// inherits `IPanel`, is registered in `Editor::initialize`, and also needs
+/// its own `drawMenuToggle` line there to appear in the menu.
 ///
 /// The registry stores raw pointers — panels are owned by `Editor` as members,
 /// so their lifetimes outlive the registry. Registering a panel twice is a no-op.
@@ -33,8 +35,6 @@ public:
     /// @brief Emits one `ImGui::MenuItem` entry for the panel and toggles its
     ///        open state on click. Returns true when the user clicked the item
     ///        this frame (mirrors `ImGui::MenuItem`'s return contract).
-    /// @note Headless test builds can stub ImGui — see `PanelRegistry::drawMenuToggle`
-    ///       implementation in `panel_registry.cpp`.
     bool drawMenuToggle(IPanel& panel) const;
 
     /// @brief Number of registered panels. For tests + diagnostics.
