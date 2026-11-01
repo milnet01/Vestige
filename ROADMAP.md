@@ -6206,19 +6206,24 @@ shipped that have no invocation path at all.
   Source: ut-ants-review-2026-10-24.
   Lanes: profiler.
 
-- 📋 [3D_E-0787] **MemoryTracker's CPU heap figures are always zero in the running engine.**
+- ✅ [3D_E-0787] **MemoryTracker's CPU heap figures are always zero in the running engine.**
   Verified 2026-10-24: MemoryTracker::recordAlloc is defined and called
   only from tests; no global operator new/delete override exists. Add the
   override, or remove the panel rows.
+  cd96d1e: the always-zero CPU heap rows are removed. Live figures would
+  need a global operator new override, measured on a quiet GPU, as its
+  own item.
   **Layman:** The memory panel shows zero for program memory because nothing ever reports it.
   Kind: fix.
   Source: ut-ants-review-2026-10-24.
   Lanes: profiler.
 
-- 📋 [3D_E-0788] **GpuTimer reads timer queries with a blocking GL_QUERY_RESULT and no availability check.**
+- ✅ [3D_E-0788] **GpuTimer reads timer queries with a blocking GL_QUERY_RESULT and no availability check.**
   Reported by UT Ants, not yet checked here: gpu_timer.cpp reads
   GL_QUERY_RESULT without GL_QUERY_RESULT_AVAILABLE. Check availability
   and skip the sample when not ready.
+  100853d: timer reads no longer block; a sample not ready is skipped
+  and left out of the logs.
   **Layman:** Reading GPU timings can occasionally make the CPU wait for the GPU, distorting the very numbers it measures.
   Kind: fix.
   Source: ut-ants-review-2026-10-24.
@@ -6231,25 +6236,32 @@ shipped that have no invocation path at all.
   report frame minus passes as a named remainder. Also: the CPU frame
   window includes vsync/cap waits and leaves out input, which skews the
   CPU-bound/GPU-bound label.
+  2026-11-01: 1919ef9 uses the whole-frame span for Total GPU, shows the
+  remainder as a row, and bases the CPU-bound label on work time. Open:
+  input handling is outside the CPU window; no separate scopes for
+  water, blit or UI.
   **Layman:** Some drawing work (water reflections, UI, editor) is never timed, so the GPU total under-reports.
   Kind: fix.
   Source: ut-ants-review-2026-10-24.
   Lanes: profiler.
 
-- 📋 [3D_E-0790] **Profiler passes cannot nest and more than 16 are dropped silently.**
+- ✅ [3D_E-0790] **Profiler passes cannot nest and more than 16 are dropped silently.**
   Reported by UT Ants, not yet checked here: a nested beginPass
   overwrites the outer slot; overflow past 16 passes is silent. Make both
   loud (static_assert or a log line). See memory note on GpuTimer
   nesting.
+  2c74609: nested, unmatched and over-limit passes are refused, counted
+  and logged once.
   **Layman:** Timing sections can overwrite each other or vanish without any warning.
   Kind: fix.
   Source: ut-ants-review-2026-10-24.
   Lanes: profiler.
 
-- 📋 [3D_E-0791] **In --demo-capture the profiler records the fixed 33.3 ms step, not what the frame took.**
+- ✅ [3D_E-0791] **In --demo-capture the profiler records the fixed 33.3 ms step, not what the frame took.**
   Reported by UT Ants, not yet checked here: Timer delta is the fixed
   step in fixed-step mode and time_s is cumulative clamped delta. Measure
   with steady_clock regardless of the simulation step.
+  b5d25d5: the profiler gets real unclamped frame time.
   **Layman:** When recording a demo video, the timings show the video's frame step instead of real cost.
   Kind: fix.
   Source: ut-ants-review-2026-10-24.
@@ -6263,6 +6275,10 @@ shipped that have no invocation path at all.
   have no caller; draw-call counts cover Renderer only; no GPU debug
   groups despite CODING_STANDARDS section 29; GpuTimer, PerformanceProfiler,
   ProfileLog and fps_floor.py have no tests.
+  2026-11-01: e3e7039 corrects the README's perf_gate command. Open:
+  --isolate-feature=ibl*, SystemRegistry timings, draw-call counts, GPU
+  debug groups, tests for PerformanceProfiler, ProfileLog and
+  fps_floor.py.
   **Layman:** Two documents give different instructions for taking a performance baseline.
   Kind: doc-fix.
   Source: ut-ants-review-2026-10-24.
