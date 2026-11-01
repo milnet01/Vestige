@@ -131,7 +131,8 @@ public:
     /// @brief Gets the configuration (read-only).
     const CascadedShadowConfig& getConfig() const;
 
-    // --- Static helpers (also used in tests) ---
+    // --- Static helpers (called only by tests; update() computes the
+    //     same split formula inline, so change both together) ---
 
     /// @brief Computes split distances using a logarithmic-linear blend.
     /// @param nearPlane Camera near plane distance.

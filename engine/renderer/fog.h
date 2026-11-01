@@ -185,8 +185,9 @@ struct SunInscatterParams
 ///
 /// @param params          Sun-inscatter parameters.
 /// @param viewDir         Unit view direction from camera through pixel.
-/// @param sunDirection    Unit direction *from* the scene *to* the sun
-///                        (matches the directional-light convention).
+/// @param sunDirection    Unit direction the sunlight travels, from the sun
+///                        into the scene (the directional-light convention).
+///                        The function negates it to get the direction to the sun.
 /// @param viewDistance    Eye-space distance to the surface.
 /// @returns Lobe weight in `[0, 1]` — 0 at start distance / backlit,
 ///          rising toward 1 as view aligns with sun.

@@ -141,7 +141,7 @@ float computeSunInscatterLobe(const SunInscatterParams& params,
 {
     if (viewDistance < params.startDistance) return 0.0f;
 
-    // `sunDirection` points from scene toward the sun (engine
+    // `sunDirection` is the direction the light travels (engine
     // convention for directional lights). Align-with-sun lobe weight
     // is the cosine between viewDir and *-sunDirection* (toward sun
     // means looking into where the light comes from).
