@@ -651,6 +651,23 @@ TEST_F(DismembermentZonesTest, AddZone)
     EXPECT_EQ(zones.getZone(0).zoneName, "LeftArm");
 }
 
+TEST_F(DismembermentZonesTest, ZeroMaxHealthKeepsVisualScaleFinite)
+{
+    DismembermentZones zones;
+    DismembermentZone zone;
+    zone.boneIndex = 4;
+    zone.zoneName = "LeftArm";
+    zone.health = 10.0f;
+    zone.maxHealth = 0.0f;
+    zones.addZone(zone);
+
+    zones.applyDamage(0, 1.0f);
+    const float scale = zones.getZone(0).damageVisualScale;
+    EXPECT_TRUE(std::isfinite(scale));
+    EXPECT_GE(scale, 0.0f);
+    EXPECT_LE(scale, 1.0f);
+}
+
 TEST_F(DismembermentZonesTest, ApplyDamageAndSever)
 {
     DismembermentZones zones;

@@ -6,6 +6,7 @@
 
 #include "experimental/animation/inertialization.h"
 
+#include <algorithm>
 #include <cmath>
 
 namespace Vestige
@@ -52,7 +53,8 @@ void Inertialization::start(const std::vector<glm::vec3>& srcPositions,
                             const std::vector<glm::vec3>& dstVelocities,
                             float halflife)
 {
-    size_t boneCount = srcPositions.size();
+    // Only bones present in both poses can be blended.
+    size_t boneCount = std::min(srcPositions.size(), dstPositions.size());
     m_states.resize(boneCount);
     m_halflife = halflife;
     m_elapsed = 0.0f;

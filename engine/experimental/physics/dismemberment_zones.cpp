@@ -31,7 +31,10 @@ bool DismembermentZones::applyDamage(int zoneIndex, float damage)
         return false;
 
     zone.health -= damage;
-    zone.damageVisualScale = 1.0f - std::max(zone.health / zone.maxHealth, 0.0f);
+    // A zone with no health budget has nothing to divide by: show it as fully damaged.
+    zone.damageVisualScale = (zone.maxHealth > 0.0f)
+        ? 1.0f - std::clamp(zone.health / zone.maxHealth, 0.0f, 1.0f)
+        : 1.0f;
 
     if (zone.health <= 0.0f)
     {

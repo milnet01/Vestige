@@ -19,7 +19,7 @@ class Skeleton;
 struct DismembermentZone
 {
     int boneIndex = -1;                ///< Skeleton bone this zone maps to
-    glm::vec3 cutPlaneNormal;          ///< Cut direction (bone-perpendicular)
+    glm::vec3 cutPlaneNormal{0.0f};        ///< Cut direction (bone-perpendicular)
     float cutPlaneOffset = 0.0f;       ///< Offset along bone axis from joint
     float health = 100.0f;            ///< Current hit points
     float maxHealth = 100.0f;         ///< Threshold for severance

@@ -435,6 +435,21 @@ TEST(InertializationTest, StartActivates)
     EXPECT_TRUE(inert.isActive());
 }
 
+TEST(InertializationTest, StartToleratesShorterDestinationPose)
+{
+    Inertialization inert;
+
+    std::vector<glm::vec3> srcPos = {glm::vec3(1, 0, 0), glm::vec3(2, 0, 0), glm::vec3(3, 0, 0)};
+    std::vector<glm::quat> srcRot(3, glm::quat(1, 0, 0, 0));
+    std::vector<glm::vec3> srcVel(3, glm::vec3(0));
+    std::vector<glm::vec3> dstPos = {glm::vec3(0, 0, 0)};   // shorter than the source
+    std::vector<glm::quat> dstRot = {glm::quat(1, 0, 0, 0)};
+    std::vector<glm::vec3> dstVel = {glm::vec3(0)};
+
+    inert.start(srcPos, srcRot, srcVel, dstPos, dstRot, dstVel, 0.1f);
+    EXPECT_TRUE(inert.isActive());
+}
+
 TEST(InertializationTest, OffsetDecaysToZero)
 {
     Inertialization inert;

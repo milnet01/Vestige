@@ -25,6 +25,12 @@ may change any interface without notice.
 
 ## [Unreleased]
 
+### 2026-11-01 Fixed — Experimental animation and dismemberment edge cases
+
+- **Starting an inertialization blend with a destination pose shorter than the source no longer reads past its end.** (3D_E-0830)
+
+- **A dismemberment zone with zero max health no longer produces an infinite damage scale; its cut normal now starts at zero.** (3D_E-0830)
+
 ### 2026-11-01 Fixed — Settings load: loudness target clamped, first-run flag kept on a bad file
 
 - **A hand-edited loudness target outside the 0 to -70 LUFS range is now clamped on load.** (3D_E-0823)
