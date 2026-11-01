@@ -46,8 +46,8 @@ enum class NodeCategory
 {
     MATH_BASIC,     ///< +, -, *, /, negate
     MATH_ADVANCED,  ///< pow, sqrt, abs, min, max
-    TRIGONOMETRY,   ///< sin, cos, tan, asin, acos, atan
-    EXPONENTIAL,    ///< exp, log, log2
+    TRIGONOMETRY,   ///< sin, cos
+    EXPONENTIAL,    ///< exp, log
     CLAMPING,       ///< clamp, saturate, floor, ceil
     INTERPOLATION,  ///< lerp, smoothstep
     INPUT,          ///< Variable inputs and constants

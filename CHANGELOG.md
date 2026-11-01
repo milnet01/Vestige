@@ -25,6 +25,10 @@ may change any interface without notice.
 
 ## [Unreleased]
 
+### 2026-11-01 Fixed — Formula node factory only offers usable functions
+
+- **The formula node factory no longer lists tan, asin, acos, atan and log2, which the expression layer rejects and which would throw on conversion** (3D_E-0833)
+
 ### 2026-11-01 Fixed — Formula graph with a shared input
 
 - **A formula graph where one node feeds two inputs (such as x + x) now converts to an expression instead of failing** (3D_E-0833)

@@ -848,12 +848,13 @@ Node NodeGraph::createFunctionNode(const std::string& function)
     node.name = function;
 
     // Categorize
-    if (function == "sin" || function == "cos" || function == "tan" ||
-        function == "asin" || function == "acos" || function == "atan")
+    // Only functions ExprNode::isAllowedUnaryOp accepts are listed: the
+    // evaluator and both code generators have no tan/asin/acos/atan/log2.
+    if (function == "sin" || function == "cos")
     {
         node.category = NodeCategory::TRIGONOMETRY;
     }
-    else if (function == "exp" || function == "log" || function == "log2")
+    else if (function == "exp" || function == "log")
     {
         node.category = NodeCategory::EXPONENTIAL;
     }

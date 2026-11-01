@@ -639,6 +639,23 @@ TEST(NodeGraph_ExprTree, AddTwoVariables)
     EXPECT_EQ(expr->children[1]->name, "b");
 }
 
+TEST(NodeGraph_Factory, FunctionNodesOfferedAreAllExpressible)
+{
+    // 3D_E-0833: every function the trig / exponential groups offer must
+    // be accepted by the expression allow-list, or toExpressionTree throws.
+    for (const char* fn : {"sin", "cos", "exp", "log"})
+    {
+        EXPECT_TRUE(ExprNode::isAllowedUnaryOp(fn)) << fn;
+    }
+    for (const char* fn : {"tan", "asin", "acos", "atan", "log2"})
+    {
+        const Node node = NodeGraph::createFunctionNode(fn);
+        EXPECT_NE(node.category, NodeCategory::TRIGONOMETRY) << fn;
+        EXPECT_NE(node.category, NodeCategory::EXPONENTIAL) << fn;
+        EXPECT_FALSE(ExprNode::isAllowedUnaryOp(fn)) << fn;
+    }
+}
+
 TEST(NodeGraph_ExprTree, SharedSourceFeedingTwoInputsConverts)
 {
     // 3D_E-0833: x feeds both inputs of the add (a diamond, not a cycle).
