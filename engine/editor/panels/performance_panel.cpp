@@ -324,18 +324,9 @@ void PerformancePanel::drawMemoryTab(PerformanceProfiler& profiler)
 {
     auto& mem = profiler.getMemoryTracker();
 
-    ImGui::Text("CPU Heap");
-    size_t cpuBytes = MemoryTracker::getCpuAllocatedBytes();
-    size_t cpuCount = MemoryTracker::getCpuAllocationCount();
-    size_t cpuPeak = MemoryTracker::getCpuPeakBytes();
-
-    ImGui::Text("  Allocated: %.1f MB (%zu allocs)",
-                static_cast<double>(cpuBytes) / (1024.0 * 1024.0), cpuCount);
-    ImGui::Text("  Peak:      %.1f MB",
-                static_cast<double>(cpuPeak) / (1024.0 * 1024.0));
-
-    ImGui::Separator();
-
+    // No CPU heap rows: nothing in the engine feeds MemoryTracker's CPU
+    // counters (no global operator new/delete override), so they would read
+    // zero. 3D_E-0787.
     ImGui::Text("GPU VRAM");
     size_t gpuUsed = mem.getGpuUsedMB();
     size_t gpuTotal = mem.getGpuTotalMB();

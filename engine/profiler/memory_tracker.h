@@ -15,7 +15,8 @@ namespace Vestige
 ///
 /// CPU tracking uses atomic counters fed by `recordAlloc` / `recordFree`.
 /// No global new/delete override in the engine calls them, so outside tests
-/// the CPU figures stay at zero.
+/// the CPU figures stay at zero. The Performance panel therefore shows only
+/// GPU VRAM (3D_E-0787).
 /// GPU VRAM is read from AMD sysfs (amortized — every 60 frames).
 class MemoryTracker
 {

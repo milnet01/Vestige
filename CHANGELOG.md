@@ -25,6 +25,10 @@ may change any interface without notice.
 
 ## [Unreleased]
 
+### 2026-11-01 Fixed — Memory tab no longer shows a CPU heap figure that was always zero
+
+- **The Performance panel's Memory tab dropped its CPU Heap rows. Nothing in the engine reported heap use, so they always read zero. GPU VRAM is unchanged.** (3D_E-0787)
+
 ### 2026-11-01 Fixed — The recovery dialog no longer reads the autosave file every frame
 
 - **The autosave recovery dialog reads the file's details once when it opens instead of on every frame.** (3D_E-0856)
