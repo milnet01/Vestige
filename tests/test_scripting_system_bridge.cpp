@@ -471,3 +471,42 @@ TEST(ScriptingSystemBridge, TimelineHandlesRemainingTimeNaNGracefully)
     sys.unregisterInstance(instance);
     sys.shutdown();
 }
+
+TEST(ScriptingSystemBridge, OnTickThatSchedulesActionsDoesNotInvalidateTheRunningAction)
+{
+    Engine engine;
+    ScriptingSystem sys;
+    ASSERT_TRUE(sys.initialize(engine));
+
+    ScriptGraph graph;
+    ScriptInstance instance;
+    instance.initialize(graph, 1);
+    sys.registerInstance(instance);
+
+    // One action whose per-frame callback schedules many more, which forces
+    // the pending vector to reallocate while the first action is running.
+    PendingLatentAction first;
+    first.nodeId = 0;
+    first.remainingTime = 1.0f;
+    first.totalDuration = 1.0f;
+    first.onTick = [&instance](float)
+    {
+        for (int i = 0; i < 64; ++i)
+        {
+            PendingLatentAction extra;
+            extra.nodeId = 0;
+            extra.remainingTime = 5.0f;
+            extra.totalDuration = 5.0f;
+            instance.pendingActions().push_back(extra);
+        }
+    };
+    instance.pendingActions().push_back(first);
+
+    sys.update(0.1f);
+
+    // The original action is still pending, and so are the 64 new ones.
+    EXPECT_EQ(instance.pendingActions().size(), 65u);
+
+    sys.unregisterInstance(instance);
+    sys.shutdown();
+}

@@ -612,8 +612,10 @@ void ScriptingSystem::tickLatentActions(float deltaTime)
 
         for (size_t i = 0; i < countAtStart; ++i)
         {
-            auto& action = actions[i];
+            // `action` must not be used after onTick: a callback that
+            // schedules a new action reallocates `actions`.
             bool done = false;
+            auto& action = actions[i];
 
             if (action.condition)
             {
@@ -637,16 +639,20 @@ void ScriptingSystem::tickLatentActions(float deltaTime)
                 if (!std::isfinite(progress)) progress = 0.0f;
                 if (progress < 0.0f) progress = 0.0f;
                 if (progress > 1.0f) progress = 1.0f;
-                action.onTick(progress);
+                // Call a copy: the callback may reallocate `actions`, which
+                // would destroy the std::function that is running.
+                const auto tick = action.onTick;
+                tick(progress);
             }
 
+            auto& current = actions[i];
             if (done)
             {
-                completed.push_back(std::move(action));
+                completed.push_back(std::move(current));
             }
             else
             {
-                pending.push_back(std::move(action));
+                pending.push_back(std::move(current));
             }
         }
 

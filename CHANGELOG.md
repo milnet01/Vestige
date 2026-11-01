@@ -25,6 +25,10 @@ may change any interface without notice.
 
 ## [Unreleased]
 
+### 2026-11-01 Fixed — A script action that schedules another action no longer reads freed memory
+
+- **A per-frame script callback that schedules a new latent action no longer touches a list that was just moved in memory.** (3D_E-0841)
+
 ### 2026-11-01 Fixed — Saving a scene in the editor keeps its music
 
 - **Save and Save As no longer drop a scene's music settings** (3D_E-0835)
