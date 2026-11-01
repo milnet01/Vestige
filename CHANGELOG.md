@@ -25,6 +25,10 @@ may change any interface without notice.
 
 ## [Unreleased]
 
+### 2026-11-01 Fixed — Subtitle line breaks no longer split a letter
+
+- **A long subtitle word, or a cut-off last line, is no longer broken in the middle of a multi-byte letter such as Greek or Hebrew.** (3D_E-0843)
+
 ### 2026-11-01 Fixed — The material preview leaves the depth test as it found it
 
 - **Drawing the material preview no longer leaves depth testing switched on for whatever draws next.** (3D_E-0835)

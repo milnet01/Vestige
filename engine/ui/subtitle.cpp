@@ -17,12 +17,39 @@ namespace
 /// @brief UTF-8 ellipsis ("…", U+2026).
 constexpr const char* kEllipsis = "\xE2\x80\xA6";
 
+/// @brief True for a UTF-8 continuation byte (10xxxxxx).
+bool isContinuationByte(char c)
+{
+    return (static_cast<unsigned char>(c) & 0xC0) == 0x80;
+}
+
+/// @brief Drops a UTF-8 sequence cut short at the end of `line`.
+void dropIncompleteTail(std::string& line)
+{
+    std::size_t start = line.size();
+    while (start > 0 && isContinuationByte(line[start - 1]))
+    {
+        --start;
+    }
+    if (start == 0)
+    {
+        line.clear();   // only stray continuation bytes
+        return;
+    }
+    const unsigned char lead = static_cast<unsigned char>(line[start - 1]);
+    std::size_t len = 1;
+    if (lead >= 0xF0) len = 4;
+    else if (lead >= 0xE0) len = 3;
+    else if (lead >= 0xC0) len = 2;
+    if ((line.size() - (start - 1)) < len)
+    {
+        line.erase(start - 1);
+    }
+}
+
 /// @brief Strips the last char from `line` repeatedly until appending
-///        the ellipsis keeps it within `budget`. Assumes ASCII text;
-///        multi-byte-UTF-8 at the truncation boundary is left intact
-///        only if it happens to fall clear of the strip point — callers
-///        concerned with that should pre-normalise (Phase 10.7 captions
-///        are ASCII by policy).
+///        the ellipsis keeps it within `budget`. A multi-byte letter cut
+///        by the strip is removed whole. Widths are still counted in bytes.
 void truncateWithEllipsis(std::string& line, std::size_t budget)
 {
     // The ellipsis renders as one glyph but occupies 1 character in
@@ -37,6 +64,7 @@ void truncateWithEllipsis(std::string& line, std::size_t budget)
     {
         line.pop_back();
     }
+    dropIncompleteTail(line);
     // Strip trailing whitespace so we don't produce "foo …".
     while (!line.empty() && line.back() == ' ')
     {
@@ -114,8 +142,23 @@ std::vector<std::string> wrapSubtitleText(const std::string& text,
             {
                 flushLine();
             }
-            output.push_back(token.substr(0, maxCharsPerLine));
-            token.erase(0, maxCharsPerLine);
+            // Cut on a letter boundary, never inside a multi-byte letter.
+            std::size_t cut = maxCharsPerLine;
+            while (cut > 0 && isContinuationByte(token[cut]))
+            {
+                --cut;
+            }
+            if (cut == 0)
+            {
+                // The limit is smaller than one letter: take that letter whole.
+                cut = 1;
+                while (cut < token.size() && isContinuationByte(token[cut]))
+                {
+                    ++cut;
+                }
+            }
+            output.push_back(token.substr(0, cut));
+            token.erase(0, cut);
         }
 
         const std::size_t needed = current.empty()

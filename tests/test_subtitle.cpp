@@ -270,6 +270,58 @@ TEST(SubtitleWrap, HardBreaksOverlongToken_P1)
     EXPECT_EQ(lines[0], std::string(40, 'X'));
 }
 
+namespace
+{
+/// True when `s` has no truncated or stray UTF-8 sequence.
+bool isWholeUtf8(const std::string& s)
+{
+    std::size_t i = 0;
+    while (i < s.size())
+    {
+        const unsigned char c = static_cast<unsigned char>(s[i]);
+        std::size_t len = 1;
+        if (c >= 0xF0) len = 4;
+        else if (c >= 0xE0) len = 3;
+        else if (c >= 0xC0) len = 2;
+        else if (c >= 0x80) return false;
+        if (i + len > s.size()) return false;
+        for (std::size_t k = 1; k < len; ++k)
+        {
+            if ((static_cast<unsigned char>(s[i + k]) & 0xC0) != 0x80) return false;
+        }
+        i += len;
+    }
+    return true;
+}
+}  // namespace
+
+TEST(SubtitleWrap, HardBreakNeverSplitsAMultiByteLetter)
+{
+    // 39 ASCII letters then Greek letters (two bytes each): a cut at byte
+    // 40 would land inside the first Greek letter.
+    const std::string text = std::string(39, 'a') + "\xCE\xB1\xCE\xB2\xCE\xB3";
+    auto lines = wrapSubtitleText(text);
+    ASSERT_GE(lines.size(), 2u);
+    for (const auto& line : lines)
+    {
+        EXPECT_TRUE(isWholeUtf8(line)) << line;
+    }
+}
+
+TEST(SubtitleWrap, EllipsisTruncationNeverSplitsAMultiByteLetter)
+{
+    // Three full lines of two-byte letters force the last kept line to be
+    // truncated with an ellipsis.
+    std::string word;
+    for (int i = 0; i < 20; ++i) word += "\xCE\xB1";   // 40 bytes
+    auto lines = wrapSubtitleText(word + " " + word + " " + word);
+    ASSERT_FALSE(lines.empty());
+    for (const auto& line : lines)
+    {
+        EXPECT_TRUE(isWholeUtf8(line)) << line;
+    }
+}
+
 TEST(SubtitleWrap, ClampsToMaxLinesWithEllipsis_P1)
 {
     // A 3-line input must truncate to 2 lines and end in "…".
