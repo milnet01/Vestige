@@ -25,6 +25,10 @@ may change any interface without notice.
 
 ## [Unreleased]
 
+### 2026-11-01 Fixed — File, New starts from an empty scene
+
+- **File, New now stops the old scene's music and clears its terrain and foliage, so the next Save no longer writes them into the new scene.** (3D_E-0835)
+
 ### 2026-11-01 Fixed — The Sprite Atlas and Tilemap panels can be opened from the View menu
 
 - **The Sprite Atlas and Tilemap panels were built but had no way to open them. The View menu now has an entry for each.** (3D_E-0835)

@@ -6,6 +6,8 @@
 #include "editor/file_menu.h"
 #include "editor/command_history.h"
 #include "editor/scene_serializer.h"
+#include "environment/foliage_manager.h"
+#include "environment/terrain.h"
 #include "editor/selection.h"
 #include "core/logger.h"
 #include "resource/resource_manager.h"
@@ -460,6 +462,20 @@ void FileMenu::newScene(Scene* scene, Selection& selection)
     selection.clearSelection();
     m_currentScenePath.clear();
     m_sceneMusic = MusicSceneSettings{};
+    // Nothing of the previous scene may survive into the new one, or the
+    // next Save would write it out as the new scene's own.
+    if (m_musicPlayer)
+    {
+        applyMusicSceneSettings(*m_musicPlayer, m_sceneMusic);  // stops all layers
+    }
+    if (m_foliageManager)
+    {
+        m_foliageManager->clear();
+    }
+    if (m_terrain && m_terrain->isInitialized())
+    {
+        m_terrain->shutdown();
+    }
     if (m_commandHistory)
     {
         m_commandHistory->clear();
