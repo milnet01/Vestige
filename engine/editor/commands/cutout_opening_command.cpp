@@ -8,6 +8,7 @@
 
 #include "scene/entity.h"
 #include "scene/mesh_renderer.h"
+#include "scene/scene.h"
 
 namespace Vestige
 {
@@ -15,18 +16,18 @@ namespace Vestige
 void CutoutOpeningCommand::apply(const std::shared_ptr<Mesh>& mesh,
                                  const std::string& name)
 {
-    // Both pointers are borrowed, not owned. An entity deleted while this
-    // command sits on the undo stack would leave them dangling. The null
-    // checks below only cover a null constructor argument; they cannot detect
-    // a dangling pointer. Other commands look entities up by id instead.
-    if (m_renderer != nullptr)
+    // Look the entity up by id: it may have been deleted while this command
+    // sat on the undo stack, in which case there is nothing to change.
+    Entity* entity = m_scene.findEntityById(m_entityId);
+    if (entity == nullptr)
     {
-        m_renderer->setMesh(mesh);
+        return;
     }
-    if (m_entity != nullptr)
+    if (MeshRenderer* renderer = entity->getComponent<MeshRenderer>())
     {
-        m_entity->setName(name);
+        renderer->setMesh(mesh);
     }
+    entity->setName(name);
 }
 
 } // namespace Vestige

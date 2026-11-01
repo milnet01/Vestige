@@ -7,6 +7,7 @@
 
 #include "editor/commands/editor_command.h"
 
+#include <cstdint>
 #include <memory>
 #include <string>
 #include <utility>
@@ -14,9 +15,8 @@
 namespace Vestige
 {
 
-class Entity;
 class Mesh;
-class MeshRenderer;
+class Scene;
 
 /// @brief Undo command for a `CutoutTool` opening (3D_E-0632).
 ///
@@ -25,6 +25,10 @@ class MeshRenderer;
 /// undone. Worse, `FileMenu::isDirty()` delegates entirely to
 /// `CommandHistory`, so the scene was never marked dirty either and quitting
 /// discarded the cut with no unsaved-changes prompt.
+///
+/// The command holds the entity's id and looks it up on each execute and undo,
+/// so an entity deleted while the command is on the undo stack makes both do
+/// nothing instead of touching freed memory.
 ///
 /// The mutation is two reversible writes — the renderer's mesh pointer and the
 /// entity's name — so both old values are captured and swapped back on undo.
@@ -39,15 +43,15 @@ class MeshRenderer;
 class CutoutOpeningCommand : public EditorCommand
 {
 public:
-    CutoutOpeningCommand(MeshRenderer* renderer,
-                         Entity* entity,
+    CutoutOpeningCommand(Scene& scene,
+                         uint32_t entityId,
                          std::shared_ptr<Mesh> oldMesh,
                          std::shared_ptr<Mesh> newMesh,
                          std::string oldName,
                          std::string newName,
                          std::string description)
-        : m_renderer(renderer)
-        , m_entity(entity)
+        : m_scene(scene)
+        , m_entityId(entityId)
         , m_oldMesh(std::move(oldMesh))
         , m_newMesh(std::move(newMesh))
         , m_oldName(std::move(oldName))
@@ -65,8 +69,8 @@ public:
 private:
     void apply(const std::shared_ptr<Mesh>& mesh, const std::string& name);
 
-    MeshRenderer* m_renderer = nullptr;
-    Entity* m_entity = nullptr;
+    Scene& m_scene;
+    uint32_t m_entityId = 0;
     std::shared_ptr<Mesh> m_oldMesh;
     std::shared_ptr<Mesh> m_newMesh;
     std::string m_oldName;

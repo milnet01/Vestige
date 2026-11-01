@@ -63,6 +63,7 @@ add_executable(vestige_tests
     test_scene_serializer.cpp
     test_file_menu.cpp
     test_command_history.cpp
+    test_cutout_opening_command.cpp
     test_panel_registry.cpp
     test_scene_envelope_atomicity.cpp
     test_particle_data.cpp

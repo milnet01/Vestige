@@ -176,8 +176,8 @@ void CutoutTool::drawConfigDialog(Scene& scene, ResourceManager& /*resources*/,
                 // not only on redo (see place_tree_command.h, where doing both
                 // placed every tree twice).
                 history.execute(std::make_unique<CutoutOpeningCommand>(
-                    renderer,
-                    entity,
+                    scene,
+                    entity->getId(),
                     renderer->getMesh(),
                     newMesh,
                     entity->getName(),
