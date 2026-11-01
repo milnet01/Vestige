@@ -835,6 +835,10 @@ void FileMenu::drawRecoveryModal(Scene* scene, Selection& selection)
 {
     if (m_showRecoveryModal)
     {
+        // Read the autosave's timestamp once, as the dialog opens, not on
+        // every frame it stays up (3D_E-0856).
+        SceneMetadata meta = SceneSerializer::readMetadata(getAutoSavePath());
+        m_recoveryTimeText = meta.modified.empty() ? "unknown time" : meta.modified;
         ImGui::OpenPopup("Recover Auto-Save");
         m_showRecoveryModal = false;
     }
@@ -848,12 +852,8 @@ void FileMenu::drawRecoveryModal(Scene* scene, Selection& selection)
     {
         fs::path autoSavePath = getAutoSavePath();
 
-        // Read metadata for the timestamp
-        SceneMetadata meta = SceneSerializer::readMetadata(autoSavePath);
-        std::string timeStr = meta.modified.empty() ? "unknown time" : meta.modified;
-
         ImGui::Text("An auto-save recovery file was found.");
-        ImGui::Text("Last modified: %s", timeStr.c_str());
+        ImGui::Text("Last modified: %s", m_recoveryTimeText.c_str());
         ImGui::Spacing();
         ImGui::TextWrapped("This may indicate that the application crashed or was "
                            "terminated unexpectedly. Would you like to recover?");

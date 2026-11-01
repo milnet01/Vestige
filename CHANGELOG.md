@@ -25,6 +25,10 @@ may change any interface without notice.
 
 ## [Unreleased]
 
+### 2026-11-01 Fixed — The recovery dialog no longer reads the autosave file every frame
+
+- **The autosave recovery dialog reads the file's details once when it opens instead of on every frame.** (3D_E-0856)
+
 ### 2026-11-01 Fixed — Grouping no longer changes an object's rotation or size
 
 - **Grouping objects that sit under a rotated or scaled parent now keeps their orientation and size as well as their position, and undo restores them exactly.** (3D_E-0855)

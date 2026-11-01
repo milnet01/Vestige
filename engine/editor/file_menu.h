@@ -195,6 +195,7 @@ private:
     // Crash recovery
     bool m_recoveryPending = false;
     bool m_showRecoveryModal = false;
+    std::string m_recoveryTimeText;  ///< Autosave timestamp, read once when the dialog opens.
 };
 
 } // namespace Vestige
