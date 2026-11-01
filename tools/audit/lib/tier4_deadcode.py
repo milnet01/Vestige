@@ -190,7 +190,12 @@ def _analyze_cpp(config: Config) -> tuple[DeadCodeAnalysis, list[Finding]]:
         for word in re.findall(r"&\w+::(\w+)", content):
             all_references.add(word)
 
-    # Phase 3: Find declarations that are never referenced elsewhere
+    # Phase 3: Find declarations that are never referenced.
+    # NOTE: this is effectively inert for C/C++. Phase 2 scans every file,
+    # including the header that holds the declaration, and _FUNC_DECL_RE only
+    # matches text of the form `name(`, which Phase 2 records as a reference.
+    # So the check below always continues and the code after it does not run.
+    # Making it work means excluding the declaration's own occurrence.
     for func_name, decl_list in declarations.items():
         if func_name in all_references:
             continue
