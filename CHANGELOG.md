@@ -25,6 +25,10 @@ may change any interface without notice.
 
 ## [Unreleased]
 
+### 2026-11-01 Fixed — Default HUD slots on screen
+
+- **The notification stack and interaction-prompt slot of the default HUD now sit inside the screen instead of off the right and bottom edges** (3D_E-0843)
+
 ### 2026-11-01 Fixed — Formula node factory only offers usable functions
 
 - **The formula node factory no longer lists tan, asin, acos, atan and log2, which the expression layer rejects and which would throw on conversion** (3D_E-0833)

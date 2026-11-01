@@ -96,6 +96,25 @@ TEST_F(DefaultHudPrefabTest, NotificationStackAnchorsTopRightWithThreeSlots)
     EXPECT_EQ(stack->getChildCount(), NotificationQueue::DEFAULT_CAPACITY);
 }
 
+// 3D_E-0843: an element's top-left sits at anchor point + position, so
+// right- and bottom-anchored slots need negative offsets to stay on screen.
+TEST_F(DefaultHudPrefabTest, PromptSlotAndNotificationStackLieInsideScreen)
+{
+    constexpr int kW = 1920;
+    constexpr int kH = 1080;
+    for (std::size_t index : {std::size_t{2}, std::size_t{3}})
+    {
+        auto* panel = dynamic_cast<UIPanel*>(canvas.getElementAt(index));
+        ASSERT_NE(panel, nullptr);
+        const glm::vec2 topLeft = panel->computeAbsolutePosition({0.0f, 0.0f}, kW, kH);
+        const glm::vec2 bottomRight = topLeft + panel->size;
+        EXPECT_GE(topLeft.x, 0.0f) << "element " << index;
+        EXPECT_GE(topLeft.y, 0.0f) << "element " << index;
+        EXPECT_LE(bottomRight.x, static_cast<float>(kW)) << "element " << index;
+        EXPECT_LE(bottomRight.y, static_cast<float>(kH)) << "element " << index;
+    }
+}
+
 // -- Accessibility walk over an unpopulated notification stack --
 
 // Slice 18 Ts1 cleanup: renamed from `NotificationSlotsStartInvisible`

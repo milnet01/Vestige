@@ -559,7 +559,11 @@ void buildDefaultHud(UICanvas& canvas, const UITheme& theme,
     auto promptSlot = std::make_unique<UIPanel>();
     promptSlot->anchor          = Anchor::BOTTOM_CENTER;
     promptSlot->size            = {360.0f, theme.typeBody * 2.0f};
-    promptSlot->position        = {0.0f, theme.typeBody * 4.0f};
+    // A bottom-anchored element's top-left sits at the anchor point plus
+    // position, so the offsets are negative: centred, and its bottom edge
+    // 4 body-lines above the screen bottom.
+    promptSlot->position        = {-promptSlot->size.x * 0.5f,
+                                   -(promptSlot->size.y + theme.typeBody * 4.0f)};
     promptSlot->backgroundColor = glm::vec4(0.0f);  // Fully transparent.
     canvas.addElement(std::move(promptSlot));
 
@@ -578,9 +582,10 @@ void buildDefaultHud(UICanvas& canvas, const UITheme& theme,
     auto stack = std::make_unique<UIPanel>();
     stack->anchor          = Anchor::TOP_RIGHT;
     stack->size            = {toastWidth, stackHeight};
-    // Right-anchored panels use positive-X for "inset from right edge".
-    // A 24 px inset keeps the stack clear of the screen bevel.
-    stack->position        = {toastWidth + 24.0f, 24.0f};
+    // A right-anchored panel's top-left sits at the anchor point plus
+    // position, so X is negative: its right edge is 24 px inside the
+    // screen edge, which keeps the stack clear of the screen bevel.
+    stack->position        = {-(toastWidth + 24.0f), 24.0f};
     stack->backgroundColor = glm::vec4(0.0f);
 
     for (std::size_t i = 0; i < NotificationQueue::DEFAULT_CAPACITY; ++i)
