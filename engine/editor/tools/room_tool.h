@@ -2,7 +2,7 @@
 // SPDX-License-Identifier: MIT
 
 /// @file room_tool.h
-/// @brief Room creation tool -- enter dimensions or click corners.
+/// @brief Room creation tool -- enter dimensions or click the room's centre.
 #pragma once
 
 #include <glm/glm.hpp>
@@ -17,8 +17,8 @@ class CommandHistory;
 
 /// @brief Creates rectangular rooms (4 walls + optional floor/ceiling).
 ///
-/// Two modes: dimension-input (ImGui dialog) or click-to-place (click a
-/// corner in the viewport). Both call the same internal createRoom() method.
+/// Two modes: dimension-input (ImGui dialog) or click-to-place (click the room's
+/// centre in the viewport). Both call the same internal createRoom() method.
 class RoomTool
 {
 public:
@@ -26,7 +26,7 @@ public:
     {
         INACTIVE,           ///< Tool is off.
         DIMENSION_INPUT,    ///< Showing the ImGui dimension dialog.
-        WAITING_CORNER      ///< Waiting for a click to place the room.
+        WAITING_CORNER      ///< Waiting for a click to place the room (the click is the room's centre, despite the name).
     };
 
     RoomTool() = default;
@@ -34,7 +34,7 @@ public:
     /// @brief Activates dimension-input mode (opens ImGui dialog).
     void activateDimensionMode();
 
-    /// @brief Activates click-to-place mode (click a corner in the viewport).
+    /// @brief Activates click-to-place mode (click the room's centre in the viewport).
     void activateClickMode();
 
     /// @brief Cancels the current operation and deactivates the tool.
