@@ -37,7 +37,7 @@ enum class SubtitleCategory
 {
     Dialogue,   ///< A speaking character — speaker name rendered.
     Narrator,   ///< Disembodied narration / voice-over.
-    SoundCue,   ///< Spatial sound effect ("[rustling]", "[footsteps behind]").
+    SoundCue,   ///< Spatial sound effect; shown as "[rustling]", text authored without brackets.
 };
 
 /// @brief Size presets exposed to users via the Settings menu.
@@ -125,8 +125,9 @@ std::vector<std::string> wrapSubtitleText(
 struct Subtitle
 {
     /// The caption text as it should appear on screen. For
-    /// `SoundCue` entries, this is typically bracketed
-    /// ("[thunder in the distance]") by convention.
+    /// `SoundCue` entries, author it WITHOUT brackets ("thunder in the
+    /// distance"): `composeSubtitleText` wraps it through the
+    /// `subtitle.sound_cue` localisation string.
     std::string text;
 
     /// Speaker name, rendered as a prefix for `Dialogue` entries
