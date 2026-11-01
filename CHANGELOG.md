@@ -25,6 +25,10 @@ may change any interface without notice.
 
 ## [Unreleased]
 
+### 2026-11-01 Fixed — Non-looping ping-pong sprite clips stop
+
+- **A sprite clip set to ping-pong without looping now stops when it is back on its first frame instead of playing forever** (3D_E-0831)
+
 ### 2026-11-01 Fixed — GPU cloth damping setting
 
 - **Setting damping on the GPU cloth simulator now updates its reported configuration and clamps to 0 to 1 like the CPU version** (3D_E-0829)

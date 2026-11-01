@@ -204,6 +204,12 @@ void SpriteAnimation::advanceFrame(const SpriteAnimationClip& clip)
             if (next >= 0 && next < count)
             {
                 m_frameIndex = next;
+                if (!clip.loop && m_pingPongStep == -1 && m_frameIndex == 0)
+                {
+                    // A non-looping clip stops once it is back on the first frame.
+                    m_playing = false;
+                    m_frameElapsedMs = 0.0f;
+                }
             }
             else
             {
@@ -222,15 +228,9 @@ void SpriteAnimation::advanceFrame(const SpriteAnimationClip& clip)
                 {
                     m_frameIndex = reflected;
                 }
-                if (!clip.loop &&
-                    ((m_pingPongStep == 1 && m_frameIndex == 0) ||
-                     (m_pingPongStep == -1 && m_frameIndex == count - 1)))
+                if (!clip.loop && m_frameIndex == 0)
                 {
-                    // Intended: stop after a full ping-pong cycle without loop.
-                    // Unreachable for clips of two or more frames: the index
-                    // was just moved off the endpoint, so it never equals the
-                    // endpoint tested here. A non-looping PingPong clip keeps
-                    // playing.
+                    // Two-frame clip: the bounce itself lands on the first frame.
                     m_playing = false;
                     m_frameElapsedMs = 0.0f;
                 }

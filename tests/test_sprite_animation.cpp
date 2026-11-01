@@ -115,6 +115,41 @@ TEST(SpriteAnimation, PingPongReversesAtEndpoints)
     EXPECT_EQ(anim.currentFrameName(), "f1");
 }
 
+TEST(SpriteAnimation, NonLoopingPingPongStopsBackOnFirstFrame)
+{
+    // 3D_E-0831: f0 -> f1 -> f2 -> f1 -> f0, then stop.
+    SpriteAnimation anim;
+    anim.addClip(makeThreeFrameClip("pp", SpriteAnimationDirection::PingPong, false));
+    anim.play("pp");
+    for (const char* expected : {"f1", "f2", "f1"})
+    {
+        anim.tick(0.055f);
+        EXPECT_EQ(anim.currentFrameName(), expected);
+        EXPECT_TRUE(anim.isPlaying());
+    }
+    anim.tick(0.055f);
+    EXPECT_EQ(anim.currentFrameName(), "f0");
+    EXPECT_FALSE(anim.isPlaying());
+    // Further ticks leave it on f0.
+    anim.tick(1.0f);
+    EXPECT_EQ(anim.currentFrameName(), "f0");
+}
+
+TEST(SpriteAnimation, NonLoopingTwoFramePingPongStopsOnFirstFrame)
+{
+    SpriteAnimation anim;
+    SpriteAnimationClip clip = makeThreeFrameClip("pp2", SpriteAnimationDirection::PingPong, false);
+    clip.frames.pop_back();
+    anim.addClip(clip);
+    anim.play("pp2");
+    anim.tick(0.055f);
+    EXPECT_EQ(anim.currentFrameName(), "f1");
+    EXPECT_TRUE(anim.isPlaying());
+    anim.tick(0.055f);
+    EXPECT_EQ(anim.currentFrameName(), "f0");
+    EXPECT_FALSE(anim.isPlaying());
+}
+
 TEST(SpriteAnimation, StopKeepsCurrentFrame)
 {
     SpriteAnimation anim;
