@@ -6809,6 +6809,10 @@ shipped that have no invocation path at all.
 - 🚧 [3D_E-0835] **Readability review: editor shell findings and possible bugs to work through.**
   4 high, 11 medium, 17 low; 19 possible bugs, unchecked. Do not re-review: fold in directly with close-findings. Files: Vestige_private/readability-2026-10-31/lane-13-editor-shell.md, leads.md, message-1.md.
   2026-11-01: HIGH single-edit comments fixed. Rest of the list open.
+  2026-11-01: Save keeps music; File New clears the old scene's world;
+  undo and dirty tracking fixed in several places; hidden windows and
+  panels reachable. Fixes that have no automated test have not been
+  tried by hand in the running editor.
   **Layman:** A cold read of the editor's main code found comments that mislead and possible bugs to check.
   Kind: review-fix.
   Source: review-readability 2026-10-31 at 7b2a81d.
@@ -6843,6 +6847,11 @@ shipped that have no invocation path at all.
 - 🚧 [3D_E-0839] **Readability review: scene and navigation findings and possible bugs to work through.**
   3 high, 35 medium, 24 low; 12 possible bugs, unchecked. Do not re-review: fold in directly with close-findings. Files: Vestige_private/readability-2026-10-31/lane-17-scene-nav.md, leads.md, message-1.md.
   2026-11-01: HIGH single-edit comments fixed. Rest of the list open.
+  Waiting-on: user (Should autosave recovery also bring back terrain and
+  music? It holds scene objects only today, so a recovered scene loses
+  them. Recommend yes: write them beside the autosave, because losing
+  terrain after a crash is the worst case autosave exists to prevent.
+  2026-11-01)
   **Layman:** A cold read of the scene and navigation code found comments that mislead and possible bugs to check.
   Kind: review-fix.
   Source: review-readability 2026-10-31 at 7b2a81d.
@@ -6927,6 +6936,9 @@ shipped that have no invocation path at all.
 
 - 📋 [3D_E-0849] **Readability review: cursor bridge findings and possible bugs to work through.**
   0 high, 2 medium, 7 low; 7 possible bugs, unchecked. Do not re-review: fold in directly with close-findings. Files: Vestige_private/readability-2026-10-31/lane-27-tools-ts.md, leads.md, message-1.md.
+  Waiting-on: user (Should the cursor bridge normalise file paths? Needs
+  a VS Code host to test. Recommend leaving it until the bridge is next
+  worked on: no reported fault. 2026-11-01)
   **Layman:** A cold read of the cursor bridge tool found small issues and possible bugs to check.
   Kind: review-fix.
   Source: review-readability 2026-10-31 at 7b2a81d.
@@ -6935,6 +6947,9 @@ shipped that have no invocation path at all.
 - 🚧 [3D_E-0850] **Readability review: scripts and build findings and possible bugs to work through.**
   1 high, 6 medium, 13 low; 7 possible bugs, unchecked. Do not re-review: fold in directly with close-findings. Files: Vestige_private/readability-2026-10-31/lane-28-shell-build.md, leads.md, message-1.md.
   2026-11-01: HIGH single-edit comments fixed. Rest of the list open.
+  Waiting-on: user (Should a commit that only deletes code need a
+  CHANGELOG entry? Recommend yes when a user could notice the removal,
+  no otherwise, matching the rule for other changes. 2026-11-01)
   **Layman:** A cold read of the scripts and build files found comments that mislead and possible bugs to check.
   Kind: review-fix.
   Source: review-readability 2026-10-31 at 7b2a81d.
