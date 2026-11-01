@@ -1664,7 +1664,7 @@ void Renderer::endFrame(float deltaTime)
     }
 
     // AUDIT.md §H15 / FIXPLAN G1: snapshot this frame's world
-    // matrices so the per-object motion vector overlay next frame
+    // matrices so buildInstanceBatches next frame
     // can compute prev→curr per entity. Only scene items are
     // tracked; transients (particle quads, debug lines) do not
     // participate in TAA reprojection anyway.
@@ -1673,8 +1673,8 @@ void Renderer::endFrame(float deltaTime)
     // modes (MSAA / SMAA / None) also wipe the cache so a subsequent
     // toggle-back to TAA doesn't read stale matrices that may belong
     // to entities destroyed (and their entityIds reused) in between.
-    // Population stays gated on `isTAA` because only TAA's overlay
-    // reads the cache.
+    // Population stays gated on `isTAA`; the cache is read by
+    // buildInstanceBatches (the old overlay pass no longer exists).
     if (m_currentRenderData)
     {
         updateMotionOverlayPrevWorld(m_prevWorldMatrices, isTAA,
@@ -1682,6 +1682,7 @@ void Renderer::endFrame(float deltaTime)
                                        m_currentRenderData->transparentItems);
     }
 
+    // The pointer is cleared only under TAA (non-TAA modes leave it set).
     if (isTAA)
     {
         // Clear the cached pointer — it must not be dereferenced after
@@ -2964,12 +2965,12 @@ struct PointShadowNames
     std::string maps, indices, farPlane;
 };
 
-static const std::array<PointShadowNames, 2>& getPointShadowNames()
+static const std::array<PointShadowNames, MAX_POINT_SHADOW_LIGHTS>& getPointShadowNames()
 {
     static const auto names = []()
     {
-        std::array<PointShadowNames, 2> arr;
-        for (int i = 0; i < 2; i++)
+        std::array<PointShadowNames, MAX_POINT_SHADOW_LIGHTS> arr;
+        for (int i = 0; i < MAX_POINT_SHADOW_LIGHTS; i++)
         {
             std::string idx = "[" + std::to_string(i) + "]";
             arr[static_cast<size_t>(i)] = {
@@ -3155,8 +3156,8 @@ void Renderer::renderScene(const SceneRenderData& renderData, const Camera& came
                             const glm::vec4& clipPlane, bool geometryOnly,
                             const glm::mat4& viewOverride, const glm::mat4& projOverride)
 {
-    // AUDIT.md §H15 / FIXPLAN G1: stash for endFrame()'s motion vector
-    // overlay pass. Only the non-geometryOnly main render is used; capture
+    // AUDIT.md §H15 / FIXPLAN G1: stash for endFrame()'s prev-world-matrix
+    // cache update. Only the non-geometryOnly main render is used; capture
     // paths (light probes, SH grid) set geometryOnly=true and must not
     // overwrite the main frame's renderData pointer.
     if (!geometryOnly) m_currentRenderData = &renderData;
@@ -3724,6 +3725,9 @@ void Renderer::renderScene(const SceneRenderData& renderData, const Camera& came
     // `geometryOnly` is the cleanest proxy for the capture path — both
     // captureLightProbe and captureSHGrid call renderScene with
     // geometryOnly=true under forward-Z; main rendering uses reverse-Z.
+    // The water refraction and reflection passes in Engine::run also pass
+    // geometryOnly=true, so the proxy is not capture-only; see the
+    // u_skyboxFarDepth and u_maxRadiance values below.
     if (m_skybox && m_skyboxEnabled)
     {
         glDepthMask(GL_FALSE);   // Don't write to depth buffer

@@ -4,9 +4,9 @@
 /// @file motion_overlay_prev_world.h
 /// @brief Prev-frame world-matrix cache update for the motion-vector overlay.
 ///
-/// The `Renderer::renderScene` per-object motion-vector overlay reads each
-/// entity's prev-frame world matrix from `m_prevWorldMatrices` keyed by
-/// `entityId`. Before R10 the cache was cleared + populated only inside
+/// `Renderer::buildInstanceBatches` reads each entity's prev-frame world
+/// matrix from `m_prevWorldMatrices` keyed by `entityId` (the per-object
+/// overlay pass that once did this no longer exists). Before R10 the cache was cleared + populated only inside
 /// the `if (isTaa)` end-of-frame block, so non-TAA modes (MSAA / SMAA /
 /// None) carried stale entries from a prior TAA session forever — the
 /// motion overlay then read those stale matrices on a subsequent TAA
@@ -37,8 +37,9 @@ namespace Vestige
 ///
 /// @param cache The renderer's prev-frame matrix cache.
 /// @param isTaa Whether TAA is the active anti-aliasing mode this
-///        frame. The cache is read by the per-object motion-vector
-///        overlay only in TAA mode; non-TAA modes need only the clear.
+///        frame. The cache is read by `Renderer::buildInstanceBatches`
+///        (there is no separate overlay pass any more). Population
+///        runs only in TAA mode; non-TAA modes need only the clear.
 /// @param renderItems Current-frame opaque scene items.
 /// @param transparentItems Current-frame transparent scene items.
 ///

@@ -640,8 +640,8 @@ private:
     Shader m_motionVectorShader;
     std::unordered_map<uint32_t, glm::mat4> m_prevWorldMatrices;
     /// @brief Most recent SceneRenderData pointer set by renderScene(),
-    /// consumed by endFrame()'s motion vector overlay pass. Nulled after
-    /// use so stale pointers cannot be dereferenced.
+    /// consumed by endFrame()'s prev-world-matrix cache update. endFrame
+    /// nulls it only in TAA mode; in other modes it keeps the last value.
     const SceneRenderData* m_currentRenderData = nullptr;
     Shader m_idBufferShader;
     Shader m_outlineShader;
