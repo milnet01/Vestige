@@ -4,6 +4,10 @@ All notable changes to the Audit Tool are documented in this file.
 
 ## [Unreleased]
 
+### 2026-11-01 Security — The audit web page escapes quotes in config values
+
+- **A project config with a quote in its name or build command can no longer inject markup into the config builder page.** (3D_E-0846)
+
 ### Fixed — `_deep_merge` corrupted module-level `DEFAULTS` for the process (2026-08-31)
 
 `_deep_merge(base, overlay)` did `result = dict(base)` — a **shallow** copy.

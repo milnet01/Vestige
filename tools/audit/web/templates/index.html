@@ -675,7 +675,12 @@ function renderResearch(research){
   $('#tab-research').innerHTML = html;
 }
 
-function esc(s){ if(!s) return ''; const d=document.createElement('div'); d.textContent=s; return d.innerHTML; }
+function esc(s){
+  // innerHTML escapes & < > but not quotes; esc() output is also used inside value="..." attributes.
+  if(!s) return '';
+  const d=document.createElement('div'); d.textContent=s;
+  return d.innerHTML.replace(/"/g,'&quot;').replace(/'/g,'&#39;');
+}
 
 // --- Recent projects (localStorage) ---
 function getRecent(key){ try { return JSON.parse(localStorage.getItem(key)||'[]'); } catch { return []; } }
