@@ -186,3 +186,10 @@ TEST(UpdateRelaunch, DropsAppRunsAssetsPairAndKeepsTheUsersArguments)
 
 }  // namespace
 }  // namespace Vestige::Update::Test
+
+TEST(UpdateInstaller, ExePathEqualToAppdirWithTrailingSeparatorIsAppImage)
+{
+    EXPECT_EQ(Vestige::Update::detectInstall("linux", "/x/app.AppImage", "/tmp/.mount_Vabc/",
+                            "/tmp/.mount_Vabc"),
+              Vestige::Update::InstallKind::AppImage);
+}

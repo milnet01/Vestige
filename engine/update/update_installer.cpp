@@ -65,7 +65,7 @@ bool isUnder(std::string_view path, std::string_view dir)
     const fs::path p = fs::path(std::string(path)).lexically_normal();
     const fs::path d = fs::path(std::string(dir)).lexically_normal();
     auto pi = p.begin();
-    for (auto di = d.begin(); di != d.end(); ++di, ++pi)
+    for (auto di = d.begin(); di != d.end(); ++di)
     {
         if (di->empty())
         {
@@ -75,6 +75,7 @@ bool isUnder(std::string_view path, std::string_view dir)
         {
             return false;
         }
+        ++pi;  // only after a match, so it never steps past the end
     }
     return true;
 }
