@@ -25,6 +25,10 @@ may change any interface without notice.
 
 ## [Unreleased]
 
+### 2026-11-01 Fixed — Cubemap skybox loading
+
+- **Cubemap faces that are grey or grey-plus-alpha no longer make the loader read past the image buffer, and a face whose size differs from the first is rejected** (3D_E-0825)
+
 ### 2026-11-01 Security — Hostile scene and model files are refused in more places
 
 - **A scene file can no longer point a particle texture at any file on disk** (3D_E-0844)

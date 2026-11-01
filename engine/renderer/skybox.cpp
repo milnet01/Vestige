@@ -122,15 +122,17 @@ bool Skybox::loadCubemap(const std::vector<std::string>& faces)
     int width = 0;
     int height = 0;
     int channels = 0;
-    unsigned char* firstData = stbi_load(faces[0].c_str(), &width, &height, &channels, 0);
+    unsigned char* firstData = stbi_load(faces[0].c_str(), &width, &height, &channels, 4);
     if (!firstData)
     {
         Logger::error("Failed to load cubemap face: " + faces[0]);
         return false;
     }
 
-    GLenum format = (channels == 4) ? GL_RGBA : GL_RGB;
-    GLenum internalFormat = (channels == 4) ? GL_RGBA8 : GL_RGB8;
+    // Every face is decoded as 4 channels (the 4 above), so a grey or grey+alpha
+    // face expands to RGBA and the upload never reads past the buffer.
+    const GLenum format = GL_RGBA;
+    const GLenum internalFormat = GL_RGBA8;
 
     // Create cubemap with DSA (immutable storage)
     glCreateTextures(GL_TEXTURE_CUBE_MAP, 1, &m_cubemapTexture);
@@ -147,13 +149,21 @@ bool Skybox::loadCubemap(const std::vector<std::string>& faces)
         int faceW = 0;
         int faceH = 0;
         int faceCh = 0;
-        unsigned char* data = stbi_load(faces[i].c_str(), &faceW, &faceH, &faceCh, 0);
+        unsigned char* data = stbi_load(faces[i].c_str(), &faceW, &faceH, &faceCh, 4);
+
+        if (data && (faceW != width || faceH != height))
+        {
+            Logger::error("Cubemap face size differs from the first face: " + faces[i]);
+            stbi_image_free(data);
+            glDeleteTextures(1, &m_cubemapTexture);
+            m_cubemapTexture = 0;
+            return false;
+        }
 
         if (data)
         {
-            GLenum faceFormat = (faceCh == 4) ? GL_RGBA : GL_RGB;
             glTextureSubImage3D(m_cubemapTexture, 0, 0, 0, static_cast<GLint>(i),
-                                faceW, faceH, 1, faceFormat, GL_UNSIGNED_BYTE, data);
+                                faceW, faceH, 1, GL_RGBA, GL_UNSIGNED_BYTE, data);
             stbi_image_free(data);
         }
         else
