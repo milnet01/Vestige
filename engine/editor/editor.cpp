@@ -55,6 +55,34 @@ void registerLatentNodeTypes(NodeTypeRegistry& registry);
 namespace Vestige
 {
 
+namespace
+{
+
+/// Pastes the clipboard transform through the history, so Ctrl+Z undoes it and
+/// the scene counts as changed.
+void pasteTransformUndoable(Scene& scene, CommandHistory& history, uint32_t entityId,
+                            const EntityActions::TransformClipboard& clipboard)
+{
+    const Entity* entity = scene.findEntityById(entityId);
+    if (!clipboard.hasData || !entity)
+    {
+        return;
+    }
+    if (entity->transform.hasMatrixOverride())
+    {
+        // A matrix override is not part of TransformCommand; paste directly.
+        EntityActions::pasteTransform(scene, entityId, clipboard);
+        history.markUnsavedChange();
+        return;
+    }
+    history.execute(std::make_unique<TransformCommand>(
+        scene, entityId,
+        entity->transform.position, entity->transform.rotation, entity->transform.scale,
+        clipboard.position, clipboard.rotation, clipboard.scale));
+}
+
+}  // namespace
+
 Editor::Editor() = default;
 
 Editor::~Editor()
@@ -302,7 +330,8 @@ void Editor::drawPanels(Renderer* renderer, Scene* scene, Camera* camera,
         // Process undo/redo shortcuts (Ctrl+Z / Ctrl+Y / Ctrl+Shift+Z)
         {
             const ImGuiIO& undoIo = ImGui::GetIO();
-            if (!ImGui::IsPopupOpen("Unsaved Changes"))
+            // Ctrl+Z belongs to a focused text field while one is being typed in.
+            if (!ImGui::IsPopupOpen("Unsaved Changes") && !undoIo.WantTextInput)
             {
                 if (undoIo.KeyCtrl && !undoIo.KeyShift
                     && ImGui::IsKeyPressed(ImGuiKey_Z))
@@ -410,8 +439,8 @@ void Editor::drawPanels(Renderer* renderer, Scene* scene, Camera* camera,
                 }
                 if (ImGui::MenuItem("Paste Transform", "Ctrl+Shift+V", false, hasSel && scene))
                 {
-                    EntityActions::pasteTransform(
-                        *scene, m_selection.getPrimaryId(), m_transformClipboard);
+                    pasteTransformUndoable(*scene, m_commandHistory,
+                        m_selection.getPrimaryId(), m_transformClipboard);
                 }
 
                 ImGui::Separator();
@@ -1335,12 +1364,10 @@ void Editor::drawPanels(Renderer* renderer, Scene* scene, Camera* camera,
                     break;
                 case FirstRunWizardSceneOp::ApplyEmpty:
                     applyEmptyScene(*scene, *m_resourceManager);
-                    // Phase 10.9 Slice 12 Ed7: scene wholesale-replaced;
-                    // the undo history is NOT cleared here (applyEmptyScene
-                    // takes no history). Use the
-                    // sticky "unsaved change" signal so the user is
-                    // prompted to save before quitting, without the
-                    // FileMenu::m_isDirty dual SoT.
+                    // The scene was wholesale-replaced, so old undo entries
+                    // no longer apply. Clear them, then use the sticky
+                    // "unsaved change" signal so quitting prompts to save.
+                    m_commandHistory.clear();
                     m_commandHistory.markUnsavedChange();
                     m_selection.clearSelection();
                     break;
@@ -1348,6 +1375,7 @@ void Editor::drawPanels(Renderer* renderer, Scene* scene, Camera* camera,
                     if (m_applyDemoCallback)
                     {
                         m_applyDemoCallback();
+                        m_commandHistory.clear();
                         m_commandHistory.markUnsavedChange();
                         m_selection.clearSelection();
                     }
@@ -1358,6 +1386,7 @@ void Editor::drawPanels(Renderer* renderer, Scene* scene, Camera* camera,
                     {
                         TemplateDialog::applyTemplate(
                             *picked, scene, m_resourceManager, renderer);
+                        m_commandHistory.clear();
                         m_commandHistory.markUnsavedChange();
                         m_selection.clearSelection();
                     }
@@ -2334,7 +2363,8 @@ void Editor::processEntityShortcuts(Scene* scene)
     if (io.KeyCtrl && io.KeyShift && ImGui::IsKeyPressed(ImGuiKey_V)
         && m_selection.hasSelection())
     {
-        EntityActions::pasteTransform(*scene, m_selection.getPrimaryId(), m_transformClipboard);
+        pasteTransformUndoable(*scene, m_commandHistory,
+            m_selection.getPrimaryId(), m_transformClipboard);
     }
 }
 

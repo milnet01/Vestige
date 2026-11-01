@@ -8,6 +8,7 @@
 #include "editor/commands/create_entity_command.h"
 #include "editor/commands/delete_entity_command.h"
 #include "editor/commands/entity_property_command.h"
+#include "editor/commands/group_entities_command.h"
 #include "editor/commands/reparent_command.h"
 #include "editor/entity_actions.h"
 #include "editor/selection.h"
@@ -379,7 +380,21 @@ void HierarchyPanel::draw(Scene* scene, Selection& selection)
     // Group selected entities (Ctrl+G)
     if (m_wantGroupSelected)
     {
-        EntityActions::groupEntities(*scene, selection);
+        const auto ids = selection.getSelectedIds();
+        if (m_commandHistory)
+        {
+            // Through the history, so Ctrl+Z undoes it and the scene is marked changed.
+            if (ids.size() >= 2)
+            {
+                m_commandHistory->execute(std::make_unique<GroupEntitiesCommand>(
+                    *scene, selection,
+                    std::vector<uint32_t>(ids.begin(), ids.end())));
+            }
+        }
+        else
+        {
+            EntityActions::groupEntities(*scene, selection);
+        }
     }
 }
 

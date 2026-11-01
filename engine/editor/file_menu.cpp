@@ -246,6 +246,12 @@ void FileMenu::drawDialogs(Scene* scene, Selection& selection)
                 {
                     proceedWithPendingAction(scene, selection);
                 }
+                else
+                {
+                    // The save failed. Drop the pending action, or a later
+                    // quit request would be ignored for good.
+                    m_pendingAction = PendingAction::NONE;
+                }
             }
             ImGui::SameLine();
         }
@@ -569,6 +575,8 @@ void FileMenu::handleSaveResult(Scene* scene, Selection& selection)
         selectedPath += ".scene";
     }
 
+    const fs::path previousPath = m_currentScenePath;
+    const std::string previousName = scene->getName();
     m_currentScenePath = selectedPath;
     scene->setName(selectedPath.stem().string());
 
@@ -592,6 +600,11 @@ void FileMenu::handleSaveResult(Scene* scene, Selection& selection)
     else
     {
         Logger::error("Failed to save scene: " + result.errorMessage);
+        // Keep the old path and name, and drop any pending action so a later
+        // quit request is not ignored.
+        m_currentScenePath = previousPath;
+        scene->setName(previousName);
+        m_pendingAction = PendingAction::NONE;
     }
 }
 

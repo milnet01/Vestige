@@ -25,6 +25,16 @@ may change any interface without notice.
 
 ## [Unreleased]
 
+### 2026-11-01 Fixed — Editor undo, dirty tracking and failed saves
+
+- **Ctrl+G in the Hierarchy panel and Paste Transform can now be undone, and they mark the scene as changed.** (3D_E-0835)
+
+- **The first-run wizard replacing the scene now clears the undo history, so Ctrl+Z cannot act on the old scene.** (3D_E-0835)
+
+- **Ctrl+Z while typing in a text field no longer also undoes a scene change.** (3D_E-0835)
+
+- **A failed Save no longer blocks later quit requests, and a failed Save As keeps the previous file path and scene name.** (3D_E-0835)
+
 ### 2026-11-01 Fixed — Null animation clip and large cloth grids
 
 - **Adding a null clip to a skeleton animator is ignored instead of crashing later when a clip is played by name.** (3D_E-0831)
