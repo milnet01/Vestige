@@ -1454,18 +1454,6 @@ void Editor::drawPanels(Renderer* renderer, Scene* scene, Camera* camera,
             }
         }
 
-        // --- Welcome panel ---
-        m_welcomePanel.draw();
-
-        // --- Self-update (3D_E-0729) ---
-        m_updateDialog.draw();
-
-        // --- Settings editor panel (Phase 10 slice 13.5b) ---
-        m_settingsEditorPanel.draw();
-
-        // --- Script editor panel (Phase 9E-3) ---
-        m_scriptEditorPanel.draw();
-
         // --- Scene statistics panel ---
         if (m_showStatistics && scene)
         {
@@ -1509,6 +1497,20 @@ void Editor::drawPanels(Renderer* renderer, Scene* scene, Camera* camera,
         }
 
         } // !m_fullscreenViewport (side panels)
+
+        // These open from the menu bar, which stays visible in fullscreen
+        // viewport mode, so they draw outside the side-panel block.
+        // --- Welcome panel ---
+        m_welcomePanel.draw();
+
+        // --- Self-update (3D_E-0729) ---
+        m_updateDialog.draw();
+
+        // --- Settings editor panel (Phase 10 slice 13.5b) ---
+        m_settingsEditorPanel.draw();
+
+        // --- Script editor panel (Phase 9E-3) ---
+        m_scriptEditorPanel.draw();
 
         // --- Import dialog (file browser + settings modal) ---
         m_importDialog.draw(scene, m_resourceManager, m_selection,

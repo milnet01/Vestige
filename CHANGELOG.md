@@ -25,6 +25,10 @@ may change any interface without notice.
 
 ## [Unreleased]
 
+### 2026-11-01 Fixed — Settings, Welcome, the update dialog and the script editor show in fullscreen viewport
+
+- **Opening Settings or Welcome from the menu, or an update in progress, no longer stays invisible while the viewport is fullscreen.** (3D_E-0835)
+
 ### 2026-11-01 Fixed — Undoing a gizmo drag returns to the true starting position
 
 - **Undo after a gizmo drag now restores the exact starting transform, not the position after the first frame of the drag.** (3D_E-0835)
