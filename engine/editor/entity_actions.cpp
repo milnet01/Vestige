@@ -14,6 +14,7 @@
 #include "core/logger.h"
 
 #include <algorithm>
+#include <cmath>
 #include <cctype>
 #include <string>
 #include <unordered_set>
@@ -236,6 +237,45 @@ void pasteTransform(Scene& scene, uint32_t entityId, const TransformClipboard& c
     Logger::info("Pasted transform to '" + entity->getName() + "'");
 }
 
+void localTransformUnderGroup(const glm::mat4& world, const glm::vec3& parentPosition,
+                              glm::vec3& position, glm::vec3& rotationDegrees,
+                              glm::vec3& scale)
+{
+    position = glm::vec3(world[3]) - parentPosition;
+
+    glm::vec3 axes[3] = {glm::vec3(world[0]), glm::vec3(world[1]), glm::vec3(world[2])};
+    scale = glm::vec3(glm::length(axes[0]), glm::length(axes[1]), glm::length(axes[2]));
+    if (glm::determinant(glm::mat3(world)) < 0.0f)
+    {
+        scale.x = -scale.x;  // a mirror: keep the rotation proper
+    }
+
+    glm::mat3 rot(1.0f);
+    for (int i = 0; i < 3; ++i)
+    {
+        if (std::abs(scale[i]) > 1e-8f)
+        {
+            rot[i] = axes[i] / scale[i];
+        }
+    }
+
+    // Rotation matrix = Rx(a) * Ry(b) * Rz(c), glm indexing is rot[column][row].
+    const float sinB = std::clamp(rot[2][0], -1.0f, 1.0f);
+    float a = 0.0f;
+    float b = std::asin(sinB);
+    float c = 0.0f;
+    if (std::abs(sinB) < 0.99999f)
+    {
+        a = std::atan2(-rot[2][1], rot[2][2]);
+        c = std::atan2(-rot[1][0], rot[0][0]);
+    }
+    else
+    {
+        a = std::atan2(rot[1][2], rot[1][1]);  // straight up or down: fold roll into a
+    }
+    rotationDegrees = glm::degrees(glm::vec3(a, b, c));
+}
+
 Entity* groupEntities(Scene& scene, Selection& selection)
 {
     if (!selection.hasSelection())
@@ -252,7 +292,7 @@ Entity* groupEntities(Scene& scene, Selection& selection)
     // Compute centroid of selected entities' world positions
     glm::vec3 centroid(0.0f);
     int count = 0;
-    std::vector<std::pair<uint32_t, glm::vec3>> entityPositions;
+    std::vector<std::pair<uint32_t, glm::mat4>> entityWorlds;
 
     for (uint32_t id : ids)
     {
@@ -261,7 +301,7 @@ Entity* groupEntities(Scene& scene, Selection& selection)
         {
             glm::vec3 wp = e->getWorldPosition();
             centroid += wp;
-            entityPositions.emplace_back(id, wp);
+            entityWorlds.emplace_back(id, e->getWorldMatrix());
             ++count;
         }
     }
@@ -278,16 +318,21 @@ Entity* groupEntities(Scene& scene, Selection& selection)
     group->transform.position = centroid;
 
     // Reparent all selected entities under the group
-    for (const auto& [id, worldPos] : entityPositions)
+    for (const auto& [id, worldMatrix] : entityWorlds)
     {
         scene.reparentEntity(id, group->getId());
 
-        // Adjust local position to preserve world position
-        // Group has no rotation/scale, so: new_local_pos = old_world_pos - centroid
+        // Keep the whole world transform. The group has only a position, so
+        // the child's local rotation and scale become its world ones.
         Entity* e = scene.findEntityById(id);
-        if (e)
+        if (e && !e->transform.hasMatrixOverride())
         {
-            e->transform.position = worldPos - centroid;
+            localTransformUnderGroup(worldMatrix, centroid, e->transform.position,
+                                     e->transform.rotation, e->transform.scale);
+        }
+        else if (e)
+        {
+            e->transform.position = glm::vec3(worldMatrix[3]) - centroid;
         }
     }
 

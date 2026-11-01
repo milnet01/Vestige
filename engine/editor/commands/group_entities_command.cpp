@@ -6,6 +6,7 @@
 
 #include "editor/commands/group_entities_command.h"
 #include "core/logger.h"
+#include "editor/entity_actions.h"
 
 namespace Vestige
 {
@@ -41,7 +42,7 @@ void GroupEntitiesCommand::execute()
         // Centroid + per-child old state (mirrors EntityActions::groupEntities).
         glm::vec3 centroid(0.0f);
         int count = 0;
-        std::vector<glm::vec3> oldWorldPositions;
+        std::vector<glm::mat4> oldWorldMatrices;
 
         for (uint32_t id : m_entityIds)
         {
@@ -54,10 +55,12 @@ void GroupEntitiesCommand::execute()
             s.oldParentId = parent ? parent->getId() : 0;
             s.oldSiblingIndex = parent ? findSiblingIndex(parent, e) : 0;
             s.oldLocalPosition = e->transform.position;
+            s.oldLocalRotation = e->transform.rotation;
+            s.oldLocalScale = e->transform.scale;
 
             glm::vec3 wp = e->getWorldPosition();
             centroid += wp;
-            oldWorldPositions.push_back(wp);
+            oldWorldMatrices.push_back(e->getWorldMatrix());
             m_childStates.push_back(s);
             ++count;
         }
@@ -78,7 +81,9 @@ void GroupEntitiesCommand::execute()
         group->transform.position = centroid;
         m_groupId = group->getId();
 
-        // Reparent each child + adjust local position so world position is preserved.
+        // Reparent each child + adjust its local transform so the whole world
+        // transform is preserved (3D_E-0855). The group has only a position,
+        // so the child's local rotation and scale become its world ones.
         for (size_t i = 0; i < m_childStates.size(); ++i)
         {
             ChildState& s = m_childStates[i];
@@ -86,9 +91,23 @@ void GroupEntitiesCommand::execute()
             Entity* e = m_scene.findEntityById(s.id);
             if (e)
             {
-                glm::vec3 newLocal = oldWorldPositions[i] - centroid;
-                e->transform.position = newLocal;
-                s.newLocalPosition = newLocal;
+                if (e->transform.hasMatrixOverride())
+                {
+                    // An explicit matrix ignores position/rotation/scale; keep
+                    // the earlier position-only behaviour for it.
+                    s.newLocalPosition = glm::vec3(oldWorldMatrices[i][3]) - centroid;
+                    s.newLocalRotation = e->transform.rotation;
+                    s.newLocalScale = e->transform.scale;
+                }
+                else
+                {
+                    EntityActions::localTransformUnderGroup(
+                        oldWorldMatrices[i], centroid, s.newLocalPosition,
+                        s.newLocalRotation, s.newLocalScale);
+                }
+                e->transform.position = s.newLocalPosition;
+                e->transform.rotation = s.newLocalRotation;
+                e->transform.scale = s.newLocalScale;
             }
         }
 
@@ -117,6 +136,8 @@ void GroupEntitiesCommand::execute()
         if (e)
         {
             e->transform.position = s.newLocalPosition;
+            e->transform.rotation = s.newLocalRotation;
+            e->transform.scale = s.newLocalScale;
         }
     }
 
@@ -154,6 +175,8 @@ void GroupEntitiesCommand::undo()
             if (refound)
             {
                 refound->transform.position = s.oldLocalPosition;
+                refound->transform.rotation = s.oldLocalRotation;
+                refound->transform.scale = s.oldLocalScale;
             }
         }
     }

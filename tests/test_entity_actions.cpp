@@ -7,11 +7,14 @@
 #include "editor/commands/composite_command.h"
 #include "editor/commands/delete_entity_command.h"
 #include "editor/command_history.h"
+#include "editor/commands/group_entities_command.h"
+#include "editor/selection.h"
 #include "scene/scene.h"
 #include "scene/entity.h"
 
 #include <gtest/gtest.h>
 
+#include <cmath>
 #include <memory>
 
 using namespace Vestige;
@@ -170,4 +173,100 @@ TEST(EntityActionsNaming, HugeSuffixOnSiblingDoesNotThrow)
     std::string name;
     EXPECT_NO_THROW(name = EntityActions::generateDuplicateName("Cube", parent));
     EXPECT_FALSE(name.empty());
+}
+
+// ---------------------------------------------------------------------------
+// 3D_E-0855 — grouping keeps the whole world transform
+// ---------------------------------------------------------------------------
+
+namespace
+{
+
+/// A rotated, scaled parent with one child under it, plus a plain sibling.
+struct GroupFixture
+{
+    Scene scene{"Group"};
+    Selection selection;
+    Entity* child = nullptr;
+    Entity* other = nullptr;
+
+    GroupFixture()
+    {
+        Entity* parent = scene.createEntity("Parent");
+        parent->transform.position = glm::vec3(5.0f, 1.0f, -2.0f);
+        parent->transform.rotation = glm::vec3(0.0f, 90.0f, 0.0f);
+        parent->transform.scale = glm::vec3(2.0f, 2.0f, 2.0f);
+        child = parent->addChild(std::make_unique<Entity>("Child"));
+        scene.registerEntityRecursive(child);
+        child->transform.position = glm::vec3(1.0f, 0.0f, 0.0f);
+        child->transform.rotation = glm::vec3(0.0f, 30.0f, 0.0f);
+        child->transform.scale = glm::vec3(1.0f, 3.0f, 1.0f);
+        other = scene.createEntity("Other");
+        other->transform.position = glm::vec3(-4.0f, 0.0f, 6.0f);
+        scene.update(0.0f);
+    }
+};
+
+void expectMatrixNear(const glm::mat4& a, const glm::mat4& b)
+{
+    for (int c = 0; c < 4; ++c)
+    {
+        for (int r = 0; r < 4; ++r)
+        {
+            EXPECT_NEAR(a[c][r], b[c][r], 1e-4f) << "column " << c << " row " << r;
+        }
+    }
+}
+
+}  // namespace
+
+TEST(EntityActionsGroup, CommandKeepsWorldOrientationAndSize_0855)
+{
+    GroupFixture f;
+    const glm::mat4 before = f.child->getWorldMatrix();
+
+    GroupEntitiesCommand cmd(f.scene, f.selection,
+                             {f.child->getId(), f.other->getId()});
+    cmd.execute();
+    f.scene.update(0.0f);
+
+    expectMatrixNear(f.child->getWorldMatrix(), before);
+}
+
+TEST(EntityActionsGroup, UndoRestoresLocalTransformExactly_0855)
+{
+    GroupFixture f;
+    const glm::vec3 pos = f.child->transform.position;
+    const glm::vec3 rot = f.child->transform.rotation;
+    const glm::vec3 scl = f.child->transform.scale;
+    const Entity* oldParent = f.child->getParent();
+
+    GroupEntitiesCommand cmd(f.scene, f.selection,
+                             {f.child->getId(), f.other->getId()});
+    cmd.execute();
+    cmd.undo();
+
+    EXPECT_EQ(f.child->getParent(), oldParent);
+    EXPECT_EQ(f.child->transform.position, pos);
+    EXPECT_EQ(f.child->transform.rotation, rot);
+    EXPECT_EQ(f.child->transform.scale, scl);
+
+    // Redo keeps the world transform too.
+    const glm::mat4 before = f.child->getWorldMatrix();
+    cmd.execute();
+    f.scene.update(0.0f);
+    expectMatrixNear(f.child->getWorldMatrix(), before);
+}
+
+TEST(EntityActionsGroup, DirectGroupKeepsWorldOrientationAndSize_0855)
+{
+    GroupFixture f;
+    const glm::mat4 before = f.child->getWorldMatrix();
+    f.selection.select(f.child->getId());
+    f.selection.addToSelection(f.other->getId());
+
+    ASSERT_NE(EntityActions::groupEntities(f.scene, f.selection), nullptr);
+    f.scene.update(0.0f);
+
+    expectMatrixNear(f.child->getWorldMatrix(), before);
 }

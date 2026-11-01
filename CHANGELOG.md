@@ -25,6 +25,10 @@ may change any interface without notice.
 
 ## [Unreleased]
 
+### 2026-11-01 Fixed — Grouping no longer changes an object's rotation or size
+
+- **Grouping objects that sit under a rotated or scaled parent now keeps their orientation and size as well as their position, and undo restores them exactly.** (3D_E-0855)
+
 ### 2026-11-01 Fixed — Opening a scene without terrain or foliage no longer shows the last scene's
 
 - **Loading a scene file that has no environment or terrain data now clears the previous scene's foliage and terrain, as File New does.** (3D_E-0854)

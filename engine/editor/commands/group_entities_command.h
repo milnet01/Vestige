@@ -62,7 +62,11 @@ private:
         uint32_t   oldParentId     = 0;       ///< 0 → scene root.
         size_t     oldSiblingIndex = 0;
         glm::vec3  oldLocalPosition{0.0f};
+        glm::vec3  oldLocalRotation{0.0f};  ///< Euler degrees.
+        glm::vec3  oldLocalScale{1.0f};
         glm::vec3  newLocalPosition{0.0f};
+        glm::vec3  newLocalRotation{0.0f};
+        glm::vec3  newLocalScale{1.0f};
     };
 
     Scene&                  m_scene;

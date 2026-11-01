@@ -97,6 +97,19 @@ void pasteTransform(Scene& scene, uint32_t entityId, const TransformClipboard& c
 /// @return Pointer to the group entity, or nullptr if fewer than 2 entities selected.
 Entity* groupEntities(Scene& scene, Selection& selection);
 
+/// @brief Works out the local position, rotation and scale an entity needs
+///        under a parent that has only a position, so its world transform
+///        stays as it was (3D_E-0855).
+/// Rotation is in degrees, in the order `Transform::getLocalMatrix` uses.
+/// A world matrix with shear (a rotated child under a rotated, unevenly
+/// scaled parent) has no exact position/rotation/scale form; this returns the
+/// closest one.
+/// @param world The entity's current world matrix.
+/// @param parentPosition The new parent's position.
+void localTransformUnderGroup(const glm::mat4& world, const glm::vec3& parentPosition,
+                              glm::vec3& position, glm::vec3& rotationDegrees,
+                              glm::vec3& scale);
+
 /// @brief Axis for align/distribute operations.
 enum class AlignAxis
 {
