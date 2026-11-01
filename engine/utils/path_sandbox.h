@@ -4,7 +4,11 @@
 /// @file path_sandbox.h
 /// @brief Path-traversal guards reusable across the engine.
 ///
-/// Two flavours:
+/// Three flavours:
+///
+///   - `isSafeRelativeAsset(path)` — for a path read from a file, before it is
+///     stored. Refuses anything rooted or holding a `..` part, the same on
+///     every platform.
 ///
 ///   - `resolveUriIntoBase(base, uri)` — for *relative* URIs (e.g. an asset
 ///     reference inside a glTF / scene-JSON that should resolve under a
@@ -34,6 +38,11 @@
 
 namespace Vestige::PathSandbox
 {
+
+/// @brief Returns false if @a path is absolute, rooted, drive-prefixed or holds
+///        a `..` part. Backslashes count as separators on every platform.
+///        An empty path returns true: it means "no asset".
+bool isSafeRelativeAsset(const std::string& path);
 
 /// @brief Resolves @a uri against @a base and ensures the result stays
 ///        inside @a base after canonicalisation.

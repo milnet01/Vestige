@@ -4,6 +4,7 @@
 /// @file path_sandbox.cpp
 #include "utils/path_sandbox.h"
 
+#include <algorithm>
 #include <cctype>
 
 namespace fs = std::filesystem;
@@ -54,6 +55,21 @@ bool insideOrEqual(const std::string& canon, const std::string& base)
 }
 
 }  // namespace
+
+bool isSafeRelativeAsset(const std::string& path)
+{
+    if (isAbsoluteOrRooted(path))
+        return false;
+
+    std::string normalised = path;
+    std::replace(normalised.begin(), normalised.end(), '\\', '/');
+    for (const auto& part : fs::path(normalised))
+    {
+        if (part == "..")
+            return false;
+    }
+    return true;
+}
 
 std::string resolveUriIntoBase(const fs::path& base, const std::string& uri)
 {

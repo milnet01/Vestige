@@ -11,6 +11,8 @@
 /// cache wasn't populated.
 
 #include <gtest/gtest.h>
+
+#include <stdexcept>
 #include "resource/resource_manager.h"
 
 #include <filesystem>
@@ -93,6 +95,20 @@ TEST_F(ResourceManagerSandboxTest, NoSandboxConfiguredPreservesEmptyRoots_D1)
     auto mesh = rm.loadMesh((m_root / "assets" / "ok.txt").string());
     EXPECT_EQ(mesh, nullptr);
     EXPECT_TRUE(rm.getSandboxRoots().empty());
+}
+
+// No red run: the symptom is the harm, a scene key that allocates until memory
+// runs out. This locks the bound instead.
+TEST(BuiltinMeshKey, SegmentCountIsBounded)
+{
+    EXPECT_EQ(ResourceManager::parseBuiltinSegmentCount("32"), 32u);
+    EXPECT_EQ(ResourceManager::parseBuiltinSegmentCount("1"), 1u);
+    EXPECT_EQ(ResourceManager::parseBuiltinSegmentCount("1024"), 1024u);
+    EXPECT_THROW(ResourceManager::parseBuiltinSegmentCount("0"), std::out_of_range);
+    EXPECT_THROW(ResourceManager::parseBuiltinSegmentCount("-1"), std::out_of_range);
+    EXPECT_THROW(ResourceManager::parseBuiltinSegmentCount("1025"), std::out_of_range);
+    EXPECT_THROW(ResourceManager::parseBuiltinSegmentCount("99999999999"), std::out_of_range);
+    EXPECT_THROW(ResourceManager::parseBuiltinSegmentCount("wide"), std::invalid_argument);
 }
 
 }  // namespace Vestige::ResourceManagerSandbox::Test

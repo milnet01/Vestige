@@ -40,6 +40,7 @@
 #include "resource/resource_manager.h"
 #include "scene/component.h"
 #include "scene/entity.h"
+#include "scene/particle_emitter.h"
 #include "scene/scene.h"
 #include "utils/entity_serializer.h"
 
@@ -533,4 +534,43 @@ TEST_F(EntitySerializerUnregisteredComponentWarning, WarnsForEachAffectedEntityI
 
     EXPECT_FALSE(firstWarningContaining("EntityAlpha").empty());
     EXPECT_FALSE(firstWarningContaining("EntityBravo").empty());
+}
+
+// ---------------------------------------------------------------------------
+// A particle texture path comes from the scene file, and the particle renderer
+// opens it directly, so the path has to be checked when it is read.
+// ---------------------------------------------------------------------------
+
+namespace
+{
+
+std::string particleTexturePathAfterLoading(const std::string& path)
+{
+    json entityJson;
+    entityJson["name"] = "Sparks";
+    entityJson["components"]["ParticleEmitter"]["texturePath"] = path;
+
+    Scene scene("ParticlePath");
+    ResourceManager resources;
+    Entity* host = EntitySerializer::deserializeEntity(entityJson, scene, resources);
+    EXPECT_NE(host, nullptr);
+    auto* emitter = host ? host->getComponent<ParticleEmitterComponent>() : nullptr;
+    EXPECT_NE(emitter, nullptr);
+    return emitter ? emitter->getConfig().texturePath : std::string("<no emitter>");
+}
+
+} // namespace
+
+TEST(EntitySerializerParticlePath, UnsafePathsAreDropped)
+{
+    EXPECT_EQ(particleTexturePathAfterLoading("/etc/passwd"), "");
+    EXPECT_EQ(particleTexturePathAfterLoading("../../secret.png"), "");
+    EXPECT_EQ(particleTexturePathAfterLoading("C:secret.png"), "");
+    EXPECT_EQ(particleTexturePathAfterLoading("\\\\server\\share\\a.png"), "");
+    EXPECT_EQ(particleTexturePathAfterLoading("..\\..\\secret.png"), "");
+}
+
+TEST(EntitySerializerParticlePath, AssetPathIsKept)
+{
+    EXPECT_EQ(particleTexturePathAfterLoading("textures/spark.png"), "textures/spark.png");
 }

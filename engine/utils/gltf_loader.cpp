@@ -118,9 +118,12 @@ static const unsigned char* validateAccessorData(
 
     const auto& buffer = model.buffers[static_cast<size_t>(bufferView.buffer)];
 
-    // Validate offsets don't exceed buffer
-    size_t totalOffset = bufferView.byteOffset + accessor.byteOffset;
-    if (totalOffset > buffer.data.size())
+    // Every value below comes straight from the file, so a sum or product can
+    // wrap and pass a bounds check. Compare by subtracting and dividing from a
+    // size already known to fit.
+    const size_t bufferSize = buffer.data.size();
+    if (bufferView.byteOffset > bufferSize
+        || accessor.byteOffset > bufferSize - bufferView.byteOffset)
     {
         Logger::warning("glTF: data offset exceeds buffer for "
             + std::string(attributeName));
@@ -137,12 +140,14 @@ static const unsigned char* validateAccessorData(
         return nullptr;
     }
 
+    const size_t totalOffset = bufferView.byteOffset + accessor.byteOffset;
+    const size_t available = bufferSize - totalOffset;
+
     // Validate that all elements fit within buffer
     if (accessor.count > 0)
     {
-        size_t requiredSize = totalOffset
-            + (accessor.count - 1) * stride + elementSize;
-        if (requiredSize > buffer.data.size())
+        if (elementSize > available
+            || accessor.count - 1 > (available - elementSize) / stride)
         {
             Logger::warning("glTF: accessor data extends beyond buffer for "
                 + std::string(attributeName));

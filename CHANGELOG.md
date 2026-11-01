@@ -25,6 +25,17 @@ may change any interface without notice.
 
 ## [Unreleased]
 
+### 2026-11-01 Security — Hostile scene and model files are refused in more places
+
+- **A scene file can no longer point a particle texture at any file on disk** (3D_E-0844)
+  Particle texture paths now pass the check material textures use. That check now behaves the same on Linux and Windows, including drive prefixes and backslash paths.
+
+- **A glTF model whose offsets or element count overflow is now refused** (3D_E-0844)
+  Such a file used to pass the bounds check, then load a bogus mesh or crash the loader.
+
+- **A scene file can no longer force a huge allocation through a colour gradient or a built-in shape** (3D_E-0838)
+  Gradients stop at 65536 stops, matching animation curves. Built-in sphere, cone and cylinder keys accept 1 to 1024 segments; anything else gets the default shape.
+
 ### 2026-10-31 Fixed — The water inspector's reflection mode and refraction switch now work
 
 - **Reflection mode and the refraction switch now change the water, per surface** (3D_E-0814). Water that does not need a scene re-render no longer pays for one. Cubemap reflects the sky only; its old description of a dynamic cubemap described something never built.

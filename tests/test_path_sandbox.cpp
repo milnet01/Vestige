@@ -45,6 +45,24 @@ protected:
     }
 };
 
+TEST(PathSandboxAsset, RefusesRootedAndTraversingPathsOnEveryPlatform)
+{
+    for (const char* path : {"/etc/passwd", "\\\\server\\share\\a.png", "\\rooted.png",
+                             "C:foo.png", "C:\\foo.png", "../a.png", "a/../../b.png",
+                             "..\\a.png", "a\\..\\..\\b.png"})
+    {
+        EXPECT_FALSE(isSafeRelativeAsset(path)) << path;
+    }
+}
+
+TEST(PathSandboxAsset, AcceptsPlainAssetPaths)
+{
+    for (const char* path : {"", "a.png", "textures/a.png", "textures\\a.png", "a..b/c.png"})
+    {
+        EXPECT_TRUE(isSafeRelativeAsset(path)) << path;
+    }
+}
+
 TEST_F(PathSandboxTest, ResolveUriIntoBaseAcceptsFileInsideBase_D1)
 {
     auto out = resolveUriIntoBase(m_root / "assets", "ok/in.png");

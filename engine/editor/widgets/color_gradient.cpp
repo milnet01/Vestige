@@ -99,10 +99,18 @@ ColorGradient ColorGradient::fromJson(const nlohmann::json& j)
     ColorGradient grad;
     grad.stops.clear();
 
+    // A scene file supplies this array, so its length must not decide how much
+    // is allocated. Same cap as AnimationCurve::fromJson.
+    constexpr size_t MAX_STOPS = 65536;
+
     if (j.is_array())
     {
         for (const auto& item : j)
         {
+            if (grad.stops.size() >= MAX_STOPS)
+            {
+                break;
+            }
             ColorStop stop;
             stop.position = item.value("pos", 0.0f);
             stop.color.r = item.value("r", 1.0f);

@@ -41,7 +41,8 @@ std::shared_ptr<Texture> ResourceManager::loadTexture(const std::string& filePat
 {
     // Include linear flag in cache key so the same file can be loaded with different formats.
     // The cache key uses the *original* filePath (not canonical) so callers can lookup
-    // by the same string they passed in; sandbox validation runs on each call regardless.
+    // by the same string they passed in. Only a cache miss reaches validatePath, so a
+    // cached entry is not re-checked against roots set after it was loaded.
     std::string cacheKey = filePath + (linear ? ":linear" : ":srgb");
 
     // Check cache
@@ -267,6 +268,19 @@ std::string ResourceManager::findMeshKey(const std::shared_ptr<Mesh>& mesh) cons
     return "";
 }
 
+uint32_t ResourceManager::parseBuiltinSegmentCount(const std::string& text)
+{
+    // A scene file supplies these keys, and a shape's vertex count grows with the
+    // product of its segment counts. Zero would divide by zero in the generators.
+    constexpr int MAX_SEGMENTS = 1024;
+    const int segments = std::stoi(text);
+    if (segments < 1 || segments > MAX_SEGMENTS)
+    {
+        throw std::out_of_range("built-in mesh segment count out of range");
+    }
+    return static_cast<uint32_t>(segments);
+}
+
 std::shared_ptr<Mesh> ResourceManager::getMeshByKey(const std::string& key)
 {
     // Check cache first (handles exact matches for any previously created mesh)
@@ -309,8 +323,8 @@ std::shared_ptr<Mesh> ResourceManager::getMeshByKey(const std::string& key)
             auto xPos = key.find('x', 17);
             if (xPos != std::string::npos)
             {
-                uint32_t sectors = static_cast<uint32_t>(std::stoi(key.substr(17, xPos - 17)));
-                uint32_t stacks = static_cast<uint32_t>(std::stoi(key.substr(xPos + 1)));
+                uint32_t sectors = parseBuiltinSegmentCount(key.substr(17, xPos - 17));
+                uint32_t stacks = parseBuiltinSegmentCount(key.substr(xPos + 1));
                 return getSphereMesh(sectors, stacks);
             }
         }
@@ -326,7 +340,7 @@ std::shared_ptr<Mesh> ResourceManager::getMeshByKey(const std::string& key)
     {
         try
         {
-            uint32_t sectors = static_cast<uint32_t>(std::stoi(key.substr(19)));
+            uint32_t sectors = parseBuiltinSegmentCount(key.substr(19));
             return getCylinderMesh(sectors);
         }
         catch (const std::invalid_argument&)
@@ -345,8 +359,8 @@ std::shared_ptr<Mesh> ResourceManager::getMeshByKey(const std::string& key)
             auto xPos = key.find('x', 15);
             if (xPos != std::string::npos)
             {
-                uint32_t sectors = static_cast<uint32_t>(std::stoi(key.substr(15, xPos - 15)));
-                uint32_t stacks = static_cast<uint32_t>(std::stoi(key.substr(xPos + 1)));
+                uint32_t sectors = parseBuiltinSegmentCount(key.substr(15, xPos - 15));
+                uint32_t stacks = parseBuiltinSegmentCount(key.substr(xPos + 1));
                 return getConeMesh(sectors, stacks);
             }
         }

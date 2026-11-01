@@ -108,6 +108,20 @@ TEST(AnimationCurveTest, JsonRoundTrip)
 // ColorGradient tests
 // ---------------------------------------------------------------------------
 
+// A scene file supplies this array, so its length must not decide how much the
+// loader allocates. The cap matches AnimationCurve::fromJson.
+TEST(ColorGradientTest, FromJsonCapsTheStopCount)
+{
+    constexpr size_t OVER_CAP = 65536 + 10;
+    nlohmann::json j = nlohmann::json::array();
+    for (size_t i = 0; i < OVER_CAP; ++i)
+    {
+        j.push_back({{"pos", 0.5f}});
+    }
+
+    EXPECT_EQ(ColorGradient::fromJson(j).stops.size(), 65536u);
+}
+
 TEST(ColorGradientTest, DefaultGradientFadesAlpha)
 {
     ColorGradient grad;  // default: white opaque -> white transparent

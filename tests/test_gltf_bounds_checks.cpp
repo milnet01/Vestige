@@ -220,4 +220,72 @@ TEST_F(GltfBoundsChecksTest, FileWithoutRequiredExtensionsLoads_D12)
     EXPECT_NE(model, nullptr);
 }
 
+// -- Accessor regions. The offsets and the count come straight from the file, so
+// sums and products over them can wrap and pass a bounds check. A rejected
+// POSITION accessor skips the primitive before any GL upload, so these need no
+// context. The buffer is twelve zero bytes.
+
+static std::string gltfWithPositionAccessor(const std::string& bufferViewFields,
+                                            const std::string& accessorFields)
+{
+    return R"({
+        "asset": {"version": "2.0"},
+        "buffers": [{"byteLength": 12,
+                     "uri": "data:application/octet-stream;base64,AAAAAAAAAAAAAAAA"}],
+        "bufferViews": [{"buffer": 0, "byteLength": 12, )" + bufferViewFields + R"(}],
+        "accessors": [{"bufferView": 0, "componentType": 5126, "type": "VEC3", )"
+        + accessorFields + R"(}],
+        "meshes": [{"primitives": [{"attributes": {"POSITION": 0}}]}],
+        "nodes": [{"mesh": 0}],
+        "scenes": [{"nodes": [0]}],
+        "scene": 0
+    })";
+}
+
+TEST_F(GltfBoundsChecksTest, AccessorOffsetSumThatWrapsIsRejected)
+{
+    // 8 + (2^64 - 8) wraps to 0, which looks like the start of the buffer.
+    writeGltf(gltfWithPositionAccessor(
+        R"("byteOffset": 8)", R"("byteOffset": 18446744073709551608, "count": 1)"));
+
+    ResourceManager rm;
+    auto model = GltfLoader::load(m_gltfPath.string(), rm);
+    ASSERT_NE(model, nullptr);
+    EXPECT_TRUE(model->m_primitives.empty());
+}
+
+TEST_F(GltfBoundsChecksTest, AccessorCountThatWrapsTheSizeIsRejected)
+{
+    // (2^60 + 1 - 1) * 16 wraps to 0, so the region appears to be one element.
+    writeGltf(gltfWithPositionAccessor(
+        R"("byteOffset": 0, "byteStride": 16)", R"("count": 1152921504606846977)"));
+
+    ResourceManager rm;
+    auto model = GltfLoader::load(m_gltfPath.string(), rm);
+    ASSERT_NE(model, nullptr);
+    EXPECT_TRUE(model->m_primitives.empty());
+}
+
+TEST_F(GltfBoundsChecksTest, BufferViewOffsetPastTheBufferIsRejected)
+{
+    // The view's offset is checked alone first: subtracting it from the buffer
+    // size would otherwise wrap to a huge "remaining" size.
+    writeGltf(gltfWithPositionAccessor(R"("byteOffset": 16)", R"("byteOffset": 0, "count": 1)"));
+
+    ResourceManager rm;
+    auto model = GltfLoader::load(m_gltfPath.string(), rm);
+    ASSERT_NE(model, nullptr);
+    EXPECT_TRUE(model->m_primitives.empty());
+}
+
+TEST_F(GltfBoundsChecksTest, AccessorOneElementPastTheBufferIsRejected)
+{
+    writeGltf(gltfWithPositionAccessor(R"("byteOffset": 0)", R"("byteOffset": 4, "count": 1)"));
+
+    ResourceManager rm;
+    auto model = GltfLoader::load(m_gltfPath.string(), rm);
+    ASSERT_NE(model, nullptr);
+    EXPECT_TRUE(model->m_primitives.empty());
+}
+
 }  // namespace Vestige::GltfBoundsChecks::Test

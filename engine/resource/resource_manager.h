@@ -92,6 +92,11 @@ public:
     /// @return The mesh, or nullptr if the key is invalid.
     std::shared_ptr<Mesh> getMeshByKey(const std::string& key);
 
+    /// @brief Reads a segment count from a built-in mesh key.
+    /// @throws std::invalid_argument if @a text is not a number.
+    /// @throws std::out_of_range if it is outside 1 to 1024.
+    static uint32_t parseBuiltinSegmentCount(const std::string& text);
+
     /// @brief Finds the file path for a cached texture (strips cache key suffix).
     /// @return The original file path, or empty if not found.
     std::string findTexturePath(const std::shared_ptr<Texture>& texture) const;
@@ -111,9 +116,10 @@ public:
 
     /// @brief Sets the allowed root directories for asset loads.
     ///
-    /// Every `loadTexture` / `loadMesh` / `loadModel` call canonicalises
-    /// its path argument and rejects (returns default / nullptr + logs a
-    /// warning) any path that does not lie inside one of these roots.
+    /// A `loadTexture` / `loadMesh` / `loadModel` call that misses the cache
+    /// canonicalises its path argument and rejects (returns default / nullptr
+    /// + logs a warning) any path that does not lie inside one of these roots.
+    /// A cache hit returns without checking, so set the roots before loading.
     ///
     /// Empty roots = sandbox disabled (the default). Production code wires
     /// `[install_root, project_root, asset_library_root]` once at startup.

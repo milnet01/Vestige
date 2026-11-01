@@ -25,6 +25,7 @@
 #include "scene/scene.h"
 #include "core/logger.h"
 #include "utils/component_serializer_registry.h"
+#include "utils/path_sandbox.h"
 
 #include <nlohmann/json.hpp>
 
@@ -42,33 +43,21 @@ namespace EntitySerializer
 // Helpers
 // ---------------------------------------------------------------------------
 
-/// @brief Validates a scene-JSON-sourced asset path. Rejects empty,
-///        absolute, or ``..``-containing paths so a hostile ``.scene``
+/// @brief Validates a scene-JSON-sourced asset path, so a hostile ``.scene``
 ///        file can't coerce the engine into loading ``/etc/passwd`` or
-///        ``../../../secret`` via a texture slot. Returns the raw path
-///        on success, empty string on rejection (callers treat empty as
-///        "no texture"). (AUDIT H3.)
+///        ``../../../secret``. Returns the raw path on success, empty string
+///        on rejection (callers treat empty as "no asset"). (AUDIT H3.)
+///
+/// Used for every field that names a file. The ``mesh`` key is exempt:
+/// getMeshByKey only looks in the cache and builds built-in shapes, and never
+/// opens a file.
 static std::string sanitizeAssetPath(const std::string& raw, const char* fieldName)
 {
-    if (raw.empty())
+    if (!PathSandbox::isSafeRelativeAsset(raw))
     {
-        return {};
-    }
-    std::filesystem::path p(raw);
-    if (p.is_absolute())
-    {
-        Logger::warning(std::string("scene: absolute path rejected for ")
+        Logger::warning(std::string("scene: unsafe path rejected for ")
             + fieldName + ": " + raw);
         return {};
-    }
-    for (const auto& part : p)
-    {
-        if (part == "..")
-        {
-            Logger::warning(std::string("scene: path traversal rejected for ")
-                + fieldName + ": " + raw);
-            return {};
-        }
     }
     return raw;
 }
@@ -607,7 +596,7 @@ static void applyParticleEmitter(const json& j, ParticleEmitterComponent& comp)
                         ? ParticleEmitterConfig::BlendMode::ALPHA_BLEND
                         : ParticleEmitterConfig::BlendMode::ADDITIVE;
 
-    cfg.texturePath = j.value("texturePath", std::string(""));
+    cfg.texturePath = sanitizeAssetPath(j.value("texturePath", std::string("")), "texturePath");
 
     // Light coupling
     cfg.emitsLight = j.value("emitsLight", false);
