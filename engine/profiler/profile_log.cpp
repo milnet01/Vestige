@@ -163,9 +163,10 @@ void ProfileLog::sample(PerformanceProfiler& profiler, double elapsedSec)
         ++m_intervalFrames;
     }
 
-    // GPU — only once the triple-buffered timestamp queries are warm.
+    // GPU — only once the triple-buffered timestamp queries are warm, and not
+    // when the GPU was late and the sample was skipped (3D_E-0788).
     GpuTimer& gpu = profiler.getGpuTimer();
-    if (gpu.hasResults())
+    if (gpu.hasResults() && gpu.hasFreshResults())
     {
         addSample(ProfileCategory::Gpu, "total", 0,
                   static_cast<double>(gpu.getTotalGpuTimeMs()));

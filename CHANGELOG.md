@@ -25,6 +25,10 @@ may change any interface without notice.
 
 ## [Unreleased]
 
+### 2026-11-01 Fixed — GPU timings no longer make the CPU wait for the GPU
+
+- **The GPU timer now checks that a timing query has finished before reading it, and skips that sample if not. Before, a late GPU made the CPU stall inside the profiler. A skipped sample is left out of the --profile-log GPU rows and the --frame-log GPU rows; the file formats are unchanged. perf_gate numbers keep their meaning.** (3D_E-0788)
+
 ### 2026-11-01 Fixed — Memory tab no longer shows a CPU heap figure that was always zero
 
 - **The Performance panel's Memory tab dropped its CPU Heap rows. Nothing in the engine reported heap use, so they always read zero. GPU VRAM is unchanged.** (3D_E-0787)

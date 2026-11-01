@@ -66,6 +66,12 @@ public:
     /// @brief Whether the timer has valid results (needs 3 frames to warm up).
     bool hasResults() const { return m_frameCount >= BUFFER_COUNT; }
 
+    /// @brief Whether the latest endFrame() read a new sample: the results are
+    ///        exactly RESULT_LATENCY_FRAMES frames old. False when the GPU had
+    ///        not finished that frame's queries and the sample was skipped; the
+    ///        results then still hold the previous sample (3D_E-0788).
+    bool hasFreshResults() const { return m_resultsFresh; }
+
     /// @brief Whether getFrameSpanMs() holds a measurement for the results.
     bool hasFrameSpan() const { return m_hasFrameSpan; }
 
@@ -95,6 +101,12 @@ private:
     std::vector<GpuPassTiming> m_results;
     double m_frameSpanMs = 0.0;
     bool m_hasFrameSpan = false;
+    bool m_resultsFresh = false;
+
+    /// True when the GPU has finished the queries of buffer `buf`, so reading
+    /// them cannot make the CPU wait. Timestamps finish in order, so the last
+    /// one issued is enough.
+    bool buffersReady(int buf) const;
 };
 
 } // namespace Vestige

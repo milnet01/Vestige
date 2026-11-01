@@ -93,8 +93,10 @@ void GpuTimer::endFrame()
     // Store the pass count for the buffer we just wrote
     m_bufferPassCount[m_writeBuffer] = m_passCount;
 
-    if (m_frameCount >= BUFFER_COUNT)
+    m_resultsFresh = false;
+    if (m_frameCount >= BUFFER_COUNT && buffersReady(m_readBuffer))
     {
+        m_resultsFresh = true;
         m_results.clear();
         // Read the exact pass count that was recorded in the read buffer
         int readPassCount = m_bufferPassCount[m_readBuffer];
@@ -128,6 +130,28 @@ void GpuTimer::endFrame()
 
     // Advance write buffer
     m_writeBuffer = (m_writeBuffer + 1) % BUFFER_COUNT;
+}
+
+bool GpuTimer::buffersReady(int buf) const
+{
+    // GL_QUERY_RESULT_AVAILABLE does not wait; GL_QUERY_RESULT does.
+    // Timestamps complete in order, so the last one issued covers the rest.
+    GLuint lastQuery = 0;
+    if (m_spanEnded[buf])
+    {
+        lastQuery = m_spanQueries[buf][1];
+    }
+    else if (m_bufferPassCount[buf] > 0)
+    {
+        lastQuery = m_queries[buf][m_bufferPassCount[buf] * 2 - 1];
+    }
+    if (lastQuery == 0)
+    {
+        return true;
+    }
+    GLint available = GL_FALSE;
+    glGetQueryObjectiv(lastQuery, GL_QUERY_RESULT_AVAILABLE, &available);
+    return available == GL_TRUE;
 }
 
 float GpuTimer::getTotalGpuTimeMs() const

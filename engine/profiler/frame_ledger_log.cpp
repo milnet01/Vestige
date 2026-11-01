@@ -116,7 +116,7 @@ void FrameLedgerLog::sample(PerformanceProfiler& profiler, const FrameLedgerTime
     frame.cpuEntries = cpu.data();
     frame.cpuEntryCount = cpu.size();
     frame.memMb = static_cast<double>(profiler.getMemoryTracker().getGpuUsedMB());
-    if (gpu.hasResults() && m_frame >= GpuTimer::RESULT_LATENCY_FRAMES)
+    if (gpu.hasResults() && gpu.hasFreshResults() && m_frame >= GpuTimer::RESULT_LATENCY_FRAMES)
     {
         frame.gpuFrame = m_frame - GpuTimer::RESULT_LATENCY_FRAMES;
         frame.gpuPasses = gpu.getResults().data();
