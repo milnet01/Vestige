@@ -40,7 +40,7 @@ enum class GameTemplateType
 /// @brief Configuration for a game type template.
 struct GameTemplateConfig
 {
-    GameTemplateType type;
+    GameTemplateType type{};
     std::string displayName;
     std::string description;
 
