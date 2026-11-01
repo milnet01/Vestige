@@ -39,6 +39,7 @@
 #include "editor/panels/template_dialog.h"         // GameTemplateConfig
 
 #include <filesystem>
+#include <optional>
 #include <string>
 #include <vector>
 
@@ -85,7 +86,7 @@ enum class FirstRunWizardSceneOp
     ApplyEmpty,       ///< Camera + directional light + ground plane.
     ApplyDemo,        ///< `Engine::setupDemoScene()` showroom.
     ApplyTemplate,    ///< Whatever template the panel had selected when
-                      ///  the user clicked Create. Panel state carries index.
+                      ///  the user clicked Create (`selectedTemplate()`).
 };
 
 /// @brief Transition emitted by `applyFirstRunIntent`. Fully describes
@@ -164,6 +165,16 @@ std::vector<GameTemplateConfig> filterByAvailability(
     const std::vector<GameTemplateConfig>& templates,
     const std::filesystem::path& assetRoot);
 
+/// @brief The template at `index` of the picker's list: the availability-
+///        filtered `featured` followed by the availability-filtered `more`.
+///        This is the list the picker draws, so its row index means the same
+///        thing here. Returns nothing for an index outside that list.
+std::optional<GameTemplateConfig> pickWizardTemplate(
+    const std::vector<GameTemplateConfig>& featured,
+    const std::vector<GameTemplateConfig>& more,
+    const std::filesystem::path& assetRoot,
+    int index);
+
 // --------------------------------------------------------------
 // Scene-op helpers used by slice 14.4 engine wiring
 // --------------------------------------------------------------
@@ -207,7 +218,7 @@ public:
     ///
     /// Slice 14.4 uses the op to call either `applyEmptyScene`,
     /// `Engine::setupDemoScene`, or `TemplateDialog::applyTemplate`
-    /// with the panel's current `selectedTemplateIndex()`.
+    /// with the panel's current `selectedTemplate()`.
     FirstRunWizardSceneOp draw();
 
     /// @brief Re-open from the Help menu. Bypasses the auto-open
@@ -216,7 +227,15 @@ public:
 
     bool                isOpen()                const { return m_open; }
     FirstRunWizardStep  currentStep()           const { return m_step; }
-    int                 selectedTemplateIndex() const { return m_selectedIndex; }
+
+    /// @brief The template the user picked, or nothing if the selection is
+    ///        out of range. Resolved against the same filtered lists the
+    ///        picker draws.
+    std::optional<GameTemplateConfig> selectedTemplate() const
+    {
+        return pickWizardTemplate(featuredTemplates(), moreTemplates(),
+                                  m_assetRoot, m_selectedIndex);
+    }
 
 private:
     /// Runs an intent through the pure function, writes the result

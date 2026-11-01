@@ -368,3 +368,28 @@ TEST(WelcomePanelSlice14_4, NoLongerAutoOpensOnFirstLaunch)
     p.open();
     EXPECT_TRUE(p.isOpen());
 }
+
+// 3D_E-0836: the picker's row index counts the availability-filtered lists.
+TEST(FirstRunWizardPick, IndexCountsFilteredListNotFullList)
+{
+    const auto root = std::filesystem::temp_directory_path();
+    GameTemplateConfig a; a.displayName = "A";
+    GameTemplateConfig hidden; hidden.displayName = "Hidden";
+    hidden.requiredAssets = {"vestige_no_such_asset_3D_E_0836.bin"};
+    GameTemplateConfig c; c.displayName = "C";
+
+    const auto picked = pickWizardTemplate({a, hidden}, {c}, root, 1);
+    ASSERT_TRUE(picked.has_value());
+    EXPECT_EQ(picked->displayName, "C");
+}
+
+TEST(FirstRunWizardPick, OutOfRangeIndexGivesNothing)
+{
+    const auto root = std::filesystem::temp_directory_path();
+    GameTemplateConfig a; a.displayName = "A";
+    GameTemplateConfig hidden; hidden.displayName = "Hidden";
+    hidden.requiredAssets = {"vestige_no_such_asset_3D_E_0836.bin"};
+
+    EXPECT_FALSE(pickWizardTemplate({a, hidden}, {}, root, 1).has_value());
+    EXPECT_FALSE(pickWizardTemplate({a}, {}, root, -1).has_value());
+}

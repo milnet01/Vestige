@@ -1354,16 +1354,10 @@ void Editor::drawPanels(Renderer* renderer, Scene* scene, Camera* camera,
                     break;
                 case FirstRunWizardSceneOp::ApplyTemplate:
                 {
-                    // The wizard's index counts its availability-filtered
-                    // lists, but `all` is unfiltered. The two agree only while
-                    // no template is hidden (no template sets requiredAssets).
-                    const auto all = allWizardTemplates();
-                    const int idx  = m_firstRunWizard.selectedTemplateIndex();
-                    if (idx >= 0 && idx < static_cast<int>(all.size()))
+                    if (const auto picked = m_firstRunWizard.selectedTemplate())
                     {
                         TemplateDialog::applyTemplate(
-                            all[static_cast<size_t>(idx)], scene,
-                            m_resourceManager, renderer);
+                            *picked, scene, m_resourceManager, renderer);
                         m_commandHistory.markUnsavedChange();
                         m_selection.clearSelection();
                     }

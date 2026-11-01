@@ -83,6 +83,22 @@ std::vector<GameTemplateConfig> allWizardTemplates()
     return featured;
 }
 
+std::optional<GameTemplateConfig> pickWizardTemplate(
+    const std::vector<GameTemplateConfig>& featured,
+    const std::vector<GameTemplateConfig>& more,
+    const std::filesystem::path& assetRoot,
+    int index)
+{
+    std::vector<GameTemplateConfig> all = filterByAvailability(featured, assetRoot);
+    const std::vector<GameTemplateConfig> shownMore = filterByAvailability(more, assetRoot);
+    all.insert(all.end(), shownMore.begin(), shownMore.end());
+    if (index < 0 || index >= static_cast<int>(all.size()))
+    {
+        return std::nullopt;
+    }
+    return all[static_cast<size_t>(index)];
+}
+
 void applyEmptyScene(Scene& scene, ResourceManager& resources)
 {
     // Announces SceneLoadedEvent when the function returns, once filled.

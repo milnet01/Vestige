@@ -25,6 +25,10 @@ may change any interface without notice.
 
 ## [Unreleased]
 
+### 2026-11-01 Fixed — First-run wizard applies the template you picked
+
+- **The first-run wizard now applies the template you chose even when some templates are hidden for missing assets; before, it could apply a different one** (3D_E-0836)
+
 ### 2026-11-01 Fixed — Undo of a wall opening after the wall is deleted
 
 - **Undoing or redoing a door or window cut no longer touches freed memory if the wall was deleted in between; it now does nothing** (3D_E-0838)
