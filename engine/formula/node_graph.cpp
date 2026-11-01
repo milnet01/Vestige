@@ -1160,6 +1160,14 @@ NodeGraph NodeGraph::fromJson(const nlohmann::json& j)
                     std::to_string(node.id) + " (AUDIT.md §M9)");
             }
             if (node.id > maxId) maxId = node.id;
+            for (const auto& port : node.inputs)
+            {
+                if (port.id >= graph.m_nextPortId) graph.m_nextPortId = port.id + 1;
+            }
+            for (const auto& port : node.outputs)
+            {
+                if (port.id >= graph.m_nextPortId) graph.m_nextPortId = port.id + 1;
+            }
             graph.m_nodes[node.id] = std::move(node);
         }
         // Defensive: ensure any future addNode() picks an id strictly
@@ -1181,6 +1189,28 @@ NodeGraph NodeGraph::fromJson(const nlohmann::json& j)
             c.sourcePort = cj.value("sourcePort", static_cast<PortId>(0));
             c.targetNode = cj.value("targetNode", static_cast<NodeId>(0));
             c.targetPort = cj.value("targetPort", static_cast<PortId>(0));
+
+            // A saved connection must join an existing output port to an
+            // existing input port; anything else would dangle at evaluation.
+            auto hasPort = [&graph](NodeId nodeId, PortId portId, bool wantOutput)
+            {
+                const Node* n = graph.getNode(nodeId);
+                if (!n) return false;
+                const auto& ports = wantOutput ? n->outputs : n->inputs;
+                for (const auto& port : ports)
+                {
+                    if (port.id == portId) return true;
+                }
+                return false;
+            };
+            if (!hasPort(c.sourceNode, c.sourcePort, true)
+                || !hasPort(c.targetNode, c.targetPort, false))
+            {
+                throw std::runtime_error(
+                    "NodeGraph::fromJson: connection " + std::to_string(c.id)
+                    + " refers to a missing node or port");
+            }
+            if (c.id >= graph.m_nextConnectionId) graph.m_nextConnectionId = c.id + 1;
             graph.m_connections.push_back(c);
         }
     }

@@ -25,6 +25,10 @@ may change any interface without notice.
 
 ## [Unreleased]
 
+### 2026-11-01 Security — Saved formula graphs are checked on load
+
+- **Loading a formula graph now rejects a connection that points at a missing node or port, and raises the port and connection counters above every loaded id.** (3D_E-0833)
+
 ### 2026-11-01 Fixed — Motion matching respects NO_ENTRY and the database sample rate
 
 - **A search with no tag filter could land on frames marked NO_ENTRY. They are now skipped on every path.** (3D_E-0830)

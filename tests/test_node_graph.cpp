@@ -1130,6 +1130,45 @@ TEST(NodeGraph_Json, NextNodeIdReclampedAgainstMax)
            "produce a strictly greater id — AUDIT.md §M9.";
 }
 
+TEST(NodeGraph_Json, ConnectionToMissingNodeOrPortThrows)
+{
+    NodeGraph g;
+    NodeId a = g.addNode(NodeGraph::createLiteralNode(1.0f));
+    NodeId b = g.addNode(NodeGraph::createLiteralNode(2.0f));
+    (void)a;
+    (void)b;
+
+    nlohmann::json j = g.toJson();
+    nlohmann::json cj;
+    cj["id"] = 1;
+    cj["sourceNode"] = 9999;   // no such node
+    cj["sourcePort"] = 1;
+    cj["targetNode"] = 9998;
+    cj["targetPort"] = 2;
+    j["connections"] = nlohmann::json::array({cj});
+
+    EXPECT_THROW(NodeGraph::fromJson(j), std::runtime_error);
+}
+
+TEST(NodeGraph_Json, PortAndConnectionCountersRaisedAboveLoadedIds)
+{
+    NodeGraph g;
+    NodeId n = g.addNode(NodeGraph::createLiteralNode(3.0f));
+    ASSERT_NE(g.getNode(n), nullptr);
+    PortId highestPort = g.getNode(n)->outputs.back().id;
+
+    nlohmann::json j = g.toJson();
+    j["nextPortId"] = 1;
+    j["nextConnectionId"] = 1;
+
+    NodeGraph restored = NodeGraph::fromJson(j);
+    NodeId fresh = restored.addNode(NodeGraph::createLiteralNode(4.0f));
+    const Node* fn = restored.getNode(fresh);
+    ASSERT_NE(fn, nullptr);
+    EXPECT_GT(fn->outputs.front().id, highestPort)
+        << "a new node's ports must not reuse a loaded port id";
+}
+
 // ===========================================================================
 // Enum string conversions
 // ===========================================================================
