@@ -461,6 +461,16 @@ void Scene::collectRenderDataRecursive(
     {
         SpotLight sl = spotLight->light;
         sl.position = entity.getWorldPosition();
+        // The component's direction is in the entity's space: turn it by the
+        // world matrix so rotating the entity (or a parent) turns the beam.
+        // Scale is divided out by the normalize; a degenerate (zero-scale)
+        // matrix keeps the authored direction rather than a NaN one.
+        const glm::vec3 worldDir =
+            glm::mat3(entity.getWorldMatrix()) * spotLight->light.direction;
+        if (glm::dot(worldDir, worldDir) > 1e-12f)
+        {
+            sl.direction = glm::normalize(worldDir);
+        }
         data.spotLights.push_back(sl);
     }
 

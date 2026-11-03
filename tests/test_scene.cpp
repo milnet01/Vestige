@@ -4,10 +4,13 @@
 /// @file test_scene.cpp
 /// @brief Unit tests for the Scene and SceneManager systems.
 #include "scene/camera_component.h"
+#include "scene/light_component.h"
 #include "scene/scene.h"
 #include "scene/scene_manager.h"
 
 #include <gtest/gtest.h>
+
+#include <glm/glm.hpp>
 
 using namespace Vestige;
 
@@ -262,4 +265,43 @@ TEST(SceneEntityLifecycle, ClearEntitiesNullsActiveCamera_S1)
     { Scene::Replacement replacement(scene); }
 
     EXPECT_EQ(scene.getActiveCamera(), nullptr);
+}
+
+// 3D_E-0857: a spot light's direction is in its entity's space, so turning
+// the entity turns the beam. The parent's rotation counts too.
+TEST(SceneTest, SpotLightDirectionFollowsEntityRotation_0857)
+{
+    Scene scene("Spot");
+    Entity* parent = scene.createEntity("Parent");
+    Entity* lamp = scene.createEntity("Lamp");
+    ASSERT_TRUE(scene.reparentEntity(lamp->getId(), parent->getId()));
+    auto* spot = lamp->addComponent<SpotLightComponent>();
+    spot->light.direction = glm::vec3(0.0f, -1.0f, 0.0f);
+
+    // Unrotated: the direction is unchanged.
+    SceneRenderData flat = scene.collectRenderData();
+    ASSERT_EQ(flat.spotLights.size(), 1u);
+    EXPECT_NEAR(flat.spotLights[0].direction.y, -1.0f, 1e-5f);
+
+    // +90 degrees about Z on the entity turns straight down into +X;
+    // a further +90 about Y on the parent turns +X into -Z.
+    lamp->transform.rotation = glm::vec3(0.0f, 0.0f, 90.0f);
+    parent->transform.rotation = glm::vec3(0.0f, 90.0f, 0.0f);
+    scene.update(0.0f);
+    SceneRenderData turned = scene.collectRenderData();
+    ASSERT_EQ(turned.spotLights.size(), 1u);
+    const glm::vec3 d = turned.spotLights[0].direction;
+    EXPECT_NEAR(d.x, 0.0f, 1e-5f);
+    EXPECT_NEAR(d.y, 0.0f, 1e-5f);
+    EXPECT_NEAR(d.z, -1.0f, 1e-5f);
+    // The component keeps its own (local) direction.
+    EXPECT_NEAR(spot->light.direction.y, -1.0f, 1e-5f);
+
+    // A zero-scale entity has no direction to turn: keep the authored one,
+    // not a NaN.
+    lamp->transform.scale = glm::vec3(0.0f);
+    scene.update(0.0f);
+    SceneRenderData squashed = scene.collectRenderData();
+    ASSERT_EQ(squashed.spotLights.size(), 1u);
+    EXPECT_FLOAT_EQ(squashed.spotLights[0].direction.y, -1.0f);
 }

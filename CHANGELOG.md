@@ -25,6 +25,12 @@ may change any interface without notice.
 
 ## [Unreleased]
 
+### 2026-11-03 Fixed — Spot lights turn with their object
+
+Rotating an object that carries a spot light, or its parent, now turns
+the beam. The light's Direction field is now relative to the object; on
+an unrotated object it means what it did before. (3D_E-0857)
+
 ### 2026-11-03 Added — Formula Workbench: roughness and F0 as inputs to the specular formulas, for DOOM_Ants
 
 Four new templates whose exported GLSL takes roughness and reflectivity

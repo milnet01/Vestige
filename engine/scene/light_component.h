@@ -43,7 +43,7 @@ public:
     }
 };
 
-/// @brief Attaches a spot light to an entity (position comes from the entity's world position; direction is the light's own `direction` field and does not follow entity rotation).
+/// @brief Attaches a spot light to an entity. Position comes from the entity's world position; `light.direction` is in the entity's space, so rotating the entity or a parent turns the beam.
 class SpotLightComponent : public Component
 {
 public:
