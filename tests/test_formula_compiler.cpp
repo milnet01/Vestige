@@ -235,6 +235,28 @@ TEST(CodegenGlsl, GenerateFunction)
     EXPECT_EQ(code.find("glm::"), std::string::npos);
 }
 
+// 3D_E-0813: roughness and F0 are inputs, so the exports take them as
+// parameters, and the metallic Fresnel takes and returns a vec3.
+TEST(CodegenGlsl, SpecularLobeExportsTakeRoughnessAndF0)
+{
+    EXPECT_NE(CodegenGlsl::generateFunction(PhysicsTemplates::createGgxDistributionParam())
+                  .find("float ggxDistributionParam(float NdotH, float alpha)"),
+              std::string::npos);
+    EXPECT_NE(CodegenGlsl::generateFunction(PhysicsTemplates::createSmithGgxVisibility())
+                  .find("float smithGgxVisibility(float NdotV, float NdotL, float alpha)"),
+              std::string::npos);
+    EXPECT_NE(CodegenGlsl::generateFunction(PhysicsTemplates::createFresnelSchlickF0())
+                  .find("float fresnelSchlickF0(float cosTheta, float f0)"),
+              std::string::npos);
+    const std::string metallic =
+        CodegenGlsl::generateFunction(PhysicsTemplates::createFresnelSchlickMetallic());
+    EXPECT_NE(metallic.find("vec3 fresnelSchlickMetallic(float cosTheta, vec3 f0)"),
+              std::string::npos) << metallic;
+    EXPECT_NE(CodegenCpp::generateFunction(PhysicsTemplates::createFresnelSchlickMetallic())
+                  .find("glm::vec3 fresnelSchlickMetallic(float cosTheta, const glm::vec3& f0)"),
+              std::string::npos);
+}
+
 TEST(CodegenGlsl, ProvenanceCommentSanitisesNewlines)
 {
     // 3D_E-0012 / AUDIT §H11 comment-injection sibling: a newline in a

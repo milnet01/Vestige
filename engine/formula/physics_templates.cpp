@@ -63,6 +63,10 @@ std::vector<FormulaDefinition> PhysicsTemplates::createAll()
     // PBR Lighting
     all.push_back(createGGXDistribution());
     all.push_back(createSchlickGeometry());
+    all.push_back(createGgxDistributionParam());
+    all.push_back(createSmithGgxVisibility());
+    all.push_back(createFresnelSchlickF0());
+    all.push_back(createFresnelSchlickMetallic());
     all.push_back(createACESTonemap());
     all.push_back(createSpotConeFalloff());
     // Animation
@@ -688,6 +692,145 @@ FormulaDefinition PhysicsTemplates::createSchlickGeometry()
 
     def.source = "Schlick 1994, applied to GGX (Karis 2013); "
                  "matches scene.frag.glsl geometrySchlickGGX()";
+    def.accuracy = 1.0f;
+    return def;
+}
+
+// The four templates below take roughness and F0 as INPUTS, not
+// coefficients: the export inlines coefficients as constants, and a shader
+// reading roughness and F0 per pixel needs them as function parameters.
+// Added for DOOM_Ants (3D_E-0813). The fixed-coefficient versions above stay.
+
+FormulaDefinition PhysicsTemplates::createGgxDistributionParam()
+{
+    // D = alpha^2 / (PI * (NdotH^2 * (alpha^2 - 1) + 1)^2), alpha = roughness^2.
+    // Same formula as ggx_distribution, with alpha an input.
+    FormulaDefinition def;
+    def.name = "ggx_distribution_param";
+    def.category = "lighting";
+    def.description = "GGX / Trowbridge-Reitz NDF with alpha as an input: "
+                      "D(NdotH, alpha), alpha = roughness^2.";
+    def.inputs = {
+        {"NdotH", VT::FLOAT, "", 1.0f},
+        {"alpha", VT::FLOAT, "", 0.25f}
+    };
+    def.output = {VT::FLOAT, ""};
+
+    const auto alpha2 = [] { return binOp("*", var("alpha"), var("alpha")); };
+    auto inner = binOp("+",
+        binOp("*", binOp("*", var("NdotH"), var("NdotH")),
+            binOp("-", alpha2(), lit(1.0f))),
+        lit(1.0f));
+    auto innerCopy = inner->clone();
+    auto denom = binOp("*", lit(3.14159265f),
+        binOp("*", std::move(innerCopy), std::move(inner)));
+    // '/' codegens to safeDiv: alpha = 0 at NdotH = 1 gives 0, not NaN.
+    def.expressions[QT::FULL] = binOp("/", alpha2(), std::move(denom));
+
+    def.source = "GGX (Trowbridge-Reitz 1975, Walter et al. 2007)";
+    def.accuracy = 1.0f;
+    return def;
+}
+
+FormulaDefinition PhysicsTemplates::createSmithGgxVisibility()
+{
+    // Height-correlated Smith GGX visibility (Heitz 2014, Eq. 99):
+    //   V = 0.5 / (NdotL * sqrt(NdotV^2 (1 - a2) + a2)
+    //            + NdotV * sqrt(NdotL^2 (1 - a2) + a2)),  a2 = alpha^2
+    // V = G2 / (4 NdotV NdotL): the Cook-Torrance denominator is INCLUDED,
+    // so specular = D * V * F with no further divide.
+    FormulaDefinition def;
+    def.name = "smith_ggx_visibility";
+    def.category = "lighting";
+    def.description = "Height-correlated Smith GGX visibility V(NdotV, NdotL, alpha), "
+                      "alpha = roughness^2. Includes 1/(4 NdotV NdotL): "
+                      "specular = D * V * F.";
+    def.inputs = {
+        {"NdotV", VT::FLOAT, "", 1.0f},
+        {"NdotL", VT::FLOAT, "", 1.0f},
+        {"alpha", VT::FLOAT, "", 0.25f}
+    };
+    def.output = {VT::FLOAT, ""};
+
+    const auto alpha2 = [] { return binOp("*", var("alpha"), var("alpha")); };
+    const auto lambda = [&](const char* n) {
+        return fn("sqrt", binOp("+",
+            binOp("*", binOp("*", var(n), var(n)),
+                binOp("-", lit(1.0f), alpha2())),
+            alpha2()));
+    };
+    auto denom = binOp("+",
+        binOp("*", var("NdotL"), lambda("NdotV")),
+        binOp("*", var("NdotV"), lambda("NdotL")));
+    // safeDiv: both cosines 0 gives 0, not NaN.
+    def.expressions[QT::FULL] = binOp("/", lit(0.5f), std::move(denom));
+
+    // APPROXIMATE (Hammon 2017): 0.5 / mix(2 NdotL NdotV, NdotL + NdotV, alpha).
+    // No square roots.
+    const auto twoLV = [] {
+        return binOp("*", lit(2.0f), binOp("*", var("NdotL"), var("NdotV")));
+    };
+    auto mixed = binOp("+", twoLV(),
+        binOp("*",
+            binOp("-", binOp("+", var("NdotL"), var("NdotV")), twoLV()),
+            var("alpha")));
+    def.expressions[QT::APPROXIMATE] = binOp("/", lit(0.5f), std::move(mixed));
+
+    def.source = "Heitz, 'Understanding the Masking-Shadowing Function in "
+                 "Microfacet-Based BRDFs', JCGT 3(2) 2014; approximation: "
+                 "Hammon, 'PBR Diffuse Lighting for GGX+Smith Microsurfaces', GDC 2017";
+    def.accuracy = 1.0f;
+    return def;
+}
+
+namespace
+{
+// F0 + (1 - F0) * (1 - cosTheta)^power, F0 an input named f0.
+std::unique_ptr<ExprNode> schlickWithF0Input(float power)
+{
+    return binOp("+", var("f0"),
+        binOp("*",
+            binOp("-", lit(1.0f), var("f0")),
+            binOp("pow", binOp("-", lit(1.0f), var("cosTheta")), lit(power))));
+}
+} // namespace
+
+FormulaDefinition PhysicsTemplates::createFresnelSchlickF0()
+{
+    FormulaDefinition def;
+    def.name = "fresnel_schlick_f0";
+    def.category = "lighting";
+    def.description = "Schlick Fresnel with F0 as an input: F(cosTheta, f0).";
+    def.inputs = {
+        {"cosTheta", VT::FLOAT, "", 1.0f},
+        {"f0",       VT::FLOAT, "", 0.04f}
+    };
+    def.output = {VT::FLOAT, ""};
+    def.expressions[QT::FULL] = schlickWithF0Input(5.0f);
+    def.source = "Schlick 1994";
+    def.accuracy = 1.0f;
+    return def;
+}
+
+FormulaDefinition PhysicsTemplates::createFresnelSchlickMetallic()
+{
+    // Same formula per colour channel: a metal's F0 is its albedo, so F0 is
+    // a vec3. Only the (1 - cosTheta)^5 term is scalar, so the expression is
+    // valid GLSL and C++ (glm) with f0 a vec3. The evaluator is scalar: it
+    // computes one channel, which is the same formula.
+    FormulaDefinition def;
+    def.name = "fresnel_schlick_metallic";
+    def.category = "lighting";
+    def.description = "Schlick Fresnel with a colour F0: F(cosTheta, f0) for a "
+                      "vec3 f0, e.g. mix(vec3(0.04), albedo, metallic).";
+    def.inputs = {
+        {"cosTheta", VT::FLOAT, "", 1.0f},
+        {"f0",       VT::VEC3,  "", 0.04f}
+    };
+    def.output = {VT::VEC3, ""};
+    def.expressions[QT::FULL] = schlickWithF0Input(5.0f);
+    def.source = "Schlick 1994; F0 from albedo per the metallic workflow "
+                 "(Karis 2013)";
     def.accuracy = 1.0f;
     return def;
 }

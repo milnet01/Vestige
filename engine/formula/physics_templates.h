@@ -53,6 +53,12 @@ public:
     // PBR Lighting
     static FormulaDefinition createGGXDistribution();
     static FormulaDefinition createSchlickGeometry();
+    // Parameterised specular lobe (DOOM_Ants, 3D_E-0813): roughness and F0
+    // are inputs, so the GLSL export takes them as function parameters.
+    static FormulaDefinition createGgxDistributionParam();
+    static FormulaDefinition createSmithGgxVisibility();
+    static FormulaDefinition createFresnelSchlickF0();
+    static FormulaDefinition createFresnelSchlickMetallic();
     static FormulaDefinition createACESTonemap();
     static FormulaDefinition createSpotConeFalloff();
 

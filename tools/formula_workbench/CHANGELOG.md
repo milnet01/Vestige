@@ -6,6 +6,19 @@ All notable changes to the Formula Workbench are documented in this file.
 
 ### Added
 
+- **Specular lobe with roughness and F0 as inputs (3D_E-0813).** Four
+  templates for DOOM_Ants, all taking `alpha = roughness^2`:
+  `ggx_distribution_param` exports `ggxDistributionParam(NdotH, alpha)`;
+  `smith_ggx_visibility` exports `smithGgxVisibility(NdotV, NdotL, alpha)`,
+  height-correlated Smith (Heitz 2014) with the Cook-Torrance
+  `1/(4 NdotV NdotL)` included, so specular is `D * V * F`, and an
+  APPROXIMATE tier (Hammon 2017) with no square roots;
+  `fresnel_schlick_f0` exports `fresnelSchlickF0(cosTheta, f0)`; and
+  `fresnel_schlick_metallic` exports `vec3 fresnelSchlickMetallic(cosTheta,
+  vec3 f0)` for an F0 taken from albedo. Each divide is guarded: a
+  zero denominator gives 0, not NaN. `ggx_distribution`,
+  `schlick_geometry` and `fresnel_schlick` keep their fixed coefficients.
+
 - **Cross-formula fit target in the reference harness (FW W9,
   3D_E-S0004).** A reference case may name `reference_formula`. The
   harness then builds its synthetic data from that formula's curve,

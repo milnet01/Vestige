@@ -952,8 +952,9 @@ TEST(PhysicsTemplates, CreateAllReturnsExpectedCount)
 {
     auto all = PhysicsTemplates::createAll();
     // 27 original + 11 path-tracer templates (3D_E-0006..0010)
-    // + bloom_knee_quadratic (DOOM_Ants' extract weight).
-    EXPECT_EQ(all.size(), 39u);
+    // + bloom_knee_quadratic (DOOM_Ants' extract weight)
+    // + 4 parameterised specular-lobe templates (3D_E-0813).
+    EXPECT_EQ(all.size(), 43u);
 
     // Each has a name, category, and FULL expression
     for (const auto& def : all)
@@ -969,9 +970,9 @@ TEST(PhysicsTemplates, RegisterBuiltinTemplates)
 {
     FormulaLibrary lib;
     lib.registerBuiltinTemplates();
-    // 39 physics/render/path-tracer templates + 3 audio templates (AX4 S1,
+    // 43 physics/render/path-tracer templates + 3 audio templates (AX4 S1,
     // 3D_E-0022): impact_loudness_gain, impact_pitch_scale, aggregate_event_rate.
-    EXPECT_EQ(lib.count(), 42u);
+    EXPECT_EQ(lib.count(), 46u);
 
     // Spot-check original formulas
     EXPECT_NE(lib.findByName("aerodynamic_drag"), nullptr);
@@ -1517,6 +1518,89 @@ TEST(PhysicsTemplates, BloomKneeQuadraticEvaluates)
     // APPROXIMATE: hard threshold, max(0, peak - t) / max(peak, 1e-4).
     EXPECT_NEAR(eval1(QualityTier::APPROXIMATE, 3.0f), 2.0f / 3.0f, 1e-5f);
     EXPECT_NEAR(eval1(QualityTier::APPROXIMATE, 1.2f), 0.2f / 1.2f, 1e-5f);
+}
+
+// 3D_E-0813: the specular lobe with roughness and F0 as inputs, for
+// DOOM_Ants. Expected values worked by hand.
+namespace
+{
+float evalTemplate(const FormulaDefinition& def, QualityTier tier,
+                   const ExpressionEvaluator::VariableMap& vars)
+{
+    ExpressionEvaluator eval;
+    const std::unordered_map<std::string, float> noCoeffs;
+    return eval.evaluate(*def.getExpression(tier), vars, noCoeffs);
+}
+} // namespace
+
+TEST(PhysicsTemplates, GgxDistributionParamEvaluates)
+{
+    auto def = PhysicsTemplates::createGgxDistributionParam();
+    EXPECT_TRUE(def.coefficients.empty());
+    const auto D = [&](float nh, float a) {
+        return evalTemplate(def, QualityTier::FULL, {{"NdotH", nh}, {"alpha", a}});
+    };
+    // alpha 0.5: a2 = 0.25; at NdotH 1 the bracket is 0.25, so D = 0.25 / (pi * 0.0625) = 4/pi.
+    EXPECT_NEAR(D(1.0f, 0.5f), 4.0f / 3.14159265f, 1e-4f);
+    // NdotH 0: bracket 1, D = a2 / pi.
+    EXPECT_NEAR(D(0.0f, 0.5f), 0.25f / 3.14159265f, 1e-5f);
+    // alpha 0 at NdotH 1 is 0/0: the guarded divide gives 0, not NaN.
+    EXPECT_FLOAT_EQ(D(1.0f, 0.0f), 0.0f);
+
+    // Agrees with the fixed-coefficient ggx_distribution at its alpha.
+    auto fixedDef = PhysicsTemplates::createGGXDistribution();
+    ExpressionEvaluator eval;
+    std::unordered_map<std::string, float> coeffs(
+        fixedDef.coefficients.begin(), fixedDef.coefficients.end());
+    for (float nh : {0.0f, 0.3f, 0.7f, 0.95f, 1.0f})
+    {
+        EXPECT_NEAR(D(nh, coeffs.at("alpha")),
+                    eval.evaluate(*fixedDef.getExpression(QualityTier::FULL),
+                                  {{"NdotH", nh}}, coeffs),
+                    1e-5f) << "NdotH " << nh;
+    }
+}
+
+TEST(PhysicsTemplates, SmithGgxVisibilityEvaluates)
+{
+    auto def = PhysicsTemplates::createSmithGgxVisibility();
+    EXPECT_TRUE(def.coefficients.empty());
+    const auto V = [&](QualityTier t, float nv, float nl, float a) {
+        return evalTemplate(def, t, {{"NdotV", nv}, {"NdotL", nl}, {"alpha", a}});
+    };
+    const QualityTier FULL = QualityTier::FULL;
+    // Head-on: G2 = 1, so V = 1 / (4 * 1 * 1): the 1/(4 NdotV NdotL) is included.
+    EXPECT_NEAR(V(FULL, 1.0f, 1.0f, 0.5f), 0.25f, 1e-6f);
+    // NdotV 0.5, NdotL 1, alpha 0.5:
+    // 0.5 / (1 * sqrt(0.25*0.75 + 0.25) + 0.5 * 1) = 0.5 / 1.1614378.
+    EXPECT_NEAR(V(FULL, 0.5f, 1.0f, 0.5f), 0.5f / (std::sqrt(0.4375f) + 0.5f), 1e-6f);
+    // Symmetric in NdotV and NdotL.
+    EXPECT_NEAR(V(FULL, 1.0f, 0.5f, 0.5f), V(FULL, 0.5f, 1.0f, 0.5f), 1e-6f);
+    // Both cosines 0: guarded divide gives 0, not inf.
+    EXPECT_FLOAT_EQ(V(FULL, 0.0f, 0.0f, 0.5f), 0.0f);
+    // APPROXIMATE: 0.5 / (2*0.5 + (1.5 - 1) * 0.5) = 0.4; exact head-on.
+    EXPECT_NEAR(V(QualityTier::APPROXIMATE, 0.5f, 1.0f, 0.5f), 0.4f, 1e-6f);
+    EXPECT_NEAR(V(QualityTier::APPROXIMATE, 1.0f, 1.0f, 0.5f), 0.25f, 1e-6f);
+}
+
+TEST(PhysicsTemplates, FresnelSchlickF0Evaluates)
+{
+    for (const auto& def : {PhysicsTemplates::createFresnelSchlickF0(),
+                            PhysicsTemplates::createFresnelSchlickMetallic()})
+    {
+        EXPECT_TRUE(def.coefficients.empty()) << def.name;
+        const auto F = [&](float c, float f0) {
+            return evalTemplate(def, QualityTier::FULL, {{"cosTheta", c}, {"f0", f0}});
+        };
+        EXPECT_NEAR(F(1.0f, 0.04f), 0.04f, 1e-6f) << def.name;  // head-on: F0
+        EXPECT_NEAR(F(0.0f, 0.04f), 1.0f, 1e-6f) << def.name;   // grazing: 1
+        // 0.04 + 0.96 * 0.5^5 = 0.07.
+        EXPECT_NEAR(F(0.5f, 0.04f), 0.07f, 1e-6f) << def.name;
+    }
+    auto metallic = PhysicsTemplates::createFresnelSchlickMetallic();
+    ASSERT_EQ(metallic.inputs.size(), 2u);
+    EXPECT_EQ(metallic.inputs[1].type, FormulaValueType::VEC3);
+    EXPECT_EQ(metallic.output.type, FormulaValueType::VEC3);
 }
 
 TEST(PhysicsTemplates, BloomThresholdEvaluates)

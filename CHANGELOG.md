@@ -25,6 +25,15 @@ may change any interface without notice.
 
 ## [Unreleased]
 
+### 2026-11-03 Added — Formula Workbench: roughness and F0 as inputs to the specular formulas, for DOOM_Ants
+
+Four new templates whose exported GLSL takes roughness and reflectivity
+as parameters instead of fixed numbers: `ggx_distribution_param`
+(D), `smith_ggx_visibility` (V, height-correlated, includes the
+1/(4 N·V N·L)), `fresnel_schlick_f0` (F) and `fresnel_schlick_metallic`
+(F with a colour F0, for metals). The fixed-number versions stay.
+(3D_E-0813)
+
 ### 2026-11-01 Fixed — README and CLAUDE.md agree on how to take a perf_gate baseline
 
 - **The README told people to record perf_gate baselines with --visual-test, which times screenshot and report work inside its frames. It now says --demo-flythrough --no-vsync, as CLAUDE.md does, and why.** (3D_E-0792)
