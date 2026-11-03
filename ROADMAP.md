@@ -1,6 +1,6 @@
 <!-- ants-roadmap-format: 1 -->
 <!-- Generated from the Ants Terminal roadmap store. Edit it with roadmap_log; hand edits are discarded by the next write. -->
-<!-- ants-roadmap-id-high-water: 3D_E=874 3D_E#S=989 -->
+<!-- ants-roadmap-id-high-water: 3D_E=875 3D_E#S=989 -->
 
 # Vestige Engine Roadmap
 
@@ -7019,14 +7019,19 @@ shipped that have no invocation path at all.
   Source: review-readability 2026-10-31 at 7b2a81d.
   Lanes: editor.
 
-- 📋 [3D_E-0857] **Spot lights do not follow their object's rotation.**
+- ✅ [3D_E-0857] **Spot lights do not follow their object's rotation.**
+  2026-11-03, 3ea3ea5: the direction is entity-space, turned by the
+  world matrix in collectRenderData; zero scale keeps the authored
+  direction.
   **Layman:** Turning an object with a spot light does not turn the light.
   Kind: fix.
   Source: review-readability 2026-10-31 at 7b2a81d.
   Lanes: scene.
 
-- 📋 [3D_E-0858] **Terrain border normals treat the outside of the grid as height zero.**
+- ✅ [3D_E-0858] **Terrain border normals treat the outside of the grid as height zero.**
   terrain.cpp; decide on clamp-to-edge.
+  2026-11-03, adf62a6: decided clamp-to-edge. getRawHeight repeats the
+  edge texel, which also fixes the smooth brush at borders.
   **Layman:** Terrain edges can be lit wrongly.
   Kind: fix.
   Source: review-readability 2026-10-31 at 7b2a81d.
@@ -7126,8 +7131,11 @@ shipped that have no invocation path at all.
   Source: review-readability 2026-10-31 at 7b2a81d.
   Lanes: editor.
 
-- 📋 [3D_E-0873] **Correct the cloth solver's friction documentation.**
+- ✅ [3D_E-0873] **Correct the cloth solver's friction documentation.**
   cloth_solver_backend.h.
+  2026-11-03: the docs now say friction has no lasting effect on either
+  backend (velocity recovery overwrites it); the behaviour fix is
+  3D_E-0875.
   **Layman:** A comment describes cloth friction wrongly.
   Kind: doc-fix.
   Source: review-readability 2026-10-31 at 7b2a81d.
@@ -7139,6 +7147,23 @@ shipped that have no invocation path at all.
   Kind: review-fix.
   Source: review-readability 2026-10-31 at 7b2a81d.
   Lanes: engine.
+
+- 📋 [3D_E-0875] **Cloth friction has no effect: the end-of-substep velocity recovery overwrites it.**
+  Both backends edit velocity in the collision pass (applyFriction),
+  then recover velocity from positions, v = (pos - prevPos) / dt
+  (ClothSimulator::simulate step 7, cloth_velocity.comp.glsl), which
+  discards the edit. Fix: apply friction as a position correction in
+  the collision pass (PBD friction: move the contact particle along
+  the tangent toward prevPos, capped by mu x penetration depth), on
+  both backends with a parity test. Hazard: the 0.4 / 0.3 defaults
+  would start acting on every shipped cloth, so check the cloth demo
+  scenes look right. Also check the CPU lambda reads its normal speed
+  before the inward component is zeroed (the GPU one takes it as a
+  parameter for that reason).
+  **Layman:** Cloth slides over surfaces the same whatever friction is set to.
+  Kind: fix.
+  Source: 3D_E-0873 doc fix 2026-11-03 (review-readability 2026-10-31).
+  Lanes: physics.
 
 ## 0.3.0 — An editor a builder can use
 
