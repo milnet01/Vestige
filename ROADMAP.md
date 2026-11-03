@@ -11763,7 +11763,7 @@ record, and a real clearance before commercial release needs counsel.
   Source: user-request-2026-10-24.
   Lanes: formula, tools.
 
-- 📋 [3D_E-0813] **Formula Workbench: parameterised GGX distribution, Smith GGX visibility and Fresnel-Schlick exports for DOOM Ants.**
+- ✅ [3D_E-0813] **Formula Workbench: parameterised GGX distribution, Smith GGX visibility and Fresnel-Schlick exports for DOOM Ants.**
   Asked by DOOM Ants for spec DOOM-0103 (B1), not urgent: they build
   DOOM-0273 first. Their formulas.glsl has ggxDistribution,
   schlickGeometry and fresnelSchlick with alpha 0.25, k 0.125 and
@@ -11773,6 +11773,10 @@ record, and a real clearance before commercial release needs counsel.
   guards. Keep the fixed-parameter versions. When done, tell them the
   Workbench version and the export command (they run
   formula_workbench --export-glsl --tier full).
+  2026-11-03, 4acf8f1: ggx_distribution_param, smith_ggx_visibility
+  (height-correlated, 1/(4 NdotV NdotL) included, sqrt-free APPROXIMATE
+  tier), fresnel_schlick_f0, and fresnel_schlick_metallic (vec3 f0, asked
+  for DOOM-0517). Export compiles for Vulkan 1.3 at both tiers.
   **Layman:** DOOM Ants needs three lighting formulas that take roughness and reflectivity as inputs instead of fixed numbers.
   Kind: feature.
   Source: doom-ants-31 request 2026-10-26 (DOOM-0103 § 4.1).
