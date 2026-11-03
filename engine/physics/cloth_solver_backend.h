@@ -274,10 +274,18 @@ public:
 
     // -- Friction --
     //
-    // Phase 10.9 Sh3 — Coulomb static + kinetic friction at every collider
-    // contact (ground / sphere / plane on both backends; cylinder / box / mesh
-    // on CPU only since those colliders are CPU-only). Negative inputs clamp
-    // to zero. CPU defaults are 0.4 / 0.3; GPU defaults match.
+    // Phase 10.9 Sh3 — Coulomb static + kinetic friction is applied to the
+    // velocity at each collider contact (ground / sphere / plane on both
+    // backends; cylinder / box / mesh on CPU only since those colliders are
+    // CPU-only). Negative inputs clamp to zero. CPU defaults are 0.4 / 0.3;
+    // GPU defaults match.
+    //
+    // It currently has NO lasting effect on either backend: the velocity
+    // recovery at the end of each substep, v = (pos - prevPos) / dt
+    // (`ClothSimulator::simulate` step 7, `cloth_velocity.comp.glsl`),
+    // overwrites the velocity the friction edited. Changing these
+    // coefficients does not change how the cloth moves. 3D_E-0875 tracks
+    // making friction act on positions.
 
     /// @brief Sets static and kinetic friction coefficients for collider surfaces.
     virtual void setFriction(float staticCoeff, float kineticCoeff) = 0;

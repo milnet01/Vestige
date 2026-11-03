@@ -48,7 +48,7 @@ layout(std140, binding = 3) uniform Colliders
 uniform uint u_particleCount;
 
 // Phase 10.9 Sh3 — Coulomb friction at a contact. Mirrors the CPU helper at
-// `cloth_simulator.cpp:990-1016`. `n` must be the unit outward contact
+// `ClothSimulator::applyCollisions` (its applyFriction lambda). `n` must be the unit outward contact
 // normal. Modifies `v` in place.
 //
 // Invariant: called *after* the inward velocity component has been zeroed
