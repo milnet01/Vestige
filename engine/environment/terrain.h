@@ -97,9 +97,9 @@ public:
     glm::vec3 getNormal(float worldX, float worldZ) const;
 
     /// @brief Gets the raw height value at a heightmap texel.
-    /// @param x Texel X (0 to width-1).
-    /// @param z Texel Z (0 to depth-1).
-    /// @return Normalized height (0..1).
+    /// @param x Texel X (0 to width-1); outside that, the edge texel is read.
+    /// @param z Texel Z (0 to depth-1); outside that, the edge texel is read.
+    /// @return Normalized height (0..1); 0 before initialize().
     float getRawHeight(int x, int z) const;
 
     /// @brief Sets the raw height value at a heightmap texel.

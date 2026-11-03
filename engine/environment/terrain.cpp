@@ -173,10 +173,14 @@ glm::vec3 Terrain::getNormal(float worldX, float worldZ) const
 
 float Terrain::getRawHeight(int x, int z) const
 {
-    if (x < 0 || x >= m_config.width || z < 0 || z >= m_config.depth)
+    if (m_heightData.empty() || m_config.width <= 0 || m_config.depth <= 0)
     {
         return 0.0f;
     }
+    // Clamp-to-edge: a read past the grid repeats the edge texel, so border
+    // normals and the smooth brush see flat ground there, not a drop to 0.
+    x = std::clamp(x, 0, m_config.width - 1);
+    z = std::clamp(z, 0, m_config.depth - 1);
     return m_heightData[static_cast<size_t>(z * m_config.width + x)];
 }
 

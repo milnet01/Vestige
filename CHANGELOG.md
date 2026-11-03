@@ -25,6 +25,13 @@ may change any interface without notice.
 
 ## [Unreleased]
 
+### 2026-11-03 Fixed — Terrain edges no longer light as if the ground drops away
+
+The terrain treated everything past its edge as height zero, so raised
+terrain was shaded like a cliff along its border, and the smooth brush
+pulled edge heights down. Reads past the edge now repeat the edge
+height. (3D_E-0858)
+
 ### 2026-11-03 Fixed — Spot lights turn with their object
 
 Rotating an object that carries a spot light, or its parent, now turns
