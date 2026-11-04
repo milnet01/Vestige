@@ -7,6 +7,7 @@
 
 #include <glad/gl.h>
 
+#include <cstddef>
 #include <memory>
 #include <string>
 #include <vector>
@@ -124,6 +125,16 @@ private:
 
     /// @brief Selects the appropriate internal format based on channels and sRGB flag.
     static GLenum selectInternalFormat(int channels, bool linear);
+
+    /// @brief 3D_E-0870 — the one create-and-upload step every load path
+    ///        calls: creates the texture (repeat wrap, trilinear filtering,
+    ///        full mip chain) at m_width x m_height, uploads @a pixels as
+    ///        level 0 and generates the mips.
+    /// @param rowBytes Bytes in one row of @a pixels. Rows that are not a
+    ///        multiple of 4 bytes are uploaded with GL_UNPACK_ALIGNMENT 1;
+    ///        the default of 4 would shear them into diagonal bands.
+    void createAndUpload(GLenum internalFormat, GLenum dataFormat, GLenum dataType,
+                         const void* pixels, std::size_t rowBytes);
 
     GLuint m_textureId;
     int m_width;

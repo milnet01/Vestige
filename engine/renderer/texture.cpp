@@ -26,6 +26,24 @@ static GLsizei computeMipLevels(int width, int height)
 }
 
 /// @brief Checks if a file path ends with the given extension (case-insensitive).
+/// Largest width or height any load path accepts.
+static constexpr int kMaxTextureSize = 16384;
+
+static bool validTextureSize(int width, int height)
+{
+    return width > 0 && height > 0 && width <= kMaxTextureSize && height <= kMaxTextureSize;
+}
+
+/// The upload format for 8-bit data with this many channels (1, 3 or 4).
+static GLenum dataFormatForChannels(int channels)
+{
+    if (channels == 4)
+    {
+        return GL_RGBA;
+    }
+    return channels == 1 ? GL_RED : GL_RGB;
+}
+
 static bool hasExtension(const std::string& path, const std::string& ext)
 {
     if (path.size() < ext.size())
@@ -110,6 +128,37 @@ void Texture::releaseGpuTexture()
     m_height = 0;
 }
 
+void Texture::createAndUpload(GLenum internalFormat, GLenum dataFormat, GLenum dataType,
+                              const void* pixels, std::size_t rowBytes)
+{
+    // Create texture with DSA (immutable storage)
+    glCreateTextures(GL_TEXTURE_2D, 1, &m_textureId);
+
+    glTextureParameteri(m_textureId, GL_TEXTURE_WRAP_S, GL_REPEAT);
+    glTextureParameteri(m_textureId, GL_TEXTURE_WRAP_T, GL_REPEAT);
+    glTextureParameteri(m_textureId, GL_TEXTURE_MIN_FILTER, GL_LINEAR_MIPMAP_LINEAR);
+    glTextureParameteri(m_textureId, GL_TEXTURE_MAG_FILTER, GL_LINEAR);
+
+    glTextureStorage2D(m_textureId, computeMipLevels(m_width, m_height), internalFormat,
+                       m_width, m_height);
+
+    // Rows that are not a multiple of 4 bytes (3- or 1-channel data at most
+    // widths) are misread at the default GL_UNPACK_ALIGNMENT of 4, which
+    // shears the image into diagonal bands — the terrain "corduroy" artefact
+    // fixed in 82d0738.
+    const bool unalignedRows = rowBytes % 4 != 0;
+    if (unalignedRows)
+    {
+        glPixelStorei(GL_UNPACK_ALIGNMENT, 1);
+    }
+    glTextureSubImage2D(m_textureId, 0, 0, 0, m_width, m_height, dataFormat, dataType, pixels);
+    if (unalignedRows)
+    {
+        glPixelStorei(GL_UNPACK_ALIGNMENT, 4);
+    }
+    glGenerateTextureMipmap(m_textureId);
+}
+
 bool Texture::loadFromFile(const std::string& filePath, bool linear)
 {
     releaseGpuTexture();
@@ -141,49 +190,16 @@ bool Texture::loadFromFile(const std::string& filePath, bool linear)
     }
 
     // Validate dimensions
-    if (m_width <= 0 || m_height <= 0 || m_width > 16384 || m_height > 16384)
+    if (!validTextureSize(m_width, m_height))
     {
         Logger::error("Texture dimensions invalid or too large: " + filePath);
         stbi_image_free(data);
         return false;
     }
 
-    GLenum internalFormat = selectInternalFormat(channels, linear);
-    GLenum dataFormat = GL_RGB;
-    if (channels == 4)
-    {
-        dataFormat = GL_RGBA;
-    }
-    else if (channels == 1)
-    {
-        dataFormat = GL_RED;
-    }
-
-    // Create texture with DSA (immutable storage)
-    glCreateTextures(GL_TEXTURE_2D, 1, &m_textureId);
-
-    glTextureParameteri(m_textureId, GL_TEXTURE_WRAP_S, GL_REPEAT);
-    glTextureParameteri(m_textureId, GL_TEXTURE_WRAP_T, GL_REPEAT);
-    glTextureParameteri(m_textureId, GL_TEXTURE_MIN_FILTER, GL_LINEAR_MIPMAP_LINEAR);
-    glTextureParameteri(m_textureId, GL_TEXTURE_MAG_FILTER, GL_LINEAR);
-
-    GLsizei mipLevels = computeMipLevels(m_width, m_height);
-    glTextureStorage2D(m_textureId, mipLevels, internalFormat, m_width, m_height);
-
-    // Set alignment for non-4-byte-aligned rows (RGB=3 bytes, RED=1 byte)
-    if (channels != 4)
-    {
-        glPixelStorei(GL_UNPACK_ALIGNMENT, 1);
-    }
-
-    glTextureSubImage2D(m_textureId, 0, 0, 0, m_width, m_height,
-                        dataFormat, GL_UNSIGNED_BYTE, data);
-    glGenerateTextureMipmap(m_textureId);
-
-    if (channels != 4)
-    {
-        glPixelStorei(GL_UNPACK_ALIGNMENT, 4);
-    }
+    createAndUpload(selectInternalFormat(channels, linear), dataFormatForChannels(channels),
+                    GL_UNSIGNED_BYTE, data,
+                    static_cast<std::size_t>(m_width) * static_cast<std::size_t>(channels));
 
     stbi_image_free(data);
 
@@ -234,48 +250,16 @@ bool Texture::loadFromMemory(const unsigned char* compressedData, size_t dataSiz
         return false;
     }
 
-    if (m_width <= 0 || m_height <= 0 || m_width > 16384 || m_height > 16384)
+    if (!validTextureSize(m_width, m_height))
     {
         Logger::error("Texture from memory: dimensions invalid or too large");
         stbi_image_free(data);
         return false;
     }
 
-    GLenum internalFormat = selectInternalFormat(channels, linear);
-    GLenum dataFormat = GL_RGB;
-    if (channels == 4)
-    {
-        dataFormat = GL_RGBA;
-    }
-    else if (channels == 1)
-    {
-        dataFormat = GL_RED;
-    }
-
-    // Create texture with DSA (immutable storage)
-    glCreateTextures(GL_TEXTURE_2D, 1, &m_textureId);
-
-    glTextureParameteri(m_textureId, GL_TEXTURE_WRAP_S, GL_REPEAT);
-    glTextureParameteri(m_textureId, GL_TEXTURE_WRAP_T, GL_REPEAT);
-    glTextureParameteri(m_textureId, GL_TEXTURE_MIN_FILTER, GL_LINEAR_MIPMAP_LINEAR);
-    glTextureParameteri(m_textureId, GL_TEXTURE_MAG_FILTER, GL_LINEAR);
-
-    GLsizei mipLevels = computeMipLevels(m_width, m_height);
-    glTextureStorage2D(m_textureId, mipLevels, internalFormat, m_width, m_height);
-
-    if (channels != 4)
-    {
-        glPixelStorei(GL_UNPACK_ALIGNMENT, 1);
-    }
-
-    glTextureSubImage2D(m_textureId, 0, 0, 0, m_width, m_height,
-                        dataFormat, GL_UNSIGNED_BYTE, data);
-    glGenerateTextureMipmap(m_textureId);
-
-    if (channels != 4)
-    {
-        glPixelStorei(GL_UNPACK_ALIGNMENT, 4);
-    }
+    createAndUpload(selectInternalFormat(channels, linear), dataFormatForChannels(channels),
+                    GL_UNSIGNED_BYTE, data,
+                    static_cast<std::size_t>(m_width) * static_cast<std::size_t>(channels));
 
     stbi_image_free(data);
 
@@ -292,7 +276,7 @@ bool Texture::loadFromMemory(const unsigned char* rawData, int width, int height
 {
     releaseGpuTexture();
 
-    if (!rawData || width <= 0 || height <= 0 || width > 16384 || height > 16384)
+    if (!rawData || !validTextureSize(width, height))
     {
         Logger::error("Texture::loadFromMemory: invalid raw data or dimensions");
         return false;
@@ -318,45 +302,8 @@ bool Texture::loadFromMemory(const unsigned char* rawData, int width, int height
         std::memcpy(dstRow, srcRow, static_cast<size_t>(rowBytes));
     }
 
-    GLenum internalFormat = selectInternalFormat(channels, linear);
-    GLenum dataFormat = GL_RGB;
-    if (channels == 4)
-    {
-        dataFormat = GL_RGBA;
-    }
-    else if (channels == 1)
-    {
-        dataFormat = GL_RED;
-    }
-
-    // Create texture with DSA (immutable storage)
-    glCreateTextures(GL_TEXTURE_2D, 1, &m_textureId);
-
-    glTextureParameteri(m_textureId, GL_TEXTURE_WRAP_S, GL_REPEAT);
-    glTextureParameteri(m_textureId, GL_TEXTURE_WRAP_T, GL_REPEAT);
-    glTextureParameteri(m_textureId, GL_TEXTURE_MIN_FILTER, GL_LINEAR_MIPMAP_LINEAR);
-    glTextureParameteri(m_textureId, GL_TEXTURE_MAG_FILTER, GL_LINEAR);
-
-    GLsizei mipLevels = computeMipLevels(m_width, m_height);
-    glTextureStorage2D(m_textureId, mipLevels, internalFormat, m_width, m_height);
-
-    // Rows of a 3-component image at an odd width are not 4-byte aligned, and
-    // the default GL_UNPACK_ALIGNMENT of 4 then shears the upload into diagonal
-    // bands — the terrain "corduroy" artefact fixed in 82d0738. That fix reached
-    // three of this file's four upload paths; this one feeds
-    // generateNormalFromHeight (3-channel). 1-channel rows at a width that is
-    // not a multiple of 4 are unaligned too, so match the other paths.
-    if (channels != 4)
-    {
-        glPixelStorei(GL_UNPACK_ALIGNMENT, 1);
-    }
-    glTextureSubImage2D(m_textureId, 0, 0, 0, m_width, m_height,
-                        dataFormat, GL_UNSIGNED_BYTE, flipped.data());
-    if (channels != 4)
-    {
-        glPixelStorei(GL_UNPACK_ALIGNMENT, 4);
-    }
-    glGenerateTextureMipmap(m_textureId);
+    createAndUpload(selectInternalFormat(channels, linear), dataFormatForChannels(channels),
+                    GL_UNSIGNED_BYTE, flipped.data(), static_cast<std::size_t>(rowBytes));
 
     Logger::debug("Texture loaded from raw data ("
         + std::to_string(m_width) + "x" + std::to_string(m_height)
@@ -382,7 +329,7 @@ bool Texture::decodeExr(const std::string& filePath, int& width, int& height,
     }
 
     // Validate dimensions
-    if (width <= 0 || height <= 0 || width > 16384 || height > 16384)
+    if (!validTextureSize(width, height))
     {
         Logger::error("EXR texture dimensions invalid or too large: " + filePath);
         free(data);
@@ -409,20 +356,9 @@ bool Texture::loadFromExr(const std::string& filePath)
     if (!decodeExr(filePath, m_width, m_height, data))
         return false;
 
-    // Create texture with DSA (immutable storage, HDR float)
-    glCreateTextures(GL_TEXTURE_2D, 1, &m_textureId);
-
-    glTextureParameteri(m_textureId, GL_TEXTURE_WRAP_S, GL_REPEAT);
-    glTextureParameteri(m_textureId, GL_TEXTURE_WRAP_T, GL_REPEAT);
-    glTextureParameteri(m_textureId, GL_TEXTURE_MIN_FILTER, GL_LINEAR_MIPMAP_LINEAR);
-    glTextureParameteri(m_textureId, GL_TEXTURE_MAG_FILTER, GL_LINEAR);
-
-    GLsizei mipLevels = computeMipLevels(m_width, m_height);
-    glTextureStorage2D(m_textureId, mipLevels, GL_RGBA16F, m_width, m_height);
-
-    glTextureSubImage2D(m_textureId, 0, 0, 0, m_width, m_height,
-                        GL_RGBA, GL_FLOAT, data.data());
-    glGenerateTextureMipmap(m_textureId);
+    // HDR float RGBA: rows are always 4-byte aligned.
+    createAndUpload(GL_RGBA16F, GL_RGBA, GL_FLOAT, data.data(),
+                    static_cast<std::size_t>(m_width) * 4 * sizeof(float));
 
     Logger::debug("EXR texture loaded: " + filePath + " ("
         + std::to_string(m_width) + "x" + std::to_string(m_height)
