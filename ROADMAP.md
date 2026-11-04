@@ -6716,6 +6716,10 @@ shipped that have no invocation path at all.
   a start before the engine loads and an end after the last frame, but the
   writer emits the header first, so the end value needs a design.
   File headers also lack the quality tier.
+  2026-11-05 (frameledger-2f, FLED-0014): compare REFUSES two runs
+  whose inputs are both [] (FLED-0001 § 4.2, § 4.10), not just warns.
+  So do this item before collecting the interleaved run sets owed to
+  frameledger; otherwise every compare needs --override inputs=REASON.
   **Layman:** Run files do not yet say what content ran or how busy the machine was.
   Kind: enhancement.
   Source: 3D_E-0786 first run file 2026-10-31.
