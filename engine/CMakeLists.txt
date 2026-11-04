@@ -294,6 +294,7 @@ set(ENGINE_SOURCES
     utils/entity_serializer.cpp
     utils/component_serializer_registry.cpp
     utils/material_library.cpp
+    utils/material_json.cpp
     testing/demo_flythrough.cpp
     testing/stills_file.cpp
     testing/visual_test_runner.cpp

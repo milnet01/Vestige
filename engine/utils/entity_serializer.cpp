@@ -25,6 +25,7 @@
 #include "scene/scene.h"
 #include "core/logger.h"
 #include "utils/component_serializer_registry.h"
+#include "utils/material_json.h"
 #include "utils/path_sandbox.h"
 
 #include <nlohmann/json.hpp>
@@ -103,215 +104,11 @@ static glm::vec3 readVec3(const json& j, const std::string& key, const glm::vec3
 // Material serialization
 // ---------------------------------------------------------------------------
 
-static json serializeMaterial(const Material& mat, const ResourceManager& resources)
-{
-    json j;
-
-    if (mat.getType() == MaterialType::BLINN_PHONG)
-    {
-        j["type"] = "BLINN_PHONG";
-        j["diffuseColor"] = vec3ToJson(mat.getDiffuseColor());
-        j["specularColor"] = vec3ToJson(mat.getSpecularColor());
-        j["shininess"] = mat.getShininess();
-    }
-    else
-    {
-        j["type"] = "PBR";
-        j["albedo"] = vec3ToJson(mat.getAlbedo());
-        j["metallic"] = mat.getMetallic();
-        j["roughness"] = mat.getRoughness();
-        j["ao"] = mat.getAo();
-        j["emissive"] = vec3ToJson(mat.getEmissive());
-        j["emissiveStrength"] = mat.getEmissiveStrength();
-        j["clearcoat"] = mat.getClearcoat();
-        j["clearcoatRoughness"] = mat.getClearcoatRoughness();
-        j["uvScale"] = mat.getUvScale();
-    }
-
-    // Texture paths (shared textures)
-    if (mat.hasDiffuseTexture())
-    {
-        std::string path = resources.findTexturePath(mat.getDiffuseTexture());
-        if (!path.empty())
-        {
-            j["diffuseTexture"] = path;
-        }
-    }
-    if (mat.hasNormalMap())
-    {
-        std::string path = resources.findTexturePath(mat.getNormalMap());
-        if (!path.empty())
-        {
-            j["normalMap"] = path;
-        }
-    }
-    if (mat.hasHeightMap())
-    {
-        std::string path = resources.findTexturePath(mat.getHeightMap());
-        if (!path.empty())
-        {
-            j["heightMap"] = path;
-        }
-    }
-
-    j["heightScale"] = mat.getHeightScale();
-    j["pomEnabled"] = mat.isPomEnabled();
-    j["stochasticTiling"] = mat.isStochasticTiling();
-
-    // PBR-specific textures
-    if (mat.getType() == MaterialType::PBR)
-    {
-        if (mat.hasMetallicRoughnessTexture())
-        {
-            std::string path = resources.findTexturePath(mat.getMetallicRoughnessTexture());
-            if (!path.empty())
-            {
-                j["metallicRoughnessTexture"] = path;
-            }
-        }
-        if (mat.hasEmissiveTexture())
-        {
-            std::string path = resources.findTexturePath(mat.getEmissiveTexture());
-            if (!path.empty())
-            {
-                j["emissiveTexture"] = path;
-            }
-        }
-        if (mat.hasAoTexture())
-        {
-            std::string path = resources.findTexturePath(mat.getAoTexture());
-            if (!path.empty())
-            {
-                j["aoTexture"] = path;
-            }
-        }
-    }
-
-    // Transparency
-    switch (mat.getAlphaMode())
-    {
-        case AlphaMode::OPAQUE: j["alphaMode"] = "OPAQUE"; break;
-        case AlphaMode::MASK:   j["alphaMode"] = "MASK"; break;
-        case AlphaMode::BLEND:  j["alphaMode"] = "BLEND"; break;
-    }
-    j["alphaCutoff"] = mat.getAlphaCutoff();
-    j["doubleSided"] = mat.isDoubleSided();
-    j["baseColorAlpha"] = mat.getBaseColorAlpha();
-
-    return j;
-}
-
 static std::shared_ptr<Material> deserializeMaterial(
     const json& j, ResourceManager& resources, uint32_t entityId)
 {
-    std::string matName = "__prefab_mat_" + std::to_string(entityId);
-    auto material = resources.createMaterial(matName);
-
-    std::string typeStr = j.value("type", std::string("PBR"));
-    if (typeStr == "BLINN_PHONG")
-    {
-        material->setType(MaterialType::BLINN_PHONG);
-        material->setDiffuseColor(readVec3(j, "diffuseColor", glm::vec3(0.8f)));
-        material->setSpecularColor(readVec3(j, "specularColor", glm::vec3(1.0f)));
-        material->setShininess(j.value("shininess", 32.0f));
-    }
-    else
-    {
-        material->setType(MaterialType::PBR);
-        material->setAlbedo(readVec3(j, "albedo", glm::vec3(0.8f)));
-        material->setMetallic(j.value("metallic", 0.0f));
-        material->setRoughness(j.value("roughness", 0.5f));
-        material->setAo(j.value("ao", 1.0f));
-        material->setEmissive(readVec3(j, "emissive", glm::vec3(0.0f)));
-        material->setEmissiveStrength(j.value("emissiveStrength", 1.0f));
-        material->setClearcoat(j.value("clearcoat", 0.0f));
-        material->setClearcoatRoughness(j.value("clearcoatRoughness", 0.04f));
-        material->setUvScale(j.value("uvScale", 1.0f));
-    }
-
-    // Shared textures
-    if (j.contains("diffuseTexture"))
-    {
-        auto path = sanitizeAssetPath(j["diffuseTexture"].get<std::string>(), "diffuseTexture");
-        if (!path.empty())
-        {
-            auto tex = resources.loadTexture(path, false);
-            if (tex) { material->setDiffuseTexture(tex); }
-        }
-    }
-    if (j.contains("normalMap"))
-    {
-        auto path = sanitizeAssetPath(j["normalMap"].get<std::string>(), "normalMap");
-        if (!path.empty())
-        {
-            auto tex = resources.loadTexture(path, true);
-            if (tex) { material->setNormalMap(tex); }
-        }
-    }
-    if (j.contains("heightMap"))
-    {
-        auto path = sanitizeAssetPath(j["heightMap"].get<std::string>(), "heightMap");
-        if (!path.empty())
-        {
-            auto tex = resources.loadTexture(path, true);
-            if (tex) { material->setHeightMap(tex); }
-        }
-    }
-
-    material->setHeightScale(j.value("heightScale", 0.05f));
-    material->setPomEnabled(j.value("pomEnabled", false));
-    material->setStochasticTiling(j.value("stochasticTiling", false));
-
-    // PBR textures
-    if (j.contains("metallicRoughnessTexture"))
-    {
-        auto path = sanitizeAssetPath(
-            j["metallicRoughnessTexture"].get<std::string>(), "metallicRoughnessTexture");
-        if (!path.empty())
-        {
-            auto tex = resources.loadTexture(path, true);
-            if (tex) { material->setMetallicRoughnessTexture(tex); }
-        }
-    }
-    if (j.contains("emissiveTexture"))
-    {
-        auto path = sanitizeAssetPath(
-            j["emissiveTexture"].get<std::string>(), "emissiveTexture");
-        if (!path.empty())
-        {
-            auto tex = resources.loadTexture(path, false);
-            if (tex) { material->setEmissiveTexture(tex); }
-        }
-    }
-    if (j.contains("aoTexture"))
-    {
-        auto path = sanitizeAssetPath(j["aoTexture"].get<std::string>(), "aoTexture");
-        if (!path.empty())
-        {
-            auto tex = resources.loadTexture(path, true);
-            if (tex) { material->setAoTexture(tex); }
-        }
-    }
-
-    // Transparency
-    std::string alphaStr = j.value("alphaMode", std::string("OPAQUE"));
-    if (alphaStr == "MASK")
-    {
-        material->setAlphaMode(AlphaMode::MASK);
-    }
-    else if (alphaStr == "BLEND")
-    {
-        material->setAlphaMode(AlphaMode::BLEND);
-    }
-    else
-    {
-        material->setAlphaMode(AlphaMode::OPAQUE);
-    }
-
-    material->setAlphaCutoff(j.value("alphaCutoff", 0.5f));
-    material->setDoubleSided(j.value("doubleSided", false));
-    material->setBaseColorAlpha(j.value("baseColorAlpha", 1.0f));
-
+    auto material = resources.createMaterial("__prefab_mat_" + std::to_string(entityId));
+    MaterialJson::apply(j, *material, resources, MaterialJson::TexturePaths::SandboxedRelative);
     return material;
 }
 
@@ -334,7 +131,7 @@ static json serializeMeshRenderer(const MeshRenderer& mr, const ResourceManager&
 
     if (mr.getMaterial())
     {
-        j["material"] = serializeMaterial(*mr.getMaterial(), resources);
+        j["material"] = MaterialJson::toJson(*mr.getMaterial(), resources);
     }
 
     j["castsShadow"] = mr.castsShadow();

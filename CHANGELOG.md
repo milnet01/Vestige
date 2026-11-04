@@ -25,6 +25,15 @@ may change any interface without notice.
 
 ## [Unreleased]
 
+### 2026-11-05 Fixed — Saved scenes keep a material's subsurface settings
+
+Subsurface strength, colour and thickness (light passing through wax,
+skin or leaves) were lost when a scene was saved and reopened. Material
+presets already kept them: the two kept separate copies of the material
+save code, and the scene copy had fallen behind. Both now share one
+(engine/utils/material_json.h). Scene files still load textures only
+from inside the project. (3D_E-0871)
+
 ### 2026-11-04 Fixed — Terrain draws on Mesa without shadows or ground textures
 
 On Linux's Mesa drivers the terrain failed to draw (GL_INVALID_OPERATION)

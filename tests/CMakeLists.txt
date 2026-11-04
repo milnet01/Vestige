@@ -119,6 +119,7 @@ add_executable(vestige_tests
     test_terrain_render_no_shadows.cpp
     test_texture_upload.cpp
     test_ibl_face_pass.cpp
+    test_material_json.cpp
     test_audio_channel_formats.cpp
     test_localization_format.cpp
     test_localization_tables.cpp
