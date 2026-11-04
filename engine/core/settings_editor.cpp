@@ -15,6 +15,10 @@ SettingsEditor::SettingsEditor(Settings initial, const ApplyTargets& targets)
     , m_pending(std::move(initial))
     , m_targets(targets)
 {
+    if (m_targets.inputMap)
+    {
+        m_appliedMapBindings = extractInputBindings(*m_targets.inputMap);
+    }
 }
 
 void SettingsEditor::mutate(const std::function<void(Settings&)>& mutator)
@@ -39,6 +43,10 @@ SaveStatus SettingsEditor::apply(const std::filesystem::path& settingsPath)
         // (from the live-apply invariant) but isDirty() stays true so
         // the caller knows persistence didn't happen.
         m_applied = m_pending;
+        if (m_targets.inputMap)
+        {
+            m_appliedMapBindings = extractInputBindings(*m_targets.inputMap);
+        }
     }
     return status;
 }
@@ -62,6 +70,12 @@ SaveStatus SettingsEditor::commitUpdatePreferences(const UpdateSettings& updates
 void SettingsEditor::revert()
 {
     m_pending = m_applied;
+    // Rebinds are reverted too: put the map back as it was committed,
+    // then the push below lays the committed wire list on top.
+    if (m_targets.inputMap)
+    {
+        applyInputBindings(m_appliedMapBindings, *m_targets.inputMap);
+    }
     pushPendingToSinks();
 }
 

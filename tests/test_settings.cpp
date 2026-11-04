@@ -2351,6 +2351,66 @@ TEST(SettingsEditorControls, RebindPersistedIntoPendingSurvivesTheSameApply)
     EXPECT_EQ(editor.pending().controls.bindings[0].primary.scancode, 200);
 }
 
+// 3D_E-0866: Revert undoes a rebind even when the committed settings
+// list no bindings (an empty list means "use the registered defaults").
+TEST(SettingsEditorControls, RevertUndoesARebind)
+{
+    InputActionMap map;
+    map.addAction(makeAction("Jump", InputBinding::scancode(100)));
+
+    SettingsEditor::ApplyTargets targets{};
+    targets.inputMap = &map;
+    SettingsEditor editor(Settings{}, targets);
+
+    map.setPrimary("Jump", InputBinding::scancode(200));
+    std::vector<ActionBindingWire> wires = extractInputBindings(map);
+    editor.mutate([&wires](Settings& s) { s.controls.bindings = wires; });
+    ASSERT_EQ(map.findAction("Jump")->primary.code, 200);
+
+    editor.revert();
+    EXPECT_FALSE(editor.isDirty());
+    EXPECT_EQ(map.findAction("Jump")->primary.code, 100)
+        << "Revert left the rebound key in place";
+}
+
+// 3D_E-0866: after Apply, Revert returns the map to how it was applied,
+// not to how the editor found it, even for an action the committed
+// list does not name.
+TEST(SettingsEditorControls, RevertAfterApplyKeepsTheAppliedRebind)
+{
+    InputActionMap map;
+    map.addAction(makeAction("Jump", InputBinding::scancode(100)));
+    map.addAction(makeAction("Fire", InputBinding::scancode(100)));
+
+    SettingsEditor::ApplyTargets targets{};
+    targets.inputMap = &map;
+    SettingsEditor editor(Settings{}, targets);
+
+    map.setPrimary("Jump", InputBinding::scancode(200));
+    map.setPrimary("Fire", InputBinding::scancode(500));
+    std::vector<ActionBindingWire> jumpOnly;
+    for (const ActionBindingWire& w : extractInputBindings(map))
+    {
+        if (w.id == "Jump")
+        {
+            jumpOnly.push_back(w);
+        }
+    }
+    editor.mutate([&jumpOnly](Settings& s) { s.controls.bindings = jumpOnly; });
+    TmpDir tmp;
+    ASSERT_EQ(editor.apply(tmp.path() / "settings.json"), SaveStatus::Ok);
+
+    map.setPrimary("Jump", InputBinding::scancode(300));
+    map.setPrimary("Fire", InputBinding::scancode(600));
+    std::vector<ActionBindingWire> wires = extractInputBindings(map);
+    editor.mutate([&wires](Settings& s) { s.controls.bindings = wires; });
+
+    editor.revert();
+    EXPECT_EQ(map.findAction("Jump")->primary.code, 200);
+    EXPECT_EQ(map.findAction("Fire")->primary.code, 500)
+        << "Revert went back past the applied state";
+}
+
 // ===== Slice 13.5 — SettingsEditor orchestrator =============================
 
 namespace

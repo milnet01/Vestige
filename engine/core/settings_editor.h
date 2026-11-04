@@ -178,6 +178,12 @@ private:
     Settings      m_pending;
     ApplyTargets  m_targets;
     std::optional<VideoMode> m_lastVideoMode;  ///< last mode sent; none yet
+
+    /// The input map's bindings when the settings were last committed
+    /// (construction or a successful apply). The committed wire list may
+    /// name no action ("use the registered default"), so re-pushing it
+    /// cannot undo a rebind; revert() restores this first (3D_E-0866).
+    std::vector<ActionBindingWire> m_appliedMapBindings;
 };
 
 } // namespace Vestige

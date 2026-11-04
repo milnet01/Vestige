@@ -25,6 +25,14 @@ may change any interface without notice.
 
 ## [Unreleased]
 
+### 2026-11-04 Fixed — Revert in the Settings window undoes key rebinds
+
+Revert discards every unsaved change, but a rebound key could stay
+rebound: when the saved settings held no key list (meaning "use the
+defaults"), there was nothing to put back. The editor now keeps a copy
+of the key map as it was last applied and restores it on Revert.
+(3D_E-0866)
+
 ### 2026-11-04 Fixed — Changing a setting no longer resets the window
 
 Every change in the Settings window, a volume slider included, sent the
