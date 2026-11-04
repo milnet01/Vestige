@@ -17,7 +17,7 @@ SkeletonAnimator::~SkeletonAnimator() = default;
 // ---------------------------------------------------------------------------
 // advanceAndSample — advance a clip's playback time and sample all channels
 // ---------------------------------------------------------------------------
-void SkeletonAnimator::advanceAndSample(
+int SkeletonAnimator::advanceAndSample(
     int clipIndex, float& time, float deltaTime,
     std::vector<glm::vec3>& translations,
     std::vector<glm::quat>& rotations,
@@ -25,20 +25,22 @@ void SkeletonAnimator::advanceAndSample(
 {
     if (clipIndex < 0 || clipIndex >= static_cast<int>(m_clips.size()))
     {
-        return;  // Frozen pose — buffers unchanged
+        return 0;  // Frozen pose — buffers unchanged
     }
 
     const auto& clip = m_clips[static_cast<size_t>(clipIndex)];
     if (!clip || clip->getDuration() <= 0.0f)
     {
-        return;
+        return 0;
     }
 
     // Advance time
     time += deltaTime * m_speed;
+    int wraps = 0;
 
     if (m_looping)
     {
+        wraps = static_cast<int>(std::floor(time / clip->getDuration()));
         time = std::fmod(time, clip->getDuration());
         if (time < 0.0f)
         {
@@ -167,6 +169,7 @@ void SkeletonAnimator::advanceAndSample(
         }
         }
     }
+    return wraps;
 }
 
 // ---------------------------------------------------------------------------
@@ -198,6 +201,10 @@ void SkeletonAnimator::update(float deltaTime)
         return;
     }
 
+    // Root travel lost at loop points this frame (3D_E-0859).
+    glm::vec3 wrapOffset(0.0f);
+    glm::quat wrapTurn(1.0f, 0.0f, 0.0f, 0.0f);
+
     if (m_crossfading)
     {
         // Advance crossfade timer
@@ -207,12 +214,18 @@ void SkeletonAnimator::update(float deltaTime)
 
         // Sample source (outgoing) clip into source buffers
         // If m_sourceClipIndex == -1, buffers hold a frozen pose — skip sampling
-        advanceAndSample(m_sourceClipIndex, m_sourceTime, deltaTime,
-                         m_sourceTranslations, m_sourceRotations, m_sourceScales);
+        int sourceWraps = advanceAndSample(m_sourceClipIndex, m_sourceTime, deltaTime,
+                                           m_sourceTranslations, m_sourceRotations,
+                                           m_sourceScales);
 
         // Sample target (incoming) clip into primary buffers
-        advanceAndSample(m_activeClipIndex, m_currentTime, deltaTime,
-                         m_localTranslations, m_localRotations, m_localScales);
+        int targetWraps = advanceAndSample(m_activeClipIndex, m_currentTime, deltaTime,
+                                           m_localTranslations, m_localRotations,
+                                           m_localScales);
+        addRootWrapTravel(m_sourceClipIndex, sourceWraps, 1.0f - blendFactor,
+                          wrapOffset, wrapTurn);
+        addRootWrapTravel(m_activeClipIndex, targetWraps, blendFactor,
+                          wrapOffset, wrapTurn);
 
         // Blend per-bone: source → target
         int jointCount = m_skeleton->getJointCount();
@@ -237,8 +250,9 @@ void SkeletonAnimator::update(float deltaTime)
     else
     {
         // Single clip playback
-        advanceAndSample(m_activeClipIndex, m_currentTime, deltaTime,
-                         m_localTranslations, m_localRotations, m_localScales);
+        int wraps = advanceAndSample(m_activeClipIndex, m_currentTime, deltaTime,
+                                     m_localTranslations, m_localRotations, m_localScales);
+        addRootWrapTravel(m_activeClipIndex, wraps, 1.0f, wrapOffset, wrapTurn);
 
         // Check if non-looping clip finished
         if (!m_looping && m_activeClipIndex >= 0)
@@ -252,7 +266,7 @@ void SkeletonAnimator::update(float deltaTime)
     }
 
     // Root motion extraction (after sampling/blending, before bone matrix computation)
-    extractRootMotion();
+    extractRootMotion(wrapOffset, wrapTurn);
 
     computeBoneMatrices();
 
@@ -268,7 +282,53 @@ void SkeletonAnimator::update(float deltaTime)
 // ---------------------------------------------------------------------------
 // extractRootMotion
 // ---------------------------------------------------------------------------
-void SkeletonAnimator::extractRootMotion()
+void SkeletonAnimator::addRootWrapTravel(int clipIndex, int wraps, float weight,
+                                         glm::vec3& offset, glm::quat& turn) const
+{
+    if (wraps == 0 || m_rootMotionMode == RootMotionMode::IGNORE
+        || clipIndex < 0 || clipIndex >= static_cast<int>(m_clips.size()))
+    {
+        return;
+    }
+    const auto& clip = m_clips[static_cast<size_t>(clipIndex)];
+    if (!clip)
+    {
+        return;
+    }
+
+    for (const auto& channel : clip->m_channels)
+    {
+        if (channel.jointIndex != m_rootMotionBone)
+        {
+            continue;
+        }
+        if (channel.targetPath == AnimTargetPath::TRANSLATION)
+        {
+            glm::vec3 travel = sampleVec3(channel, clip->getDuration())
+                             - sampleVec3(channel, 0.0f);
+            offset += travel * static_cast<float>(wraps) * weight;
+        }
+        else if (channel.targetPath == AnimTargetPath::ROTATION)
+        {
+            // One loop's turn, end relative to start; a backward wrap undoes it.
+            glm::quat loopTurn = sampleQuat(channel, clip->getDuration())
+                               * glm::inverse(sampleQuat(channel, 0.0f));
+            if (wraps < 0)
+            {
+                loopTurn = glm::inverse(loopTurn);
+            }
+            glm::quat total(1.0f, 0.0f, 0.0f, 0.0f);
+            for (int i = 0; i < std::abs(wraps); ++i)
+            {
+                total = loopTurn * total;
+            }
+            turn = glm::slerp(glm::quat(1.0f, 0.0f, 0.0f, 0.0f), total, weight) * turn;
+        }
+    }
+}
+
+void SkeletonAnimator::extractRootMotion(const glm::vec3& wrapOffset,
+                                         const glm::quat& wrapTurn)
 {
     m_rootMotionDeltaPos = glm::vec3(0.0f);
     m_rootMotionDeltaRot = glm::quat(1.0f, 0.0f, 0.0f, 0.0f);
@@ -294,9 +354,11 @@ void SkeletonAnimator::extractRootMotion()
     }
     else
     {
-        // Compute delta from previous frame
-        m_rootMotionDeltaPos = m_localTranslations[ridx] - m_prevRootPos;
-        m_rootMotionDeltaRot = glm::inverse(m_prevRootRot) * m_localRotations[ridx];
+        // Compute delta from previous frame. A loop point jumps the root back to
+        // its start pose, so add back the travel and turn that jump lost.
+        m_rootMotionDeltaPos = m_localTranslations[ridx] - m_prevRootPos + wrapOffset;
+        m_rootMotionDeltaRot = glm::inverse(m_prevRootRot) * wrapTurn
+                             * m_localRotations[ridx];
 
         // Save current as previous for next frame
         m_prevRootPos = m_localTranslations[ridx];

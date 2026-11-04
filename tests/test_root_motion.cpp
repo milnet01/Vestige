@@ -160,6 +160,80 @@ TEST_F(RootMotionTest, DeltaAccumulatesAcrossFrames)
     EXPECT_NEAR(totalDelta.x, 9.0f, 1e-3f);
 }
 
+// 3D_E-0859: at a loop point the root jumps from its end position back
+// to its start. The delta must carry on forward, not jump back.
+TEST_F(RootMotionTest, LoopWrapKeepsMovingForward)
+{
+    m_animator.setRootMotionMode(RootMotionMode::APPLY_TO_TRANSFORM);
+    m_animator.setLooping(true);
+    m_animator.playIndex(0);
+
+    m_animator.update(0.1f);  // baseline at 1.0
+    m_animator.update(0.8f);  // 1.0 -> 9.0
+    m_animator.update(0.2f);  // 9.0 -> end (10) -> wraps -> 1.0: travels 2
+    EXPECT_NEAR(m_animator.getRootMotionDeltaPosition().x, 2.0f, 1e-3f);
+
+    m_animator.update(2.1f);  // 1.0 -> two whole loops -> 2.0: travels 21
+    EXPECT_NEAR(m_animator.getRootMotionDeltaPosition().x, 21.0f, 1e-3f);
+}
+
+// 3D_E-0859: in a crossfade, a clip's wrap adds its travel scaled by that
+// clip's blend weight.
+TEST_F(RootMotionTest, CrossfadeWrapIsWeightedByBlend)
+{
+    auto second = makeWalkClip(1.0f);
+    second->m_name = "walk2";
+    m_animator.addClip(second);
+    m_animator.setRootMotionMode(RootMotionMode::APPLY_TO_TRANSFORM);
+    m_animator.setLooping(true);
+    m_animator.playIndex(0);
+    m_animator.update(0.1f);
+    m_animator.update(0.7f);                 // walk at 0.8
+    m_animator.crossfadeTo("walk2", 10.0f);  // slow blend into walk2 at 0.0
+
+    m_animator.update(0.1f);  // baseline: walk 0.9, walk2 0.1, blend 0.01
+    m_animator.update(0.2f);  // walk wraps to 0.1, walk2 at 0.3, blend 0.03
+    // Blended root: mix(9, 1, 0.01) = 8.92, then mix(1, 3, 0.03) = 1.06.
+    // The wrap adds walk's 10 units at weight 0.97: 1.06 - 8.92 + 9.7.
+    EXPECT_NEAR(m_animator.getRootMotionDeltaPosition().x, 1.84f, 1e-3f);
+}
+
+/// @brief A clip turning joint 0 a quarter turn about Y over its duration.
+static std::shared_ptr<AnimationClip> makeTurnClip(float duration)
+{
+    auto clip = std::make_shared<AnimationClip>();
+    clip->m_name = "turn";
+
+    glm::quat end = glm::angleAxis(glm::radians(90.0f), glm::vec3(0, 1, 0));
+    AnimationChannel ch;
+    ch.jointIndex = 0;
+    ch.targetPath = AnimTargetPath::ROTATION;
+    ch.interpolation = AnimInterpolation::LINEAR;
+    ch.timestamps = {0.0f, duration};
+    ch.values = {0, 0, 0, 1,  end.x, end.y, end.z, end.w};  // glTF order x,y,z,w
+    clip->m_channels.push_back(ch);
+    clip->computeDuration();
+    return clip;
+}
+
+// 3D_E-0859: a looping turn keeps turning the same way across the wrap.
+TEST_F(RootMotionTest, LoopWrapKeepsTurning)
+{
+    SkeletonAnimator animator;
+    animator.setSkeleton(m_skel);
+    animator.addClip(makeTurnClip(1.0f));
+    animator.setRootMotionMode(RootMotionMode::APPLY_TO_TRANSFORM);
+    animator.setLooping(true);
+    animator.playIndex(0);
+
+    animator.update(0.1f);  // baseline at 9 degrees
+    animator.update(0.8f);  // to 81 degrees
+    animator.update(0.2f);  // to 90, wrap, to 9: turns 18 degrees
+    glm::quat delta = animator.getRootMotionDeltaRotation();
+    float degrees = glm::degrees(glm::angle(delta)) * glm::sign(glm::axis(delta).y);
+    EXPECT_NEAR(degrees, 18.0f, 0.05f);
+}
+
 TEST_F(RootMotionTest, NoDeltaWhenNotPlaying)
 {
     m_animator.setRootMotionMode(RootMotionMode::APPLY_TO_TRANSFORM);

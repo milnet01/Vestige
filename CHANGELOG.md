@@ -25,6 +25,14 @@ may change any interface without notice.
 
 ## [Unreleased]
 
+### 2026-11-04 Fixed — Looping root motion keeps going forward at the loop point
+
+When a looping clip with root motion reached its end and started
+again, that frame's delta jumped the character back to the start, and
+a turning clip turned back. The delta now carries on across the loop:
+each wrap adds the clip's start-to-end travel and turn, scaled by the
+clip's weight during a crossfade. (3D_E-0859)
+
 ### 2026-11-04 Fixed — Back-and-forth tweens fire every event they pass
 
 A ping-pong tween that turned round inside one frame skipped the

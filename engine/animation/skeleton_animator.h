@@ -167,13 +167,25 @@ private:
     void computeBoneMatrices();
 
     /// @brief Advances a clip's time and samples all channels into the given pose buffers.
-    void advanceAndSample(int clipIndex, float& time, float deltaTime,
-                          std::vector<glm::vec3>& translations,
-                          std::vector<glm::quat>& rotations,
-                          std::vector<glm::vec3>& scales);
+    /// @return How many times a looping clip wrapped: positive forward, negative when
+    /// playing backward, 0 when it did not wrap or does not loop.
+    int advanceAndSample(int clipIndex, float& time, float deltaTime,
+                         std::vector<glm::vec3>& translations,
+                         std::vector<glm::quat>& rotations,
+                         std::vector<glm::vec3>& scales);
+
+    /// @brief The root travel a clip's loop points add to this frame's delta.
+    ///
+    /// A wrap jumps the root from its end pose back to its start pose. The travel
+    /// lost there is the clip's whole start-to-end root motion, once per wrap, so
+    /// this adds it back, scaled by the clip's blend weight.
+    void addRootWrapTravel(int clipIndex, int wraps, float weight,
+                           glm::vec3& offset, glm::quat& turn) const;
 
     /// @brief Extracts root motion delta and zeroes the root bone's horizontal motion.
-    void extractRootMotion();
+    /// @param wrapOffset Travel lost at loop points this frame (addRootWrapTravel).
+    /// @param wrapTurn Turn lost at loop points this frame (addRootWrapTravel).
+    void extractRootMotion(const glm::vec3& wrapOffset, const glm::quat& wrapTurn);
 
     /// @brief Allocates pose buffers and initializes from bind pose.
     void initializeBuffers();
