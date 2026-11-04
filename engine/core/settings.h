@@ -359,14 +359,15 @@ struct PhotosensitiveSafetyWire
 
 struct AccessibilitySettings
 {
-    /// UIScalePreset on disk: "1.0x" / "1.25x" / "1.5x" / "2.0x".
+    /// UIScalePreset on disk; the allowed strings are kUiScaleWireStrings
+    /// (core/accessibility_wire_strings.h), as for the two below.
     std::string uiScalePreset   = "1.0x";
     bool        highContrast    = false;
     bool        reducedMotion   = false;
     bool        subtitlesEnabled = true;
-    /// SubtitleSizePreset on disk: "small" / "medium" / "large" / "xl".
+    /// SubtitleSizePreset on disk: kSubtitleSizeWireStrings.
     std::string subtitleSize   = "medium";
-    /// ColorVisionMode on disk: "none" / "protanopia" / "deuteranopia" / "tritanopia".
+    /// ColorVisionMode on disk: kColorVisionWireStrings.
     std::string colorVisionFilter = "none";
 
     PhotosensitiveSafetyWire     photosensitiveSafety;

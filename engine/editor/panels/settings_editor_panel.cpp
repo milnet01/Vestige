@@ -5,6 +5,7 @@
 /// @brief Phase 10 slice 13.5b — ImGui editor panel implementation.
 #include "editor/panels/settings_editor_panel.h"
 #include "localization/supported_languages.h"
+#include "core/accessibility_wire_strings.h"
 
 #include "core/logger.h"
 #include "core/settings_apply.h"   // extractInputBindings
@@ -21,6 +22,7 @@
 // scancode (I1).
 #include <GLFW/glfw3.h>
 
+#include <algorithm>
 #include <cstddef>
 #include <string>
 #include <utility>
@@ -657,16 +659,13 @@ void SettingsEditorPanel::drawAccessibilityTab()
     ImGui::TextDisabled("Accessibility");
     ImGui::Separator();
 
-    // UI scale preset — combo over the four wire strings.
-    const char* scalePresets[] = {"1.0x", "1.25x", "1.5x", "2.0x"};
-    int scaleIdx = 0;
-    for (int i = 0; i < 4; ++i)
+    // UI scale preset — combo over the wire strings
+    // (core/accessibility_wire_strings.h, as are the two combos below).
+    int scaleIdx = std::max(0, wireStringIndex(kUiScaleWireStrings, p.accessibility.uiScalePreset));
+    if (ImGui::Combo("UI scale", &scaleIdx, kUiScaleWireStrings.data(),
+                     static_cast<int>(kUiScaleWireStrings.size())))
     {
-        if (p.accessibility.uiScalePreset == scalePresets[i]) { scaleIdx = i; break; }
-    }
-    if (ImGui::Combo("UI scale", &scaleIdx, scalePresets, 4))
-    {
-        const std::string s = scalePresets[scaleIdx];
+        const std::string s = kUiScaleWireStrings[static_cast<std::size_t>(scaleIdx)];
         m_editor->mutate([s](Settings& set) { set.accessibility.uiScalePreset = s; });
     }
 
@@ -686,29 +685,22 @@ void SettingsEditorPanel::drawAccessibilityTab()
         m_editor->mutate([subs](Settings& s) { s.accessibility.subtitlesEnabled = subs; });
     }
 
-    // Subtitle size combo.
-    const char* subSizes[] = {"small", "medium", "large", "xl"};
-    int subIdx = 1;
-    for (int i = 0; i < 4; ++i)
+    // Subtitle size combo; a string not in the list shows "medium".
+    const int subFound = wireStringIndex(kSubtitleSizeWireStrings, p.accessibility.subtitleSize);
+    int subIdx = subFound < 0 ? 1 : subFound;
+    if (ImGui::Combo("Subtitle size", &subIdx, kSubtitleSizeWireStrings.data(),
+                     static_cast<int>(kSubtitleSizeWireStrings.size())))
     {
-        if (p.accessibility.subtitleSize == subSizes[i]) { subIdx = i; break; }
-    }
-    if (ImGui::Combo("Subtitle size", &subIdx, subSizes, 4))
-    {
-        const std::string s = subSizes[subIdx];
+        const std::string s = kSubtitleSizeWireStrings[static_cast<std::size_t>(subIdx)];
         m_editor->mutate([s](Settings& set) { set.accessibility.subtitleSize = s; });
     }
 
     // Color-vision filter combo.
-    const char* cvFilters[] = {"none", "protanopia", "deuteranopia", "tritanopia"};
-    int cvIdx = 0;
-    for (int i = 0; i < 4; ++i)
+    int cvIdx = std::max(0, wireStringIndex(kColorVisionWireStrings, p.accessibility.colorVisionFilter));
+    if (ImGui::Combo("Color vision filter", &cvIdx, kColorVisionWireStrings.data(),
+                     static_cast<int>(kColorVisionWireStrings.size())))
     {
-        if (p.accessibility.colorVisionFilter == cvFilters[i]) { cvIdx = i; break; }
-    }
-    if (ImGui::Combo("Color vision filter", &cvIdx, cvFilters, 4))
-    {
-        const std::string s = cvFilters[cvIdx];
+        const std::string s = kColorVisionWireStrings[static_cast<std::size_t>(cvIdx)];
         m_editor->mutate(
             [s](Settings& set) { set.accessibility.colorVisionFilter = s; });
     }

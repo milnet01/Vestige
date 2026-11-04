@@ -5,6 +5,7 @@
 /// @brief `UIRuntimePanel` — editor panel for the in-game UI runtime.
 
 #include "editor/panels/ui_runtime_panel.h"
+#include "core/accessibility_wire_strings.h"
 
 #include "systems/ui_system.h"
 #include "ui/menu_prefabs.h"
@@ -298,10 +299,10 @@ void UIRuntimePanel::drawAccessibilityTab(UISystem* uiSystem)
         return;
     }
 
-    // Scale preset
-    const char* kScaleLabels[] = {"1.0x", "1.25x", "1.5x", "2.0x"};
+    // Scale preset; the labels are the settings wire strings, in enum order.
     int scaleIndex = static_cast<int>(uiSystem->getScalePreset());
-    if (ImGui::Combo("UI scale", &scaleIndex, kScaleLabels, IM_ARRAYSIZE(kScaleLabels)))
+    if (ImGui::Combo("UI scale", &scaleIndex, kUiScaleWireStrings.data(),
+                     static_cast<int>(kUiScaleWireStrings.size())))
     {
         uiSystem->setScalePreset(static_cast<UIScalePreset>(scaleIndex));
     }

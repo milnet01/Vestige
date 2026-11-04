@@ -4,6 +4,7 @@
 /// @file settings.cpp
 /// @brief Phase 10 — persistent, user-editable engine settings.
 #include "core/settings.h"
+#include "core/accessibility_wire_strings.h"
 #include "localization/supported_languages.h"
 
 #include "core/logger.h"
@@ -684,17 +685,17 @@ float clamp01(float v)          { return std::clamp(v, 0.0f, 1.0f); }
 
 bool isValidScalePreset(const std::string& s)
 {
-    return s == "1.0x" || s == "1.25x" || s == "1.5x" || s == "2.0x";
+    return wireStringIndex(kUiScaleWireStrings, s) >= 0;
 }
 
 bool isValidSubtitleSize(const std::string& s)
 {
-    return s == "small" || s == "medium" || s == "large" || s == "xl";
+    return wireStringIndex(kSubtitleSizeWireStrings, s) >= 0;
 }
 
 bool isValidColorVisionFilter(const std::string& s)
 {
-    return s == "none" || s == "protanopia" || s == "deuteranopia" || s == "tritanopia";
+    return wireStringIndex(kColorVisionWireStrings, s) >= 0;
 }
 
 // The languages bundled in `assets/localization/` (3D_E-0024: one list in

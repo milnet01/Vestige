@@ -3,6 +3,7 @@
 
 #include "ui/accessibility_settings_page.h"
 
+#include "core/accessibility_wire_strings.h"
 #include "core/settings.h"
 #include "core/settings_editor.h"
 #include "ui/settings_page_layout.h"
@@ -14,6 +15,7 @@
 #include "ui/ui_slider.h"
 
 #include <algorithm>
+#include <array>
 #include <memory>
 #include <string>
 #include <string_view>
@@ -27,15 +29,16 @@ namespace
 
 using namespace SettingsPageLayout;
 
-// Option labels, and the strings `AccessibilitySettings` stores for them, in
-// the same order. The editor's Accessibility tab offers the same sets.
+// Option labels, in the order of the stored strings they stand for
+// (core/accessibility_wire_strings.h, which the editor's Accessibility tab
+// also reads).
 constexpr const char* kScaleOptions[] = {
     "ui.settings.accessibility.ui_scale.1_0x",
     "ui.settings.accessibility.ui_scale.1_25x",
     "ui.settings.accessibility.ui_scale.1_5x",
     "ui.settings.accessibility.ui_scale.2_0x",
 };
-constexpr std::string_view kScaleValues[] = {"1.0x", "1.25x", "1.5x", "2.0x"};
+static_assert(std::size(kScaleOptions) == kUiScaleWireStrings.size());
 
 constexpr const char* kSubtitleSizeOptions[] = {
     "ui.settings.accessibility.subtitle_size.small",
@@ -43,7 +46,7 @@ constexpr const char* kSubtitleSizeOptions[] = {
     "ui.settings.accessibility.subtitle_size.large",
     "ui.settings.accessibility.subtitle_size.xl",
 };
-constexpr std::string_view kSubtitleSizeValues[] = {"small", "medium", "large", "xl"};
+static_assert(std::size(kSubtitleSizeOptions) == kSubtitleSizeWireStrings.size());
 
 constexpr const char* kColourVisionOptions[] = {
     "ui.settings.accessibility.colour_vision.none",
@@ -51,7 +54,7 @@ constexpr const char* kColourVisionOptions[] = {
     "ui.settings.accessibility.colour_vision.deuteranopia",
     "ui.settings.accessibility.colour_vision.tritanopia",
 };
-constexpr std::string_view kColourVisionValues[] = {"none", "protanopia", "deuteranopia", "tritanopia"};
+static_assert(std::size(kColourVisionOptions) == kColorVisionWireStrings.size());
 
 constexpr const char* kRowLabels[] = {
     "ui.settings.accessibility.ui_scale",
@@ -70,9 +73,16 @@ constexpr const char* kRowLabels[] = {
 };
 
 template <std::size_t N>
-std::string valueAt(const std::string_view (&values)[N], int index)
+std::string valueAt(const std::array<const char*, N>& values, int index)
 {
-    return std::string(values[std::clamp(index, 0, static_cast<int>(N) - 1)]);
+    return values[static_cast<std::size_t>(std::clamp(index, 0, static_cast<int>(N) - 1))];
+}
+
+/// The index of @a value in @a values, or 0 when absent.
+template <std::size_t N>
+int wireIndexOrFirst(const std::array<const char*, N>& values, const std::string& value)
+{
+    return std::max(0, wireStringIndex(values, value));
 }
 
 /// Connects @a box so a toggle writes its new state through @a write.
@@ -129,15 +139,15 @@ AccessibilitySettingsPage buildAccessibilitySettingsPage(UICanvas& canvas, const
     SettingsEditor* ed = &editor;
     page.interfaceScale->onSelectionChanged.connect([ed](int i)
     {
-        ed->mutate([v = valueAt(kScaleValues, i)](Settings& s) { s.accessibility.uiScalePreset = v; });
+        ed->mutate([v = valueAt(kUiScaleWireStrings, i)](Settings& s) { s.accessibility.uiScalePreset = v; });
     });
     page.subtitleSize->onSelectionChanged.connect([ed](int i)
     {
-        ed->mutate([v = valueAt(kSubtitleSizeValues, i)](Settings& s) { s.accessibility.subtitleSize = v; });
+        ed->mutate([v = valueAt(kSubtitleSizeWireStrings, i)](Settings& s) { s.accessibility.subtitleSize = v; });
     });
     page.colourVisionFilter->onSelectionChanged.connect([ed](int i)
     {
-        ed->mutate([v = valueAt(kColourVisionValues, i)](Settings& s) { s.accessibility.colorVisionFilter = v; });
+        ed->mutate([v = valueAt(kColorVisionWireStrings, i)](Settings& s) { s.accessibility.colorVisionFilter = v; });
     });
     page.fogIntensity->onValueChanged.connect([ed](float v)
     {
@@ -168,12 +178,12 @@ AccessibilitySettingsPage buildAccessibilitySettingsPage(UICanvas& canvas, const
     root->addChild(std::make_unique<UIFrameHook>([ed, page]()
     {
         const AccessibilitySettings& a = ed->pending().accessibility;
-        page.interfaceScale->selectedIndex     = indexOf(kScaleValues, std::string_view(a.uiScalePreset));
+        page.interfaceScale->selectedIndex     = wireIndexOrFirst(kUiScaleWireStrings, a.uiScalePreset);
         page.highContrast->checked             = a.highContrast;
         page.reducedMotion->checked            = a.reducedMotion;
         page.subtitles->checked                = a.subtitlesEnabled;
-        page.subtitleSize->selectedIndex       = indexOf(kSubtitleSizeValues, std::string_view(a.subtitleSize));
-        page.colourVisionFilter->selectedIndex = indexOf(kColourVisionValues, std::string_view(a.colorVisionFilter));
+        page.subtitleSize->selectedIndex       = wireIndexOrFirst(kSubtitleSizeWireStrings, a.subtitleSize);
+        page.colourVisionFilter->selectedIndex = wireIndexOrFirst(kColorVisionWireStrings, a.colorVisionFilter);
         page.photosensitiveSafe->checked       = a.photosensitiveSafety.enabled;
         page.fog->checked                      = a.postProcess.fogEnabled;
         page.fogIntensity->value = std::clamp(a.postProcess.fogIntensityScale, 0.0f, 1.0f);

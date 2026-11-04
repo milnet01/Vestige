@@ -4,6 +4,7 @@
 /// @file settings_apply.cpp
 /// @brief Apply layer between Settings and engine subsystems — display.
 #include "core/settings_apply.h"
+#include "core/accessibility_wire_strings.h"
 
 #include "audio/audio_engine.h"
 #include "core/first_person_controller.h"
@@ -170,16 +171,28 @@ void applyAudio(const AudioSettings& audio, AudioApplySink& sink)
 namespace
 {
 
-/// @brief Map the wire-format scale-preset string to the typed enum.
-///        Unknown strings fall back to 1.0× — matches the Settings
-///        validation policy (`isValidScalePreset` in settings.cpp).
+// Each list in core/accessibility_wire_strings.h is in its enum's order, so a
+// string's index is its enum value. These catch a list and an enum that
+// differ in length.
+static_assert(kUiScaleWireStrings.size() == static_cast<std::size_t>(UIScalePreset::X2_0) + 1,
+              "kUiScaleWireStrings must list every UIScalePreset, in order");
+static_assert(kSubtitleSizeWireStrings.size() == static_cast<std::size_t>(SubtitleSizePreset::XL) + 1,
+              "kSubtitleSizeWireStrings must list every SubtitleSizePreset, in order");
+static_assert(kColorVisionWireStrings.size() == static_cast<std::size_t>(ColorVisionMode::Tritanopia) + 1,
+              "kColorVisionWireStrings must list every ColorVisionMode, in order");
+
+/// @brief The enum value at @a s's index in @a list, or @a fallback for a
+///        string not in the list (the same default Settings validation uses).
+template <typename Enum, std::size_t N>
+Enum enumFromWireString(const std::array<const char*, N>& list, const std::string& s, Enum fallback)
+{
+    const int i = wireStringIndex(list, s);
+    return i < 0 ? fallback : static_cast<Enum>(i);
+}
+
 UIScalePreset uiScalePresetFromWireString(const std::string& s)
 {
-    if (s == "1.25x") return UIScalePreset::X1_25;
-    if (s == "1.5x")  return UIScalePreset::X1_5;
-    if (s == "2.0x")  return UIScalePreset::X2_0;
-    // "1.0x" and anything unexpected both fall back to 1.0×.
-    return UIScalePreset::X1_0;
+    return enumFromWireString(kUiScaleWireStrings, s, UIScalePreset::X1_0);
 }
 
 } // namespace
@@ -213,10 +226,7 @@ namespace
 
 ColorVisionMode colorVisionModeFromWireString(const std::string& s)
 {
-    if (s == "protanopia")   return ColorVisionMode::Protanopia;
-    if (s == "deuteranopia") return ColorVisionMode::Deuteranopia;
-    if (s == "tritanopia")   return ColorVisionMode::Tritanopia;
-    return ColorVisionMode::Normal;   // "none" + unknown strings
+    return enumFromWireString(kColorVisionWireStrings, s, ColorVisionMode::Normal);
 }
 
 PostProcessAccessibilitySettings postProcessFromWire(
@@ -273,10 +283,7 @@ namespace
 
 SubtitleSizePreset subtitleSizeFromWireString(const std::string& s)
 {
-    if (s == "small") return SubtitleSizePreset::Small;
-    if (s == "large") return SubtitleSizePreset::Large;
-    if (s == "xl")    return SubtitleSizePreset::XL;
-    return SubtitleSizePreset::Medium;   // "medium" + unknown strings
+    return enumFromWireString(kSubtitleSizeWireStrings, s, SubtitleSizePreset::Medium);
 }
 
 } // namespace

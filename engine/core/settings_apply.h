@@ -246,8 +246,8 @@ private:
 
 /// @brief Pushes the UI accessibility fields of a `Settings` onto
 ///        a sink. Translates the wire-format scale-preset string
-///        (`"1.0x"` / `"1.25x"` / `"1.5x"` / `"2.0x"`) to the
-///        `UIScalePreset` enum. Unknown strings fall back to 1.0×.
+///        (`kUiScaleWireStrings`, core/accessibility_wire_strings.h)
+///        to the `UIScalePreset` enum. Unknown strings fall back to 1.0×.
 ///
 /// @note Subtitle size, colour-vision filter, post-process
 ///       accessibility, and photosensitive safety fields are wired
@@ -295,7 +295,7 @@ private:
 /// @brief Pushes renderer-relevant accessibility fields onto a sink.
 ///
 /// Translates the wire-format color-vision string
-/// (`"none"` / `"protanopia"` / `"deuteranopia"` / `"tritanopia"`)
+/// (`kColorVisionWireStrings`, core/accessibility_wire_strings.h)
 /// to the typed `ColorVisionMode` enum. Unknown strings fall back
 /// to `Normal` to match the Settings validation policy. Maps the
 /// `PostProcessAccessibilityWire` fields carried by
@@ -340,8 +340,8 @@ private:
 };
 
 /// @brief Pushes the subtitle fields onto a sink. Translates the
-///        wire-format size-preset string (`"small"` / `"medium"` /
-///        `"large"` / `"xl"`) to the typed `SubtitleSizePreset`.
+///        wire-format size-preset string (`kSubtitleSizeWireStrings`,
+///        core/accessibility_wire_strings.h) to the typed `SubtitleSizePreset`.
 ///        Unknown strings fall back to `Medium`.
 void applySubtitleSettings(const AccessibilitySettings& access,
                             SubtitleApplySink& sink);
