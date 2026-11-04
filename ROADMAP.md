@@ -7044,7 +7044,7 @@ shipped that have no invocation path at all.
   Source: review-readability 2026-10-31 at 7b2a81d.
   Lanes: animation.
 
-- 📋 [3D_E-0860] **Ping-pong tween turnaround can miss events.**
+- ✅ [3D_E-0860] **Ping-pong tween turnaround can miss events.**
   tween.cpp, the last span of one update.
   2026-11-03 analysis, not built: confirmed in Tween::update PING_PONG +
   fireEvents. At a turnaround (e.g. 0.9 -> 1.0 -> 0.9) the code fires
@@ -7054,6 +7054,10 @@ shipped that have no invocation path at all.
   [0,a)), every full half between, then start of last half->new.
   Red test: d=1, events 0.05/0.85/0.95; updates 0.9, 0.2 (0.95 must
   fire twice), 0.85, 0.2 (0.05 must fire on the way back up).
+  2026-11-04 fixed: ping-pong counts half-cycles and fires each leg
+  (old -> end, whole halves, start -> new), onLoop once per turnaround.
+  Red tests PingPongTurnaroundFiresBothLegs and
+  PingPongMultiLegUpdateFiresEveryLeg; four mutations each red.
   **Layman:** Events on a back-and-forth animation can be skipped.
   Kind: fix.
   Source: review-readability 2026-10-31 at 7b2a81d.
