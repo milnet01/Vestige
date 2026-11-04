@@ -769,6 +769,26 @@ public:
     bool isAvailable() const { return m_available; }
 
 private:
+    // 3D_E-0869 — the one start-a-sound sequence. Every `playSound*` and
+    // `playSynth` goes through `beginPlayback`, so state a pooled source kept
+    // from its last sound (velocity, gain, looping) is reset in one place.
+
+    /// @brief The shared front of the file-backed `playSound*` calls:
+    ///        announces the caption, loads the clip, claims a source and
+    ///        calls `beginPlayback` with the clip's loudness makeup.
+    /// @return The source, not yet positioned or playing; 0 when the sound
+    ///         cannot start.
+    unsigned int prepareFilePlayback(const std::string& filePath, float volume,
+                                     bool loop, AudioBus bus, SoundPriority priority);
+
+    /// @brief Records the source's mix, attaches @a buffer and resets the
+    ///        source: gain from the mixer, looping, velocity zero. The
+    ///        caller sets position and attenuation, then plays it.
+    /// @param volume The caller's volume before @a makeup is folded in.
+    /// @return The gain the source starts at.
+    float beginPlayback(unsigned int source, unsigned int buffer, AudioBus bus,
+                        float volume, float makeup, SoundPriority priority, bool loop);
+
     ALCdevice* m_device = nullptr;
     ALCcontext* m_context = nullptr;
     bool m_available = false;

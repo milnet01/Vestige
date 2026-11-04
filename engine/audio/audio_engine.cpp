@@ -787,9 +787,57 @@ std::array<bool, AudioBusCount> AudioEngine::busesWithLivePlayback(float minVolu
     return active;
 }
 
-unsigned int AudioEngine::playSound(const std::string& filePath, const glm::vec3& position,
-                                     float volume, bool loop, AudioBus bus,
-                                     SoundPriority priority)
+namespace
+{
+
+/// A positioned (not listener-relative) source with the given attenuation.
+void placeInWorld(ALuint source, const glm::vec3& position, const glm::vec3& velocity,
+                  const AttenuationParams& params)
+{
+    alSource3f(source, AL_POSITION, position.x, position.y, position.z);
+    alSource3f(source, AL_VELOCITY, velocity.x, velocity.y, velocity.z);
+    alSourcef(source, AL_REFERENCE_DISTANCE, params.referenceDistance);
+    alSourcef(source, AL_MAX_DISTANCE,       params.maxDistance);
+    alSourcef(source, AL_ROLLOFF_FACTOR,     params.rolloffFactor);
+    alSourcei(source, AL_SOURCE_RELATIVE, AL_FALSE);
+}
+
+/// The fixed attenuation of `playSound` and `playSynth`.
+AttenuationParams defaultPointAttenuation()
+{
+    AttenuationParams params;
+    params.referenceDistance = 1.0f;
+    params.maxDistance       = 50.0f;
+    params.rolloffFactor     = 1.0f;
+    return params;
+}
+
+}  // namespace
+
+float AudioEngine::beginPlayback(unsigned int source, unsigned int buffer, AudioBus bus,
+                                 float volume, float makeup, SoundPriority priority,
+                                 bool loop)
+{
+    // AX9 — the per-clip loudness makeup is folded into the stored volume, so
+    // updateGains and the eviction candidate scan reuse it.
+    const float mixedVolume = volume * makeup;
+    m_livePlaybacks[source] = SourceMix{
+        bus, mixedVolume, priority, std::chrono::steady_clock::now(), makeup};
+    const float initialGain =
+        resolveSourceGain(currentMixer(), bus, mixedVolume, effectiveDuck(bus));
+
+    alSourcei(source, AL_BUFFER, static_cast<ALint>(buffer));
+    alSourcef(source, AL_GAIN, initialGain);
+    alSourcei(source, AL_LOOPING, loop ? AL_TRUE : AL_FALSE);
+    // A pooled source keeps the last sound's velocity; a stale one would
+    // Doppler-shift this sound. Positioned callers set their own after this.
+    alSource3f(source, AL_VELOCITY, 0.0f, 0.0f, 0.0f);
+    return initialGain;
+}
+
+unsigned int AudioEngine::prepareFilePlayback(const std::string& filePath, float volume,
+                                              bool loop, AudioBus bus,
+                                              SoundPriority priority)
 {
     // Phase 10.9 P4: fire the caption announcer BEFORE the availability
     // check — a user with broken audio hardware / deafness still needs
@@ -803,38 +851,34 @@ unsigned int AudioEngine::playSound(const std::string& filePath, const glm::vec3
         return 0;
     }
 
-    ALuint buffer = loadBuffer(filePath);
+    const ALuint buffer = loadBuffer(filePath);
     if (buffer == 0)
     {
         return 0;
     }
 
-    ALuint source = acquireSource(priority);
+    const ALuint source = acquireSource(priority);
     if (source == 0)
     {
         return 0;
     }
 
-    // AX9 — fold the per-clip loudness makeup gain into the source volume
-    // before it is stored / resolved, so updateGains and the eviction
-    // candidate scan reuse it. Returns 1.0 (no-op) when loudness is disabled
-    // or the clip has no cached measurement.
-    const float makeup = loudnessMakeupForPath(filePath);
-    volume *= makeup;
-    m_livePlaybacks[source] = SourceMix{
-        bus, volume, priority, std::chrono::steady_clock::now(), makeup};
-    const float initialGain =
-        resolveSourceGain(
-            currentMixer(), bus, volume, effectiveDuck(bus));
+    // Returns 1.0 (no-op) when loudness is disabled or the clip has no
+    // cached measurement.
+    beginPlayback(source, buffer, bus, volume, loudnessMakeupForPath(filePath), priority, loop);
+    return source;
+}
 
-    alSourcei(source, AL_BUFFER, static_cast<ALint>(buffer));
-    alSource3f(source, AL_POSITION, position.x, position.y, position.z);
-    alSourcef(source, AL_GAIN, initialGain);
-    alSourcei(source, AL_LOOPING, loop ? AL_TRUE : AL_FALSE);
-    alSourcef(source, AL_REFERENCE_DISTANCE, 1.0f);
-    alSourcef(source, AL_MAX_DISTANCE, 50.0f);
-    alSourcef(source, AL_ROLLOFF_FACTOR, 1.0f);
-    alSourcei(source, AL_SOURCE_RELATIVE, AL_FALSE);  // 3D positioned
+unsigned int AudioEngine::playSound(const std::string& filePath, const glm::vec3& position,
+                                     float volume, bool loop, AudioBus bus,
+                                     SoundPriority priority)
+{
+    const ALuint source = prepareFilePlayback(filePath, volume, loop, bus, priority);
+    if (source == 0)
+    {
+        return 0;
+    }
+    placeInWorld(source, position, glm::vec3(0.0f), defaultPointAttenuation());
     alSourcePlay(source);
     return source;
 }
@@ -847,42 +891,8 @@ unsigned int AudioEngine::playSoundSpatial(const std::string& filePath,
                                            AudioBus bus,
                                            SoundPriority priority)
 {
-    // Phase 10.9 P4 — see playSound() above for rationale.
-    if (m_captionAnnouncer)
-    {
-        m_captionAnnouncer(filePath);
-    }
-    if (!m_available) return 0;
-
-    ALuint buffer = loadBuffer(filePath);
-    if (buffer == 0) return 0;
-
-    ALuint source = acquireSource(priority);
-    if (source == 0) return 0;
-
-    // AX9 — fold the per-clip loudness makeup gain into the source volume
-    // before it is stored / resolved, so updateGains and the eviction
-    // candidate scan reuse it. Returns 1.0 (no-op) when loudness is disabled
-    // or the clip has no cached measurement.
-    const float makeup = loudnessMakeupForPath(filePath);
-    volume *= makeup;
-    m_livePlaybacks[source] = SourceMix{
-        bus, volume, priority, std::chrono::steady_clock::now(), makeup};
-    const float initialGain =
-        resolveSourceGain(
-            currentMixer(), bus, volume, effectiveDuck(bus));
-
-    alSourcei(source, AL_BUFFER, static_cast<ALint>(buffer));
-    alSource3f(source, AL_POSITION, position.x, position.y, position.z);
-    alSource3f(source, AL_VELOCITY, 0.0f, 0.0f, 0.0f);
-    alSourcef(source, AL_GAIN, initialGain);
-    alSourcei(source, AL_LOOPING, loop ? AL_TRUE : AL_FALSE);
-    alSourcef(source, AL_REFERENCE_DISTANCE, params.referenceDistance);
-    alSourcef(source, AL_MAX_DISTANCE,       params.maxDistance);
-    alSourcef(source, AL_ROLLOFF_FACTOR,     params.rolloffFactor);
-    alSourcei(source, AL_SOURCE_RELATIVE, AL_FALSE);
-    alSourcePlay(source);
-    return source;
+    return playSoundSpatial(filePath, position, glm::vec3(0.0f), params, volume, loop, bus,
+                            priority);
 }
 
 unsigned int AudioEngine::playSoundSpatial(const std::string& filePath,
@@ -894,40 +904,12 @@ unsigned int AudioEngine::playSoundSpatial(const std::string& filePath,
                                            AudioBus bus,
                                            SoundPriority priority)
 {
-    // Phase 10.9 P4 — see playSound() above for rationale.
-    if (m_captionAnnouncer)
+    const ALuint source = prepareFilePlayback(filePath, volume, loop, bus, priority);
+    if (source == 0)
     {
-        m_captionAnnouncer(filePath);
+        return 0;
     }
-    if (!m_available) return 0;
-
-    ALuint buffer = loadBuffer(filePath);
-    if (buffer == 0) return 0;
-
-    ALuint source = acquireSource(priority);
-    if (source == 0) return 0;
-
-    // AX9 — fold the per-clip loudness makeup gain into the source volume
-    // before it is stored / resolved, so updateGains and the eviction
-    // candidate scan reuse it. Returns 1.0 (no-op) when loudness is disabled
-    // or the clip has no cached measurement.
-    const float makeup = loudnessMakeupForPath(filePath);
-    volume *= makeup;
-    m_livePlaybacks[source] = SourceMix{
-        bus, volume, priority, std::chrono::steady_clock::now(), makeup};
-    const float initialGain =
-        resolveSourceGain(
-            currentMixer(), bus, volume, effectiveDuck(bus));
-
-    alSourcei(source, AL_BUFFER, static_cast<ALint>(buffer));
-    alSource3f(source, AL_POSITION, position.x, position.y, position.z);
-    alSource3f(source, AL_VELOCITY, velocity.x, velocity.y, velocity.z);
-    alSourcef(source, AL_GAIN, initialGain);
-    alSourcei(source, AL_LOOPING, loop ? AL_TRUE : AL_FALSE);
-    alSourcef(source, AL_REFERENCE_DISTANCE, params.referenceDistance);
-    alSourcef(source, AL_MAX_DISTANCE,       params.maxDistance);
-    alSourcef(source, AL_ROLLOFF_FACTOR,     params.rolloffFactor);
-    alSourcei(source, AL_SOURCE_RELATIVE, AL_FALSE);
+    placeInWorld(source, position, velocity, params);
     alSourcePlay(source);
     return source;
 }
@@ -937,44 +919,12 @@ unsigned int AudioEngine::playSound2D(const std::string& filePath, float volume,
                                        SoundPriority priority,
                                        bool loop)
 {
-    // Phase 10.9 P4 — see playSound() above for rationale.
-    if (m_captionAnnouncer)
-    {
-        m_captionAnnouncer(filePath);
-    }
-    if (!m_available)
-    {
-        return 0;
-    }
-
-    ALuint buffer = loadBuffer(filePath);
-    if (buffer == 0)
-    {
-        return 0;
-    }
-
-    ALuint source = acquireSource(priority);
+    const ALuint source = prepareFilePlayback(filePath, volume, loop, bus, priority);
     if (source == 0)
     {
         return 0;
     }
-
-    // AX9 — fold the per-clip loudness makeup gain into the source volume
-    // before it is stored / resolved, so updateGains and the eviction
-    // candidate scan reuse it. Returns 1.0 (no-op) when loudness is disabled
-    // or the clip has no cached measurement.
-    const float makeup = loudnessMakeupForPath(filePath);
-    volume *= makeup;
-    m_livePlaybacks[source] = SourceMix{
-        bus, volume, priority, std::chrono::steady_clock::now(), makeup};
-    const float initialGain =
-        resolveSourceGain(
-            currentMixer(), bus, volume, effectiveDuck(bus));
-
-    alSourcei(source, AL_BUFFER, static_cast<ALint>(buffer));
     alSource3f(source, AL_POSITION, 0.0f, 0.0f, 0.0f);
-    alSourcef(source, AL_GAIN, initialGain);
-    alSourcei(source, AL_LOOPING, loop ? AL_TRUE : AL_FALSE);
     applyNonSpatialMode(source);  // listener-pinned, or a world-locked soundfield
     alSourcePlay(source);
     return source;
@@ -1044,11 +994,8 @@ unsigned int AudioEngine::playSynth(SurfaceMaterial material, float approachSpee
 
     // Amplitude is the impactLoudnessGain curve baked into the samples, so the
     // per-source volume is unity (no AX9 LUFS makeup — synth has no path key).
-    const float volume = 1.0f;
-    m_livePlaybacks[source] = SourceMix{
-        bus, volume, priority, std::chrono::steady_clock::now()};
     const float initialGain =
-        resolveSourceGain(currentMixer(), bus, volume, effectiveDuck(bus));
+        beginPlayback(source, buffer, bus, 1.0f, 1.0f, priority, false);
 
     // AX12 — feed the editor spectrum viewer this freshly-synthesised block
     // (content gain = initialGain, no solo). Only while the Debug tab is active
@@ -1065,15 +1012,7 @@ unsigned int AudioEngine::playSynth(SurfaceMaterial material, float approachSpee
                             static_cast<int>(Procedural::kSynthSampleRate));
     }
 
-    alSourcei(source, AL_BUFFER, static_cast<ALint>(buffer));
-    alSource3f(source, AL_POSITION, position.x, position.y, position.z);
-    alSource3f(source, AL_VELOCITY, 0.0f, 0.0f, 0.0f);
-    alSourcef(source, AL_GAIN, initialGain);
-    alSourcei(source, AL_LOOPING, AL_FALSE);
-    alSourcef(source, AL_REFERENCE_DISTANCE, 1.0f);
-    alSourcef(source, AL_MAX_DISTANCE, 50.0f);
-    alSourcef(source, AL_ROLLOFF_FACTOR, 1.0f);
-    alSourcei(source, AL_SOURCE_RELATIVE, AL_FALSE);  // 3D positioned
+    placeInWorld(source, position, glm::vec3(0.0f), defaultPointAttenuation());
     alSourcePlay(source);
     return source;
 }

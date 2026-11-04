@@ -115,6 +115,7 @@ add_executable(vestige_tests
     test_audio_playback_ticket.cpp
     test_ambient_system.cpp
     test_audio_bus_activity.cpp
+    test_audio_source_reuse.cpp
     test_audio_channel_formats.cpp
     test_localization_format.cpp
     test_localization_tables.cpp

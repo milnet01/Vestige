@@ -25,6 +25,15 @@ may change any interface without notice.
 
 ## [Unreleased]
 
+### 2026-11-04 Fixed — A sound no longer starts pitch-shifted after a moving one
+
+The engine reuses a small pool of audio channels. A moving sound (a
+passing cart, say) gives its channel a speed, which shifts the pitch.
+Sounds started with `playSound` or `playSound2D` kept that speed when
+they reused the channel, so a still sound could play too high or too
+low. All five ways of starting a sound now share one start sequence,
+which resets the channel. (3D_E-0869)
+
 ### 2026-11-04 Fixed — Gamepad buttons can be rebound, and the shared-key note stays visible
 
 In the Settings window's key bindings, the Gamepad column took only a
