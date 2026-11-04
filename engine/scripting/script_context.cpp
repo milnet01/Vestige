@@ -193,10 +193,13 @@ void ScriptContext::executeNode(uint32_t nodeId)
         return;
     }
 
-    // Clear cached output values before execution (impure nodes re-evaluate)
+    // Clear cached output values before execution (impure nodes re-evaluate).
+    // An impure node can change what a pure node reads (a variable, a loop
+    // index), so pure results cached before it are stale (3D_E-0861).
     if (!desc->isPure)
     {
         nodeInst->outputValues.clear();
+        m_pureCache.clear();
     }
 
     ++m_callDepth;
@@ -339,10 +342,11 @@ const ScriptConnection* ScriptContext::findInputConnection(
 ScriptValue ScriptContext::evaluatePureNode(uint32_t nodeId, PinId outputPinId)
 {
     // Per-execution memoization (audit M11). Keyed by (nodeId, pinId) packed
-    // into a uint64_t. A pure node read N times inside one execute() chain
-    // (e.g. via a ForLoop body that pulls the same value each iteration) now
-    // runs once instead of N times. The cache dies with this ScriptContext,
-    // so latent re-triggers and new event dispatches start fresh.
+    // into a uint64_t. A pure node read N times between two impure nodes runs
+    // once. executeNode empties the cache whenever an impure node runs, since
+    // that node may change what pure nodes read (3D_E-0861). The cache dies
+    // with this ScriptContext, so latent re-triggers and new event dispatches
+    // start fresh.
     //
     // D3/AUDIT.md §H7 — nodes that *read* mutable state (GetVariable,
     // FindEntityByName, HasVariable, etc.) are classified isPure=true for

@@ -25,6 +25,14 @@ may change any interface without notice.
 
 ## [Unreleased]
 
+### 2026-11-04 Fixed — Script While loops re-check their condition each time round
+
+A While Loop whose condition came through a maths or compare node kept
+its first answer for the whole run, so a loop counting up to a limit
+never stopped on its own. A node that changes something (Set Variable,
+for one) now makes the maths and compare nodes recalculate next time
+they are read. (3D_E-0861)
+
 ### 2026-11-04 Fixed — Looping root motion keeps going forward at the loop point
 
 When a looping clip with root motion reached its end and started

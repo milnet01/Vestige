@@ -176,11 +176,11 @@ private:
     Blackboard m_flowBlackboard; ///< Flow scope — local to this execution chain
 
     /// @brief Memoization cache for pure-node outputs (audit M11). Key packs
-    /// `(nodeId << 32) | pinId` — a pure node read multiple times within the
-    /// same execute() chain only runs once, eliminating the multiplicative
-    /// cost when pure nodes are pulled inside ForLoop bodies. Cache lives on
-    /// the ScriptContext stack and dies with it, so cross-tick or
-    /// cross-event-dispatch staleness is impossible.
+    /// `(nodeId << 32) | pinId` — a pure node read several times between two
+    /// impure nodes runs once. executeNode empties it whenever an impure node
+    /// runs, since that node may change what the pure nodes read (3D_E-0861).
+    /// Cache lives on the ScriptContext stack and dies with it, so cross-tick
+    /// or cross-event-dispatch staleness is impossible.
     std::unordered_map<uint64_t, ScriptValue> m_pureCache;
 };
 

@@ -452,6 +452,44 @@ TEST_F(NodeLibraryTest, SwitchIntRoutesToDefault)
     EXPECT_EQ(ctx.nodesExecuted(), 2);
 }
 
+// 3D_E-0861: a WhileLoop whose Condition comes through a memoizable pure
+// node (CompareLess) must see the Body's changes on every iteration, and
+// so must a pure node (MathAdd) the Body reads.
+TEST_F(NodeLibraryTest, WhileLoopReevaluatesPureCondition)
+{
+    ScriptGraph graph;
+    graph.variables.push_back({"i", ScriptDataType::INT,
+                               ScriptValue(0), VariableScope::GRAPH});
+
+    uint32_t loop = graph.addNode("WhileLoop");
+    uint32_t readForCompare = graph.addNode("GetVariable");
+    uint32_t less = graph.addNode("CompareLess");
+    uint32_t readForAdd = graph.addNode("GetVariable");
+    uint32_t add = graph.addNode("MathAdd");
+    uint32_t write = graph.addNode("SetVariable");
+
+    graph.findNode(readForCompare)->properties["Name"] = ScriptValue(std::string("i"));
+    graph.findNode(readForAdd)->properties["Name"] = ScriptValue(std::string("i"));
+    graph.findNode(less)->properties["B"] = ScriptValue(3.0f);
+    graph.findNode(add)->properties["B"] = ScriptValue(1.0f);
+    graph.findNode(write)->properties["Name"] = ScriptValue(std::string("i"));
+
+    graph.addConnection(readForCompare, "Value", less, "A");
+    graph.addConnection(less, "Result", loop, "Condition");
+    graph.addConnection(readForAdd, "Value", add, "A");
+    graph.addConnection(add, "Result", write, "Value");
+    graph.addConnection(loop, "Body", write, "Exec");
+
+    ScriptInstance instance;
+    instance.initialize(graph, 1);
+    ScriptContext ctx(instance, m_registry, nullptr);
+    ctx.executeNode(loop);
+
+    EXPECT_FLOAT_EQ(instance.graphBlackboard().get("i").asFloat(), 3.0f);
+    auto* inst = instance.getNodeInstance(loop);
+    ASSERT_NE(inst, nullptr);
+    EXPECT_FALSE(inst->outputValues[internPin("Clamped")].asBool());
+}
 TEST_F(NodeLibraryTest, ForLoopIteratesExpectedTimes)
 {
     ScriptGraph graph;

@@ -208,9 +208,9 @@ void registerFlowNodeTypes(NodeTypeRegistry& registry)
 
     // -----------------------------------------------------------------------
     // WhileLoop — repeats Body while Condition is true. Condition is
-    // re-evaluated each iteration only when it is pulled directly from a
-    // non-memoizable pure node. A memoizable node (e.g. CompareLess) is cached
-    // per (nodeId, pin) for the whole chain, so its first answer sticks.
+    // re-evaluated each iteration: every impure node the Body runs empties
+    // the pure-node cache (3D_E-0861). A Body that runs no impure node
+    // changes nothing, so its Condition cannot change either.
     // Bounded by MAX_WHILE_ITERATIONS as a hard safety rail.
     //
     // AUDIT Sc8 — surface a "Clamped" boolean output when the cap fires so
