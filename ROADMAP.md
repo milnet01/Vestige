@@ -7068,7 +7068,10 @@ shipped that have no invocation path at all.
   Source: review-readability 2026-10-31 at 7b2a81d.
   Lanes: animation.
 
-- 📋 [3D_E-0861] **Pure script node wired into a WhileLoop condition never re-evaluates.**
+- ✅ [3D_E-0861] **Pure script node wired into a WhileLoop condition never re-evaluates.**
+  2026-11-04 fixed (68384ba): executeNode empties the pure-node cache
+  whenever an impure node runs. Test WhileLoopReevaluatesPureCondition;
+  mutation red. Spec memoisation bullet amended.
   **Layman:** Some script loops can never end correctly because their condition is remembered.
   Kind: fix.
   Source: review-readability 2026-10-31 at 7b2a81d.
