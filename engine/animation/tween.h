@@ -127,6 +127,14 @@ private:
 
     void applyValue(float easedProgress);
     void fireEvents(float oldProgress, float newProgress, bool loopWrapped);
+    /// Fires events crossed moving from `from` to `to` in one direction:
+    /// (from, to] forward, [to, from) backward.
+    void fireLeg(float from, float to);
+    /// Fires each leg of a ping-pong update that ran from half-cycle
+    /// `firstHalf` to `lastHalf`, calling onLoop at each turnaround.
+    void firePingPongLegs(float oldProgress, float newProgress,
+                          float firstHalf, float lastHalf);
+    static bool isForwardHalf(float halfIndex);
 
     TargetType m_targetType = TargetType::FLOAT;
     void* m_target = nullptr;

@@ -168,6 +168,8 @@ void Tween::update(float deltaTime)
     float oldProgress = m_progress;
     float newProgress = 0.0f;
     bool loopWrapped = false;
+    float pingPongFirstHalf = 0.0f;
+    float pingPongLastHalf = 0.0f;
 
     switch (m_playback)
     {
@@ -197,26 +199,17 @@ void Tween::update(float deltaTime)
     }
     case TweenPlayback::PING_PONG:
     {
-        float cycleDuration = m_duration * 2.0f;
-        float cycle = std::fmod(activeTime, cycleDuration);
+        // Half-cycle k (each m_duration long) runs forward when k is even
+        // and backward when k is odd. One update can span several halves,
+        // so count them rather than compare directions: two turnarounds
+        // in one update leave the direction unchanged.
+        float prevActive = std::max(0.0f, activeTime - deltaTime);
+        pingPongFirstHalf = std::floor(prevActive / m_duration);
+        pingPongLastHalf = std::floor(activeTime / m_duration);
 
-        // Detect direction change
-        float prevCycle = std::fmod(std::max(0.0f, activeTime - deltaTime), cycleDuration);
-        bool wasForward = prevCycle < m_duration;
-        bool isForward = cycle < m_duration;
-        if (m_started && wasForward != isForward && m_onLoop)
-        {
-            m_onLoop();
-        }
-
-        if (cycle < m_duration)
-        {
-            newProgress = cycle / m_duration;
-        }
-        else
-        {
-            newProgress = 1.0f - (cycle - m_duration) / m_duration;
-        }
+        float local = std::clamp(
+            (activeTime - pingPongLastHalf * m_duration) / m_duration, 0.0f, 1.0f);
+        newProgress = isForwardHalf(pingPongLastHalf) ? local : 1.0f - local;
         break;
     }
     }
@@ -239,7 +232,14 @@ void Tween::update(float deltaTime)
     applyValue(easedProgress);
 
     // Fire events
-    fireEvents(oldProgress, newProgress, loopWrapped);
+    if (m_playback == TweenPlayback::PING_PONG)
+    {
+        firePingPongLegs(oldProgress, newProgress, pingPongFirstHalf, pingPongLastHalf);
+    }
+    else
+    {
+        fireEvents(oldProgress, newProgress, loopWrapped);
+    }
 
     // Fire onComplete for ONCE mode
     if (m_finished && m_onComplete)
@@ -298,24 +298,38 @@ void Tween::applyValue(float easedProgress)
 
 void Tween::fireEvents(float oldProgress, float newProgress, bool loopWrapped)
 {
+    if (!loopWrapped)
+    {
+        fireLeg(oldProgress, newProgress);
+        return;
+    }
+
+    // LOOP wrap: progress ran to the end and restarted, so the crossed
+    // span is (oldProgress, 1] plus [0, newProgress].
+    for (auto& evt : m_events)
+    {
+        bool crossed = (evt.normalizedTime > oldProgress || evt.normalizedTime <= newProgress);
+        if (crossed && evt.callback)
+        {
+            evt.callback();
+        }
+    }
+}
+
+void Tween::fireLeg(float from, float to)
+{
     for (auto& evt : m_events)
     {
         bool crossed = false;
-        if (loopWrapped)
+        if (to >= from)
         {
-            // LOOP wrap: progress ran to the end and restarted, so the
-            // crossed span is (oldProgress, 1] plus [0, newProgress].
-            crossed = (evt.normalizedTime > oldProgress || evt.normalizedTime <= newProgress);
-        }
-        else if (newProgress >= oldProgress)
-        {
-            // Forward: fire if event time is in (oldProgress, newProgress]
-            crossed = (evt.normalizedTime > oldProgress && evt.normalizedTime <= newProgress);
+            // Forward: fire if event time is in (from, to]
+            crossed = (evt.normalizedTime > from && evt.normalizedTime <= to);
         }
         else
         {
-            // Backward (ping-pong reverse): fire if event time is in [newProgress, oldProgress)
-            crossed = (evt.normalizedTime >= newProgress && evt.normalizedTime < oldProgress);
+            // Backward: fire if event time is in [to, from)
+            crossed = (evt.normalizedTime >= to && evt.normalizedTime < from);
         }
 
         if (crossed && evt.callback)
@@ -323,6 +337,37 @@ void Tween::fireEvents(float oldProgress, float newProgress, bool loopWrapped)
             evt.callback();
         }
     }
+}
+
+void Tween::firePingPongLegs(float oldProgress, float newProgress,
+                             float firstHalf, float lastHalf)
+{
+    if (lastHalf <= firstHalf)
+    {
+        fireLeg(oldProgress, newProgress);
+        return;
+    }
+
+    // The leg from oldProgress to the end of its half, then onLoop at each
+    // turnaround, every whole half in between, and the start of the last
+    // half up to newProgress.
+    fireLeg(oldProgress, isForwardHalf(firstHalf) ? 1.0f : 0.0f);
+    for (float half = firstHalf + 1.0f; half <= lastHalf; half += 1.0f)
+    {
+        if (m_onLoop)
+        {
+            m_onLoop();
+        }
+        bool forward = isForwardHalf(half);
+        float start = forward ? 0.0f : 1.0f;
+        float end = (half < lastHalf) ? (forward ? 1.0f : 0.0f) : newProgress;
+        fireLeg(start, end);
+    }
+}
+
+bool Tween::isForwardHalf(float halfIndex)
+{
+    return std::fmod(halfIndex, 2.0f) < 1.0f;
 }
 
 // ---------------------------------------------------------------------------

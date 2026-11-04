@@ -290,6 +290,60 @@ TEST(TweenTest, LoopWrapFiresOnlyCrossedEvents)
     EXPECT_EQ(endFired, 1);
 }
 
+// 3D_E-0860: an update that turns a ping-pong tween round must fire the
+// events on the leg to the end as well as on the leg back.
+TEST(TweenTest, PingPongTurnaroundFiresBothLegs)
+{
+    float value = 0.0f;
+    int lowFired = 0;
+    int midFired = 0;
+    int highFired = 0;
+
+    auto tween = Tween::floatTween(&value, 0.0f, 10.0f, 1.0f);
+    tween.setPlayback(TweenPlayback::PING_PONG);
+    tween.addEvent(0.05f, [&lowFired]() { lowFired++; });
+    tween.addEvent(0.85f, [&midFired]() { midFired++; });
+    tween.addEvent(0.95f, [&highFired]() { highFired++; });
+
+    tween.update(0.9f);   // 0.0 -> 0.9 forward
+    EXPECT_EQ(lowFired, 1);
+    EXPECT_EQ(midFired, 1);
+    EXPECT_EQ(highFired, 0);
+
+    tween.update(0.2f);   // 0.9 -> 1.0 -> 0.9: 0.95 crossed up and back
+    EXPECT_EQ(highFired, 2);
+    EXPECT_EQ(midFired, 1);
+
+    tween.update(0.85f);  // 0.9 -> 0.05 backward
+    EXPECT_EQ(midFired, 2);
+    EXPECT_EQ(lowFired, 2);
+
+    tween.update(0.2f);   // 0.05 -> 0.0 -> 0.15: 0.05 crossed down and up
+    EXPECT_EQ(lowFired, 3);
+    EXPECT_EQ(midFired, 2);
+    EXPECT_EQ(highFired, 2);
+}
+
+// 3D_E-0860: one update spanning several legs fires each event once per
+// leg and onLoop once per turnaround.
+TEST(TweenTest, PingPongMultiLegUpdateFiresEveryLeg)
+{
+    float value = 0.0f;
+    int midFired = 0;
+    int loops = 0;
+
+    auto tween = Tween::floatTween(&value, 0.0f, 10.0f, 1.0f);
+    tween.setPlayback(TweenPlayback::PING_PONG);
+    tween.addEvent(0.5f, [&midFired]() { midFired++; });
+    tween.onLoop([&loops]() { loops++; });
+
+    tween.update(0.1f);   // start playback
+    tween.update(2.4f);   // 0.1 -> 1 -> 0 -> 0.5: three legs, two turnarounds
+    EXPECT_EQ(midFired, 3);
+    EXPECT_EQ(loops, 2);
+    EXPECT_NEAR(value, 5.0f, 0.01f);
+}
+
 // ---------------------------------------------------------------------------
 // Custom cubic bezier easing
 // ---------------------------------------------------------------------------

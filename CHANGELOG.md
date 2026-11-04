@@ -25,6 +25,14 @@ may change any interface without notice.
 
 ## [Unreleased]
 
+### 2026-11-04 Fixed — Back-and-forth tweens fire every event they pass
+
+A ping-pong tween that turned round inside one frame skipped the
+events between where it was and the end it turned at. Each event
+now fires once on every leg that passes it, and `onLoop` fires once
+per turnaround, in order between the legs, including on the first
+frame. (3D_E-0860)
+
 ### 2026-11-03 Fixed — Terrain edges no longer light as if the ground drops away
 
 The terrain treated everything past its edge as height zero, so raised
