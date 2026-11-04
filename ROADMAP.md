@@ -6357,7 +6357,7 @@ shipped that have no invocation path at all.
   Source: user-request-2026-10-26 (3D_E-0773 needs stills).
   Lanes: testing, app.
 
-- 📋 [3D_E-0802] **Clouds near the horizon render as flat colour bands instead of smooth cloud.**
+- 🚫 [3D_E-0802] **Clouds near the horizon render as flat colour bands instead of smooth cloud.**
   Seen 2026-10-26 in a --stills shot from (0, ground+1.7, 0), yaw 0,
   pitch -5: the sky behind the trees is posterised into flat steps.
   Looking up at the sun from the same spot (yaw 34.3, pitch 47.9) the
@@ -6369,6 +6369,14 @@ shipped that have no invocation path at all.
   covers clouds up to the top of the frame, while other headings are
   smooth. So it depends on direction, which points at the HDRI's own
   pixels or its sampling.
+  2026-11-05 dismissed: not in the engine's output. The evidence PNG
+  itself is smooth: its top 300 rows hold 53,475 distinct colours,
+  and a full-resolution crop shows soft clouds. The bands came from
+  the image viewer used to inspect the full 1920x1080 picture, which
+  reduces colours on large images. Re-rendered today at 1280x720 and
+  1920x1080 (Release and Debug, headless, same spot): crops smooth.
+  The source HDRI is smooth too. To judge sky smoothness, crop the
+  PNG first or count colours; never judge a full 1080p frame.
   **Layman:** Low in the sky, the clouds look like a poster with only a few colours instead of soft, smooth cloud.
   Kind: fix.
   Source: user-request-2026-10-26 (3D_E-0773 needs stills).
