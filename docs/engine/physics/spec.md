@@ -554,7 +554,7 @@ Per CODING_STANDARDS §11 — no exceptions on the steady-state path.
 | Cloth constraint graph + colouring | `tests/test_cloth_constraint_graph.cpp` | Stretch / shear / bend generation; greedy colouring; LRA; dihedrals |
 | Cloth presets + fabric DB | `tests/test_cloth_presets.cpp` | Preset → config mapping |
 | Cloth collision (mesh / BVH) | `tests/test_cloth_collision.cpp` | Mesh-collider end-to-end |
-| Cloth solver improvements — adaptive damping, friction, thick particles | `tests/test_cloth_solver_improvements.cpp` | Phase 8 cloth-improvements design |
+| Cloth solver improvements — adaptive damping, friction, thick particles | `tests/test_cloth_solver_improvements.cpp`; friction behaviour on both backends: `tests/test_cloth_friction.cpp` | Phase 8 cloth-improvements design |
 | GPU cloth backend — SSBO lifecycle, pin upload, support probe | `tests/test_gpu_cloth_simulator.cpp` | Public API contract (skips when no GL) |
 | Advanced physics integrations — character + constraints + cloth together | `tests/test_advanced_physics.cpp` | Smoke / integration |
 | 2D physics (separate subsystem reach-through) | `tests/test_physics2d_system.cpp` | Out of scope here; listed for completeness |

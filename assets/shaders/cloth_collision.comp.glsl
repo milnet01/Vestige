@@ -5,14 +5,16 @@
 /// @brief Phase 9B Step 7 — sphere + plane + ground collision response.
 ///
 /// One thread per particle. Pushes the particle out of any sphere or
-/// half-space plane it has penetrated by `surface + collisionMargin`, and
-/// zeros the inward-pointing component of velocity. Pinned particles
+/// half-space plane it has penetrated by `surface + collisionMargin`, zeros
+/// the inward-pointing component of velocity, and applies Coulomb friction
+/// as a position correction against the substep's start position. Pinned particles
 /// (`positions[i].w == 0`) are skipped. Cylinder, box, and mesh colliders
 /// are deferred to a follow-up commit per the design doc.
 ///
 /// SSBO bindings:
-///   binding 0 — Positions  (read+write, vec4 xyz + invMass)
-///   binding 2 — Velocities (read+write, vec4 xyz + padding)
+///   binding 0 — Positions     (read+write, vec4 xyz + invMass)
+///   binding 1 — PrevPositions (read-only, the substep's start positions)
+///   binding 2 — Velocities    (read+write, vec4 xyz + padding)
 ///   binding 3 — Colliders  (UBO, read-only)
 
 #version 450 core
@@ -26,6 +28,7 @@ struct SphereCollider { vec4 centerRadius; };  // xyz=center, w=radius
 struct PlaneCollider  { vec4 normalOffset; };  // xyz=normal (unit), w=offset
 
 layout(std430, binding = 0) buffer Positions  { vec4 positions[]; };
+layout(std430, binding = 1) readonly buffer PrevPositions { vec4 prevPositions[]; };
 layout(std430, binding = 2) buffer Velocities { vec4 velocities[]; };
 
 layout(std140, binding = 3) uniform Colliders
@@ -36,9 +39,7 @@ layout(std140, binding = 3) uniform Colliders
     int   planeCount;
     float groundY;
     float collisionMargin;
-    // Phase 10.9 Sh3 — Coulomb friction. Matches CPU
-    // `ClothSimulator::applyFriction` two-tier model: static if
-    // `|vTangent| < staticFriction · |vNormal|`, else kinetic reduction.
+    // Coulomb friction coefficients; see applyFriction below.
     float staticFriction;
     float kineticFriction;
     float _pad0;
@@ -47,35 +48,30 @@ layout(std140, binding = 3) uniform Colliders
 
 uniform uint u_particleCount;
 
-// Phase 10.9 Sh3 — Coulomb friction at a contact. Mirrors the CPU helper at
-// `ClothSimulator::applyCollisions` (its applyFriction lambda). `n` must be the unit outward contact
-// normal. Modifies `v` in place.
-//
-// Invariant: called *after* the inward velocity component has been zeroed
-// out by the caller (the same pattern the CPU side uses). That is exactly why
-// `normalImpulse` is a PARAMETER: the residual dot(v, n) at that point is 0 by
-// construction, so deriving the normal speed from `v` here made the whole
-// function a no-op on every real contact. The caller passes the inward speed
-// it removed, which is the impulse Coulomb friction is proportional to.
-void applyFriction(inout vec3 v, vec3 n, float normalImpulse)
+// Coulomb friction at a contact, as a position correction (3D_E-0875).
+// Mirrors the applyFriction lambda in `ClothSimulator::applyCollisions`.
+// It must act on positions: cloth_velocity.comp.glsl rebuilds velocity from
+// (position - prevPosition), so a velocity edit here would be lost.
+// `n` is the unit outward contact normal; `depth` is how far the contact just
+// pushed the particle out (the normal impulse x dt^2/m). The tangential move
+// this substep is cancelled while under staticFriction x depth (stick), else
+// shortened by kineticFriction x depth.
+void applyFriction(inout vec3 p, vec3 prevP, vec3 n, float depth)
 {
-    if (staticFriction <= 0.0 && kineticFriction <= 0.0) return;
+    if (depth <= 0.0 || (staticFriction <= 0.0 && kineticFriction <= 0.0)) return;
 
-    float vn       = dot(v, n);
-    vec3  vNormal  = n * vn;
-    vec3  vTangent = v - vNormal;
-    float vtLen    = length(vTangent);
-    if (vtLen < 1e-7) return;
+    vec3  moved      = p - prevP;
+    vec3  tangent    = moved - n * dot(moved, n);
+    float tangentLen = length(tangent);
+    if (tangentLen < 1e-9) return;
 
-    float normalSpeed = normalImpulse;
-    if (vtLen < staticFriction * normalSpeed)
+    if (tangentLen < staticFriction * depth)
     {
-        v = vNormal;  // Static: stick.
+        p -= tangent;  // Static: stick.
     }
     else
     {
-        float reduction = kineticFriction * normalSpeed / vtLen;
-        v = vNormal + vTangent * max(0.0, 1.0 - reduction);
+        p -= tangent * min(1.0, kineticFriction * depth / tangentLen);
     }
 }
 
@@ -89,20 +85,16 @@ void main()
 
     vec3 p = posv.xyz;
     vec3 v = velocities[id].xyz;
+    vec3 prevP = prevPositions[id].xyz;
 
     // Ground plane (Y = groundY). Particle stays at or above ground+margin.
     float groundLimit = groundY + collisionMargin;
     if (p.y < groundLimit)
     {
+        float depth = groundLimit - p.y;
         p.y = groundLimit;
-        // Capture the inward normal speed BEFORE it is zeroed -- applyFriction
-        // needs the impulse that was just removed. Reading dot(v, n) after the
-        // zeroing gave normalSpeed == 0 exactly, which made the static test
-        // `vtLen < 0` never true and the kinetic reduction `k * 0 / vtLen` a
-        // no-op: friction was arithmetically inert on every contact.
-        float impulseY = max(0.0, -v.y);
         if (v.y < 0.0) v.y = 0.0;
-        applyFriction(v, vec3(0.0, 1.0, 0.0), impulseY);
+        applyFriction(p, prevP, vec3(0.0, 1.0, 0.0), depth);
     }
 
     // Sphere colliders.
@@ -117,9 +109,8 @@ void main()
             vec3 n   = toP / dist;
             p        = c + n * r;
             float vn = dot(v, n);
-            float impulse = max(0.0, -vn);  // see the ground case above
             if (vn < 0.0) v -= n * vn;
-            applyFriction(v, n, impulse);
+            applyFriction(p, prevP, n, r - dist);
         }
     }
 
@@ -140,9 +131,8 @@ void main()
         {
             p      -= n * signedDist;  // signedDist < 0, so subtract pushes outward.
             float vn = dot(v, n);
-            float impulse = max(0.0, -vn);  // see the ground case above
             if (vn < 0.0) v -= n * vn;
-            applyFriction(v, n, impulse);
+            applyFriction(p, prevP, n, -signedDist);
         }
     }
 

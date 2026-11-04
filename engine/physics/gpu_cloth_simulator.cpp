@@ -988,6 +988,8 @@ void GpuClothSimulator::simulate(float deltaTime)
         {
             m_collisionShader.use();
             glBindBufferBase(GL_SHADER_STORAGE_BUFFER, BIND_POSITIONS,  m_positionsSSBO);
+            // Friction measures each particle's move from its substep start.
+            glBindBufferBase(GL_SHADER_STORAGE_BUFFER, BIND_PREV_POSITIONS, m_prevPositionsSSBO);
             glBindBufferBase(GL_SHADER_STORAGE_BUFFER, BIND_VELOCITIES, m_velocitiesSSBO);
             glBindBufferBase(GL_UNIFORM_BUFFER,        BIND_COLLIDERS_UBO, m_collidersUBO);
             m_collisionShader.setUInt("u_particleCount", m_particleCount);

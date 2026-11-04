@@ -414,30 +414,31 @@ TEST(ClothCollisionShader, PlaneBlockHasNoMarginInPenetration_Sh2)
 
 // -- Phase 10.9 Sh3: cloth_collision Coulomb friction parity --
 //
-// CPU `ClothSimulator::applyCollisions` calls `applyFriction(velocity, n)`
+// CPU `ClothSimulator::applyCollisions` calls `applyFriction(i, n, depth)`
 // at every contact (ground / sphere / box / cylinder / plane). Pre-Sh3 the
 // GPU shader had no friction term, so sliding particles behaved differently
-// across backends. Each contact branch must call the helper.
+// across backends. Each contact branch must call the helper. Whether the
+// friction actually slows sliding is test_cloth_friction.cpp (3D_E-0875).
 
 TEST(ClothCollisionShader, AppliesFrictionAtGroundSphereAndPlane_Sh3)
 {
     const std::string src = readShaderSource("cloth_collision.comp.glsl");
 
     EXPECT_NE(src.find("void applyFriction"), std::string::npos)
-        << "cloth_collision.comp.glsl must define applyFriction(v, n)";
+        << "cloth_collision.comp.glsl must define applyFriction(p, prevP, n, depth)";
 
     // Count how many sites call the helper. Three legitimate branches on
     // the GPU side: ground, sphere loop, plane loop. (Cylinder / box are
     // CPU-only — see `GpuClothSimulator::addCylinderCollider` log-and-drop.)
     size_t callSites = 0;
     size_t pos = 0;
-    while ((pos = src.find("applyFriction(v,", pos)) != std::string::npos)
+    while ((pos = src.find("applyFriction(p, prevP,", pos)) != std::string::npos)
     {
         ++callSites;
         pos += 1;
     }
     EXPECT_EQ(callSites, 3u)
-        << "expected applyFriction(v, …) at ground + sphere + plane sites; "
+        << "expected applyFriction(p, prevP, …) at ground + sphere + plane sites; "
            "found " << callSites;
 }
 

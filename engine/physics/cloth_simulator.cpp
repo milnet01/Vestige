@@ -409,8 +409,9 @@ void ClothSimulator::simulate(float deltaTime)
                 continue;
             }
             // This overwrites every velocity edit applyCollisions made above
-            // (friction, inward-velocity removal, self-collision damping).
-            // Only the position change survives into the next substep.
+            // (inward-velocity removal, self-collision damping). Only the
+            // position change survives into the next substep, which is why
+            // friction is a position correction there.
             m_velocities[i] = (m_positions[i] - m_prevPositions[i]) / dtSub;
             m_velocities[i] *= dampFactor;
         }
@@ -1149,32 +1150,34 @@ void ClothSimulator::applyCollisions()
 
     uint32_t count = static_cast<uint32_t>(m_positions.size());
 
-    // Friction helper: apply Coulomb friction to tangential velocity at collision
-    auto applyFriction = [this](glm::vec3& velocity, const glm::vec3& normal)
+    // Coulomb friction at a contact, as a position correction (3D_E-0875).
+    // It must act on positions: step 7 of simulate() rebuilds velocity from
+    // (position - prevPosition), so a velocity edit here would be lost.
+    // `depth` is how far the contact just pushed the particle out, which is
+    // the normal impulse times dt^2/m that Coulomb friction is proportional to.
+    // The tangential move this substep is cancelled while it is under
+    // staticFriction x depth (stick), else shortened by kineticFriction x depth.
+    // Mirrored in cloth_collision.comp.glsl's applyFriction.
+    auto applyFriction = [this](uint32_t i, const glm::vec3& normal, float depth)
     {
-        if (m_staticFriction <= 0.0f && m_kineticFriction <= 0.0f)
+        if (depth <= 0.0f || (m_staticFriction <= 0.0f && m_kineticFriction <= 0.0f))
         {
             return;
         }
-        float vn = glm::dot(velocity, normal);
-        glm::vec3 vNormal = normal * vn;
-        glm::vec3 vTangent = velocity - vNormal;
-        float vtLen = glm::length(vTangent);
-        if (vtLen < 1e-7f)
+        glm::vec3 moved = m_positions[i] - m_prevPositions[i];
+        glm::vec3 tangent = moved - normal * glm::dot(moved, normal);
+        float tangentLen = glm::length(tangent);
+        if (tangentLen < 1e-9f)
         {
             return;
         }
-        float normalSpeed = std::abs(vn);
-        if (vtLen < m_staticFriction * normalSpeed)
+        if (tangentLen < m_staticFriction * depth)
         {
-            // Static friction: stick
-            velocity = vNormal;
+            m_positions[i] -= tangent;  // Static friction: stick.
         }
         else
         {
-            // Kinetic friction: reduce tangential velocity
-            float reduction = m_kineticFriction * normalSpeed / vtLen;
-            velocity = vNormal + vTangent * std::max(0.0f, 1.0f - reduction);
+            m_positions[i] -= tangent * std::min(1.0f, m_kineticFriction * depth / tangentLen);
         }
     };
 
@@ -1188,13 +1191,14 @@ void ClothSimulator::applyCollisions()
         }
         if (m_positions[i].y < groundWithMargin)
         {
+            const float depth = groundWithMargin - m_positions[i].y;
             m_positions[i].y = groundWithMargin;
             glm::vec3 groundNormal(0.0f, 1.0f, 0.0f);
             if (m_velocities[i].y < 0.0f)
             {
                 m_velocities[i].y = 0.0f;
             }
-            applyFriction(m_velocities[i], groundNormal);
+            applyFriction(i, groundNormal, depth);
         }
     }
 
@@ -1223,7 +1227,7 @@ void ClothSimulator::applyCollisions()
                 {
                     m_velocities[i] -= normal * velDotN;
                 }
-                applyFriction(m_velocities[i], normal);
+                applyFriction(i, normal, effectiveR - dist);
             }
         }
     }
@@ -1277,7 +1281,7 @@ void ClothSimulator::applyCollisions()
             {
                 m_velocities[i] += pushDir * velDotN;
             }
-            applyFriction(m_velocities[i], pushDir);
+            applyFriction(i, pushDir, minPen);
         }
     }
 
@@ -1318,7 +1322,7 @@ void ClothSimulator::applyCollisions()
                 {
                     m_velocities[i] -= normal2D * velDotN;
                 }
-                applyFriction(m_velocities[i], normal2D);
+                applyFriction(i, normal2D, effectiveR - dist2D);
             }
         }
     }
@@ -1347,7 +1351,7 @@ void ClothSimulator::applyCollisions()
                 {
                     m_velocities[i] -= plane.normal * velDotN;
                 }
-                applyFriction(m_velocities[i], plane.normal);
+                applyFriction(i, plane.normal, -dist);
             }
         }
     }
@@ -1382,7 +1386,7 @@ void ClothSimulator::applyCollisions()
                 {
                     m_velocities[i] -= normal * velDotN;
                 }
-                applyFriction(m_velocities[i], normal);
+                applyFriction(i, normal, COLLISION_MARGIN - dist);
             }
         }
     }

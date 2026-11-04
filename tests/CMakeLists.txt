@@ -147,6 +147,7 @@ add_executable(vestige_tests
     test_cloth_mesh_collider.cpp
     test_cloth_simulation_collision.cpp
     test_cloth_solver_improvements.cpp
+    test_cloth_friction.cpp
     test_gpu_particle_system.cpp
     test_gpu_particle_sort.cpp
     test_motion_matching.cpp

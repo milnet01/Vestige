@@ -7265,7 +7265,7 @@ shipped that have no invocation path at all.
   Source: review-readability 2026-10-31 at 7b2a81d.
   Lanes: engine.
 
-- 📋 [3D_E-0875] **Cloth friction has no effect: the end-of-substep velocity recovery overwrites it.**
+- 🚧 [3D_E-0875] **Cloth friction has no effect: the end-of-substep velocity recovery overwrites it.**
   Both backends edit velocity in the collision pass (applyFriction),
   then recover velocity from positions, v = (pos - prevPos) / dt
   (ClothSimulator::simulate step 7, cloth_velocity.comp.glsl), which
@@ -7280,6 +7280,19 @@ shipped that have no invocation path at all.
   2026-11-04 not started. CPU friction sites: cloth_simulator.cpp
   applyFriction lambda and its five callers; GPU: cloth_collision.comp.glsl
   three sites. The visual check needs a quiet GPU (read 99% busy today).
+  2026-11-05: friction is a position correction on both backends
+  (Macklin-style PBD): at a contact, the substep's tangential move is
+  cancelled under staticFriction x push-out depth, else shortened by
+  kineticFriction x depth. CPU lambda takes (particle, normal, depth) at
+  all six sites; GPU collision shader binds prevPositions (binding 1).
+  Also fixed: the CPU took normal speed after zeroing it, so friction was
+  zero even before the overwrite. Test: tests/test_cloth_friction.cpp,
+  cloth on a 30-degree slope (tilted gravity, plane collider). Red before:
+  static 0.9 slid 2.456 m, the same as frictionless, both backends. Green
+  after; each branch and the plane depth mutated -> red. Cloth tests 212/212
+  on RX 6600 and llvmpipe. Still owed: the Tabernacle curtains/veil visual
+  check (--biblical-demo stills) on a Release build; deferred because the
+  machine was at load 75 with other sessions' builds.
   **Layman:** Cloth slides over surfaces the same whatever friction is set to.
   Kind: fix.
   Source: 3D_E-0873 doc fix 2026-11-03 (review-readability 2026-10-31).

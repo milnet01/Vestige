@@ -25,6 +25,15 @@ may change any interface without notice.
 
 ## [Unreleased]
 
+### 2026-11-05 Fixed — Cloth friction now holds and slows cloth on surfaces
+
+Cloth slid over floors, walls and colliders the same whatever its
+friction was set to. Friction now works on both the CPU and GPU cloth
+solvers. Cloth on a slope stays put when static friction is high
+enough, and slides more slowly when kinetic friction is raised. The
+default friction (static 0.4, kinetic 0.3) now acts on every cloth that
+touches a surface. (3D_E-0875)
+
 ### 2026-11-05 Fixed — Transform reset buttons can be undone after a click on a field
 
 In the inspector's Transform section, clicking a Position, Rotation or
