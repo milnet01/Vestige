@@ -10,6 +10,7 @@ from pathlib import Path
 
 import pytest
 
+from lib import utils
 from lib.utils import run_cmd, run_shell_cmd
 
 
@@ -73,3 +74,24 @@ def test_run_cmd_respects_cwd():
         assert rc == 0
         # On macOS /tmp is a symlink to /private/tmp; compare resolved.
         assert Path(out.strip()).resolve() == Path(tmp).resolve()
+
+
+def test_capped_output_keeps_the_end(monkeypatch):
+    """3D_E-0864: a capped stream keeps its last line, where ctest's
+    summary is, and says what it cut."""
+    monkeypatch.setattr(utils, "MAX_CAPTURED_OUTPUT_BYTES", 100)
+    text = "x" * 500 + "\n100% tests passed, 0 tests failed out of 20\n"
+    out = utils._capped(text, "stdout", "ctest")
+    assert out.endswith("100% tests passed, 0 tests failed out of 20\n")
+    assert out.startswith("x" * 50)
+    assert "characters cut" in out
+    assert len(out) < 200
+
+
+def test_run_shell_cmd_output_is_capped(monkeypatch):
+    """3D_E-0864: run_shell_cmd is capped like run_cmd."""
+    monkeypatch.setattr(utils, "MAX_CAPTURED_OUTPUT_BYTES", 100)
+    rc, out, _err = utils.run_shell_cmd("python3 -c \"print('y' * 5000); print('END')\"")
+    assert rc == 0
+    assert len(out) < 200
+    assert out.endswith("END\n")

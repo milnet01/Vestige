@@ -28,20 +28,25 @@ log = logging.getLogger("audit")
 
 # AUDIT.md §M19 / FIXPLAN J5: cap subprocess captured output. cppcheck on
 # large codebases can emit 100+ MB of XML into stderr, blowing past
-# process memory when captured via capture_output=True. Truncate at
-# 64 MB per stream and log a warning so the caller knows parsing may
-# have missed entries at the tail.
+# process memory when captured via capture_output=True. Each stream is
+# cut to 64 MB, keeping its start and its end (3D_E-0864): build and test
+# runs put their summary last (ctest's "tests passed" line), so a cut that
+# kept only the start would lose the one line tier 1 reads.
 MAX_CAPTURED_OUTPUT_BYTES = 64 * 1024 * 1024
 
 
 def _capped(text: str, stream_name: str, cmd_desc: str) -> str:
+    """The stream, or its first and last halves of the cap when longer,
+    joined by a line saying how much was cut from the middle."""
     if len(text) > MAX_CAPTURED_OUTPUT_BYTES:
         log.warning(
-            "%s output from %s exceeded %d bytes — truncated "
-            "(findings at the tail may be missed)",
+            "%s output from %s exceeded %d bytes — the middle was cut "
+            "(findings there may be missed)",
             stream_name, cmd_desc, MAX_CAPTURED_OUTPUT_BYTES,
         )
-        return text[:MAX_CAPTURED_OUTPUT_BYTES]
+        half = MAX_CAPTURED_OUTPUT_BYTES // 2
+        cut = len(text) - 2 * half
+        return f"{text[:half]}\n[... {cut} characters cut ...]\n{text[-half:]}"
     return text
 
 
@@ -118,7 +123,11 @@ def run_shell_cmd(
         )
         elapsed = time.monotonic() - start
         log.debug("  -> %d in %.1fs", result.returncode, elapsed)
-        return result.returncode, result.stdout, result.stderr
+        return (
+            result.returncode,
+            _capped(result.stdout, "stdout", cmd),
+            _capped(result.stderr, "stderr", cmd),
+        )
     except subprocess.TimeoutExpired:
         elapsed = time.monotonic() - start
         log.warning("Command timed out after %.1fs: %s", elapsed, cmd)

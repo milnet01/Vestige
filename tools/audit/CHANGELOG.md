@@ -4,6 +4,10 @@ All notable changes to the Audit Tool are documented in this file.
 
 ## [Unreleased]
 
+### 2026-11-04 Fixed — A capped build or test log keeps its last lines
+
+- **Output past the 64 MB cap now keeps its start and its end, with a line saying how much of the middle was cut.** The old cap kept only the start, so the test summary at the end, which tier 1 reads, was lost. `run_shell_cmd` is now capped as `run_cmd` was. (3D_E-0864)
+
 ### 2026-11-01 Security — The audit web page escapes quotes in config values
 
 - **A project config with a quote in its name or build command can no longer inject markup into the config builder page.** (3D_E-0846)
