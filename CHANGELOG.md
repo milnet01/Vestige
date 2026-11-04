@@ -25,6 +25,16 @@ may change any interface without notice.
 
 ## [Unreleased]
 
+### 2026-11-04 Fixed — Gamepad buttons can be rebound, and the shared-key note stays visible
+
+In the Settings window's key bindings, the Gamepad column took only a
+key or mouse button, so a gamepad button could not be bound from a
+gamepad. It now takes a gamepad button pressed after the dialog opens
+(one already held does not count). The note saying a new binding is
+shared with other actions vanished as the dialog closed; it now stays
+under the bindings table, naming those actions, until the next rebind.
+(3D_E-0867)
+
 ### 2026-11-04 Fixed — Revert in the Settings window undoes key rebinds
 
 Revert discards every unsaved change, but a rebound key could stay

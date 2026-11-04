@@ -44,6 +44,28 @@ const char* kTabNames[] = {
 
 constexpr std::size_t kNumTabs = sizeof(kTabNames) / sizeof(kTabNames[0]);
 
+static_assert(kGamepadButtonCount == GLFW_GAMEPAD_BUTTON_LAST + 1,
+              "kGamepadButtonCount must match GLFW's gamepad button count");
+
+/// @brief Buttons held on any connected gamepad.
+GamepadButtons pollGamepadButtons()
+{
+    GamepadButtons held{};
+    for (int jid = GLFW_JOYSTICK_1; jid <= GLFW_JOYSTICK_LAST; ++jid)
+    {
+        GLFWgamepadstate state;
+        if (glfwJoystickIsGamepad(jid) && glfwGetGamepadState(jid, &state))
+        {
+            for (std::size_t b = 0; b < kGamepadButtonCount; ++b)
+            {
+                held[b] = static_cast<unsigned char>(
+                    held[b] | (state.buttons[b] == GLFW_PRESS ? 1 : 0));
+            }
+        }
+    }
+    return held;
+}
+
 /// @brief Minimal ImGuiKey → GLFW_KEY_* mapping for rebind capture.
 ///
 /// Covers letters, digits, F-row, arrows, modifiers, and a few
@@ -567,6 +589,8 @@ void SettingsEditorPanel::drawControlsTab()
                 {
                     m_captureActionId = a.id;
                     m_captureSlot     = slot;
+                    m_gamepadSeen     = false;
+                    m_rebindNote.clear();
                     ImGui::OpenPopup("##rebind_modal");
                 }
             };
@@ -587,8 +611,14 @@ void SettingsEditorPanel::drawControlsTab()
             ImGui::EndTable();
         }
         ImGui::TextDisabled(
-            "Click a binding cell to rebind it. Esc cancels; "
-            "any other key overwrites the slot.");
+            "Click a binding cell to rebind it. Esc cancels; Delete clears. "
+            "Keyboard and mouse slots take a key or button; the Gamepad "
+            "slot takes a gamepad button.");
+        if (!m_rebindNote.empty())
+        {
+            ImGui::TextColored(ImVec4(1.0f, 0.6f, 0.0f, 1.0f), "%s",
+                               m_rebindNote.c_str());
+        }
 
         // Modal renders outside the table so ImGui's popup stack is
         // happy. The modal runs every frame while capturing; a
@@ -890,9 +920,12 @@ void SettingsEditorPanel::drawRebindModal()
                                                 : "Gamepad";
     ImGui::Text("Slot: %s", slotName);
     ImGui::Separator();
-    ImGui::TextWrapped(
-        "Press any key or mouse button to bind. Esc to cancel. "
-        "Delete to clear the slot.");
+    ImGui::TextWrapped("%s",
+        m_captureSlot == SlotIndex::Gamepad
+            ? "Press a gamepad button to bind. Esc to cancel. "
+              "Delete to clear the slot."
+            : "Press any key or mouse button to bind. Esc to cancel. "
+              "Delete to clear the slot.");
 
     bool finished = false;
 
@@ -926,30 +959,50 @@ void SettingsEditorPanel::drawRebindModal()
     }
     else
     {
-        // Mouse capture — left / right / middle.
         InputBinding captured = InputBinding::none();
-        if      (ImGui::IsMouseClicked(0)) captured = InputBinding::mouse(GLFW_MOUSE_BUTTON_LEFT);
-        else if (ImGui::IsMouseClicked(1)) captured = InputBinding::mouse(GLFW_MOUSE_BUTTON_RIGHT);
-        else if (ImGui::IsMouseClicked(2)) captured = InputBinding::mouse(GLFW_MOUSE_BUTTON_MIDDLE);
-
-        if (!captured.isBound())
+        if (m_captureSlot == SlotIndex::Gamepad)
         {
-            // Keyboard capture — first supported key just pressed.
-            // I1: convert the ImGui-derived keycode to a platform scancode
-            // so the saved binding is layout-independent. If GLFW has no
-            // scancode for this keycode (rare; e.g. device-disconnected
-            // edge case), drop the capture rather than persisting an
-            // unbound entry.
-            const ImGuiKey k = firstJustPressedKey();
-            if (k != ImGuiKey_None)
+            // Gamepad slot: a gamepad button pressed after the modal
+            // opened. The first frame only records what is held.
+            const GamepadButtons now = pollGamepadButtons();
+            if (m_gamepadSeen)
             {
-                const int glfwCode = imguiKeyToGlfwKey(k);
-                if (glfwCode >= 0)
+                const int button = firstNewlyPressedGamepadButton(
+                    m_gamepadButtonsBefore, now);
+                if (button >= 0)
                 {
-                    const int sc = glfwGetKeyScancode(glfwCode);
-                    if (sc >= 0)
+                    captured = InputBinding::gamepad(button);
+                }
+            }
+            m_gamepadButtonsBefore = now;
+            m_gamepadSeen = true;
+        }
+        else
+        {
+            // Mouse capture — left / right / middle.
+            if      (ImGui::IsMouseClicked(0)) captured = InputBinding::mouse(GLFW_MOUSE_BUTTON_LEFT);
+            else if (ImGui::IsMouseClicked(1)) captured = InputBinding::mouse(GLFW_MOUSE_BUTTON_RIGHT);
+            else if (ImGui::IsMouseClicked(2)) captured = InputBinding::mouse(GLFW_MOUSE_BUTTON_MIDDLE);
+
+            if (!captured.isBound())
+            {
+                // Keyboard capture — first supported key just pressed.
+                // I1: convert the ImGui-derived keycode to a platform scancode
+                // so the saved binding is layout-independent. If GLFW has no
+                // scancode for this keycode (rare; e.g. device-disconnected
+                // edge case), drop the capture rather than persisting an
+                // unbound entry.
+                const ImGuiKey k = firstJustPressedKey();
+                if (k != ImGuiKey_None)
+                {
+                    const int glfwCode = imguiKeyToGlfwKey(k);
+                    if (glfwCode >= 0)
                     {
-                        captured = InputBinding::scancode(sc);
+                        const int sc = glfwGetKeyScancode(glfwCode);
+                        if (sc >= 0)
+                        {
+                            captured = InputBinding::scancode(sc);
+                        }
                     }
                 }
             }
@@ -962,11 +1015,18 @@ void SettingsEditorPanel::drawRebindModal()
             // Conflict display — show names of actions already using
             // this binding. We don't block assignment; the user can
             // intentionally double-bind a control (rare but valid).
+            // The modal closes this frame, so the note is kept and drawn
+            // under the bindings table (3D_E-0867).
             const auto conflicts = m_inputMap->findConflicts(captured, id);
             if (!conflicts.empty())
             {
-                ImGui::TextColored(ImVec4(1.0f, 0.6f, 0.0f, 1.0f),
-                    "Note: this binding is also assigned to other actions.");
+                std::string others;
+                for (const std::string& other : conflicts)
+                {
+                    others += (others.empty() ? "" : ", ") + other;
+                }
+                m_rebindNote = "Note: " + id + " now shares this binding with "
+                             + others + ".";
             }
             switch (slot)
             {
@@ -1026,6 +1086,19 @@ void SettingsEditorPanel::drawFooter()
         }
     }
     ImGui::EndDisabled();
+}
+
+int firstNewlyPressedGamepadButton(const GamepadButtons& before,
+                                   const GamepadButtons& now)
+{
+    for (std::size_t b = 0; b < kGamepadButtonCount; ++b)
+    {
+        if (now[b] && !before[b])
+        {
+            return static_cast<int>(b);
+        }
+    }
+    return -1;
 }
 
 } // namespace Vestige

@@ -2832,6 +2832,25 @@ TEST(SettingsEditor, MutateClampsStrobeHzBeforePushingToSink_F8)
 // `SettingsEditorPanel::SAFE_MODE_STROBE_HZ_SLIDER_MAX` so the .cpp
 // slider bound and this test share one source of truth.
 
+// 3D_E-0867: the gamepad slot takes a button pressed after capture
+// begins, never one already held, and the lowest of several at once.
+TEST(SettingsEditorPanel, GamepadCaptureTakesANewlyPressedButton)
+{
+    GamepadButtons before{};
+    GamepadButtons now{};
+    EXPECT_EQ(firstNewlyPressedGamepadButton(before, now), -1);
+
+    now[3] = 1;
+    EXPECT_EQ(firstNewlyPressedGamepadButton(before, now), 3);
+
+    before[3] = 1;  // held since before: not a new press
+    EXPECT_EQ(firstNewlyPressedGamepadButton(before, now), -1);
+
+    now[7] = 1;
+    now[5] = 1;
+    EXPECT_EQ(firstNewlyPressedGamepadButton(before, now), 5);
+}
+
 TEST(SettingsEditorPanel, SafeModeStrobeSliderMaxEqualsWcagCeiling_F11)
 {
     EXPECT_FLOAT_EQ(SettingsEditorPanel::SAFE_MODE_STROBE_HZ_SLIDER_MAX,

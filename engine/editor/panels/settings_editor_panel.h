@@ -20,6 +20,7 @@
 
 #include "accessibility/photosensitive_safety.h"
 
+#include <array>
 #include <filesystem>
 #include <string>
 
@@ -28,6 +29,16 @@ namespace Vestige
 
 class SettingsEditor;
 class InputActionMap;
+
+/// Buttons GLFW reports per gamepad (GLFW_GAMEPAD_BUTTON_LAST + 1).
+constexpr std::size_t kGamepadButtonCount = 15;
+using GamepadButtons = std::array<unsigned char, kGamepadButtonCount>;
+
+/// @brief The lowest-numbered gamepad button down in @a now that was up
+///        in @a before, or -1. A button already held when capture began
+///        is never taken (3D_E-0867).
+int firstNewlyPressedGamepadButton(const GamepadButtons& before,
+                                   const GamepadButtons& now);
 
 class SettingsEditorPanel
 {
@@ -120,6 +131,12 @@ private:
     // Rebind capture state — empty id = not capturing.
     std::string             m_captureActionId;
     SlotIndex               m_captureSlot  = SlotIndex::Primary;
+    /// Gamepad buttons seen last frame while capturing a gamepad slot.
+    GamepadButtons          m_gamepadButtonsBefore{};
+    bool                    m_gamepadSeen  = false;  ///< first frame not yet polled
+    /// Conflict note from the last rebind, shown under the bindings table
+    /// until the next capture starts (3D_E-0867).
+    std::string             m_rebindNote;
 };
 
 } // namespace Vestige
