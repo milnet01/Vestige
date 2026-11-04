@@ -6201,6 +6201,11 @@ shipped that have no invocation path at all.
   GPU adds only two timestamp queries per frame. Follow-ups: 3D_E-0820,
   3D_E-0821, 3D_E-0822. FPS floor not read for this change: the GPU was
   82% busy from other work.
+  2026-11-04: frameledger v0.2.0 released (compare with mem measures,
+  bisect with depth skips and skip_reason, budget, report pacing).
+  Promised frameledger: Vestige's bisect driver tallies skip_reason
+  and prints depth skips apart from the rest; run report's pacing
+  figure and survey on the first real run files.
   **Layman:** The frame-rate check smooths over about five seconds at a time, so a single stutter never shows.
   Kind: fix.
   Source: ut-ants-review-2026-10-24.
@@ -6688,6 +6693,9 @@ shipped that have no invocation path at all.
   process's own VRAM instead; DRM fdinfo per-process figures are the first
   thing to try, untested. Blocks retiring tools/perf_gate.py for
   frameledger compare, which fails at 3 percent (FLED-0018).
+  2026-11-04: frameledger v0.2.0 is the first release whose compare
+  judges mem measures: the version to pin once gpu_mb measures this
+  process alone, so perf_gate.py can retire.
   **Layman:** The memory figure counts other programs too, so a browser tab can look like the engine using more memory.
   Kind: fix.
   Source: 3D_E-0786 first run file 2026-10-31.
@@ -7084,7 +7092,11 @@ shipped that have no invocation path at all.
   Source: review-readability 2026-10-31 at 7b2a81d.
   Lanes: scripting.
 
-- 📋 [3D_E-0863] **importCsv and loadCsvDataset disagree on bad and extra cells.**
+- ✅ [3D_E-0863] **importCsv and loadCsvDataset disagree on bad and extra cells.**
+  2026-11-04 fixed (bbeec5c): importCsv reads through loadCsvDataset.
+  Rule: header decides columns, extra cells ignored, bad or short rows
+  skipped and counted. Tests ExtraCellsUseHeaderColumns, CountsSkippedRows;
+  two mutations red.
   **Layman:** Two ways of loading the same data file can give different results.
   Kind: fix.
   Source: review-readability 2026-10-31 at 7b2a81d.
