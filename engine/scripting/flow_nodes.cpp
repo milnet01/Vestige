@@ -24,10 +24,10 @@ namespace
 /// @brief Safety cap for WhileLoop iteration to prevent runaway scripts.
 /// 10,000 lets legitimate bounded loops (e.g. iterating through entities in
 /// a scene) run comfortably while terminating infinite conditions in milliseconds.
-/// A second limit applies first: ScriptContext::MAX_NODES_PER_CHAIN (1000)
-/// stops executeNode for the whole chain, so past about 1000 executed nodes
-/// the Body nodes and the node wired to Completed are skipped with only a log
-/// error, and the loop's own cap is never reached.
+/// ScriptContext::MAX_NODES_PER_CHAIN (100,000) bounds the whole chain. It is
+/// ten times this cap, so a loop running up to about nine nodes an iteration
+/// reaches this cap first; a heavier loop hits the chain limit, which skips
+/// the remaining Body nodes and the node wired to Completed with a log error.
 /// The cap is hit silently with a warning in the logs — consider expanding to
 /// a dedicated "Aborted" output pin if designers ask for in-graph visibility.
 constexpr int MAX_WHILE_ITERATIONS = 10000;
@@ -35,7 +35,7 @@ constexpr int MAX_WHILE_ITERATIONS = 10000;
 /// @brief Safety cap for ForLoop iteration count. Same reasoning as
 /// MAX_WHILE_ITERATIONS; surfaces through the node's "Clamped" output pin
 /// so designers can branch on the truncation (audit M3). The chain limit
-/// MAX_NODES_PER_CHAIN (1000) applies first, as described above.
+/// MAX_NODES_PER_CHAIN applies as described above.
 constexpr int MAX_FOR_ITERATIONS = 10000;
 
 /// @brief Get the mutable runtime state map for a node. Keyed by PinId

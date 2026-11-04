@@ -490,6 +490,50 @@ TEST_F(NodeLibraryTest, WhileLoopReevaluatesPureCondition)
     ASSERT_NE(inst, nullptr);
     EXPECT_FALSE(inst->outputValues[internPin("Clamped")].asBool());
 }
+
+// 3D_E-0862: a loop well inside its own iteration cap must finish and
+// run Completed. 2000 iterations here execute about 10000 nodes (the
+// Body's SetVariable plus the pure nodes it and the Condition read).
+TEST_F(NodeLibraryTest, LongWhileLoopFinishesAndRunsCompleted)
+{
+    ScriptGraph graph;
+    graph.variables.push_back({"i", ScriptDataType::INT,
+                               ScriptValue(0), VariableScope::GRAPH});
+    graph.variables.push_back({"done", ScriptDataType::INT,
+                               ScriptValue(0), VariableScope::GRAPH});
+
+    uint32_t loop = graph.addNode("WhileLoop");
+    uint32_t readForCompare = graph.addNode("GetVariable");
+    uint32_t less = graph.addNode("CompareLess");
+    uint32_t readForAdd = graph.addNode("GetVariable");
+    uint32_t add = graph.addNode("MathAdd");
+    uint32_t write = graph.addNode("SetVariable");
+    uint32_t markDone = graph.addNode("SetVariable");
+
+    graph.findNode(readForCompare)->properties["Name"] = ScriptValue(std::string("i"));
+    graph.findNode(readForAdd)->properties["Name"] = ScriptValue(std::string("i"));
+    graph.findNode(less)->properties["B"] = ScriptValue(2000.0f);
+    graph.findNode(add)->properties["B"] = ScriptValue(1.0f);
+    graph.findNode(write)->properties["Name"] = ScriptValue(std::string("i"));
+    graph.findNode(markDone)->properties["Name"] = ScriptValue(std::string("done"));
+    graph.findNode(markDone)->properties["Value"] = ScriptValue(1);
+
+    graph.addConnection(readForCompare, "Value", less, "A");
+    graph.addConnection(less, "Result", loop, "Condition");
+    graph.addConnection(readForAdd, "Value", add, "A");
+    graph.addConnection(add, "Result", write, "Value");
+    graph.addConnection(loop, "Body", write, "Exec");
+    graph.addConnection(loop, "Completed", markDone, "Exec");
+
+    ScriptInstance instance;
+    instance.initialize(graph, 1);
+    ScriptContext ctx(instance, m_registry, nullptr);
+    ctx.executeNode(loop);
+
+    EXPECT_FLOAT_EQ(instance.graphBlackboard().get("i").asFloat(), 2000.0f);
+    EXPECT_EQ(instance.graphBlackboard().get("done").asInt(), 1);
+}
+
 TEST_F(NodeLibraryTest, ForLoopIteratesExpectedTimes)
 {
     ScriptGraph graph;

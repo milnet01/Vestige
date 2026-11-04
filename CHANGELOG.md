@@ -25,6 +25,14 @@ may change any interface without notice.
 
 ## [Unreleased]
 
+### 2026-11-04 Fixed — Long script loops finish and run what follows them
+
+A script chain stopped after 1,000 nodes, so a loop of a few hundred
+turns was cut off part way and the node wired to Completed never ran.
+The chain limit is now 100,000, ten times the loops' own 10,000-turn
+caps, so a loop running up to about nine nodes a turn reaches its own
+cap first. (3D_E-0862)
+
 ### 2026-11-04 Fixed — Script While loops re-check their condition each time round
 
 A While Loop whose condition came through a maths or compare node kept

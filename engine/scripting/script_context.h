@@ -150,11 +150,12 @@ public:
     /// ScriptInstance::MAX_EVENT_REENTRY_DEPTH for cross-dispatch bounds).
     static constexpr int MAX_CALL_DEPTH = 256;
 
-    /// @brief Maximum total nodes executed within a single chain. Guards
-    /// against runaway non-recursive patterns (e.g., a 10,000-step sequence).
-    /// 1000 covers typical gameplay logic; values well beyond that typically
-    /// indicate a design problem worth surfacing.
-    static constexpr int MAX_NODES_PER_CHAIN = 1000;
+    /// @brief Maximum total nodes executed within a single chain, pure nodes
+    /// included. Guards against runaway non-recursive patterns. Ten times the
+    /// loop nodes' 10,000-iteration caps, so a loop whose Body and Condition
+    /// run up to about nine nodes an iteration reaches its own cap first and
+    /// still runs Completed (3D_E-0862).
+    static constexpr int MAX_NODES_PER_CHAIN = 100000;
 
 private:
     /// @brief Find the connection feeding a node's input pin.

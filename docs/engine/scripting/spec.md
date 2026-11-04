@@ -214,7 +214,7 @@ class ScriptContext
     void scheduleDelay(const ScriptNodeInstance&, const std::string& outPin, float seconds);
     void scheduleWaitForCondition(const ScriptNodeInstance&, const std::string&, std::function<bool()>);
     static constexpr int MAX_CALL_DEPTH = 256;
-    static constexpr int MAX_NODES_PER_CHAIN = 1000;
+    static constexpr int MAX_NODES_PER_CHAIN = 100000;
 };
 ```
 
@@ -253,7 +253,7 @@ const char* gameplayTemplateDisplayName(GameplayTemplate);
 - `ScriptContext`'s `engine` parameter is **nullable** — unit tests that exercise the interpreter without a full engine pass `nullptr`. Nodes that need engine access must check before deref (`ctx.engine() != nullptr`). The previous reference-typed signature forced tests into a `reinterpret_cast<Engine*>(&nullptr)` Undefined Behaviour (UB) hack — audit H5 fixed it.
 - Pure-node outputs are memoised inside one `ScriptContext` lifetime (audit M11) — the same `(nodeId, pinId)` runs once until the next impure node runs, which empties the cache because it may change what pure nodes read (3D_E-0861). **Opt-out** via `NodeTypeDescriptor::memoizable = false` for nodes that read mutable state mid-chain (`GetVariable`, `FindEntityByName`); leaving the default `true` for those caused `WhileLoop.Condition` to freeze (audit H7/H8).
 - `ScriptContext::triggerOutput` follows **all** matching connections (Phase 10.9 Sc1 — `forEachOutputConnection` semantics) — execution-pin fan-out is a deliberate template pattern (`DoOnce.Then → PlayAnimation + PlaySound`). Compiler pass 6 forbids duplicate **input** connections, not output fan-out.
-- `EventBus` re-entry into the same instance is capped at `ScriptInstance::MAX_EVENT_REENTRY_DEPTH = 4`; per-chain depth is capped at `ScriptContext::MAX_CALL_DEPTH = 256` and total nodes at `MAX_NODES_PER_CHAIN = 1000`. Latent / new-dispatch chains start a fresh `ScriptContext` so the per-context counters reset.
+- `EventBus` re-entry into the same instance is capped at `ScriptInstance::MAX_EVENT_REENTRY_DEPTH = 4`; per-chain depth is capped at `ScriptContext::MAX_CALL_DEPTH = 256` and total nodes, pure ones included, at `MAX_NODES_PER_CHAIN = 100000`: ten times the 10,000-iteration caps of `ForLoop` and `WhileLoop`, so a loop running up to about nine nodes an iteration reaches its own cap first and still runs `Completed` (3D_E-0862). Latent / new-dispatch chains start a fresh `ScriptContext` so the per-context counters reset.
 - `ScriptValue` single-arg constructors are **explicit** (audit M12) — no implicit float-to-pin coercion at call sites; the variant only enters via deliberate `ScriptValue(x)` calls.
 - `ScriptGraph` deserialisation enforces hard caps (`MAX_NODES = 10'000`, etc.) so a crafted `.vscript` can't exhaust memory (Phase 9E audit C1/H6/H7).
 - `Blackboard` insertions are **capped at 1024 keys per scope** — once full, new keys are rejected; updates to existing keys still succeed.
@@ -291,7 +291,7 @@ const char* gameplayTemplateDisplayName(GameplayTemplate);
 
 1. `ScriptingSystem::shutdown` calls `unregisterInstance` for all remaining instances, clears `m_activeInstances`, clears the registry, resets blackboards. Engine pointer nulled. Safe to `initialize()` again.
 
-**Exception path:** none; the compiler returns a `CompilationResult` with diagnostics rather than throwing, the runtime guards the EXECUTION caps (`MAX_CALL_DEPTH`, `MAX_NODES_PER_CHAIN`, `MAX_EVENT_REENTRY_DEPTH`) with a `Logger::warning` + early return — **but not the blackboard `MAX_KEYS` cap, whose insertion is rejected SILENTLY (§10)**, which is why §10's designer recourse has no log line to start from, and EventBus subscribers must not throw (per `engine/core` policy — propagates to publisher otherwise).
+**Exception path:** none; the compiler returns a `CompilationResult` with diagnostics rather than throwing, the runtime guards the EXECUTION caps (`MAX_CALL_DEPTH` and `MAX_NODES_PER_CHAIN` with a `Logger::error`, `MAX_EVENT_REENTRY_DEPTH` with a `Logger::warning`) + early return — **but not the blackboard `MAX_KEYS` cap, whose insertion is rejected SILENTLY (§10)**, which is why §10's designer recourse has no log line to start from, and EventBus subscribers must not throw (per `engine/core` policy — propagates to publisher otherwise).
 
 ## 6. CPU / GPU placement
 
@@ -356,8 +356,8 @@ Per CODING_STANDARDS §11 — no exceptions in steady-state. Scripting is a runt
 | Pure-data cycle | `CompileDiagnostic` ERROR (compiler pass 7). Execution cycles are allowed (loops + re-triggers are legitimate); only **pure-data** edges may not cycle. | Same. |
 | Graph with no entry points | `CompileDiagnostic::WARNING` (compiler pass 8). The graph compiles but never fires — interpreted as a library / helper graph. | Designer can ignore or wire an entry. |
 | Unreachable impure node | `CompileDiagnostic::WARNING` (compiler pass 9). | Designer notice; runtime ignores it. |
-| Runtime call-depth exceeded (`MAX_CALL_DEPTH = 256`) | `Logger::warning`, chain aborts (no throw). | Designer simplifies the graph. |
-| Runtime nodes-per-chain exceeded (`MAX_NODES_PER_CHAIN = 1000`) | `Logger::warning`, chain aborts. | Same. |
+| Runtime call-depth exceeded (`MAX_CALL_DEPTH = 256`) | `Logger::error`, chain aborts (no throw). | Designer simplifies the graph. |
+| Runtime nodes-per-chain exceeded (`MAX_NODES_PER_CHAIN = 100000`) | `Logger::error`, chain aborts. | Same. |
 | EventBus re-entry exceeded (`MAX_EVENT_REENTRY_DEPTH = 4`) | `Logger::warning`, dispatch dropped. | Designer breaks the publish-loop. |
 | Blackboard cap exceeded (`MAX_KEYS = 1024`) | Insertion silently rejected, updates still succeed. | Designer audits variable usage. |
 | Use-after-free of `ScriptInstance` from latent / event callback | Guarded by `ScriptingSystem::isInstanceActive(ptr, generation)`. Mismatch → callback no-op. | None — guard is invisible. (Audit H9.) |
