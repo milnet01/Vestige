@@ -104,10 +104,13 @@ TEST_F(TextureUploadTest, PngInMemoryWithUnalignedRowsReadsBackIntact)
 {
     const auto src = sourcePixels();
     const std::string path = writePng(src);
-    std::ifstream file(path, std::ios::binary);
-    ASSERT_TRUE(file.good());
-    const std::vector<unsigned char> bytes((std::istreambuf_iterator<char>(file)),
-                                           std::istreambuf_iterator<char>());
+    std::vector<unsigned char> bytes;
+    {
+        // Closed before the remove below: Windows refuses to delete an open file.
+        std::ifstream file(path, std::ios::binary);
+        ASSERT_TRUE(file.good());
+        bytes.assign(std::istreambuf_iterator<char>(file), std::istreambuf_iterator<char>());
+    }
     Texture texture;
     ASSERT_TRUE(texture.loadFromMemory(bytes.data(), bytes.size(), /*linear=*/true));
     EXPECT_EQ(readBack(texture), flippedRows(src));
