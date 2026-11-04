@@ -7194,6 +7194,17 @@ shipped that have no invocation path at all.
 
 - 📋 [3D_E-0870] **Shared helpers for duplicated renderer code.**
   Lighting uniforms across four renderers (terrain_renderer.cpp), texture upload (texture.cpp), and capture code (environment_map.cpp vs light_probe.cpp, whose far planes differ).
+  2026-11-04: parts 1-2 done. d50f82b:
+  directional_shadow_uniforms.{h,cpp} for the four renderers; terrain no
+  longer leaves its shadow or ground-material sampler2DArrays on unit 0
+  (Mesa GL_INVALID_OPERATION, red test). 2054543:
+  Texture::createAndUpload for the four load paths; skybox half already
+  fixed at HEAD. Part 3 left: environment_map.cpp vs light_probe.cpp
+  share cube vertices, CAPTURE_VIEWS and the irradiance pass; move them
+  beside runIblPrefilterLoop in ibl_prefilter.h. Far plane 10 vs 100:
+  the cube's corners are at sqrt(3), so either captures it; pick one and
+  say why. The probe checks FBO completeness, the env map does not: the
+  shared pass should.
   **Layman:** Several copied rendering blocks should become one each.
   Kind: refactor.
   Source: review-readability 2026-10-31 at 7b2a81d.
