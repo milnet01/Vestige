@@ -7087,6 +7087,13 @@ shipped that have no invocation path at all.
 
 - 📋 [3D_E-0862] **Script chain node limit stops a loop before its iteration cap.**
   MAX_NODES_PER_CHAIN and the WhileLoop iteration cap disagree.
+  2026-11-04 decided, not built: raise ScriptContext::MAX_NODES_PER_CHAIN
+  1000 -> 100000 (ten times the loops' 10000 caps; pure nodes count),
+  no loop-side budget check. Amend docs/engine/scripting/spec.md (the
+  constant, the caps bullet, the failure-table rows, which also say
+  Logger::warning where the code logs error). Draft:
+  Vestige_private/apply_0862.py <repo> + 0862-test.cpp (red: i stops near
+  200, done 0). Apply only to a clean tree; dry-run first.
   **Layman:** Long script loops stop early and skip what follows them.
   Kind: fix.
   Source: review-readability 2026-10-31 at 7b2a81d.
@@ -7104,6 +7111,9 @@ shipped that have no invocation path at all.
 
 - 📋 [3D_E-0864] **Audit build-output cap must keep the end of the output.**
   run_shell_cmd is uncapped; tier1_build.py reads the tail, so the cap needs head and tail.
+  2026-11-04 drafted, not built: _capped keeps the first and last halves
+  of the cap with a 'characters cut' line; run_shell_cmd caps too.
+  Draft with two pytest tests: Vestige_private/apply_0864.py <repo>.
   **Layman:** The audit tool's output limit must not cut off the test summary it reads.
   Kind: fix.
   Source: review-readability 2026-10-31 at 7b2a81d.
@@ -7111,6 +7121,10 @@ shipped that have no invocation path at all.
 
 - 📋 [3D_E-0865] **Settings editor re-applies the window mode on every change.**
   settings_editor.cpp pushPendingToSinks needs change detection.
+  2026-11-04 drafted, not built: send the video mode only when
+  (width, height, fullscreen, vsync) changes; forceLiveApply always
+  sends. Draft + test VideoModeIsSentOnlyWhenItChanges:
+  Vestige_private/apply_0865.py <repo>. Apply before 0866 and 0867.
   **Layman:** Changing any setting can make the window flicker or resize.
   Kind: fix.
   Source: review-readability 2026-10-31 at 7b2a81d.
@@ -7118,6 +7132,12 @@ shipped that have no invocation path at all.
 
 - 📋 [3D_E-0866] **Reverting settings can leave a rebound key in place.**
   settings_editor.cpp; decide whether rebinds are revertible.
+  2026-11-04 decided: rebinds ARE revertible (Revert discards all unsaved
+  changes, as the editor's header says). Draft: the editor snapshots
+  the input map at construction and on a successful apply; revert()
+  restores it before pushing. Tests RevertUndoesARebind,
+  RevertAfterApplyKeepsTheAppliedRebind: Vestige_private/apply_0866.py
+  <repo>, after 0865's.
   **Layman:** Cancel may not undo a key rebind.
   Kind: fix.
   Source: review-readability 2026-10-31 at 7b2a81d.
@@ -7125,6 +7145,13 @@ shipped that have no invocation path at all.
 
 - 📋 [3D_E-0867] **Settings panel note and gamepad rebinding gaps.**
   settings_editor_panel.cpp: where the note shows, and a gamepad capture design.
+  2026-11-04 decided, drafted: the conflict note is kept and drawn under
+  the bindings table (names the other actions) until the next capture;
+  the Gamepad slot takes only a gamepad button pressed after the modal
+  opens (firstNewlyPressedGamepadButton, tested). Draft:
+  Vestige_private/apply_0867.py <repo>, after 0866's; re-indent the
+  nested keyboard/mouse block it wraps. ImGui path untestable headless:
+  try by hand.
   **Layman:** A note disappears as it appears, and gamepad buttons cannot be rebound with a gamepad.
   Kind: fix.
   Source: review-readability 2026-10-31 at 7b2a81d.
@@ -7192,6 +7219,9 @@ shipped that have no invocation path at all.
   scenes look right. Also check the CPU lambda reads its normal speed
   before the inward component is zeroed (the GPU one takes it as a
   parameter for that reason).
+  2026-11-04 not started. CPU friction sites: cloth_simulator.cpp
+  applyFriction lambda and its five callers; GPU: cloth_collision.comp.glsl
+  three sites. The visual check needs a quiet GPU (read 99% busy today).
   **Layman:** Cloth slides over surfaces the same whatever friction is set to.
   Kind: fix.
   Source: 3D_E-0873 doc fix 2026-11-03 (review-readability 2026-10-31).
