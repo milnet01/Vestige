@@ -7192,7 +7192,7 @@ shipped that have no invocation path at all.
   Source: review-readability 2026-10-31 at 7b2a81d.
   Lanes: audio.
 
-- 📋 [3D_E-0870] **Shared helpers for duplicated renderer code.**
+- ✅ [3D_E-0870] **Shared helpers for duplicated renderer code.**
   Lighting uniforms across four renderers (terrain_renderer.cpp), texture upload (texture.cpp), and capture code (environment_map.cpp vs light_probe.cpp, whose far planes differ).
   2026-11-04: parts 1-2 done. d50f82b:
   directional_shadow_uniforms.{h,cpp} for the four renderers; terrain no
@@ -7205,20 +7205,32 @@ shipped that have no invocation path at all.
   the cube's corners are at sqrt(3), so either captures it; pick one and
   say why. The probe checks FBO completeness, the env map does not: the
   shared pass should.
+  2026-11-05: part 3 done (bfd28f8). ibl_prefilter.{h,cpp} now holds
+  the capture cube, face views, projection (far 10: corners at sqrt(3),
+  so both values captured the same image) and runIblFacePass, which
+  checks FBO completeness for every capture pass. Mutation-tested by
+  tests/test_ibl_face_pass.cpp. 1d68399 fixed part 2's test on Windows.
   **Layman:** Several copied rendering blocks should become one each.
   Kind: refactor.
   Source: review-readability 2026-10-31 at 7b2a81d.
   Lanes: renderer.
 
-- 📋 [3D_E-0871] **One material save and load, with a path policy as input.**
+- ✅ [3D_E-0871] **One material save and load, with a path policy as input.**
   material_library.cpp and entity_serializer.cpp.
+  2026-11-05: done. engine/utils/material_json.{h,cpp}; scenes now keep
+  subsurface fields (red test, CHANGELOG). Path rule passed in, unchanged:
+  scenes sandboxed, presets any path. Whether presets should be sandboxed
+  too is a separate question put to the user 2026-11-05.
   **Layman:** Material saving has two copies that have already drifted apart.
   Kind: refactor.
   Source: review-readability 2026-10-31 at 7b2a81d.
   Lanes: utils.
 
-- 📋 [3D_E-0872] **Inspector transform edits use the shared undo helpers.**
+- ✅ [3D_E-0872] **Inspector transform edits use the shared undo helpers.**
   inspector_panel.cpp drawTransform to EditTracker/DragUndo.
+  2026-11-05: done (d4eb537). drawVec3Control feeds an EditTracker,
+  drawTransform commits through DragUndo. Red test drives the real
+  InspectorPanel headlessly; CHANGELOG entry.
   **Layman:** The transform section keeps its own undo logic, which leaves an entry open after a click with no edit.
   Kind: refactor.
   Source: review-readability 2026-10-31 at 7b2a81d.
