@@ -1329,145 +1329,24 @@ void Workbench::importCsv(const std::string& path)
         return;
     }
 
-    std::ifstream file(path);
-    if (!file.is_open())
+    // One reader for both the GUI and benchmark mode (3D_E-0863), so a
+    // file gives the same data points either way.
+    std::string error;
+    size_t skippedRows = 0;
+    auto points = loadCsvDataset(path, error, &skippedRows);
+    if (!points)
     {
-        m_statusMessage = "Cannot open CSV file: " + path;
+        m_statusMessage = error;
         m_statusTimer = 3.0f;
         return;
     }
+    m_dataPoints.insert(m_dataPoints.end(), points->begin(), points->end());
 
-    // AUDIT.md §M11 / FIXPLAN: RFC 4180-aware line splitter. The prior
-    // getline(ss, cell, ',') broke on any Excel-exported CSV with quoted
-    // fields (e.g. `"1,234.56",5.0` would split into three cells). Now
-    // `"a, b"` is a single cell and `""` inside quotes is an escaped quote.
-    // Embedded newlines inside quoted fields are NOT supported — flagged
-    // as out-of-scope here; the import will still produce a short row and
-    // the row-length mismatch guard below will drop it.
-    auto splitCsvLine = [](const std::string& line) -> std::vector<std::string>
-    {
-        std::vector<std::string> out;
-        std::string cell;
-        bool inQuotes = false;
-        for (size_t i = 0; i < line.size(); ++i)
-        {
-            char c = line[i];
-            if (inQuotes)
-            {
-                if (c == '"')
-                {
-                    // RFC 4180: `""` inside a quoted field is a literal ".
-                    if (i + 1 < line.size() && line[i + 1] == '"')
-                    {
-                        cell.push_back('"');
-                        ++i;
-                    }
-                    else
-                    {
-                        inQuotes = false;
-                    }
-                }
-                else
-                {
-                    cell.push_back(c);
-                }
-            }
-            else
-            {
-                if (c == '"' && cell.empty())
-                {
-                    inQuotes = true;
-                }
-                else if (c == ',')
-                {
-                    out.push_back(std::move(cell));
-                    cell.clear();
-                }
-                else
-                {
-                    cell.push_back(c);
-                }
-            }
-        }
-        out.push_back(std::move(cell));
-        return out;
-    };
-
-    auto trim = [](std::string& s)
-    {
-        auto firstNonWs = s.find_first_not_of(" \t\r\n");
-        if (firstNonWs == std::string::npos) { s.clear(); return; }
-        s.erase(0, firstNonWs);
-        auto lastNonWs = s.find_last_not_of(" \t\r\n");
-        if (lastNonWs != std::string::npos)
-            s.erase(lastNonWs + 1);
-    };
-
-    // Read header line
-    std::string headerLine;
-    if (!std::getline(file, headerLine))
-    {
-        m_statusMessage = "CSV file is empty.";
-        m_statusTimer = 3.0f;
-        return;
-    }
-
-    // Parse headers (RFC 4180-aware)
-    std::vector<std::string> headers = splitCsvLine(headerLine);
-    for (auto& h : headers) trim(h);
-
-    if (headers.size() < 2)
-    {
-        m_statusMessage = "CSV must have at least 2 columns.";
-        m_statusTimer = 3.0f;
-        return;
-    }
-
-    // Last column is observed value; rest are variables
-    size_t imported = 0;
-    int badCells = 0;
-    std::string line;
-    while (std::getline(file, line))
-    {
-        if (line.empty())
-            continue;
-
-        std::vector<std::string> cells = splitCsvLine(line);
-        std::vector<float> values;
-        values.reserve(cells.size());
-        for (auto& cell : cells)
-        {
-            trim(cell);
-            try
-            {
-                values.push_back(std::stof(cell));
-            }
-            catch (const std::invalid_argument&)
-            {
-                values.push_back(0.0f);
-                ++badCells;
-            }
-            catch (const std::out_of_range&)
-            {
-                values.push_back(0.0f);
-                ++badCells;
-            }
-        }
-
-        if (values.size() < headers.size())
-            continue;
-
-        DataPoint dp;
-        for (size_t i = 0; i + 1 < headers.size(); ++i)
-            dp.variables[headers[i]] = values[i];
-        dp.observed = values[headers.size() - 1];
-        m_dataPoints.push_back(dp);
-        ++imported;
-    }
-
-    m_statusMessage = "Imported " + std::to_string(imported) + " data points from CSV.";
-    if (badCells > 0)
-        m_statusMessage = "Warning: " + std::to_string(badCells) + " cells could not be parsed (set to 0). " + m_statusMessage;
+    m_statusMessage = "Imported " + std::to_string(points->size()) + " data points from CSV.";
+    if (skippedRows > 0)
+        m_statusMessage = "Warning: skipped " + std::to_string(skippedRows)
+                        + " rows with a cell that is not a number or too few cells. "
+                        + m_statusMessage;
     m_statusTimer = 3.0f;
 
     // W6 — now that data is loaded, re-evaluate the history seed

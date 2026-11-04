@@ -4,6 +4,15 @@ All notable changes to the Formula Workbench are documented in this file.
 
 ## [Unreleased]
 
+### Fixed
+
+- **Importing a CSV in the window and in benchmark mode give the same
+  data (3D_E-0863).** Both now read files through `loadCsvDataset`. A
+  row with a cell that is not a number is skipped and counted in the
+  status line, where the window used to read the cell as 0. Cells past
+  the header's columns are ignored, where benchmark mode used to take
+  the row's last cell as the observed value.
+
 ### Added
 
 - **Specular lobe with roughness and F0 as inputs (3D_E-0813).** Four

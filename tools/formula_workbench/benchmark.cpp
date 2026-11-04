@@ -120,8 +120,12 @@ void trim(std::string& s)
 } // namespace
 
 std::optional<std::vector<DataPoint>>
-loadCsvDataset(const std::string& path, std::string& errorOut)
+loadCsvDataset(const std::string& path, std::string& errorOut, size_t* skippedRows)
 {
+    if (skippedRows)
+    {
+        *skippedRows = 0;
+    }
     std::ifstream file(path);
     if (!file.is_open())
     {
@@ -170,12 +174,19 @@ loadCsvDataset(const std::string& path, std::string& errorOut)
             }
         }
         if (!row_ok || values.size() < headers.size())
+        {
+            if (skippedRows)
+            {
+                ++*skippedRows;
+            }
             continue;
+        }
 
+        // Columns come from the header; cells past it are ignored.
         DataPoint dp;
         for (size_t i = 0; i + 1 < headers.size(); ++i)
             dp.variables[headers[i]] = values[i];
-        dp.observed = values.back();
+        dp.observed = values[headers.size() - 1];
         out.push_back(std::move(dp));
     }
 

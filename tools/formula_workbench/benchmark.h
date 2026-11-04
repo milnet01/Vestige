@@ -67,13 +67,16 @@ InformationCriteria computeAicBic(float rmse, int nPoints, int paramCount);
 
 /// @brief Parse an RFC-4180 CSV into a vector of DataPoint.
 ///
-/// First row is a header. Last column is the observed value; the
-/// rest are input variables. Returns ``std::nullopt`` on read / parse
-/// errors, with an error message in *errorOut*. A separate copy of the
-/// Workbench's ``importCsv`` so benchmark mode doesn't need the GUI; the
-/// two do not share code and differ on bad cells and extra cells.
+/// First row is a header. The header's last column is the observed
+/// value; the columns before it are input variables. A row with a cell
+/// that is not a number, or with fewer cells than the header, is
+/// skipped and counted in *skippedRows* when given. Cells past the
+/// header's columns are ignored. Returns ``std::nullopt`` on read
+/// errors or when no row is usable, with a message in *errorOut*.
+/// The Workbench's ``importCsv`` reads files through this too.
 std::optional<std::vector<DataPoint>>
-loadCsvDataset(const std::string& path, std::string& errorOut);
+loadCsvDataset(const std::string& path, std::string& errorOut,
+               size_t* skippedRows = nullptr);
 
 /// @brief Fit every library formula against the given data. Entries
 /// are sorted by AIC ascending. Formulas that can't be fit (no float

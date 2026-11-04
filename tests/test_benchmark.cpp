@@ -129,6 +129,37 @@ TEST(BenchmarkCsv, ParsesHeaderAndRows)
     std::filesystem::remove(path);
 }
 
+// 3D_E-0863: the header decides the columns. A row with extra cells
+// takes its observed value from the header's last column, not the row's.
+TEST(BenchmarkCsv, ExtraCellsUseHeaderColumns)
+{
+    const auto path = writeTempCsv("bench_extra.csv",
+                                   "x,y\n1.0,2.5,99.0\n");
+    std::string err;
+    size_t skipped = 7;
+    const auto data = loadCsvDataset(path, err, &skipped);
+    ASSERT_TRUE(data.has_value()) << err;
+    ASSERT_EQ(data->size(), 1u);
+    EXPECT_FLOAT_EQ((*data)[0].variables.at("x"), 1.0f);
+    EXPECT_FLOAT_EQ((*data)[0].observed, 2.5f);
+    EXPECT_EQ(skipped, 0u);
+    std::filesystem::remove(path);
+}
+
+// 3D_E-0863: bad and short rows are skipped and counted, never read as 0.
+TEST(BenchmarkCsv, CountsSkippedRows)
+{
+    const auto path = writeTempCsv("bench_skipped.csv",
+                                   "x,y\n1.0,2.5\n2.0,bad\n3.0\n4.0,9.0\n");
+    std::string err;
+    size_t skipped = 0;
+    const auto data = loadCsvDataset(path, err, &skipped);
+    ASSERT_TRUE(data.has_value()) << err;
+    EXPECT_EQ(data->size(), 2u);
+    EXPECT_EQ(skipped, 2u);
+    std::filesystem::remove(path);
+}
+
 TEST(BenchmarkCsv, SkipsNonNumericRowsButKeepsOthers)
 {
     const auto path = writeTempCsv("bench_mixed.csv",
