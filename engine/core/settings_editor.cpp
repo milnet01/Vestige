@@ -141,6 +141,7 @@ void SettingsEditor::restoreAllDefaults()
 
 void SettingsEditor::forceLiveApply()
 {
+    m_lastVideoMode.reset();  // send the video mode even if unchanged
     pushPendingToSinks();
 }
 
@@ -148,7 +149,13 @@ void SettingsEditor::pushPendingToSinks()
 {
     if (m_targets.display)
     {
-        applyDisplay(m_pending.display, *m_targets.display);
+        const DisplaySettings& d = m_pending.display;
+        const VideoMode mode{d.windowWidth, d.windowHeight, d.fullscreen, d.vsync};
+        if (!m_lastVideoMode || !(*m_lastVideoMode == mode))
+        {
+            applyDisplay(d, *m_targets.display);
+            m_lastVideoMode = mode;
+        }
     }
     if (m_targets.audio)
     {

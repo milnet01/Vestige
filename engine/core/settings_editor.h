@@ -35,6 +35,7 @@
 
 #include <filesystem>
 #include <functional>
+#include <optional>
 
 namespace Vestige
 {
@@ -126,7 +127,8 @@ public:
     /// @brief Discard pending edits: `m_pending` ← `m_applied`, and
     ///        re-push `m_applied` through every sink so subsystems
     ///        roll back from whatever live-preview state they were
-    ///        left in.
+    ///        left in. The display sink is called only when the
+    ///        video mode differs from the last one sent.
     void revert();
 
     /// @brief Reset one category of `m_pending` to struct defaults.
@@ -145,19 +147,37 @@ public:
     /// @brief Reset every category to struct defaults.
     void restoreAllDefaults();
 
-    /// @brief Re-push `m_pending` through every sink. Useful after
-    ///        construction if the caller wants the editor to drive
-    ///        subsystems from scratch rather than assuming they
-    ///        already reflect the starting Settings.
+    /// @brief Re-push `m_pending` through every sink, the video mode
+    ///        included even when unchanged. Useful after construction if
+    ///        the caller wants the editor to drive subsystems from scratch
+    ///        rather than assuming they already reflect the starting Settings.
     void forceLiveApply();
 
 private:
-    /// Push `m_pending` through every configured non-null sink.
+    /// The four values `applyDisplay` sends to the display sink.
+    struct VideoMode
+    {
+        int  width = 0;
+        int  height = 0;
+        bool fullscreen = false;
+        bool vsync = false;
+        bool operator==(const VideoMode& o) const
+        {
+            return width == o.width && height == o.height
+                && fullscreen == o.fullscreen && vsync == o.vsync;
+        }
+    };
+
+    /// Push `m_pending` through every configured non-null sink. The
+    /// display sink is called only when the video mode differs from the
+    /// last one sent, since setting it can resize or flash the window
+    /// (3D_E-0865).
     void pushPendingToSinks();
 
     Settings      m_applied;
     Settings      m_pending;
     ApplyTargets  m_targets;
+    std::optional<VideoMode> m_lastVideoMode;  ///< last mode sent; none yet
 };
 
 } // namespace Vestige

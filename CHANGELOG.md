@@ -25,6 +25,13 @@ may change any interface without notice.
 
 ## [Unreleased]
 
+### 2026-11-04 Fixed — Changing a setting no longer resets the window
+
+Every change in the Settings window, a volume slider included, sent the
+window size, fullscreen and vsync again, which can make the window
+flicker or resize. They are now sent only when one of the four
+changes. (3D_E-0865)
+
 ### 2026-11-04 Fixed — Long script loops finish and run what follows them
 
 A script chain stopped after 1,000 nodes, so a loop of a few hundred

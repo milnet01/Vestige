@@ -778,7 +778,8 @@ void applyLocalization(const LocalizationSettings& localization,
 
 /// @brief Production sink wrapping a live `LocalizationService`.
 ///
-/// `SettingsEditor` re-pushes every sink on every mutation, but
+/// `SettingsEditor` re-pushes every sink on every mutation (the display
+/// sink only when the video mode changed, 3D_E-0865), but
 /// `LocalizationService::setLanguage` reloads the JSON table and
 /// publishes a `LanguageChangedEvent` on each call. Forwarding
 /// unconditionally would re-fire that event (and trigger panel

@@ -2463,6 +2463,34 @@ TEST(SettingsEditor, MutatePushesLiveThroughEveryConfiguredSink)
     EXPECT_TRUE(ui.hc);
 }
 
+// 3D_E-0865: the video mode is sent only when it changes, since setting
+// it can resize or flash the window; forceLiveApply always sends it.
+TEST(SettingsEditor, VideoModeIsSentOnlyWhenItChanges)
+{
+    Record13_5Display display;
+    Record13_5Audio   audio;
+    SettingsEditor::ApplyTargets t{};
+    t.display = &display;
+    t.audio   = &audio;
+
+    SettingsEditor editor(Settings{}, t);
+    editor.forceLiveApply();
+    EXPECT_EQ(display.calls, 1);
+
+    editor.mutate([](Settings& p) { p.audio.busGains[3] = 0.33f; });
+    EXPECT_EQ(display.calls, 1);  // not a video-mode change
+
+    editor.mutate([](Settings& p) { p.display.windowWidth = 2560; });
+    EXPECT_EQ(display.calls, 2);
+    EXPECT_EQ(display.w, 2560);
+
+    editor.mutate([](Settings& p) { p.display.vsync = !p.display.vsync; });
+    EXPECT_EQ(display.calls, 3);
+
+    editor.forceLiveApply();
+    EXPECT_EQ(display.calls, 4);  // forced, though unchanged
+}
+
 TEST(SettingsEditor, ApplyCommitsPendingToAppliedAndPersists)
 {
     TmpDir tmp;
