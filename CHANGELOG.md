@@ -25,6 +25,14 @@ may change any interface without notice.
 
 ## [Unreleased]
 
+### 2026-11-05 Fixed — Transform reset buttons can be undone after a click on a field
+
+In the inspector's Transform section, clicking a Position, Rotation or
+Scale field without changing it left an undo step half-open. The next
+X, Y or Z reset button then could not be undone, and a later drag could
+undo to an old value. The section now records undo the way the other
+inspector sections do. (3D_E-0872)
+
 ### 2026-11-05 Fixed — Saved scenes keep a material's subsurface settings
 
 Subsurface strength, colour and thickness (light passing through wax,

@@ -56,19 +56,16 @@ static bool drawComponentHeader(const char* label, bool canRemove = false)
     return open;
 }
 
-/// @brief Return state from drawVec3Control for undo bracketing.
-struct Vec3EditState
+/// @brief Draws a vec3 with 3 coloured drag fields (red/green/blue labels),
+///        each with a reset button. @a tracker, when given, sees all six widgets.
+static void drawVec3Control(const char* label, glm::vec3& values,
+                            float resetValue = 0.0f, float speed = 0.1f,
+                            EditTracker* tracker = nullptr)
 {
-    bool changed = false;              ///< Any value was modified this frame.
-    bool dragActivated = false;        ///< A DragFloat started being edited.
-    bool dragDeactivatedAfterEdit = false; ///< A DragFloat finished editing with changes.
-};
-
-/// @brief Draws a vec3 with 3 coloured drag fields (red/green/blue labels).
-static Vec3EditState drawVec3Control(const char* label, glm::vec3& values,
-                                     float resetValue = 0.0f, float speed = 0.1f)
-{
-    Vec3EditState state;
+    const auto track = [tracker](bool changed)
+    {
+        if (tracker) tracker->track(changed);
+    };
 
     ImGui::PushID(label);
 
@@ -94,66 +91,52 @@ static Vec3EditState drawVec3Control(const char* label, glm::vec3& values,
     ImGui::PushStyleColor(ImGuiCol_Button,        ImVec4(0.7f, 0.15f, 0.15f, 1.0f));
     ImGui::PushStyleColor(ImGuiCol_ButtonHovered,  ImVec4(0.85f, 0.2f, 0.2f, 1.0f));
     ImGui::PushStyleColor(ImGuiCol_ButtonActive,   ImVec4(0.7f, 0.15f, 0.15f, 1.0f));
-    if (ImGui::Button("X", buttonSize))
+    const bool resetX = ImGui::Button("X", buttonSize);
+    if (resetX)
     {
         values.x = resetValue;
-        state.changed = true;
     }
+    track(resetX);
     ImGui::PopStyleColor(3);
     ImGui::SameLine();
     ImGui::SetNextItemWidth(perDragWidth);
-    if (ImGui::DragFloat("##X", &values.x, speed))
-    {
-        state.changed = true;
-    }
-    if (ImGui::IsItemActivated()) state.dragActivated = true;
-    if (ImGui::IsItemDeactivatedAfterEdit()) state.dragDeactivatedAfterEdit = true;
+    track(ImGui::DragFloat("##X", &values.x, speed));
     ImGui::SameLine();
 
     // --- Y (green) ---
     ImGui::PushStyleColor(ImGuiCol_Button,        ImVec4(0.15f, 0.6f, 0.15f, 1.0f));
     ImGui::PushStyleColor(ImGuiCol_ButtonHovered,  ImVec4(0.2f, 0.75f, 0.2f, 1.0f));
     ImGui::PushStyleColor(ImGuiCol_ButtonActive,   ImVec4(0.15f, 0.6f, 0.15f, 1.0f));
-    if (ImGui::Button("Y", buttonSize))
+    const bool resetY = ImGui::Button("Y", buttonSize);
+    if (resetY)
     {
         values.y = resetValue;
-        state.changed = true;
     }
+    track(resetY);
     ImGui::PopStyleColor(3);
     ImGui::SameLine();
     ImGui::SetNextItemWidth(perDragWidth);
-    if (ImGui::DragFloat("##Y", &values.y, speed))
-    {
-        state.changed = true;
-    }
-    if (ImGui::IsItemActivated()) state.dragActivated = true;
-    if (ImGui::IsItemDeactivatedAfterEdit()) state.dragDeactivatedAfterEdit = true;
+    track(ImGui::DragFloat("##Y", &values.y, speed));
     ImGui::SameLine();
 
     // --- Z (blue) ---
     ImGui::PushStyleColor(ImGuiCol_Button,        ImVec4(0.15f, 0.15f, 0.7f, 1.0f));
     ImGui::PushStyleColor(ImGuiCol_ButtonHovered,  ImVec4(0.2f, 0.2f, 0.85f, 1.0f));
     ImGui::PushStyleColor(ImGuiCol_ButtonActive,   ImVec4(0.15f, 0.15f, 0.7f, 1.0f));
-    if (ImGui::Button("Z", buttonSize))
+    const bool resetZ = ImGui::Button("Z", buttonSize);
+    if (resetZ)
     {
         values.z = resetValue;
-        state.changed = true;
     }
+    track(resetZ);
     ImGui::PopStyleColor(3);
     ImGui::SameLine();
     ImGui::SetNextItemWidth(std::max(20.0f, ImGui::GetContentRegionAvail().x));
-    if (ImGui::DragFloat("##Z", &values.z, speed))
-    {
-        state.changed = true;
-    }
-    if (ImGui::IsItemActivated()) state.dragActivated = true;
-    if (ImGui::IsItemDeactivatedAfterEdit()) state.dragDeactivatedAfterEdit = true;
+    track(ImGui::DragFloat("##Z", &values.z, speed));
 
     ImGui::PopStyleVar();
     ImGui::Columns(1);
     ImGui::PopID();
-
-    return state;
 }
 
 // ---------------------------------------------------------------------------
@@ -336,70 +319,23 @@ void InspectorPanel::drawTransform(Entity& entity)
         return;
     }
 
-    // Reset bracket if entity changed
-    if (entity.getId() != m_editEntityId)
+    const TransformValues start{entity.transform.position, entity.transform.rotation,
+                                entity.transform.scale};
+    EditTracker tracker;
+    drawVec3Control("Position", entity.transform.position, 0.0f, 0.05f, &tracker);
+    drawVec3Control("Rotation", entity.transform.rotation, 0.0f, 1.0f,  &tracker);
+    drawVec3Control("Scale",    entity.transform.scale,    1.0f, 0.02f, &tracker);
+
+    if (auto before = m_transformUndo.commitBefore(tracker, start, entity.getId()))
     {
-        m_transformEditActive = false;
-        m_editEntityId = entity.getId();
-    }
-
-    // Capture transform before any controls modify it
-    glm::vec3 prePos = entity.transform.position;
-    glm::vec3 preRot = entity.transform.rotation;
-    glm::vec3 preScale = entity.transform.scale;
-
-    auto posState = drawVec3Control("Position", entity.transform.position, 0.0f, 0.05f);
-    auto rotState = drawVec3Control("Rotation", entity.transform.rotation, 0.0f, 1.0f);
-    auto scaleState = drawVec3Control("Scale",  entity.transform.scale,    1.0f, 0.02f);
-
-    // Aggregate activation/deactivation across all 3 vec3 controls
-    bool anyActivated = posState.dragActivated
-                     || rotState.dragActivated
-                     || scaleState.dragActivated;
-    bool anyDeactivated = posState.dragDeactivatedAfterEdit
-                       || rotState.dragDeactivatedAfterEdit
-                       || scaleState.dragDeactivatedAfterEdit;
-
-    // --- End bracket first (handles rapid switch between fields) ---
-    if (anyDeactivated && m_transformEditActive)
-    {
-        m_transformEditActive = false;
-        bool changed = (entity.transform.position != m_editOldPos)
-                    || (entity.transform.rotation != m_editOldRot)
-                    || (entity.transform.scale != m_editOldScale);
-        if (changed && m_commandHistory && m_currentScene)
-        {
-            m_commandHistory->execute(std::make_unique<TransformCommand>(
-                *m_currentScene, m_editEntityId,
-                m_editOldPos, m_editOldRot, m_editOldScale,
-                entity.transform.position, entity.transform.rotation,
-                entity.transform.scale));
-        }
-    }
-
-    // --- Start new bracket ---
-    if (anyActivated && !m_transformEditActive)
-    {
-        m_transformEditActive = true;
-        m_editOldPos = prePos;
-        m_editOldRot = preRot;
-        m_editOldScale = preScale;
-        m_editEntityId = entity.getId();
-    }
-
-    // --- Handle instant changes (reset buttons) when no drag is active ---
-    if (!m_transformEditActive)
-    {
-        bool changed = (entity.transform.position != prePos)
-                    || (entity.transform.rotation != preRot)
-                    || (entity.transform.scale != preScale);
-        if (changed && m_commandHistory && m_currentScene)
+        const TransformValues now{entity.transform.position, entity.transform.rotation,
+                                  entity.transform.scale};
+        if (*before != now && m_commandHistory && m_currentScene)
         {
             m_commandHistory->execute(std::make_unique<TransformCommand>(
                 *m_currentScene, entity.getId(),
-                prePos, preRot, preScale,
-                entity.transform.position, entity.transform.rotation,
-                entity.transform.scale));
+                before->position, before->rotation, before->scale,
+                now.position, now.rotation, now.scale));
         }
     }
 

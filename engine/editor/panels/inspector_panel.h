@@ -72,12 +72,18 @@ private:
     std::string m_assetPath;
     Scene* m_currentScene = nullptr;
 
-    // Transform edit bracketing (DragFloat start/end tracking)
-    bool m_transformEditActive = false;
-    uint32_t m_editEntityId = 0;
-    glm::vec3 m_editOldPos = glm::vec3(0.0f);
-    glm::vec3 m_editOldRot = glm::vec3(0.0f);
-    glm::vec3 m_editOldScale = glm::vec3(1.0f);
+    /// The Transform section's undo value: one entry covers all three rows.
+    struct TransformValues
+    {
+        glm::vec3 position{0.0f};
+        glm::vec3 rotation{0.0f};
+        glm::vec3 scale{1.0f};
+        bool operator!=(const TransformValues& o) const
+        {
+            return position != o.position || rotation != o.rotation || scale != o.scale;
+        }
+    };
+    DragUndo<TransformValues> m_transformUndo;
 
     // Ed2 — Material edit bracketing across the drawMaterial call chain.
     // drawMaterial / drawMaterialPbr / drawMaterialBlinnPhong call setters
