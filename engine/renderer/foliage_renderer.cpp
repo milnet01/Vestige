@@ -6,6 +6,7 @@
 #include "renderer/foliage_renderer.h"
 #include "renderer/cascaded_shadow_map.h"
 #include "renderer/sampler_fallback.h"
+#include "renderer/directional_shadow_uniforms.h"
 #include "renderer/scoped_blend_state.h"
 #include "renderer/scoped_cull_face.h"
 #include "core/logger.h"
@@ -166,54 +167,9 @@ void FoliageRenderer::render(
     m_shader.setVec3("u_cameraPos", camPos);
     m_shader.setVec4("u_clipPlane", clipPlane);
 
-    bool hasShadows = (csm != nullptr && dirLight != nullptr);
-    m_shader.setBool("u_hasShadows", hasShadows);
-
-    if (dirLight)
-    {
-        m_shader.setVec3("u_lightDirection", dirLight->direction);
-        m_shader.setVec3("u_lightColor", dirLight->diffuse);
-        m_shader.setVec3("u_ambientColor", dirLight->ambient);
-        m_shader.setBool("u_hasDirectionalLight", true);
-    }
-    else
-    {
-        m_shader.setBool("u_hasDirectionalLight", false);
-    }
-
-    if (hasShadows)
-    {
-        csm->bindShadowTexture(3);
-        m_shader.setInt("u_cascadeShadowMap", 3);
-
-        int cascadeCount = csm->getCascadeCount();
-        m_shader.setInt("u_cascadeCount", cascadeCount);
-        static const char* cascadeSplitNames[4] = {
-            "u_cascadeSplits[0]", "u_cascadeSplits[1]",
-            "u_cascadeSplits[2]", "u_cascadeSplits[3]"
-        };
-        static const char* cascadeMatNames[4] = {
-            "u_cascadeLightSpaceMatrices[0]", "u_cascadeLightSpaceMatrices[1]",
-            "u_cascadeLightSpaceMatrices[2]", "u_cascadeLightSpaceMatrices[3]"
-        };
-        for (int i = 0; i < cascadeCount && i < 4; ++i)
-        {
-            m_shader.setFloat(cascadeSplitNames[i],
-                              csm->getCascadeSplit(i));
-            m_shader.setMat4(cascadeMatNames[i],
-                             csm->getLightSpaceMatrix(i));
-        }
-    }
-    else
-    {
-        // R6 Mesa fallback: u_cascadeShadowMap is a sampler2DArray; if
-        // we don't bind a sampler2DArray to its unit, the sampler
-        // defaults to unit 0 (which has the foliage texture, a
-        // sampler2D) and Mesa fails GL_INVALID_OPERATION on draw.
-        glBindTextureUnit(3, sharedSamplerFallback().getSampler2DArray());
-        m_shader.setInt("u_cascadeShadowMap", 3);
-        m_shader.setInt("u_cascadeCount", 0);
-    }
+    // Sun + CSM shadow receive (shared with grass, trees and terrain).
+    setDirectionalLightUniforms(m_shader, dirLight);
+    setCascadeShadowUniforms(m_shader, dirLight != nullptr ? csm : nullptr);
 
     m_shader.setInt("u_texture", 0);
 

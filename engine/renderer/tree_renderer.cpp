@@ -14,6 +14,7 @@
 /// full ResourceManager reuse (Rule 3), no per-instance vertex duplication.
 #include "renderer/tree_renderer.h"
 #include "renderer/cascaded_shadow_map.h"
+#include "renderer/directional_shadow_uniforms.h"
 #include "renderer/sampler_fallback.h"
 #include "renderer/scoped_cull_face.h"
 #include "resource/model.h"
@@ -283,48 +284,10 @@ void TreeRenderer::ensureInstanceCapacity(int count)
 void TreeRenderer::setLightingUniforms(Shader& shader, CascadedShadowMap* csm,
                                        const DirectionalLight* dirLight)
 {
-    // Copy of the foliage renderer's shared CSM + light block (§4.6), incl. the
-    // Mesa fallback: an unbound sampler2DArray defaults to unit 0 (a sampler2D),
-    // which fails GL_INVALID_OPERATION on Mesa — so bind a fallback every draw.
-    bool hasShadows = (csm != nullptr && dirLight != nullptr);
-    shader.setBool("u_hasShadows", hasShadows);
-
-    if (dirLight)
-    {
-        shader.setVec3("u_lightDirection", dirLight->direction);
-        shader.setVec3("u_lightColor", dirLight->diffuse);
-        shader.setVec3("u_ambientColor", dirLight->ambient);
-        shader.setBool("u_hasDirectionalLight", true);
-    }
-    else
-    {
-        shader.setBool("u_hasDirectionalLight", false);
-    }
-
-    if (hasShadows)
-    {
-        csm->bindShadowTexture(3);
-        shader.setInt("u_cascadeShadowMap", 3);
-        int cascadeCount = csm->getCascadeCount();
-        shader.setInt("u_cascadeCount", cascadeCount);
-        static const char* splitNames[4] = {
-            "u_cascadeSplits[0]", "u_cascadeSplits[1]",
-            "u_cascadeSplits[2]", "u_cascadeSplits[3]"};
-        static const char* matNames[4] = {
-            "u_cascadeLightSpaceMatrices[0]", "u_cascadeLightSpaceMatrices[1]",
-            "u_cascadeLightSpaceMatrices[2]", "u_cascadeLightSpaceMatrices[3]"};
-        for (int i = 0; i < cascadeCount && i < 4; ++i)
-        {
-            shader.setFloat(splitNames[i], csm->getCascadeSplit(i));
-            shader.setMat4(matNames[i], csm->getLightSpaceMatrix(i));
-        }
-    }
-    else
-    {
-        glBindTextureUnit(3, sharedSamplerFallback().getSampler2DArray());
-        shader.setInt("u_cascadeShadowMap", 3);
-        shader.setInt("u_cascadeCount", 0);
-    }
+    // §4.6 — the sun + CSM block every shadow-receiving renderer shares.
+    // Shadows need a sun to cast them.
+    setDirectionalLightUniforms(shader, dirLight);
+    setCascadeShadowUniforms(shader, dirLight != nullptr ? csm : nullptr);
 }
 
 void TreeRenderer::drawMeshTier(const std::vector<PrimDraw>& prims,

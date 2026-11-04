@@ -82,6 +82,7 @@ set(ENGINE_SOURCES
     renderer/light_probe.cpp
     renderer/light_probe_manager.cpp
     renderer/sampler_fallback.cpp
+    renderer/directional_shadow_uniforms.cpp
     renderer/scoped_blend_state.cpp
     renderer/scoped_cull_face.cpp
     renderer/scoped_shadow_depth_state.cpp

@@ -13,6 +13,7 @@
 #include "renderer/camera.h"                // viewer for the shadow caster's LOD origin (3D_E-0042)
 #include "renderer/cascaded_shadow_map.h"   // CSM shadow-receive binding (G4)
 #include "renderer/sampler_fallback.h"      // Mesa sampler2DArray fallback (G4)
+#include "renderer/directional_shadow_uniforms.h"
 #include "renderer/scoped_cull_face.h"      // two-sided blade casting (3D_E-0042)
 #include "utils/frustum.h"                  // extractFrustumPlanes + isAabbInFrustum (reuse)
 
@@ -337,50 +338,8 @@ void GrassRenderer::render(const glm::mat4& viewProjection,
 
     // --- G4 shading (§5.4): directional light + CSM shadow RECEIVE, mirroring FoliageRenderer
     // so the GPU grass and billboard foliage share one sun/shadow look.
-    const bool hasShadows = (csm != nullptr && dirLight != nullptr);
-    m_shader.setBool("u_hasShadows", hasShadows);
-
-    if (dirLight != nullptr)
-    {
-        m_shader.setBool("u_hasDirectionalLight", true);
-        m_shader.setVec3("u_lightDirection", dirLight->direction);
-        m_shader.setVec3("u_lightColor", dirLight->diffuse);
-        m_shader.setVec3("u_ambientColor", dirLight->ambient);
-    }
-    else
-    {
-        m_shader.setBool("u_hasDirectionalLight", false);
-    }
-
-    if (hasShadows)
-    {
-        csm->bindShadowTexture(3);
-        m_shader.setInt("u_cascadeShadowMap", 3);
-        const int cascadeCount = csm->getCascadeCount();
-        m_shader.setInt("u_cascadeCount", cascadeCount);
-        static const char* splitNames[4] = {
-            "u_cascadeSplits[0]", "u_cascadeSplits[1]",
-            "u_cascadeSplits[2]", "u_cascadeSplits[3]"
-        };
-        static const char* matNames[4] = {
-            "u_cascadeLightSpaceMatrices[0]", "u_cascadeLightSpaceMatrices[1]",
-            "u_cascadeLightSpaceMatrices[2]", "u_cascadeLightSpaceMatrices[3]"
-        };
-        for (int i = 0; i < cascadeCount && i < 4; ++i)
-        {
-            m_shader.setFloat(splitNames[i], csm->getCascadeSplit(i));
-            m_shader.setMat4(matNames[i], csm->getLightSpaceMatrix(i));
-        }
-    }
-    else
-    {
-        // Mesa fallback: u_cascadeShadowMap is a sampler2DArray. If nothing of that type is
-        // bound to its unit, the sampler defaults to unit 0 and Mesa fails the draw with
-        // GL_INVALID_OPERATION (see sampler_fallback.h). Bind a 1×1 array to unit 3.
-        glBindTextureUnit(3, sharedSamplerFallback().getSampler2DArray());
-        m_shader.setInt("u_cascadeShadowMap", 3);
-        m_shader.setInt("u_cascadeCount", 0);
-    }
+    setDirectionalLightUniforms(m_shader, dirLight);
+    setCascadeShadowUniforms(m_shader, dirLight != nullptr ? csm : nullptr);
     m_drawnChunks = drawField(m_shader, viewProjection, view, cameraPos, time,
                               std::numeric_limits<float>::max());
 }

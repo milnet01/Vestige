@@ -5,6 +5,8 @@
 /// @brief CDLOD terrain renderer with instanced grid mesh and splatmap texturing.
 
 #include "renderer/terrain_renderer.h"
+#include "renderer/directional_shadow_uniforms.h"
+#include "renderer/sampler_fallback.h"
 #include "renderer/cascaded_shadow_map.h"
 #include "core/logger.h"
 
@@ -175,6 +177,20 @@ void TerrainRenderer::render(const Terrain& terrain,
         // textures (Medium/High) in the shader (design §6 quality tiers).
         m_terrainShader.setInt("u_groundQuality", static_cast<int>(m_groundQuality));
     }
+    else
+    {
+        // The three arrays are sampler2DArrays. Left unset they read unit 0,
+        // where the heightmap (a sampler2D) sits, and Mesa fails the draw
+        // (sampler_fallback.h). Point them at a 1x1 array instead.
+        const GLuint fallbackArray = sharedSamplerFallback().getSampler2DArray();
+        for (int unit = 6; unit <= 8; ++unit)
+        {
+            glBindTextureUnit(static_cast<GLuint>(unit), fallbackArray);
+        }
+        m_terrainShader.setInt("u_albedoArray", 6);
+        m_terrainShader.setInt("u_normalArray", 7);
+        m_terrainShader.setInt("u_materialArray", 8);
+    }
 
     // Triplanar mapping uniforms (conditional on steep slopes)
     m_terrainShader.setBool("u_triplanarEnabled", true);
@@ -217,32 +233,10 @@ void TerrainRenderer::render(const Terrain& terrain,
         m_terrainShader.setInt("u_causticsTex", 5);
     }
 
-    // Shadow uniforms
-    bool hasShadows = (csm != nullptr && sceneData.hasDirectionalLight);
-    m_terrainShader.setBool("u_hasShadows", hasShadows);
-    if (hasShadows)
-    {
-        csm->bindShadowTexture(3);
-        m_terrainShader.setInt("u_cascadeShadowMap", 3);
-
-        int cascadeCount = csm->getCascadeCount();
-        m_terrainShader.setInt("u_cascadeCount", cascadeCount);
-        static const char* cascadeSplitNames[4] = {
-            "u_cascadeSplits[0]", "u_cascadeSplits[1]",
-            "u_cascadeSplits[2]", "u_cascadeSplits[3]"
-        };
-        static const char* cascadeMatNames[4] = {
-            "u_cascadeLightSpaceMatrices[0]", "u_cascadeLightSpaceMatrices[1]",
-            "u_cascadeLightSpaceMatrices[2]", "u_cascadeLightSpaceMatrices[3]"
-        };
-        for (int i = 0; i < cascadeCount && i < 4; ++i)
-        {
-            m_terrainShader.setFloat(cascadeSplitNames[i],
-                                     csm->getCascadeSplit(i));
-            m_terrainShader.setMat4(cascadeMatNames[i],
-                                    csm->getLightSpaceMatrix(i));
-        }
-    }
+    // Shadow uniforms (shared with foliage, grass and trees). The light block
+    // above stays terrain's own: with no sun it lights the ground with a
+    // default one, where the others turn directional light off.
+    setCascadeShadowUniforms(m_terrainShader, sceneData.hasDirectionalLight ? csm : nullptr);
 
     // Draw each selected node
     glBindVertexArray(m_gridVao);

@@ -25,6 +25,16 @@ may change any interface without notice.
 
 ## [Unreleased]
 
+### 2026-11-04 Fixed — Terrain draws on Mesa without shadows or ground textures
+
+On Linux's Mesa drivers the terrain failed to draw (GL_INVALID_OPERATION)
+when the scene had no shadow map, or when no ground textures were
+loaded: four of its texture slots were left pointing at the heightmap's
+slot. Each now points at its own slot. The sun and shadow settings that
+terrain, grass, foliage and trees share are now set in one place
+(engine/renderer/directional_shadow_uniforms.h), so the four stay in
+step. (3D_E-0870)
+
 ### 2026-11-04 Fixed — A sound no longer starts pitch-shifted after a moving one
 
 The engine reuses a small pool of audio channels. A moving sound (a
