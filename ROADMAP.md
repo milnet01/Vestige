@@ -7037,8 +7037,13 @@ shipped that have no invocation path at all.
   Source: review-readability 2026-10-31 at 7b2a81d.
   Lanes: environment.
 
-- 📋 [3D_E-0859] **Root motion has no loop-wrap handling.**
+- ✅ [3D_E-0859] **Root motion has no loop-wrap handling.**
   skeleton_animator.cpp; needs a decision on wrap rules.
+  2026-11-04 fixed (038b638). Wrap rule decided here, the standard one:
+  motion continues across the loop. Each wrap adds the clip's
+  start-to-end root travel and turn, weighted by blend share in a
+  crossfade. Tests LoopWrapKeepsMovingForward, LoopWrapKeepsTurning,
+  CrossfadeWrapIsWeightedByBlend; four mutations each red.
   **Layman:** A looping animation can jump its character at the loop point.
   Kind: fix.
   Source: review-readability 2026-10-31 at 7b2a81d.
