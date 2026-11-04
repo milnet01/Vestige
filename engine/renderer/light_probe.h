@@ -83,7 +83,6 @@ public:
 private:
     void generateIrradiance(GLuint envCubemap);
     void generatePrefilter(GLuint envCubemap);
-    void renderCube() const;
 
     glm::vec3 m_position = glm::vec3(0.0f);
     AABB m_influenceAABB;

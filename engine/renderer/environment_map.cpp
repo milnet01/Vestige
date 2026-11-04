@@ -11,45 +11,15 @@
 #include "core/logger.h"
 
 #include <glad/gl.h>
-#include <glm/gtc/matrix_transform.hpp>
 
 #include <cmath>
 
 namespace Vestige
 {
 
-// Skybox cube vertices (same as skybox.cpp — inward-facing for cubemap capture)
-static const float CUBE_VERTICES[] = {
-    -1.0f,  1.0f, -1.0f,  -1.0f, -1.0f, -1.0f,   1.0f, -1.0f, -1.0f,
-     1.0f, -1.0f, -1.0f,   1.0f,  1.0f, -1.0f,  -1.0f,  1.0f, -1.0f,
-    -1.0f, -1.0f,  1.0f,  -1.0f,  1.0f,  1.0f,   1.0f,  1.0f,  1.0f,
-     1.0f,  1.0f,  1.0f,   1.0f, -1.0f,  1.0f,  -1.0f, -1.0f,  1.0f,
-    -1.0f,  1.0f,  1.0f,  -1.0f,  1.0f, -1.0f,  -1.0f, -1.0f, -1.0f,
-    -1.0f, -1.0f, -1.0f,  -1.0f, -1.0f,  1.0f,  -1.0f,  1.0f,  1.0f,
-     1.0f,  1.0f, -1.0f,   1.0f,  1.0f,  1.0f,   1.0f, -1.0f,  1.0f,
-     1.0f, -1.0f,  1.0f,   1.0f, -1.0f, -1.0f,   1.0f,  1.0f, -1.0f,
-    -1.0f,  1.0f,  1.0f,   1.0f,  1.0f,  1.0f,   1.0f,  1.0f, -1.0f,
-     1.0f,  1.0f, -1.0f,  -1.0f,  1.0f, -1.0f,  -1.0f,  1.0f,  1.0f,
-    -1.0f, -1.0f, -1.0f,   1.0f, -1.0f, -1.0f,   1.0f, -1.0f,  1.0f,
-     1.0f, -1.0f,  1.0f,  -1.0f, -1.0f,  1.0f,  -1.0f, -1.0f, -1.0f,
-};
-
-// View matrices for rendering to each cubemap face (from the origin)
-static const glm::mat4 CAPTURE_VIEWS[6] = {
-    glm::lookAt(glm::vec3(0.0f), glm::vec3( 1.0f,  0.0f,  0.0f), glm::vec3(0.0f, -1.0f,  0.0f)),
-    glm::lookAt(glm::vec3(0.0f), glm::vec3(-1.0f,  0.0f,  0.0f), glm::vec3(0.0f, -1.0f,  0.0f)),
-    glm::lookAt(glm::vec3(0.0f), glm::vec3( 0.0f,  1.0f,  0.0f), glm::vec3(0.0f,  0.0f,  1.0f)),
-    glm::lookAt(glm::vec3(0.0f), glm::vec3( 0.0f, -1.0f,  0.0f), glm::vec3(0.0f,  0.0f, -1.0f)),
-    glm::lookAt(glm::vec3(0.0f), glm::vec3( 0.0f,  0.0f,  1.0f), glm::vec3(0.0f, -1.0f,  0.0f)),
-    glm::lookAt(glm::vec3(0.0f), glm::vec3( 0.0f,  0.0f, -1.0f), glm::vec3(0.0f, -1.0f,  0.0f)),
-};
-
-static const glm::mat4 CAPTURE_PROJECTION =
-    glm::perspective(glm::radians(90.0f), 1.0f, 0.1f, 10.0f);
-
 EnvironmentMap::EnvironmentMap()
 {
-    createCubeVAO();
+    createIblCubeMesh(m_cubeVao, m_cubeVbo);
 }
 
 EnvironmentMap::~EnvironmentMap()
@@ -62,29 +32,6 @@ EnvironmentMap::~EnvironmentMap()
     if (m_irradianceMap != 0) glDeleteTextures(1, &m_irradianceMap);
     if (m_prefilterMap != 0) glDeleteTextures(1, &m_prefilterMap);
     if (m_brdfLut != 0) glDeleteTextures(1, &m_brdfLut);
-}
-
-void EnvironmentMap::createCubeVAO()
-{
-    // DSA buffer creation
-    glCreateBuffers(1, &m_cubeVbo);
-    glNamedBufferStorage(m_cubeVbo, sizeof(CUBE_VERTICES), CUBE_VERTICES, 0);
-
-    // DSA vertex array creation
-    glCreateVertexArrays(1, &m_cubeVao);
-    glVertexArrayVertexBuffer(m_cubeVao, 0, m_cubeVbo, 0, 3 * sizeof(float));
-
-    // Attribute 0: position (vec3)
-    glEnableVertexArrayAttrib(m_cubeVao, 0);
-    glVertexArrayAttribFormat(m_cubeVao, 0, 3, GL_FLOAT, GL_FALSE, 0);
-    glVertexArrayAttribBinding(m_cubeVao, 0, 0);
-}
-
-void EnvironmentMap::renderCube() const
-{
-    glBindVertexArray(m_cubeVao);
-    glDrawArrays(GL_TRIANGLES, 0, 36);
-    glBindVertexArray(0);
 }
 
 bool EnvironmentMap::initialize(const std::string& assetPath)
@@ -211,7 +158,7 @@ void EnvironmentMap::captureEnvironment(GLuint skyboxCubemap, bool hasCubemap,
 
     // Render each face of the cubemap
     captureShader.use();
-    captureShader.setMat4("u_projection", CAPTURE_PROJECTION);
+    captureShader.setMat4("u_projection", iblCaptureProjection());
     captureShader.setBool("u_hasCubemap", hasCubemap);
     captureShader.setFloat("u_maxRadiance", Skybox::IBL_MAX_RADIANCE);
 
@@ -221,31 +168,20 @@ void EnvironmentMap::captureEnvironment(GLuint skyboxCubemap, bool hasCubemap,
         captureShader.setInt("u_skyboxTexture", 0);
     }
 
-    // Save current viewport
-    GLint viewport[4];
-    glGetIntegerv(GL_VIEWPORT, viewport);
-
-    glBindFramebuffer(GL_FRAMEBUFFER, m_captureFbo);
-    glViewport(0, 0, ENV_RESOLUTION, ENV_RESOLUTION);
-    glDisable(GL_CULL_FACE);
-
-    for (int face = 0; face < 6; face++)
+    IblFacePassParams pass;
+    pass.shader = &captureShader;
+    pass.captureFbo = m_captureFbo;
+    pass.captureRbo = m_captureRbo;
+    pass.target = m_envCubemap;
+    pass.resolution = ENV_RESOLUTION;
+    pass.drawCube = [this]() { drawIblCube(m_cubeVao); };
+    if (!runIblFacePass(pass))
     {
-        captureShader.setMat4("u_view", CAPTURE_VIEWS[face]);
-        glNamedFramebufferTextureLayer(m_captureFbo, GL_COLOR_ATTACHMENT0,
-                                       m_envCubemap, 0, face);
-        glClear(GL_COLOR_BUFFER_BIT | GL_DEPTH_BUFFER_BIT);
-        renderCube();
+        return;
     }
-
-    glEnable(GL_CULL_FACE);
-    glBindFramebuffer(GL_FRAMEBUFFER, 0);
 
     // Generate mipmaps for the environment map (used by prefilter shader for anti-aliasing)
     glGenerateTextureMipmap(m_envCubemap);
-
-    // Restore viewport
-    glViewport(viewport[0], viewport[1], viewport[2], viewport[3]);
 
     Logger::debug("Environment cubemap captured ("
         + std::to_string(ENV_RESOLUTION) + "x" + std::to_string(ENV_RESOLUTION) + ")");
@@ -265,32 +201,22 @@ void EnvironmentMap::generateIrradiance()
 
     // Convolve the environment cubemap into the irradiance map
     m_irradianceShader.use();
-    m_irradianceShader.setMat4("u_projection", CAPTURE_PROJECTION);
+    m_irradianceShader.setMat4("u_projection", iblCaptureProjection());
 
     glBindTextureUnit(0, m_envCubemap);
     m_irradianceShader.setInt("u_environmentMap", 0);
 
-    GLint viewport[4];
-    glGetIntegerv(GL_VIEWPORT, viewport);
-
-    glBindFramebuffer(GL_FRAMEBUFFER, m_captureFbo);
-    glNamedRenderbufferStorage(m_captureRbo, GL_DEPTH_COMPONENT24,
-                               IRRADIANCE_RESOLUTION, IRRADIANCE_RESOLUTION);
-    glViewport(0, 0, IRRADIANCE_RESOLUTION, IRRADIANCE_RESOLUTION);
-    glDisable(GL_CULL_FACE);
-
-    for (int face = 0; face < 6; face++)
+    IblFacePassParams pass;
+    pass.shader = &m_irradianceShader;
+    pass.captureFbo = m_captureFbo;
+    pass.captureRbo = m_captureRbo;
+    pass.target = m_irradianceMap;
+    pass.resolution = IRRADIANCE_RESOLUTION;
+    pass.drawCube = [this]() { drawIblCube(m_cubeVao); };
+    if (!runIblFacePass(pass))
     {
-        m_irradianceShader.setMat4("u_view", CAPTURE_VIEWS[face]);
-        glNamedFramebufferTextureLayer(m_captureFbo, GL_COLOR_ATTACHMENT0,
-                                       m_irradianceMap, 0, face);
-        glClear(GL_COLOR_BUFFER_BIT | GL_DEPTH_BUFFER_BIT);
-        renderCube();
+        return;
     }
-
-    glEnable(GL_CULL_FACE);
-    glBindFramebuffer(GL_FRAMEBUFFER, 0);
-    glViewport(viewport[0], viewport[1], viewport[2], viewport[3]);
 
     Logger::debug("Irradiance map generated ("
         + std::to_string(IRRADIANCE_RESOLUTION) + "x"
@@ -311,7 +237,7 @@ void EnvironmentMap::generatePrefilter()
 
     // Prefilter at each roughness mip level
     m_prefilterShader.use();
-    m_prefilterShader.setMat4("u_projection", CAPTURE_PROJECTION);
+    m_prefilterShader.setMat4("u_projection", iblCaptureProjection());
     m_prefilterShader.setFloat("u_envResolution", static_cast<float>(ENV_RESOLUTION));
 
     glBindTextureUnit(0, m_envCubemap);
@@ -322,10 +248,10 @@ void EnvironmentMap::generatePrefilter()
     params.captureFbo = m_captureFbo;
     params.captureRbo = m_captureRbo;
     params.prefilterMap = m_prefilterMap;
-    params.captureViews = CAPTURE_VIEWS;
+    params.captureViews = iblCaptureViews();
     params.resolution = PREFILTER_RESOLUTION;
     params.mipLevels = MAX_MIP_LEVELS;
-    params.drawCube = [this]() { renderCube(); };
+    params.drawCube = [this]() { drawIblCube(m_cubeVao); };
     runIblPrefilterLoop(params);
 
     Logger::debug("Prefiltered environment map generated ("

@@ -2,13 +2,12 @@
 // SPDX-License-Identifier: MIT
 
 /// @file ibl_prefilter.h
-/// @brief Shared mip-chain prefilter loop for IBL environment / light probes.
+/// @brief Shared cubemap-capture pieces for IBL environment maps and light probes.
 ///
-/// EnvironmentMap and LightProbe both render the same convolved GGX mip chain
-/// into a prefiltered cubemap. This helper captures the loop body so both
-/// call sites stay identical — caller supplies the shader + draw callback
-/// and the helper drives the mip×face iteration, per-mip RBO resize, viewport
-/// change, and FBO layer attachment.
+/// EnvironmentMap and LightProbe both draw a unit cube around the origin once
+/// per cubemap face: to capture the sky, to convolve irradiance, and to render
+/// the GGX prefilter mip chain. The cube mesh, the six face views, the
+/// projection and both draw loops live here so the two classes cannot drift.
 #pragma once
 
 #include "renderer/shader.h"
@@ -20,6 +19,39 @@
 
 namespace Vestige
 {
+
+/// @brief View matrix per cubemap face, in GL face order (+X, -X, +Y, -Y, +Z, -Z).
+/// @return Six matrices.
+const glm::mat4* iblCaptureViews();
+
+/// @brief 90-degree square projection for cube captures.
+glm::mat4 iblCaptureProjection();
+
+/// @brief Creates the inward-facing capture cube (position only, attribute 0).
+/// The caller owns and deletes @a vao and @a vbo.
+void createIblCubeMesh(GLuint& vao, GLuint& vbo);
+
+/// @brief Draws the capture cube created by createIblCubeMesh.
+void drawIblCube(GLuint vao);
+
+/// @brief Inputs for runIblFacePass.
+struct IblFacePassParams
+{
+    const Shader* shader = nullptr;  ///< Already `use()`-d, with `u_projection` set.
+    GLuint captureFbo = 0;
+    GLuint captureRbo = 0;           ///< Resized to `resolution` and attached as depth.
+    GLuint target = 0;               ///< Cubemap; mip 0 of each face is drawn.
+    int resolution = 0;              ///< Edge length of mip 0.
+    std::function<void()> drawCube;  ///< Per-face draw call.
+};
+
+/// @brief Draws `drawCube` once into mip 0 of each face of `target`.
+///
+/// Checks framebuffer completeness first and draws nothing when it fails.
+/// Afterwards FBO 0 is bound, the viewport is restored and `GL_CULL_FACE` is
+/// enabled.
+/// @return False when the framebuffer is incomplete (logged).
+bool runIblFacePass(const IblFacePassParams& params);
 
 /// @brief Inputs required by the prefilter loop. `drawCube` is the per-face
 /// draw call; it runs after `glClear` and with the face layer already bound.

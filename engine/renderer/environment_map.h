@@ -64,13 +64,11 @@ public:
     static constexpr int MAX_MIP_LEVELS = 5;
 
 private:
-    void createCubeVAO();
     void captureEnvironment(GLuint skyboxCubemap, bool hasCubemap,
                             const Shader& skyboxShader);
     void generateIrradiance();
     void generatePrefilter();
     void generateBrdfLut(const FullscreenQuad& quad);
-    void renderCube() const;
 
     // IBL generation shaders
     Shader m_captureShader;

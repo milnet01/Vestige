@@ -79,6 +79,7 @@ set(ENGINE_SOURCES
     renderer/instance_buffer.cpp
     renderer/environment_map.cpp
     renderer/ibl_capture_sequence.cpp
+    renderer/ibl_prefilter.cpp
     renderer/light_probe.cpp
     renderer/light_probe_manager.cpp
     renderer/sampler_fallback.cpp

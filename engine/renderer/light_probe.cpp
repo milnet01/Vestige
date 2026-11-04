@@ -8,41 +8,11 @@
 #include "renderer/ibl_prefilter.h"
 #include "core/logger.h"
 
-#include <glm/gtc/matrix_transform.hpp>
 
 #include <algorithm>
 
 namespace Vestige
 {
-
-// Same cube vertices used by EnvironmentMap for cubemap face rendering
-static const float CUBE_VERTICES[] = {
-    -1.0f,  1.0f, -1.0f,  -1.0f, -1.0f, -1.0f,   1.0f, -1.0f, -1.0f,
-     1.0f, -1.0f, -1.0f,   1.0f,  1.0f, -1.0f,  -1.0f,  1.0f, -1.0f,
-    -1.0f, -1.0f,  1.0f,  -1.0f,  1.0f,  1.0f,   1.0f,  1.0f,  1.0f,
-     1.0f,  1.0f,  1.0f,   1.0f, -1.0f,  1.0f,  -1.0f, -1.0f,  1.0f,
-    -1.0f,  1.0f,  1.0f,  -1.0f,  1.0f, -1.0f,  -1.0f, -1.0f, -1.0f,
-    -1.0f, -1.0f, -1.0f,  -1.0f, -1.0f,  1.0f,  -1.0f,  1.0f,  1.0f,
-     1.0f,  1.0f, -1.0f,   1.0f,  1.0f,  1.0f,   1.0f, -1.0f,  1.0f,
-     1.0f, -1.0f,  1.0f,   1.0f, -1.0f, -1.0f,   1.0f,  1.0f, -1.0f,
-    -1.0f,  1.0f,  1.0f,   1.0f,  1.0f,  1.0f,   1.0f,  1.0f, -1.0f,
-     1.0f,  1.0f, -1.0f,  -1.0f,  1.0f, -1.0f,  -1.0f,  1.0f,  1.0f,
-    -1.0f, -1.0f, -1.0f,   1.0f, -1.0f, -1.0f,   1.0f, -1.0f,  1.0f,
-     1.0f, -1.0f,  1.0f,  -1.0f, -1.0f,  1.0f,  -1.0f, -1.0f, -1.0f,
-};
-
-// Standard cubemap capture view matrices (from the origin, looking at each face)
-static const glm::mat4 CAPTURE_VIEWS[6] = {
-    glm::lookAt(glm::vec3(0.0f), glm::vec3( 1.0f,  0.0f,  0.0f), glm::vec3(0.0f, -1.0f,  0.0f)),
-    glm::lookAt(glm::vec3(0.0f), glm::vec3(-1.0f,  0.0f,  0.0f), glm::vec3(0.0f, -1.0f,  0.0f)),
-    glm::lookAt(glm::vec3(0.0f), glm::vec3( 0.0f,  1.0f,  0.0f), glm::vec3(0.0f,  0.0f,  1.0f)),
-    glm::lookAt(glm::vec3(0.0f), glm::vec3( 0.0f, -1.0f,  0.0f), glm::vec3(0.0f,  0.0f, -1.0f)),
-    glm::lookAt(glm::vec3(0.0f), glm::vec3( 0.0f,  0.0f,  1.0f), glm::vec3(0.0f, -1.0f,  0.0f)),
-    glm::lookAt(glm::vec3(0.0f), glm::vec3( 0.0f,  0.0f, -1.0f), glm::vec3(0.0f, -1.0f,  0.0f)),
-};
-
-static const glm::mat4 CAPTURE_PROJECTION =
-    glm::perspective(glm::radians(90.0f), 1.0f, 0.1f, 100.0f);
 
 LightProbe::LightProbe() = default;
 
@@ -135,15 +105,7 @@ bool LightProbe::initialize(const Shader& irradianceShader, const Shader& prefil
     m_irradianceShader = &irradianceShader;
     m_prefilterShader = &prefilterShader;
 
-    // Create cube VAO (DSA)
-    glCreateBuffers(1, &m_cubeVbo);
-    glNamedBufferStorage(m_cubeVbo, sizeof(CUBE_VERTICES), CUBE_VERTICES, 0);
-
-    glCreateVertexArrays(1, &m_cubeVao);
-    glVertexArrayVertexBuffer(m_cubeVao, 0, m_cubeVbo, 0, 3 * sizeof(float));
-    glEnableVertexArrayAttrib(m_cubeVao, 0);
-    glVertexArrayAttribFormat(m_cubeVao, 0, 3, GL_FLOAT, GL_FALSE, 0);
-    glVertexArrayAttribBinding(m_cubeVao, 0, 0);
+    createIblCubeMesh(m_cubeVao, m_cubeVbo);
 
     // Create capture FBO + depth RBO
     glCreateFramebuffers(1, &m_captureFbo);
@@ -191,47 +153,18 @@ void LightProbe::generateIrradiance(GLuint envCubemap)
     glTextureParameteri(m_irradianceMap, GL_TEXTURE_WRAP_R, GL_CLAMP_TO_EDGE);
 
     m_irradianceShader->use();
-    m_irradianceShader->setMat4("u_projection", CAPTURE_PROJECTION);
+    m_irradianceShader->setMat4("u_projection", iblCaptureProjection());
     glBindTextureUnit(0, envCubemap);
     m_irradianceShader->setInt("u_environmentMap", 0);
 
-    GLint viewport[4];
-    glGetIntegerv(GL_VIEWPORT, viewport);
-
-    glNamedRenderbufferStorage(m_captureRbo, GL_DEPTH_COMPONENT24,
-                               IRRADIANCE_RESOLUTION, IRRADIANCE_RESOLUTION);
-    glNamedFramebufferRenderbuffer(m_captureFbo, GL_DEPTH_ATTACHMENT,
-                                   GL_RENDERBUFFER, m_captureRbo);
-    // Placeholder color attachment (face 0) so completeness can be verified
-    // once before the per-face render loop swaps layers.
-    glNamedFramebufferTextureLayer(m_captureFbo, GL_COLOR_ATTACHMENT0,
-                                   m_irradianceMap, 0, 0);
-    {
-        GLenum status = glCheckNamedFramebufferStatus(m_captureFbo, GL_FRAMEBUFFER);
-        if (status != GL_FRAMEBUFFER_COMPLETE)
-        {
-            Logger::error("Light probe irradiance FBO incomplete — status: 0x"
-                + std::to_string(status));
-            return;
-        }
-    }
-
-    glBindFramebuffer(GL_FRAMEBUFFER, m_captureFbo);
-    glViewport(0, 0, IRRADIANCE_RESOLUTION, IRRADIANCE_RESOLUTION);
-    glDisable(GL_CULL_FACE);
-
-    for (int face = 0; face < 6; face++)
-    {
-        m_irradianceShader->setMat4("u_view", CAPTURE_VIEWS[face]);
-        glNamedFramebufferTextureLayer(m_captureFbo, GL_COLOR_ATTACHMENT0,
-                                       m_irradianceMap, 0, face);
-        glClear(GL_COLOR_BUFFER_BIT | GL_DEPTH_BUFFER_BIT);
-        renderCube();
-    }
-
-    glEnable(GL_CULL_FACE);
-    glBindFramebuffer(GL_FRAMEBUFFER, 0);
-    glViewport(viewport[0], viewport[1], viewport[2], viewport[3]);
+    IblFacePassParams pass;
+    pass.shader = m_irradianceShader;
+    pass.captureFbo = m_captureFbo;
+    pass.captureRbo = m_captureRbo;
+    pass.target = m_irradianceMap;
+    pass.resolution = IRRADIANCE_RESOLUTION;
+    pass.drawCube = [this]() { drawIblCube(m_cubeVao); };
+    runIblFacePass(pass);
 }
 
 void LightProbe::generatePrefilter(GLuint envCubemap)
@@ -246,7 +179,7 @@ void LightProbe::generatePrefilter(GLuint envCubemap)
     glTextureParameteri(m_prefilterMap, GL_TEXTURE_WRAP_R, GL_CLAMP_TO_EDGE);
 
     m_prefilterShader->use();
-    m_prefilterShader->setMat4("u_projection", CAPTURE_PROJECTION);
+    m_prefilterShader->setMat4("u_projection", iblCaptureProjection());
     m_prefilterShader->setFloat("u_envResolution", static_cast<float>(CAPTURE_RESOLUTION));
     glBindTextureUnit(0, envCubemap);
     m_prefilterShader->setInt("u_environmentMap", 0);
@@ -256,18 +189,11 @@ void LightProbe::generatePrefilter(GLuint envCubemap)
     params.captureFbo = m_captureFbo;
     params.captureRbo = m_captureRbo;
     params.prefilterMap = m_prefilterMap;
-    params.captureViews = CAPTURE_VIEWS;
+    params.captureViews = iblCaptureViews();
     params.resolution = PREFILTER_RESOLUTION;
     params.mipLevels = MAX_MIP_LEVELS;
-    params.drawCube = [this]() { renderCube(); };
+    params.drawCube = [this]() { drawIblCube(m_cubeVao); };
     runIblPrefilterLoop(params);
-}
-
-void LightProbe::renderCube() const
-{
-    glBindVertexArray(m_cubeVao);
-    glDrawArrays(GL_TRIANGLES, 0, 36);
-    glBindVertexArray(0);
 }
 
 void LightProbe::bindIrradiance(int unit) const

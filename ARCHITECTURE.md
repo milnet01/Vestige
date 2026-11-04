@@ -100,7 +100,7 @@ Scene
 - **Shadow pass** — directional CSM (4 cascades), point, spot (Phases 4–5).
 - **Post-processing** — TAA, bloom, SSAO, tonemap (Reinhard/ACES/linear-clamp), color-grading LUT, parallax occlusion.
 - **SMAA** — `renderer/smaa.{h,cpp}`.
-- **IBL** — prefilter + BRDF LUT via `environment_map.{h,cpp}`, `light_probe.{h,cpp}`; unified in `ibl_prefilter.h`.
+- **IBL** — prefilter + BRDF LUT via `environment_map.{h,cpp}`, `light_probe.{h,cpp}`; both share the capture cube, face views and per-face passes in `ibl_prefilter.{h,cpp}`.
 - **GPU-driven culling / instancing** — frustum-culled MDI via `gpu_culler.{h,cpp}` + `indirect_buffer.{h,cpp}`.
 - **GI** — SH probe grid + radiosity bake shipped (see `docs/research/gi_roadmap.md`). SSGI next; hybrid RT / cone tracing planned.
 - **Not started:** deferred rendering (forward-plus + GPU culling has sufficed).
