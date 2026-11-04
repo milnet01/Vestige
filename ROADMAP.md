@@ -7169,13 +7169,24 @@ shipped that have no invocation path at all.
   Source: review-readability 2026-10-31 at 7b2a81d.
   Lanes: settings.
 
-- 📋 [3D_E-0868] **One table per settings wire-string set.**
+- ✅ [3D_E-0868] **One table per settings wire-string set.**
+  2026-11-04 (58f48f1): engine/core/accessibility_wire_strings.h holds
+  each list in enum order; validator, converters, editor tab, player
+  page and UI runtime panel (a fifth scale copy) read it; static_assert
+  ties lengths to enums. Swap mutation fails 4 tests; short list fails
+  to build.
   **Layman:** Each settings list is hand-kept in four places and could drift apart.
   Kind: refactor.
   Source: review-readability 2026-10-31 at 7b2a81d.
   Lanes: settings.
 
-- 📋 [3D_E-0869] **One shared start-a-sound sequence.**
+- ✅ [3D_E-0869] **One shared start-a-sound sequence.**
+  2026-11-04 (122b8a5): prepareFilePlayback + beginPlayback are the one
+  sequence for all five starts. Fixed the divergence the finding named:
+  playSound/playSound2D kept a reused source's velocity (red test
+  test_audio_source_reuse.cpp). The claim/free-slot copies (lane-10
+  MEDIUM, audio_engine.cpp acquireSource/releaseSource) stay under
+  3D_E-0874.
   **Layman:** Five slightly different copies of the code that starts a sound should become one.
   Kind: refactor.
   Source: review-readability 2026-10-31 at 7b2a81d.
