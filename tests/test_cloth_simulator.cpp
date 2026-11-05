@@ -510,6 +510,25 @@ TEST(ClothSimulator, SetParticleMassRefusesNaNAndInf)
     EXPECT_EQ(gpu.getConfig().particleMass, gpuBefore);
 }
 
+// lane-07 lead cloth_simulator.cpp:89: re-initializing kept the old pins,
+// masses and velocities, because resize() fills only new elements.
+TEST(ClothSimulator, ReinitializeStartsClean)
+{
+    ClothSimulator sim;
+    const auto cfg = makeBaselineConfig_Cl8();
+    sim.initialize(cfg);
+    ASSERT_TRUE(sim.isInitialized());
+    sim.pinParticle(0, sim.getPositions()[0]);
+    for (int i = 0; i < 10; ++i) sim.simulate(1.0f / 60.0f);
+
+    sim.initialize(cfg);
+    EXPECT_EQ(sim.getPinnedCount(), 0u);
+    EXPECT_FALSE(sim.isParticlePinned(0));
+    for (int i = 0; i < 10; ++i) sim.simulate(1.0f / 60.0f);
+    EXPECT_LT(sim.getPositions()[0].y, -0.01f)
+        << "particle 0 must fall freely, not stay pinned by a stale mass";
+}
+
 TEST(ClothSimulator, InfMassRejectsInitialization_Cl8)
 {
     auto cfg = makeBaselineConfig_Cl8();

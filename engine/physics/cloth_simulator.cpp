@@ -82,14 +82,19 @@ void ClothSimulator::initialize(const ClothConfig& config, uint32_t seed)
     uint32_t count = m_gridW * m_gridH;
     float invMass = 1.0f / config.particleMass;
 
-    // Allocate particle arrays
-    m_positions.resize(count);
-    m_prevPositions.resize(count);
-    m_velocities.resize(count, glm::vec3(0.0f));
-    m_inverseMasses.resize(count, invMass);
-    m_originalInverseMasses.resize(count, invMass);
-    m_normals.resize(count, glm::vec3(0.0f, 1.0f, 0.0f));
-    m_texCoords.resize(count);
+    // Allocate particle arrays. assign, not resize: resize fills only NEW
+    // elements, so a second initialize() kept the old masses (pinned
+    // particles stayed at 0), velocities and normals. Old pins and tethers
+    // would point at the old grid (lane-07 lead).
+    m_positions.assign(count, glm::vec3(0.0f));
+    m_prevPositions.assign(count, glm::vec3(0.0f));
+    m_velocities.assign(count, glm::vec3(0.0f));
+    m_inverseMasses.assign(count, invMass);
+    m_originalInverseMasses.assign(count, invMass);
+    m_normals.assign(count, glm::vec3(0.0f, 1.0f, 0.0f));
+    m_texCoords.assign(count, glm::vec2(0.0f));
+    m_pinConstraints.clear();
+    m_lraConstraints.clear();
 
     // Generate grid positions and UVs
     // Grid lies in the XZ plane (Y=0), centered at origin
