@@ -436,12 +436,22 @@ void main()
     if (sizeKeyCount > 0)
         sizeMultiplier = sampleCurve(normalizedAge, sizeKeys, sizeKeyTimes, sizeKeyCount);
 
+    // Speed over lifetime: the CPU emitter sets speed = startSpeed x
+    // curve(age). The GPU particle stores no start speed, so scale by this
+    // frame's curve value over last frame's: the ratios telescope to
+    // startSpeed x curve(age) when nothing else changes the speed. A newly
+    // emitted particle (no previous frame) divides by 1. Multiplying by
+    // curve(age) every frame compounded it.
     if (speedKeyCount > 0)
     {
         float speedMult = sampleCurve(normalizedAge, speedKeys, speedKeyTimes, speedKeyCount);
+        float prevAge = p.age - u_deltaTime;
+        float prevMult = 1.0;
+        if (prevAge > 0.0 && p.lifetime > 0.0)
+            prevMult = sampleCurve(prevAge / p.lifetime, speedKeys, speedKeyTimes, speedKeyCount);
         float currentSpeed = length(vel);
-        if (currentSpeed > 0.001)
-            vel = normalize(vel) * currentSpeed * speedMult;
+        if (currentSpeed > 0.001 && prevMult > 0.0001)
+            vel *= speedMult / prevMult;
     }
 
     // Write back
