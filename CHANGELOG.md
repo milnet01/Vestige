@@ -25,6 +25,15 @@ may change any interface without notice.
 
 ## [Unreleased]
 
+### 2026-11-05 Fixed — A damaged window-state file no longer stops Vestige starting
+
+Vestige remembers its window size and position in `window_state.json`.
+If that file held a value of the wrong kind, such as text where a number
+belongs, Vestige quit at start-up. It now ignores a damaged file and
+opens at the default size. A window last placed on a monitor to the left
+of or above the main one now reopens there; it used to jump back to the
+default position.
+
 ### 2026-11-05 Fixed — Kinematic bodies turn with their object
 
 An object's rotation is stored in degrees, but a kinematic physics body

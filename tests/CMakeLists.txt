@@ -88,6 +88,7 @@ add_executable(vestige_tests
     test_memory_tracker.cpp
     test_gpu_timer.cpp
     test_profile_log.cpp
+    test_window_state.cpp
     test_visual_test_runner.cpp
     test_performance_profiler.cpp
     test_frame_ledger_log.cpp

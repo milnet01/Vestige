@@ -23,6 +23,7 @@ set(ENGINE_SOURCES
     systems/impact_audio_system.cpp
     systems/lighting_system.cpp
     core/window.cpp
+    core/window_state.cpp
     core/input_manager.cpp
     core/engine.cpp
     core/engine_paths.cpp

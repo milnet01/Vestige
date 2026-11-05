@@ -4,6 +4,7 @@
 /// @file window.cpp
 /// @brief Window implementation using GLFW and OpenGL 4.5.
 #include "core/window.h"
+#include "core/window_state.h"
 #include "core/logger.h"
 #include "utils/atomic_write.h"
 
@@ -15,7 +16,9 @@
 #include <cstdlib>
 #include <filesystem>
 #include <fstream>
+#include <sstream>
 #include <stdexcept>
+#include <vector>
 
 namespace Vestige
 {
@@ -244,48 +247,57 @@ void Window::restoreWindowState()
     {
         return;
     }
+    std::stringstream text;
+    text << file.rdbuf();
 
-    nlohmann::json state;
-    try
-    {
-        state = nlohmann::json::parse(file);
-    }
-    catch (const nlohmann::json::parse_error&)
-    {
-        return;
-    }
-
-    int w = state.value("width", 0);
-    int h = state.value("height", 0);
-    int x = state.value("x", -1);
-    int y = state.value("y", -1);
-    bool maximized = state.value("maximized", false);
-
-    // Validate dimensions (must be reasonable)
-    if (w < 200 || h < 200 || w > 8192 || h > 8192)
+    // parseWindowState never throws: a wrong-typed or non-object file used to
+    // end start-up with exit 1 (lane-02 lead window.cpp:258).
+    const std::optional<WindowState> state = parseWindowState(text.str());
+    if (!state)
     {
         return;
     }
 
     // Apply size first
-    glfwSetWindowSize(m_handle, w, h);
+    glfwSetWindowSize(m_handle, state->width, state->height);
 
-    // Apply position if valid (avoid off-screen placement)
-    if (x >= 0 && y >= 0)
+    // Restore the position when the title bar would land on a connected
+    // monitor. Negative coordinates are normal for a monitor left of or above
+    // the primary one; the old "x >= 0 && y >= 0" test dropped them.
+    if (state->hasPosition)
     {
-        glfwSetWindowPos(m_handle, x, y);
+        std::vector<MonitorRect> rects;
+        int count = 0;
+        GLFWmonitor** monitors = glfwGetMonitors(&count);
+        for (int i = 0; i < count; ++i)
+        {
+            const GLFWvidmode* mode = glfwGetVideoMode(monitors[i]);
+            if (mode == nullptr)
+            {
+                continue;
+            }
+            MonitorRect r;
+            glfwGetMonitorPos(monitors[i], &r.x, &r.y);
+            r.width = mode->width;
+            r.height = mode->height;
+            rects.push_back(r);
+        }
+        if (titleBarOnAMonitor(*state, rects))
+        {
+            glfwSetWindowPos(m_handle, state->x, state->y);
+        }
     }
 
     // Maximize if it was maximized
-    if (maximized)
+    if (state->maximized)
     {
         glfwMaximizeWindow(m_handle);
     }
 
-    Logger::debug("Restored window state: " + std::to_string(w) + "x"
-                  + std::to_string(h) + " at (" + std::to_string(x) + ", "
-                  + std::to_string(y) + ")"
-                  + (maximized ? " [maximized]" : ""));
+    Logger::debug("Restored window state: " + std::to_string(state->width) + "x"
+                  + std::to_string(state->height) + " at (" + std::to_string(state->x) + ", "
+                  + std::to_string(state->y) + ")"
+                  + (state->maximized ? " [maximized]" : ""));
 }
 
 void Window::setVsync(bool enabled)
