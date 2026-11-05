@@ -38,7 +38,7 @@ enum class ClothBackendPolicy
 {
     AUTO,        ///< Auto-select based on particle count + GL support.
     FORCE_CPU,   ///< Always use CPU XPBD solver.
-    FORCE_GPU,   ///< Always use GPU compute solver (caller must verify isSupported()).
+    FORCE_GPU,   ///< GPU compute solver whenever the context supports it, else CPU.
 };
 
 /// @brief Decision returned by the auto-select probe (for tests / telemetry).

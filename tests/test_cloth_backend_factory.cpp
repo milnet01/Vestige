@@ -61,6 +61,18 @@ TEST(ClothBackendFactory, ForceGpuRespectsCallerEvenWhenSmall)
               ClothBackendChoice::GPU);
 }
 
+// lane-07 lead cloth_backend_factory.cpp:25: FORCE_GPU returned GPU even with
+// no compute support, so the factory built a GpuClothSimulator that could not
+// run, and its "falling back to CPU" warning was unreachable.
+TEST(ClothBackendFactory, ForceGpuFallsBackToCpuWithoutCompute)
+{
+    ClothConfig cfg;
+    cfg.width = 100;
+    cfg.height = 100;
+    EXPECT_EQ(chooseClothBackend(cfg, ClothBackendPolicy::FORCE_GPU, /*gpuSupported=*/false),
+              ClothBackendChoice::CPU);
+}
+
 TEST(ClothBackendFactory, CreateReturnsCpuWhenNoGlContext)
 {
     // No GL context in unit tests → GpuClothSimulator::isSupported() returns

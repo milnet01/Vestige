@@ -23,9 +23,10 @@ ClothBackendChoice chooseClothBackend(const ClothConfig& config,
             return ClothBackendChoice::CPU;
 
         case ClothBackendPolicy::FORCE_GPU:
-            // Caller has asserted GPU is OK — trust them. Diagnostics can
-            // separately log a warning if gpuSupported is false.
-            return ClothBackendChoice::GPU;
+            // Without compute support a GPU backend cannot run at all (its
+            // initialize() calls GL directly), so fall back to CPU; the
+            // factory logs the fallback.
+            return gpuSupported ? ClothBackendChoice::GPU : ClothBackendChoice::CPU;
 
         case ClothBackendPolicy::AUTO:
         {
