@@ -113,6 +113,15 @@ AudioSourceAlState composeAudioSourceAlState(
             break;
     }
 
+    // A 2D source plays listener-relative (AL_SOURCE_RELATIVE), where
+    // AL_POSITION is an offset from the listener's head: centre it, or it
+    // pans and fades by its world coordinates (3D_E-0874).
+    if (!state.spatial)
+    {
+        state.position = glm::vec3(0.0f);
+        state.velocity = glm::vec3(0.0f);
+    }
+
     return state;
 }
 

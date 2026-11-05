@@ -443,3 +443,29 @@ TEST(AudioSourceState, ReverbSendZeroedByDrop2DAndMuteTiers_AX2)
         AudioLodTier::Mute, 1.0f, 0.8f);
     EXPECT_NEAR(mute.reverbSend, 0.0f, kEps);
 }
+
+// 3D_E-0874 lane 10: a 2D source is played listener-relative
+// (AL_SOURCE_RELATIVE), so its position is read as an offset from the
+// listener's head. Keeping the entity's world position there panned and faded
+// a "2D" sound by world coordinates. Both ways to be 2D must centre it.
+TEST(AudioSourceState, TwoDSourcesSitAtTheListener)
+{
+    AudioSourceComponent comp = makeDefaultComponent();
+    comp.velocity = glm::vec3(4.0f, 0.0f, 0.0f);
+    const glm::vec3 far(30.0f, 0.0f, -12.0f);
+
+    comp.spatial = false;
+    auto authored2D = composeAudioSourceAlState(comp, far, AudioMixer{}, 1.0f);
+    EXPECT_EQ(authored2D.position, glm::vec3(0.0f)) << "non-spatial source keeps its world position";
+    EXPECT_EQ(authored2D.velocity, glm::vec3(0.0f));
+
+    comp.spatial = true;
+    auto dropped = composeAudioSourceAlState(comp, far, AudioMixer{}, 1.0f, glm::vec3(0.0f),
+                                             AirAbsorptionParams{}, AudioLodTier::Drop2D);
+    EXPECT_FALSE(dropped.spatial);
+    EXPECT_EQ(dropped.position, glm::vec3(0.0f)) << "Drop2D source keeps its world position";
+    EXPECT_EQ(dropped.velocity, glm::vec3(0.0f));
+
+    auto full = composeAudioSourceAlState(comp, far, AudioMixer{}, 1.0f);
+    EXPECT_EQ(full.position, far) << "a spatial source must keep its position";
+}
