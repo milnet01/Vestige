@@ -75,6 +75,12 @@ public:
     /// @brief Returns the number of viewpoints registered.
     size_t viewpointCount() const { return m_viewpoints.size(); }
 
+    /// @brief A capture's file stem, e.g. "01_gate_exterior_rot045".
+    ///        @p rotationStep times @p rotationAngle is rounded to whole
+    ///        degrees, so 22.5-degree steps read 023 and 045, not 022 and 044.
+    static std::string captureBasename(size_t viewpointIndex, const std::string& name,
+                                       int rotationStep, float rotationAngle);
+
 private:
     enum class State
     {

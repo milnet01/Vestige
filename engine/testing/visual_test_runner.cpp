@@ -4,6 +4,8 @@
 /// @file visual_test_runner.cpp
 /// @brief Automated visual test runner implementation.
 #include "testing/visual_test_runner.h"
+
+#include <cmath>
 #include "renderer/frame_diagnostics.h"
 #include "renderer/camera.h"
 #include "core/logger.h"
@@ -119,19 +121,26 @@ bool VisualTestRunner::isComplete() const
 // Private
 // ---------------------------------------------------------------------------
 
+std::string VisualTestRunner::captureBasename(size_t viewpointIndex, const std::string& name,
+                                              int rotationStep, float rotationAngle)
+{
+    // Rounded, not truncated: truncating the angle first gave 22 and 44 for
+    // 22.5-degree steps, and the same name for every step under 1 degree.
+    const long rotDeg = std::lround(static_cast<double>(rotationStep) * static_cast<double>(rotationAngle));
+    std::ostringstream oss;
+    oss << std::setfill('0') << std::setw(2) << (viewpointIndex + 1)
+        << "_" << name
+        << "_rot" << std::setw(3) << rotDeg;
+    return oss.str();
+}
+
 void VisualTestRunner::captureAndAdvance(Camera& camera, const Renderer& renderer,
                                           int windowWidth, int windowHeight,
                                           int fps, float deltaTime)
 {
     const auto& vp = m_viewpoints[m_currentViewpoint];
-    int rotDeg = m_currentRotation * static_cast<int>(vp.rotationAngle);
-
-    // Build filename:  01_gate_exterior_rot045
-    std::ostringstream oss;
-    oss << std::setfill('0') << std::setw(2) << (m_currentViewpoint + 1)
-        << "_" << vp.name
-        << "_rot" << std::setw(3) << rotDeg;
-    std::string basename = oss.str();
+    const std::string basename =
+        captureBasename(m_currentViewpoint, vp.name, m_currentRotation, vp.rotationAngle);
 
     std::string result = FrameDiagnostics::captureNamed(
         renderer, camera, windowWidth, windowHeight,
@@ -159,7 +168,8 @@ void VisualTestRunner::captureAndAdvance(Camera& camera, const Renderer& rendere
         {
             writeSummary();
             m_state = State::DONE;
-            Logger::info("Visual test complete: " + std::to_string(m_captureIndex)
+            // Saved captures, not attempts: a failed capture is not in the list.
+            Logger::info("Visual test complete: " + std::to_string(m_captures.size())
                          + " captures saved to " + m_outputDir);
             return;
         }
