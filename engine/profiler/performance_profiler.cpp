@@ -5,6 +5,8 @@
 /// @brief PerformanceProfiler implementation — frame time tracking and subsystem coordination.
 #include "profiler/performance_profiler.h"
 
+#include <limits>
+
 #include <algorithm>
 
 namespace Vestige
@@ -50,7 +52,7 @@ void PerformanceProfiler::endFrame(float deltaTime)
 
     // Compute stats from history
     float sum = 0.0f;
-    float minVal = 999.0f;
+    float minVal = std::numeric_limits<float>::max();
     float maxVal = 0.0f;
     int validCount = 0;
     for (int i = 0; i < HISTORY_SIZE; ++i)
@@ -64,7 +66,7 @@ void PerformanceProfiler::endFrame(float deltaTime)
     }
 
     m_avgFrameTime = (validCount > 0) ? (sum / static_cast<float>(validCount)) : 0.0f;
-    m_minFrameTime = (minVal < 999.0f) ? minVal : 0.0f;
+    m_minFrameTime = (validCount > 0) ? minVal : 0.0f;  // no 999 ms sentinel
     m_maxFrameTime = maxVal;
 }
 

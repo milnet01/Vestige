@@ -52,6 +52,16 @@ TEST(PerformanceProfiler, KeptOnSurvivesTheClosedPanel)
     EXPECT_TRUE(profiler.isEnabled());
 }
 
+// lane-23 lead performance_profiler.cpp:67: the minimum started at a 999 ms
+// sentinel, so a history of only slow frames reported a minimum of 0.
+TEST(PerformanceProfiler, SlowFramesReportTheirRealMinimum)
+{
+    PerformanceProfiler profiler;
+    profiler.endFrame(1.5f);
+    profiler.endFrame(2.0f);
+    EXPECT_FLOAT_EQ(profiler.getMinFrameTimeMs(), 1500.0f);
+}
+
 TEST(PerformanceProfiler, NoFrameYetReadsZero)
 {
     PerformanceProfiler profiler;

@@ -96,7 +96,7 @@ private:
     int m_historyIndex = 0;
     float m_currentFrameTimeMs = 0.0f;
     float m_avgFrameTime = 0.0f;
-    float m_minFrameTime = 999.0f;
+    float m_minFrameTime = 0.0f;
     float m_maxFrameTime = 0.0f;
 
     bool m_enabled = false;
