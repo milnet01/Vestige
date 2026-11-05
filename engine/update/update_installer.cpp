@@ -10,6 +10,8 @@
 #include <miniz.h>
 
 #include <cstdlib>
+#include <utility>
+#include <vector>
 #include <filesystem>
 #include <fstream>
 #include <iterator>
@@ -267,9 +269,16 @@ public:
         return "an AppImage cannot run on Windows";
 #else
         // The new AppImage's runtime sets these for itself; the old runtime's
-        // values would point it at our mount.
-        for (const char* name : {"APPDIR", "APPIMAGE", "ARGV0", "OWD"})
+        // values would point it at our mount. Saved first, so a failed execv
+        // leaves this running copy as it was (lane-23 lead).
+        const char* const kRuntimeVars[] = {"APPDIR", "APPIMAGE", "ARGV0", "OWD"};
+        std::vector<std::pair<const char*, std::string>> saved;
+        for (const char* name : kRuntimeVars)
         {
+            if (const char* value = std::getenv(name))
+            {
+                saved.emplace_back(name, value);
+            }
             unsetenv(name);
         }
         const std::string path = m_ctx.appimagePath.string();
@@ -281,7 +290,12 @@ public:
         }
         argv.push_back(nullptr);
         execv(path.c_str(), argv.data());
-        return "could not start the new version";  // execv only returns on failure
+        // execv only returns on failure: put the runtime's variables back.
+        for (const auto& [name, value] : saved)
+        {
+            setenv(name, value.c_str(), 1);
+        }
+        return "could not start the new version";
 #endif
     }
 
