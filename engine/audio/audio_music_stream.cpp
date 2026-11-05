@@ -27,11 +27,26 @@ float computeStreamBufferedSeconds(const MusicStreamState& state)
     return static_cast<float>(gap) / static_cast<float>(state.sampleRate);
 }
 
+namespace
+{
+
+/// True once the loop policy allows no further play-through.
+bool noLoopsRemain(const MusicStreamState& state)
+{
+    return state.maxLoops >= 0
+        && state.loopCount >= static_cast<std::uint32_t>(state.maxLoops + 1);
+}
+
+} // namespace
+
 void notifyStreamFramesConsumed(MusicStreamState& state,
                                  std::uint64_t framesConsumed)
 {
     state.totalFramesConsumed += framesConsumed;
-    if (state.trackFullyDecodedOnce &&
+    // Finished only when no loop remains. A looping track's first EOF set
+    // trackFullyDecodedOnce for good, so any later underrun that drained the
+    // queue used to end the music (lane-10 lead).
+    if (state.trackFullyDecodedOnce && noLoopsRemain(state) &&
         state.totalFramesConsumed >= state.totalFramesDecoded)
     {
         state.finished = true;
@@ -81,8 +96,15 @@ StreamTickPlan planStreamTick(MusicStreamState& state, bool decoderAtEof)
         }
         else
         {
-            state.finished     = true;
-            plan.trackFinished = true;
+            // Out of loops: decode nothing more. Finish only once the queued
+            // audio has played, or the player's stop cuts the track's last
+            // buffers (lane-10 lead); notifyStreamFramesConsumed finishes it
+            // when the queue drains.
+            if (state.totalFramesConsumed >= state.totalFramesDecoded)
+            {
+                state.finished     = true;
+                plan.trackFinished = true;
+            }
             return plan;
         }
     }

@@ -25,6 +25,13 @@ may change any interface without notice.
 
 ## [Unreleased]
 
+### 2026-11-05 Fixed — Looping music keeps playing, and a track's ending is not cut
+
+A looping music track could stop for good after a brief hitch, once it
+had played through once. A track that plays once had its last fraction
+of a second cut off. Looping music now only stops when told to, and a
+track that plays once finishes after its last sound has played.
+
 ### 2026-11-05 Fixed — A damaged window-state file no longer stops Vestige starting
 
 Vestige remembers its window size and position in `window_state.json`.

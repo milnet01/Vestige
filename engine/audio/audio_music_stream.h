@@ -90,8 +90,9 @@ float computeStreamBufferedSeconds(const MusicStreamState& state);
 
 /// @brief Advances the playback counter by `framesConsumed` —
 ///        called when OpenAL unqueues a buffer. Sets the
-///        `finished` flag if `trackFullyDecodedOnce` is already
-///        true and we've consumed everything decoded.
+///        `finished` flag once the loop policy is exhausted and
+///        everything decoded has been consumed. A looping track
+///        never finishes here.
 void notifyStreamFramesConsumed(MusicStreamState& state,
                                  std::uint64_t framesConsumed);
 
@@ -110,8 +111,9 @@ void notifyStreamFramesDecoded(MusicStreamState& state,
 ///   2. If buffered seconds >= `maxSecondsBuffered`, return zero
 ///      work (back-pressure so we don't over-decode).
 ///   3. If an EOF has been reached and the loop policy is
-///      exhausted, mark finished (returning trackFinished next
-///      tick).
+///      exhausted, decode nothing more; finish (trackFinished)
+///      only once everything decoded has been consumed, so the
+///      queued tail plays out.
 ///   4. If an EOF has been reached but we may still loop, set
 ///      `rewindForLoop` and return the next chunk to decode.
 ///   5. Otherwise return the number of frames needed to reach

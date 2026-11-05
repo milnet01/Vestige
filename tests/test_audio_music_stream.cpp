@@ -80,14 +80,50 @@ TEST(MusicStream, FinishedSetAfterFullDrain)
 {
     MusicStreamState s;
     s.sampleRate = 48000;
+    s.maxLoops = 0;                              // one-shot
     notifyStreamFramesDecoded(s, 48000, true);   // decoded + EOF
     notifyStreamFramesConsumed(s, 48000);        // consume all
     EXPECT_TRUE(s.finished);
 }
 
+// lane-10 lead audio_music_stream.cpp:33: a looping track is never finished
+// by draining its queue, e.g. on an underrun after its first loop.
+TEST(MusicStream, LoopingTrackSurvivesADrainedQueue)
+{
+    MusicStreamState s;
+    s.sampleRate = 48000;
+    s.maxLoops = -1;                             // loop forever
+    notifyStreamFramesDecoded(s, 48000, true);   // first EOF
+    notifyStreamFramesConsumed(s, 48000);        // queue drains
+    EXPECT_FALSE(s.finished);
+}
+
+// lane-10 lead audio_music_stream.cpp:83: at the last EOF the queued tail
+// still has to play; finishing at once let the player cut it.
+TEST(MusicStream, LastEofWaitsForTheQueuedTail)
+{
+    MusicStreamState s;
+    s.sampleRate = 48000;
+    s.minSecondsBuffered = 0.3f;
+    s.framesPerChunk = 4096;
+    s.maxLoops = 0;
+    notifyStreamFramesDecoded(s, 48000, true);   // whole track decoded
+    notifyStreamFramesConsumed(s, 24000);        // half a second still queued
+
+    auto plan = planStreamTick(s, true);
+    EXPECT_FALSE(plan.trackFinished);
+    EXPECT_EQ(plan.framesToDecode, 0u);
+    EXPECT_FALSE(s.finished);
+
+    notifyStreamFramesConsumed(s, 24000);        // the tail plays out
+    EXPECT_TRUE(s.finished);
+    EXPECT_TRUE(planStreamTick(s, true).trackFinished);
+}
+
 TEST(MusicStream, NotFinishedUntilFullDrain)
 {
     MusicStreamState s;
+    s.maxLoops = 0;
     notifyStreamFramesDecoded(s, 48000, true);
     notifyStreamFramesConsumed(s, 24000);
     EXPECT_FALSE(s.finished);
