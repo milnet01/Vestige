@@ -156,7 +156,10 @@ float voiceKeepScore(const VoiceCandidate& v)
 {
     const int   rank = soundPriorityRank(v.priority);
     const float gain = std::max(0.0f, std::min(1.0f, v.effectiveGain));
-    const float age  = std::max(0.0f, v.ageSeconds);
+    // Age is capped so priority stays the dominant axis: unbounded, a voice
+    // older than ~1000 s scored below a fresh voice one rank lower, and an
+    // old looping Normal voice could block eviction of a Low one.
+    const float age  = std::clamp(v.ageSeconds, 0.0f, MAX_SCORED_AGE_SECONDS);
     return static_cast<float>(rank) * 1000.0f + gain * 10.0f - age;
 }
 

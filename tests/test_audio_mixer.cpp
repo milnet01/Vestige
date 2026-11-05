@@ -475,6 +475,18 @@ TEST(AudioEvictionAdmission, EqualIncomingPriorityLosesToIncumbent)
               static_cast<std::size_t>(-1));
 }
 
+// lane-10 lead audio_mixer.cpp:187: age was unbounded, so a Normal looping
+// voice older than ~1000 s scored below a fresh Low voice. An incoming Normal
+// then found the old Normal as the victim, tied on rank, and was refused,
+// although the Low voice could go.
+TEST(AudioEvictionAdmission, AnOldVoiceDoesNotOutrankALowerTier)
+{
+    std::vector<VoiceCandidate> voices;
+    voices.push_back({SoundPriority::Low, 1.0f, 1.0f});
+    voices.push_back({SoundPriority::Normal, 1.0f, 5000.0f});
+    EXPECT_EQ(chooseVoiceToEvictForIncoming(voices, SoundPriority::Normal), 0u);
+}
+
 TEST(AudioEvictionAdmission, StrictlyHigherIncomingWinsSingleVictim)
 {
     std::vector<VoiceCandidate> voices;

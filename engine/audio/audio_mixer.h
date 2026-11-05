@@ -209,9 +209,13 @@ struct VoiceCandidate
 };
 
 /// @brief Composite score — higher = more worth keeping. Equal to
-///        `priorityRank * 1000 + effectiveGain * 10 - ageSeconds`,
+///        `priorityRank * 1000 + effectiveGain * 10 - min(ageSeconds, 100)`,
 ///        chosen so priority is the dominant axis and age is a
-///        tiebreaker rather than a primary driver.
+///        tiebreaker rather than a primary driver. Age is capped so even
+///        the oldest voice cannot fall below the next rank down.
+/// @brief Age beyond this adds nothing to a voice's eviction score.
+inline constexpr float MAX_SCORED_AGE_SECONDS = 100.0f;
+
 float voiceKeepScore(const VoiceCandidate& v);
 
 /// @brief Returns the index of the voice most suitable to evict
