@@ -85,7 +85,7 @@ void GpuClothSimulator::setSubsteps(int substeps)
 
 void GpuClothSimulator::setParticleMass(float mass)
 {
-    if (mass <= 0.0f) return;
+    if (!(mass > 0.0f) || !std::isfinite(mass)) return;  // as the CPU backend
     m_config.particleMass = mass;
 
     // On GPU, particle mass translates to positions[i].w (inverse mass).

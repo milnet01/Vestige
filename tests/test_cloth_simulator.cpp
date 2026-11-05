@@ -4,6 +4,7 @@
 /// @file test_cloth_simulator.cpp
 /// @brief Unit tests for the ClothSimulator XPBD system.
 #include "physics/cloth_simulator.h"
+#include "physics/gpu_cloth_simulator.h"
 #include "cloth_test_helpers.h"
 
 #include <gtest/gtest.h>
@@ -486,6 +487,27 @@ TEST(ClothSimulator, NaNMassRejectsInitialization_Cl8)
     ClothSimulator sim;
     sim.initialize(cfg);
     EXPECT_FALSE(sim.isInitialized());
+}
+
+// lane-07 lead cloth_simulator.cpp:912: initialize() refused NaN and inf
+// masses but setParticleMass() let them in, on both backends.
+TEST(ClothSimulator, SetParticleMassRefusesNaNAndInf)
+{
+    ClothSimulator sim;
+    sim.initialize(makeBaselineConfig_Cl8());
+    ASSERT_TRUE(sim.isInitialized());
+    const float before = sim.getConfig().particleMass;
+    sim.setParticleMass(std::numeric_limits<float>::quiet_NaN());
+    EXPECT_EQ(sim.getConfig().particleMass, before);
+    sim.setParticleMass(std::numeric_limits<float>::infinity());
+    EXPECT_EQ(sim.getConfig().particleMass, before);
+
+    GpuClothSimulator gpu;  // the setter needs no GL context
+    const float gpuBefore = gpu.getConfig().particleMass;
+    gpu.setParticleMass(std::numeric_limits<float>::quiet_NaN());
+    EXPECT_EQ(gpu.getConfig().particleMass, gpuBefore);
+    gpu.setParticleMass(std::numeric_limits<float>::infinity());
+    EXPECT_EQ(gpu.getConfig().particleMass, gpuBefore);
 }
 
 TEST(ClothSimulator, InfMassRejectsInitialization_Cl8)

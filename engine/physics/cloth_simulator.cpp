@@ -913,7 +913,9 @@ void ClothSimulator::solveLRAConstraints()
 
 void ClothSimulator::setParticleMass(float mass)
 {
-    if (mass <= 0.0f)
+    // NaN fails every comparison, so "mass <= 0" let it through; +inf gave
+    // inverse mass 0, which pins every particle (lane-07 lead).
+    if (!(mass > 0.0f) || !std::isfinite(mass))
     {
         return;
     }
