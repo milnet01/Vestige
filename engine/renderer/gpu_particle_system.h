@@ -202,7 +202,7 @@ private:
     GLuint m_counterSSBO = 0;        ///< aliveCount, deadCount, emitCount, maxParticles (binding 1)
     GLuint m_freeListSSBO = 0;       ///< Free slot indices (binding 2)
     GLuint m_indirectDrawSSBO = 0;   ///< DrawArraysIndirectCommand (binding 3)
-    GLuint m_behaviorUBO = 0;        ///< BehaviorBlock uniform buffer (binding 4)
+    GLuint m_behaviorSSBO = 0;        ///< BehaviorBlock storage buffer (SSBO binding 4, std430)
     GLuint m_sortKeySSBO = 0;        ///< Sort key pairs (binding 5)
 
     // Depth collision state

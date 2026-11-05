@@ -25,6 +25,14 @@ may change any interface without notice.
 
 ## [Unreleased]
 
+### 2026-11-05 Fixed — GPU particle forces, colours and size curves read the right values
+
+GPU particle effects read their settings (gravity, drag, orbit and
+other forces, and the colour, size and speed over a particle's life)
+from the wrong places in memory. Only the first value of the first
+force came through intact, so most of an effect's settings did nothing
+or did something else. They now read what the effect sets.
+
 ### 2026-11-05 Fixed — Looping music keeps playing, and a track's ending is not cut
 
 A looping music track could stop for good after a brief hitch, once it

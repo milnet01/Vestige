@@ -51,7 +51,12 @@ const int MAX_BEHAVIORS = 16;
 const int MAX_COLOR_STOPS = 8;
 const int MAX_CURVE_KEYS = 8;
 
-layout(std140, binding = 4) uniform BehaviorBlock
+// std430 storage buffer, not a std140 uniform block: std140 gives every
+// float-array element 16 bytes, while GPUParticleSystem uploads the block
+// tightly packed (32-byte entries, 4-byte float arrays), so std140 read all
+// but the first few fields at the wrong offsets (3D_E-0874). std430 matches
+// the C++ packing; test_gpu_particle_layout.cpp pins it.
+layout(std430, binding = 4) readonly buffer BehaviorBlock
 {
     BehaviorData behaviors[MAX_BEHAVIORS];
     int behaviorCount;

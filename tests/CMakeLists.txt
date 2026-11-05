@@ -153,6 +153,7 @@ add_executable(vestige_tests
     test_cloth_friction.cpp
     test_gpu_particle_system.cpp
     test_gpu_particle_sort.cpp
+    test_gpu_particle_layout.cpp
     test_motion_matching.cpp
     test_advanced_physics.cpp
     test_environment_forces.cpp

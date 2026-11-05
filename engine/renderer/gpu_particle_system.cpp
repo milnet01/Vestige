@@ -5,6 +5,8 @@
 /// @brief GPU compute shader particle pipeline implementation.
 
 #include "renderer/gpu_particle_system.h"
+
+#include <cstddef>
 #include "renderer/sampler_fallback.h"
 #include "core/logger.h"
 
@@ -46,7 +48,7 @@ struct GPUParticleGPU
 };
 static_assert(sizeof(GPUParticleGPU) == 64, "GPUParticle must be 64 bytes for cache alignment");
 
-// Behavior entry layout for UBO (matches GLSL std140)
+// Behavior entry layout for the BehaviorBlock storage buffer (GLSL std430).
 // Tight 32-byte entry (two uint32 plus six floats), no padding. The
 // size is pinned by the static_assert below.
 struct BehaviorEntryGPU
@@ -57,7 +59,7 @@ struct BehaviorEntryGPU
 };
 static_assert(sizeof(BehaviorEntryGPU) == 32, "BehaviorEntry must be 32 bytes");
 
-// Full behavior UBO layout (std140)
+// Full behavior block layout (std430: float arrays at a 4-byte stride)
 struct BehaviorBlockGPU
 {
     BehaviorEntryGPU behaviors[16];                   // 16 * 32 = 512 bytes
@@ -72,6 +74,11 @@ struct BehaviorBlockGPU
     float speedKeys[8];                               // 8 * 4 = 32    = 784
     float speedKeyTimes[8];                           // 8 * 4 = 32    = 816
 };
+// The shader's std430 BehaviorBlock reads these offsets;
+// tests/test_gpu_particle_layout.cpp asks the compiled shader for them.
+static_assert(offsetof(BehaviorBlockGPU, colorStopTimes) == 656, "BehaviorBlock offset drift");
+static_assert(offsetof(BehaviorBlockGPU, speedKeyTimes) == 784, "BehaviorBlock offset drift");
+static_assert(sizeof(BehaviorBlockGPU) == 816, "BehaviorBlock size drift");
 
 GPUParticleSystem::GPUParticleSystem() = default;
 
@@ -128,7 +135,7 @@ void GPUParticleSystem::shutdown()
     if (m_counterSSBO) { glDeleteBuffers(1, &m_counterSSBO); m_counterSSBO = 0; }
     if (m_freeListSSBO) { glDeleteBuffers(1, &m_freeListSSBO); m_freeListSSBO = 0; }
     if (m_indirectDrawSSBO) { glDeleteBuffers(1, &m_indirectDrawSSBO); m_indirectDrawSSBO = 0; }
-    if (m_behaviorUBO) { glDeleteBuffers(1, &m_behaviorUBO); m_behaviorUBO = 0; }
+    if (m_behaviorSSBO) { glDeleteBuffers(1, &m_behaviorSSBO); m_behaviorSSBO = 0; }
     if (m_sortKeySSBO) { glDeleteBuffers(1, &m_sortKeySSBO); m_sortKeySSBO = 0; }
     m_initialized = false;
 }
@@ -180,9 +187,9 @@ void GPUParticleSystem::createBuffers(uint32_t maxParticles)
                          &cmd,
                          GL_DYNAMIC_STORAGE_BIT);
 
-    // Behavior UBO (binding 4)
-    glCreateBuffers(1, &m_behaviorUBO);
-    glNamedBufferStorage(m_behaviorUBO,
+    // Behavior block SSBO (binding 4, std430)
+    glCreateBuffers(1, &m_behaviorSSBO);
+    glNamedBufferStorage(m_behaviorSSBO,
                          sizeof(BehaviorBlockGPU),
                          nullptr,
                          GL_DYNAMIC_STORAGE_BIT);
@@ -278,7 +285,7 @@ void GPUParticleSystem::simulate(float deltaTime, const BehaviorBlock& behaviors
     // Bind SSBOs
     glBindBufferBase(GL_SHADER_STORAGE_BUFFER, 0, m_particleSSBO);
     glBindBufferBase(GL_SHADER_STORAGE_BUFFER, 1, m_counterSSBO);
-    glBindBufferBase(GL_UNIFORM_BUFFER, 4, m_behaviorUBO);
+    glBindBufferBase(GL_SHADER_STORAGE_BUFFER, 4, m_behaviorSSBO);
 
     m_simulateShader.setFloat("u_deltaTime", deltaTime);
     m_simulateShader.setFloat("u_elapsed", elapsed);
@@ -475,7 +482,7 @@ void GPUParticleSystem::uploadBehaviorBlock(const BehaviorBlock& behaviors)
         gpu.speedKeyTimes[i] = behaviors.speedKeyTimes[i];
     }
 
-    glNamedBufferSubData(m_behaviorUBO, 0, sizeof(BehaviorBlockGPU), &gpu);
+    glNamedBufferSubData(m_behaviorSSBO, 0, sizeof(BehaviorBlockGPU), &gpu);
 }
 
 /*static*/ uint32_t GPUParticleSystem::nextPowerOf2(uint32_t n)
