@@ -386,7 +386,7 @@ build_and_test_msvc() {
         # excluding them loses no signal. ANY new host-Python ctest test must be added
         # here (PerfGate joined LocalizationAudit/ShaderLint when 3D_E-0030 landed;
         # InputPollAudit joined when 3D_E-0628 landed; ShaderCompile when 3D_E-0638
-        # landed).
+        # landed; FpsFloor when 3D_E-0792 landed).
         #
         # The failure is inverted and therefore easy to misread: a host-Python test
         # that PASSES (exit 0) is reported ***Failed under Wine, while a WILL_FAIL
@@ -400,7 +400,7 @@ build_and_test_msvc() {
         # with a forced 3 s limit: nothing was left running).
         "${GL_WRAP[@]}" ctest --test-dir build-msvc --output-on-failure -j "$JOBS" -LE perf \
             --timeout "$MSVC_TEST_TIMEOUT" \
-            -E 'LocalizationAudit|ShaderLint|ShaderCompile|PerfGate|InputPollAudit' || exit 1
+            -E 'LocalizationAudit|ShaderLint|ShaderCompile|PerfGate|InputPollAudit|FpsFloor' || exit 1
     )
     local rc=$?
     if [[ $rc -eq 0 ]]; then record "$label" ok $((SECONDS - start)); else record "$label" fail $((SECONDS - start)); fi
