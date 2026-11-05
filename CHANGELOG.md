@@ -25,6 +25,15 @@ may change any interface without notice.
 
 ## [Unreleased]
 
+### 2026-11-05 Fixed — On Linux, the GPU memory figure is Vestige's own
+
+The profiler's GPU memory figure (`gpu_mb` in `--profile-log` and
+`--frame-log` files, and the performance panel's VRAM bar) was the whole
+graphics card's use, so a browser tab looked like engine memory. On
+Linux it is now this process's own VRAM. Where that can't be read, the
+logs leave the row out instead of writing a misleading number. Windows
+still has no reading. (3D_E-0820)
+
 ### 2026-11-05 Fixed — The profile log's time column starts at the first frame
 
 In a `--profile-log` file, `time_s` counted from when logging opened, so

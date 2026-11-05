@@ -203,9 +203,13 @@ void ProfileLog::sample(PerformanceProfiler& profiler, double elapsedSec)
                   static_cast<double>(e.endMs - e.startMs));
     }
 
-    // Memory (MB).
-    addSample(ProfileCategory::Mem, "gpu_mb", 0,
-              static_cast<double>(profiler.getMemoryTracker().getGpuUsedMB()));
+    // Memory (MB): this process's VRAM, and no row when it can't be read
+    // (3D_E-0820), since a zero would read as a real figure.
+    const MemoryTracker& mem = profiler.getMemoryTracker();
+    if (mem.hasGpuUsed())
+    {
+        addSample(ProfileCategory::Mem, "gpu_mb", 0, static_cast<double>(mem.getGpuUsedMB()));
+    }
 
     ++m_frameCount;
 

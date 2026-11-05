@@ -6705,7 +6705,7 @@ shipped that have no invocation path at all.
   Source: 3D_E-0810 stills 2026-10-31.
   Lanes: renderer, assets.
 
-- 📋 [3D_E-0820] **The profiler's gpu_mb is the whole graphics card's memory, not Vestige's, and reads nothing on Windows.**
+- 🚧 [3D_E-0820] **The profiler's gpu_mb is the whole graphics card's memory, not Vestige's, and reads nothing on Windows.**
   memory_tracker.cpp reads amdgpu's mem_info_vram_used, which is card-wide,
   and has no branch outside Linux. Measured in one flythrough: 6768 MB at
   frame 200, about 6100 MB by frame 800, 4787 MB just after exit. Measure the
@@ -6715,6 +6715,16 @@ shipped that have no invocation path at all.
   2026-11-04: frameledger v0.2.0 is the first release whose compare
   judges mem measures: the version to pin once gpu_mb measures this
   process alone, so perf_gate.py can retire.
+  2026-11-05 Linux half done: gpu_mb is this process's resident VRAM,
+  summed over its DRM clients' /proc/self/fdinfo records (each device +
+  client id once; drm-resident-vram, else drm-memory-vram; bytes/KiB/MiB).
+  Card total still from sysfs (panel denominator). Unknown -> no gpu_mb row
+  in either log, panel says unavailable. Tests DrmFdinfo.* (6, real amdgpu
+  record); dedupe mutation -> red. Measured: one flythrough read 1269 MB
+  throughout while card-wide ran 1159-3517 MB. Still open: Windows has no
+  reading. Plan: IDXGIAdapter3::QueryVideoMemoryInfo CurrentUsage on the
+  GL adapter (per process under WDDM), checked on the wintest box. Then
+  pin frameledger v0.2.0 so compare judges mem and perf_gate.py retires.
   **Layman:** The memory figure counts other programs too, so a browser tab can look like the engine using more memory.
   Kind: fix.
   Source: 3D_E-0786 first run file 2026-10-31.

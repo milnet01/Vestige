@@ -115,7 +115,8 @@ void FrameLedgerLog::sample(PerformanceProfiler& profiler, const FrameLedgerTime
     frame.times = times;
     frame.cpuEntries = cpu.data();
     frame.cpuEntryCount = cpu.size();
-    frame.memMb = static_cast<double>(profiler.getMemoryTracker().getGpuUsedMB());
+    const MemoryTracker& mem = profiler.getMemoryTracker();
+    frame.memMb = mem.hasGpuUsed() ? static_cast<double>(mem.getGpuUsedMB()) : -1.0;
     if (gpu.hasResults() && gpu.hasFreshResults() && m_frame >= GpuTimer::RESULT_LATENCY_FRAMES)
     {
         frame.gpuFrame = m_frame - GpuTimer::RESULT_LATENCY_FRAMES;
@@ -145,7 +146,10 @@ void FrameLedgerLog::writeFrame(const FrameLedgerFrame& frame)
 
     writeRow(m_frame, "frame", "cpu_span", 0, times.cpuSpanMs);
     writeRow(m_frame, "frame", "present_wait", 0, times.presentWaitMs);
-    writeRow(m_frame, "mem", "gpu_mb", 0, frame.memMb);
+    if (frame.memMb >= 0.0)
+    {
+        writeRow(m_frame, "mem", "gpu_mb", 0, frame.memMb);
+    }
 
     m_rows.clear();
     for (std::size_t i = 0; i < frame.cpuEntryCount; ++i)

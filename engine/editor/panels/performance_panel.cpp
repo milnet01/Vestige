@@ -351,11 +351,11 @@ void PerformancePanel::drawMemoryTab(PerformanceProfiler& profiler)
     // No CPU heap rows: nothing in the engine feeds MemoryTracker's CPU
     // counters (no global operator new/delete override), so they would read
     // zero. 3D_E-0787.
-    ImGui::Text("GPU VRAM");
+    ImGui::Text("GPU VRAM (this process)");
     size_t gpuUsed = mem.getGpuUsedMB();
     size_t gpuTotal = mem.getGpuTotalMB();
 
-    if (gpuTotal > 0)
+    if (gpuTotal > 0 && mem.hasGpuUsed())
     {
         float fraction = static_cast<float>(gpuUsed) / static_cast<float>(gpuTotal);
         char label[64];
@@ -365,7 +365,7 @@ void PerformancePanel::drawMemoryTab(PerformanceProfiler& profiler)
     }
     else
     {
-        ImGui::TextDisabled("GPU VRAM data unavailable (AMD sysfs not found)");
+        ImGui::TextDisabled("GPU VRAM data unavailable on this system");
     }
 }
 

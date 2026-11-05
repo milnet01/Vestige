@@ -68,7 +68,7 @@ struct FrameLedgerFrame
     FrameLedgerTimes times;
     const ProfileEntry* cpuEntries = nullptr;
     std::size_t cpuEntryCount = 0;
-    double memMb = 0.0;
+    double memMb = 0.0;  ///< This process's VRAM in MB; negative = unknown, no row.
 
     /// GPU results arrive after the frame that submitted them, so they name
     /// their own frame. Negative means this frame delivered none.
