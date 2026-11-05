@@ -38,6 +38,20 @@ TEST(PerformanceProfiler, HistoryKeepsOnlyTheLastWindow)
     EXPECT_FLOAT_EQ(profiler.getAvgFrameTimeMs(), 16.0f);
 }
 
+// lane-23 lead performance_panel.cpp:25: the closed panel calls
+// setEnabled(false) every frame; a log's request must survive it.
+TEST(PerformanceProfiler, KeptOnSurvivesTheClosedPanel)
+{
+    PerformanceProfiler profiler;
+    profiler.setKeptOn(true);
+    profiler.setEnabled(false);
+    EXPECT_TRUE(profiler.isEnabled());
+    profiler.setKeptOn(false);
+    EXPECT_FALSE(profiler.isEnabled());
+    profiler.setEnabled(true);
+    EXPECT_TRUE(profiler.isEnabled());
+}
+
 TEST(PerformanceProfiler, NoFrameYetReadsZero)
 {
     PerformanceProfiler profiler;

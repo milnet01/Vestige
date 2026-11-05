@@ -39,7 +39,7 @@ void PerformanceProfiler::endFrame(float deltaTime)
     m_gpuTimer.endFrame();
     getCpuProfiler_().endFrame();
 
-    if (m_enabled)
+    if (isEnabled())
     {
         m_memoryTracker.update();
     }

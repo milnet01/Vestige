@@ -71,12 +71,20 @@ public:
     /// @brief Maximum frame time over the history window.
     float getMaxFrameTimeMs() const { return m_maxFrameTime; }
 
-    /// @brief Whether profiling is enabled.
-    bool isEnabled() const { return m_enabled; }
+    /// @brief Whether profiling is enabled: by the performance panel, or kept
+    ///        on for a log.
+    bool isEnabled() const { return m_enabled || m_keptOn; }
 
     /// @brief Enable/disable profiling. Only gates the VRAM read; the GPU timer
-    ///        and CPU profiler run every frame regardless.
+    ///        and CPU profiler run every frame regardless. The performance panel
+    ///        calls this every frame with whether it is open.
     void setEnabled(bool enabled) { m_enabled = enabled; }
+
+    /// @brief Keeps profiling on whatever setEnabled() says, for a log that
+    ///        needs live readings. The closed panel's setEnabled(false) used to
+    ///        stop the VRAM reads under --profile-log / --frame-log, so gpu_mb
+    ///        went stale in the editor (lane-23 lead).
+    void setKeptOn(bool keptOn) { m_keptOn = keptOn; }
 
 private:
     CpuProfiler& getCpuProfiler_() { return Vestige::getCpuProfiler(); }
@@ -92,6 +100,7 @@ private:
     float m_maxFrameTime = 0.0f;
 
     bool m_enabled = false;
+    bool m_keptOn = false;
 };
 
 } // namespace Vestige

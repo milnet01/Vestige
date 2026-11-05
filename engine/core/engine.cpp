@@ -267,7 +267,7 @@ bool Engine::initialize(const EngineConfig& config)
                       std::to_string(static_cast<long long>(std::time(nullptr))) +
                       ".csv";
         }
-        m_profiler.setEnabled(true);
+        m_profiler.setKeptOn(true);  // the panel must not switch it off
         if (m_profileLog.open(logPath))
         {
             Logger::info("Profiler CSV log opened: " + logPath);
@@ -282,7 +282,7 @@ bool Engine::initialize(const EngineConfig& config)
     // records the resolution and vsync that settings may still change.
     if (!config.frameLogPath.empty())
     {
-        m_profiler.setEnabled(true);
+        m_profiler.setKeptOn(true);  // the panel must not switch it off
         m_frameLogPath = config.frameLogPath;
         m_frameLogScene = !config.startupScene.empty()
                               ? std::filesystem::path(config.startupScene).stem().string()
