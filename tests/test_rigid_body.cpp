@@ -254,6 +254,71 @@ TEST(RigidBody, KinematicBodySyncsFromTransform)
     world.shutdown();
 }
 
+// lane-07 lead rigid_body.cpp:210: Transform::rotation is Euler degrees applied
+// X, then Y, then Z. The kinematic sync read it as radians (glm::quat(vec3)),
+// so a body set to 90 degrees about Y turned about 1.57 degrees.
+TEST(RigidBody, KinematicBodyTakesTheEntitysRotation)
+{
+    PhysicsWorld world;
+    ASSERT_TRUE(world.initialize());
+
+    Entity entity("Door");
+    entity.update(0.0f);
+    auto* rb = entity.addComponent<RigidBody>();
+    rb->motionType = BodyMotionType::KINEMATIC;
+    rb->shapeType = CollisionShapeType::BOX;
+    rb->shapeSize = glm::vec3(1.0f, 2.0f, 0.1f);
+    rb->createBody(world);
+
+    entity.transform.rotation = glm::vec3(30.0f, 40.0f, 50.0f);
+    entity.update(0.0f);
+    rb->syncTransform();
+
+    const glm::mat3 want(entity.getWorldMatrix());
+    const glm::mat3 got = glm::mat3_cast(world.getBodyRotation(rb->getBodyId()));
+    for (int c = 0; c < 3; ++c)
+    {
+        for (int r = 0; r < 3; ++r)
+        {
+            EXPECT_NEAR(got[c][r], want[c][r], 1e-3f) << "column " << c << " row " << r;
+        }
+    }
+    world.shutdown();
+}
+
+// The dynamic sync writes the body's rotation back as the same Euler degrees,
+// so the entity's own matrix (with no override) reproduces it.
+TEST(RigidBody, DynamicBodyWritesRotationBackAsDegrees)
+{
+    PhysicsWorld world;
+    ASSERT_TRUE(world.initialize());
+
+    Entity entity("Crate");
+    entity.update(0.0f);
+    auto* rb = entity.addComponent<RigidBody>();
+    rb->motionType = BodyMotionType::DYNAMIC;
+    rb->shapeType = CollisionShapeType::BOX;
+    rb->shapeSize = glm::vec3(0.5f);
+    rb->createBody(world);
+
+    const glm::quat q = glm::angleAxis(glm::radians(60.0f), glm::normalize(glm::vec3(1, 2, 3)));
+    world.setBodyTransform(rb->getBodyId(), glm::vec3(0.0f), q);
+    rb->syncTransform();
+
+    Transform fromEuler;
+    fromEuler.rotation = entity.transform.rotation;
+    const glm::mat3 got(fromEuler.getLocalMatrix());
+    const glm::mat3 want = glm::mat3_cast(q);
+    for (int c = 0; c < 3; ++c)
+    {
+        for (int r = 0; r < 3; ++r)
+        {
+            EXPECT_NEAR(got[c][r], want[c][r], 1e-3f) << "column " << c << " row " << r;
+        }
+    }
+    world.shutdown();
+}
+
 // ---------------------------------------------------------------------------
 // Clone
 // ---------------------------------------------------------------------------

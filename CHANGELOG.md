@@ -25,6 +25,15 @@ may change any interface without notice.
 
 ## [Unreleased]
 
+### 2026-11-05 Fixed — Kinematic bodies turn with their object
+
+An object's rotation is stored in degrees, but a kinematic physics body
+(one moved by its object, like a door or platform) read it as radians.
+Turning such an object by 90 degrees turned its collision shape by
+about 1.6 degrees. It now takes the object's full rotation, including
+its parent's. A moving physics object now also shows its rotation in
+degrees in the inspector; it showed radians.
+
 ### 2026-11-05 Fixed — Acoustic baking can no longer run out of memory
 
 `--bake-acoustics` built its list of reflections without a limit. The

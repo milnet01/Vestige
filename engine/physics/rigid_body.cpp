@@ -3,6 +3,7 @@
 
 /// @file rigid_body.cpp
 /// @brief RigidBody component implementation.
+#define GLM_ENABLE_EXPERIMENTAL
 #include "physics/rigid_body.h"
 #include "scene/entity.h"
 #include "core/logger.h"
@@ -15,6 +16,7 @@
 
 #include <glm/gtc/matrix_transform.hpp>
 #include <glm/gtc/quaternion.hpp>
+#include <glm/gtx/euler_angles.hpp>
 
 namespace Vestige
 {
@@ -195,7 +197,12 @@ void RigidBody::syncTransform()
         const glm::vec3 pos = m_world->getBodyPosition(m_bodyId);
         const glm::quat rot = m_world->getBodyRotation(m_bodyId);
         owner->transform.position = pos;
-        owner->transform.rotation = glm::eulerAngles(rot);
+        // Transform::rotation is Euler DEGREES applied X, then Y, then Z
+        // (entity.h), so extract in that order and convert. glm::eulerAngles
+        // gave radians in another order, so the inspector showed nonsense.
+        glm::vec3 xyz(0.0f);
+        glm::extractEulerAngleXYZ(glm::mat4_cast(rot), xyz.x, xyz.y, xyz.z);
+        owner->transform.rotation = glm::degrees(xyz);
 
         const glm::mat4 trs =
             glm::translate(glm::mat4(1.0f), pos)
@@ -206,8 +213,16 @@ void RigidBody::syncTransform()
     else if (motionType == BodyMotionType::KINEMATIC)
     {
         // Entity -> physics
-        glm::vec3 pos = owner->getWorldPosition();
-        glm::quat rot = glm::quat(owner->transform.rotation);
+        // Position and rotation both from the world matrix, so a parented
+        // entity's body turns with its parent. Transform::rotation is Euler
+        // degrees applied X, Y, Z; reading it as radians turned a kinematic
+        // body about 57x too little (lane-07 lead rigid_body.cpp:210).
+        const glm::mat4 world = owner->getWorldMatrix();
+        glm::vec3 pos = glm::vec3(world[3]);
+        const glm::mat3 rotScale(world);
+        const glm::mat3 rotOnly(glm::normalize(rotScale[0]), glm::normalize(rotScale[1]),
+                                glm::normalize(rotScale[2]));
+        glm::quat rot = glm::normalize(glm::quat_cast(rotOnly));
         m_world->setBodyTransform(m_bodyId, pos, rot);
     }
     // Static bodies: no sync needed
