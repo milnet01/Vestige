@@ -218,6 +218,19 @@ TEST(UpdateService, OversizedAssetIsRefused)
     EXPECT_TRUE(d.bytes.empty());
 }
 
+// lane-23 lead update_service.cpp:107: a completed transfer with a bad status
+// (404, 500) has an empty error, so the message ended in "...downloaded: ".
+TEST(UpdateService, MissingSignatureNamesTheStatus)
+{
+    TestKey key;
+    auto t = offering(key, "payload");
+    t.routes.erase(kSigUrl);  // the fake answers 404 with no error text
+    UpdateService service(t, installed(), InstallKind::AppImage, key.pub);
+    const DownloadResult d = service.download(service.check("", false), {});
+    EXPECT_TRUE(d.bytes.empty());
+    EXPECT_NE(d.error.find("404"), std::string::npos) << d.error;
+}
+
 // INV-4: libcurl is reached through one file only.
 TEST(UpdateService, OnlyTheTransportIncludesLibcurl)
 {

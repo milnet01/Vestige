@@ -104,7 +104,10 @@ DownloadResult UpdateService::download(const CheckResult& offer, const ProgressF
     const HttpResult sig = m_transport.get(chosen.signature.url, 1024, kNoProgress);
     if (!sig.ok())
     {
-        result.error = "the signature could not be downloaded: " + sig.error;
+        // A completed transfer with a bad status has no error text: name the
+        // status, as the asset download below does (lane-23 lead).
+        result.error = "the signature could not be downloaded: "
+            + (sig.error.empty() ? "status " + std::to_string(sig.status) : sig.error);
         return result;
     }
     if (sig.body.size() != Signature{}.size())
