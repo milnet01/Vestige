@@ -379,7 +379,10 @@ public:
             int folders = 0;
             for (const auto& entry : fs::directory_iterator(m_stagingRoot, ec))
             {
-                if (entry.is_directory())
+                // The error_code overload: a stat failure must not throw out
+                // of a function that reports errors as strings (lane-23 lead).
+                std::error_code entryEc;
+                if (entry.is_directory(entryEc))
                 {
                     ++folders;
                     m_staged = entry.path();
