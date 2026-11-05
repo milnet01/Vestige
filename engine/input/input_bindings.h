@@ -159,6 +159,12 @@ public:
     ///        @a binding, or nullptr.
     const InputAction* findActionBoundTo(const InputBinding& binding) const;
 
+    /// @brief The first action among @a ids that @a binding fires, or
+    ///        nullptr. Actions outside @a ids are ignored, so a hotkey
+    ///        still fires when an earlier action shares its key.
+    const InputAction* findActionAmong(const std::vector<std::string>& ids,
+                                       const InputBinding& binding) const;
+
     /// @brief Returns the ids of every action bound to @a binding,
     ///        excluding @a excludeActionId.
     ///

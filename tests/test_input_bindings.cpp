@@ -183,6 +183,32 @@ TEST(InputActionMap, FindActionBoundToReturnsFirstMatch)
     EXPECT_EQ(m.findActionBoundTo(InputBinding::none()), nullptr);
 }
 
+// 3D_E-0874 lane 02: the engine's F1/F2/F11/F12 hotkeys were listed as
+// rebindable but dispatched by raw key code, so a rebind did nothing. The
+// engine now asks the map which hotkey action a key fires.
+TEST(InputActionMap, FindActionAmongFollowsARebind)
+{
+    InputActionMap m = sampleMap();
+    const std::vector<std::string> hotkeys = {"Fire"};
+    ASSERT_TRUE(m.setPrimary("Fire", InputBinding::scancode(GLFW_KEY_Q)));
+
+    const InputAction* a = m.findActionAmong(hotkeys, InputBinding::scancode(GLFW_KEY_Q));
+    ASSERT_NE(a, nullptr) << "the rebound key must fire the action";
+    EXPECT_EQ(a->id, "Fire");
+    EXPECT_EQ(m.findActionAmong(hotkeys, InputBinding::scancode(GLFW_KEY_SPACE)), nullptr)
+        << "a key bound only to an action outside the list fires none of them";
+}
+
+TEST(InputActionMap, FindActionAmongIgnoresEarlierActionsOnTheSameKey)
+{
+    InputActionMap m = sampleMap();
+    // Jump holds Space; bind Fire there too. findActionBoundTo would answer Jump.
+    ASSERT_TRUE(m.setSecondary("Fire", InputBinding::scancode(GLFW_KEY_SPACE)));
+    const InputAction* a = m.findActionAmong({"Fire"}, InputBinding::scancode(GLFW_KEY_SPACE));
+    ASSERT_NE(a, nullptr);
+    EXPECT_EQ(a->id, "Fire");
+}
+
 TEST(InputActionMap, ConflictDetectionReportsColliders)
 {
     InputActionMap m = sampleMap();

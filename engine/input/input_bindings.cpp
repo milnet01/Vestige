@@ -102,6 +102,18 @@ const InputAction* InputActionMap::findActionBoundTo(const InputBinding& binding
     return nullptr;
 }
 
+const InputAction* InputActionMap::findActionAmong(const std::vector<std::string>& ids,
+                                                   const InputBinding& binding) const
+{
+    if (!binding.isBound()) return nullptr;
+    for (const auto& id : ids)
+    {
+        const InputAction* action = findAction(id);
+        if (action && action->matches(binding)) return action;
+    }
+    return nullptr;
+}
+
 std::vector<std::string> InputActionMap::findConflicts(const InputBinding& binding,
                                                        const std::string& excludeActionId) const
 {

@@ -558,7 +558,7 @@ bool Engine::initialize(const EngineConfig& config)
             addAction("ToggleWireframe", "Toggle wireframe",  kbScan(GLFW_KEY_F1));
             addAction("CycleTonemap",    "Cycle tonemapper", kbScan(GLFW_KEY_F2));
             addAction("Screenshot",      "Screenshot + diagnostics", kbScan(GLFW_KEY_F11));
-            addAction("ToggleFullscreen","Toggle fullscreen", kbScan(GLFW_KEY_F12));
+            addAction("TogglePerformancePanel", "Toggle performance panel", kbScan(GLFW_KEY_F12));
         }
 
         // Apply persisted keybindings from Settings (if any) on top
@@ -898,6 +898,17 @@ bool Engine::initialize(const EngineConfig& config)
             return;
         }
 
+        // The four rebindable engine hotkeys go by action, not by key code,
+        // so a rebind in Settings takes effect (3D_E-0874).
+        static const std::vector<std::string> kHotkeys = {
+            "ToggleWireframe", "CycleTonemap", "Screenshot", "TogglePerformancePanel"};
+        if (const InputAction* hotkey = m_inputActionMap.findActionAmong(
+                kHotkeys, InputBinding::scancode(glfwGetKeyScancode(event.keyCode))))
+        {
+            runEngineHotkey(hotkey->id);
+            return;
+        }
+
         switch (event.keyCode)
         {
             case GLFW_KEY_ESCAPE:
@@ -957,19 +968,6 @@ bool Engine::initialize(const EngineConfig& config)
                     m_controller->setEnabled(m_isCursorCaptured);
                 }
                 break;
-
-            case GLFW_KEY_F1:
-                m_renderer->setWireframeMode(!m_renderer->isWireframeMode());
-                break;
-
-            case GLFW_KEY_F2:
-            {
-                int nextMode = (m_renderer->getTonemapMode() + 1) % 3;
-                m_renderer->setTonemapMode(nextMode);
-                const char* names[] = {"Reinhard", "ACES Filmic", "None (linear clamp)"};
-                Logger::info("Tonemapper: " + std::string(names[nextMode]));
-                break;
-            }
 
             case GLFW_KEY_F3:
             {
@@ -1100,12 +1098,6 @@ bool Engine::initialize(const EngineConfig& config)
                 if (m_editor) m_editor->showNotification(std::string("Auto-exposure: ") + (m_renderer->isAutoExposure() ? "ON" : "OFF"));
                 break;
 
-            case GLFW_KEY_F11:
-                FrameDiagnostics::capture(*m_renderer, *m_camera,
-                    m_window->getWidth(), m_window->getHeight(),
-                    m_timer->getFps(), m_timer->getDeltaTime());
-                break;
-
             // Q key: quit is now Ctrl+Q, handled by FileMenu via ImGui shortcuts.
             // Plain Q is no longer a quit shortcut.
 
@@ -1153,15 +1145,6 @@ bool Engine::initialize(const EngineConfig& config)
                         m_editor->getEditorCamera()->focusOn(glm::vec3(0.0f, 0.5f, 0.0f));
                         Logger::info("Editor camera: Focus on scene center");
                     }
-                }
-                break;
-
-            case GLFW_KEY_F12:
-                if (m_editor)
-                {
-                    m_editor->getPerformancePanel().toggleOpen();
-                    Logger::info(std::string("Performance panel: ")
-                                 + (m_editor->getPerformancePanel().isOpen() ? "ON" : "OFF"));
                 }
                 break;
 
@@ -1406,6 +1389,33 @@ bool Engine::initialize(const EngineConfig& config)
     Logger::info("Editor camera: Alt+LMB=orbit, MMB=pan, Scroll=zoom, F=focus, Numpad 1/3/7=front/right/top");
     Logger::info("Gamepad: Left stick=move, Right stick=look, LB=sprint, Triggers=up/down");
     return true;
+}
+
+void Engine::runEngineHotkey(const std::string& actionId)
+{
+    if (actionId == "ToggleWireframe")
+    {
+        m_renderer->setWireframeMode(!m_renderer->isWireframeMode());
+    }
+    else if (actionId == "CycleTonemap")
+    {
+        int nextMode = (m_renderer->getTonemapMode() + 1) % 3;
+        m_renderer->setTonemapMode(nextMode);
+        const char* names[] = {"Reinhard", "ACES Filmic", "None (linear clamp)"};
+        Logger::info("Tonemapper: " + std::string(names[nextMode]));
+    }
+    else if (actionId == "Screenshot")
+    {
+        FrameDiagnostics::capture(*m_renderer, *m_camera,
+            m_window->getWidth(), m_window->getHeight(),
+            m_timer->getFps(), m_timer->getDeltaTime());
+    }
+    else if (actionId == "TogglePerformancePanel" && m_editor)
+    {
+        m_editor->getPerformancePanel().toggleOpen();
+        Logger::info(std::string("Performance panel: ")
+                     + (m_editor->getPerformancePanel().isOpen() ? "ON" : "OFF"));
+    }
 }
 
 bool Engine::isMenuScreenActive() const

@@ -194,6 +194,11 @@ private:
     ///        screen is a menu (MainMenu / Paused / Settings) or a modal is open.
     bool isMenuScreenActive() const;
 
+    /// @brief Runs one of the rebindable engine hotkey actions by id
+    ///        (ToggleWireframe, CycleTonemap, Screenshot,
+    ///        TogglePerformancePanel). Unknown ids do nothing.
+    void runEngineHotkey(const std::string& actionId);
+
     /// @brief 3D_E-0746 — under game screens, shows the cursor and stops the
     ///        movement controller while a menu screen is up, and captures the
     ///        cursor again on Playing. Leaves the cursor alone at `None`,
