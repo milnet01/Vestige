@@ -119,3 +119,26 @@ TEST(AcousticBake, ReBakeIsDeterministic)
     ASSERT_EQ(a.size(), b.size());
     EXPECT_EQ(a, b);  // bit-identical tail (deterministic seed) + early taps
 }
+
+// lane-10 lead acoustic_bake.cpp:177: the image-source list grows about
+// facets^order. 20 facets at order 8 would need ~2.5e10 entries and exhaust
+// memory, so generation stops at kMaxImageSources. No red run: the symptom
+// (exhausting memory) is the harm; this locks the bound instead.
+TEST(AcousticBake, ImageSourcesStopAtTheCap)
+{
+    std::vector<ReflectingFacet> facets;
+    for (int i = 0; i < 20; ++i)
+    {
+        const float a = static_cast<float>(i) * 0.31f;
+        ReflectingFacet f;
+        f.plane = glm::vec4(glm::normalize(glm::vec3(std::cos(a), 0.3f, std::sin(a))), -5.0f);
+        f.area = 10.0f;
+        facets.push_back(f);
+    }
+    EXPECT_EQ(countImageSources(facets, glm::vec3(0.0f), 8), kMaxImageSources);
+
+    // A normal bake stays under the cap and is untouched by it: a box room
+    // (6 facets) to order 2 is 1 + 6 + 6*5 = 37 sources.
+    EXPECT_EQ(countImageSources(boxFacets(4.0f, 3.0f, 5.0f, SurfaceMaterial::Default),
+                                glm::vec3(0.0f), 2), 37u);
+}

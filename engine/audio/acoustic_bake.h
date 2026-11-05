@@ -80,6 +80,16 @@ float estimateRt60(const std::vector<float>& ir, int sampleRate);
 /// the [-1,1] convention at `params.sampleRate` (physical amplitudes, not
 /// peak-normalised — the inter-reflection levels are meaningful and the AX2 wet
 /// gain is calibrated against them).
+/// @brief Most image sources one probe bake generates. The count grows about
+///        facets^order, so 20 facets at order 8 would need ~2.5e10 entries and
+///        exhaust memory; past this cap generation stops with a warning.
+inline constexpr std::size_t kMaxImageSources = 250000;
+
+/// @brief How many image sources (order 0 included) a bake of @p facets to
+///        @p reflectionOrder (clamped [0,8]) generates, after the cap.
+std::size_t countImageSources(const std::vector<ReflectingFacet>& facets,
+                              const glm::vec3& probePos, int reflectionOrder);
+
 std::vector<float> bakeProbeIr(const std::vector<ReflectingFacet>& facets,
                                const glm::vec3& probePos,
                                float roomVolumeM3,

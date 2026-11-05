@@ -25,6 +25,14 @@ may change any interface without notice.
 
 ## [Unreleased]
 
+### 2026-11-05 Fixed — Acoustic baking can no longer run out of memory
+
+`--bake-acoustics` built its list of reflections without a limit. The
+list grows with the number of walls raised to the reflection order, so
+a room with many walls at a high order could use up all memory. The
+list now stops at 250,000 reflections, with a warning that names the
+room's wall count and order. Normal rooms bake as before.
+
 ### 2026-11-05 Fixed — On Linux, the GPU memory figure is Vestige's own
 
 The profiler's GPU memory figure (`gpu_mb` in `--profile-log` and

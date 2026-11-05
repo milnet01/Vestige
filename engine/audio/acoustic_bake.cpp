@@ -75,7 +75,55 @@ std::uint32_t seedFromPosition(const glm::vec3& p, std::uint32_t base)
     return h;
 }
 
+/// Breadth-first image sources to @p order, stopping at kMaxImageSources.
+std::vector<ImageSource> generateImageSources(const std::vector<ReflectingFacet>& facets,
+                                              const glm::vec3& probePos, int order)
+{
+    std::vector<ImageSource> images;
+    images.push_back({probePos, 1.0f, -1, 0});  // order 0 = the source itself (not emitted)
+    size_t head = 0;
+    bool capped = false;
+    while (head < images.size() && !capped)
+    {
+        const ImageSource cur = images[head++];
+        if (cur.order >= order)
+        {
+            continue;
+        }
+        for (int fi = 0; fi < static_cast<int>(facets.size()); ++fi)
+        {
+            if (fi == cur.lastFacet)
+            {
+                continue;  // no immediate re-reflection across the same plane
+            }
+            if (images.size() >= kMaxImageSources)
+            {
+                capped = true;
+                break;
+            }
+            const ReflectingFacet& f = facets[static_cast<size_t>(fi)];
+            const glm::vec3 mirrored = reflectAcrossPlane(cur.pos, f.plane);
+            const float factor = std::sqrt(std::max(0.0f, 1.0f - absorptionFor(f.material)));
+            images.push_back({mirrored, cur.reflectionProduct * factor, fi, cur.order + 1});
+        }
+    }
+    if (capped)
+    {
+        Logger::warning("[AcousticBake] image sources capped at "
+                        + std::to_string(kMaxImageSources) + " (" + std::to_string(facets.size())
+                        + " facets, order " + std::to_string(order)
+                        + "); lower the reflection order for a complete early field");
+    }
+    return images;
+}
+
 } // namespace
+
+std::size_t countImageSources(const std::vector<ReflectingFacet>& facets,
+                              const glm::vec3& probePos, int reflectionOrder)
+{
+    return generateImageSources(facets, probePos, std::clamp(reflectionOrder, 0, 8)).size();
+}
 
 float surfaceMaterialAbsorption(SurfaceMaterial material)
 {
@@ -171,28 +219,7 @@ std::vector<float> bakeProbeIr(const std::vector<ReflectingFacet>& facets,
     const float c = params.speedOfSound > 1.0f ? params.speedOfSound : 343.0f;
 
     // --- Early reflections: breadth-first image-source generation to order K.
-    std::vector<ImageSource> images;
-    images.push_back({probePos, 1.0f, -1, 0});  // order 0 = the source itself (not emitted)
-    size_t head = 0;
-    while (head < images.size())
-    {
-        const ImageSource cur = images[head++];
-        if (cur.order >= order)
-        {
-            continue;
-        }
-        for (int fi = 0; fi < static_cast<int>(facets.size()); ++fi)
-        {
-            if (fi == cur.lastFacet)
-            {
-                continue;  // no immediate re-reflection across the same plane
-            }
-            const ReflectingFacet& f = facets[static_cast<size_t>(fi)];
-            const glm::vec3 mirrored = reflectAcrossPlane(cur.pos, f.plane);
-            const float factor = std::sqrt(std::max(0.0f, 1.0f - absorptionFor(f.material)));
-            images.push_back({mirrored, cur.reflectionProduct * factor, fi, cur.order + 1});
-        }
-    }
+    const std::vector<ImageSource> images = generateImageSources(facets, probePos, order);
 
     // Delay/amplitude of each image (order ≥ 1) as heard at the probe.
     struct Tap { int sample; float amp; };
