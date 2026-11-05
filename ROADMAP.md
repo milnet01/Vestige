@@ -7391,7 +7391,7 @@ shipped that have no invocation path at all.
   Source: 3D_E-0792 2026-11-05.
   Lanes: profiler, renderer.
 
-- 🚧 [3D_E-0877] **CI's Windows job crashes in IblFacePassTest, and the Debug, audit and Windows builds run mostly uncached.**
+- ✅ [3D_E-0877] **CI's Windows job crashes in IblFacePassTest, and the Debug, audit and Windows builds run mostly uncached.**
   Windows (no GL 4.5 on the runner): IblFacePassTest's SetUp and
   TearDown called gl* after the base fixture's GTEST_SKIP, so a null
   pointer crashed the shard. Local CI missed it: Wine supplies a GL
@@ -7419,6 +7419,10 @@ shipped that have no invocation path at all.
   local-ci.sh) stays the pre-push Windows gate; the real Windows PC
   (scripts/wintest.sh) is an extra check for GPU and driver work.
   MSVC may be installed on the Windows PC if a task needs it.
+  2026-11-05 second run 42005624182 (39cc879), all green: Debug and
+  audit ccache hits 86% (917/1064), Release 86%; Linux Debug 3.6 min,
+  audit 5.6 min, Linux Release 2.9 min, Windows 9.6 min. MSVC caching
+  stays a separate change, not owed here.
   **Layman:** CI went red on every push since 2026-11-04 because one test crashed on GitHub's Windows machine; this fixes it, makes the local check catch that kind of crash, and speeds up the slowest CI jobs.
   Kind: fix.
   Source: user-request-2026-11-05.
