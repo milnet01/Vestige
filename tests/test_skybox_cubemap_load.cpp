@@ -101,4 +101,49 @@ TEST_F(SkyboxCubemapLoadTest, RejectsFaceWithDifferentSize)
     removeAll(faces);
 }
 
+
+// 3D_E-0874 lane 04: a second loadCubemap created a new texture without
+// deleting the first, leaking it on every sky change.
+TEST_F(SkyboxCubemapLoadTest, ReloadDeletesThePreviousCubemap)
+{
+    std::vector<std::string> faces;
+    for (int f = 0; f < 6; ++f)
+    {
+        faces.push_back(writeGreyFace("r" + std::to_string(f), kFaceW, kFaceH, 9));
+    }
+
+    Skybox skybox;
+    ASSERT_TRUE(skybox.loadCubemap(faces));
+    const GLuint first = skybox.getTextureId();
+    ASSERT_TRUE(skybox.loadCubemap(faces));
+    EXPECT_NE(skybox.getTextureId(), 0u);
+    EXPECT_FALSE(glIsTexture(first) && first != skybox.getTextureId())
+        << "the first cubemap is still alive after the reload";
+    removeAll(faces);
+}
+
+// A reload that fails part way must leave the sky it had, not report a texture
+// while holding none.
+TEST_F(SkyboxCubemapLoadTest, FailedReloadKeepsThePreviousSky)
+{
+    std::vector<std::string> good;
+    std::vector<std::string> bad;
+    for (int f = 0; f < 6; ++f)
+    {
+        good.push_back(writeGreyFace("g" + std::to_string(f), kFaceW, kFaceH, 9));
+        bad.push_back(writeGreyFace("b" + std::to_string(f),
+                                    (f == 4) ? kFaceW + 1 : kFaceW, kFaceH, 9));
+    }
+
+    Skybox skybox;
+    ASSERT_TRUE(skybox.loadCubemap(good));
+    const GLuint before = skybox.getTextureId();
+    EXPECT_FALSE(skybox.loadCubemap(bad));
+    EXPECT_TRUE(skybox.hasTexture());
+    EXPECT_EQ(skybox.getTextureId(), before);
+    EXPECT_TRUE(glIsTexture(skybox.getTextureId())) << "hasTexture() is true but the texture is gone";
+    removeAll(good);
+    removeAll(bad);
+}
+
 }  // namespace Vestige::Test

@@ -134,12 +134,14 @@ bool Skybox::loadCubemap(const std::vector<std::string>& faces)
     const GLenum format = GL_RGBA;
     const GLenum internalFormat = GL_RGBA8;
 
-    // Create cubemap with DSA (immutable storage)
-    glCreateTextures(GL_TEXTURE_CUBE_MAP, 1, &m_cubemapTexture);
-    glTextureStorage2D(m_cubemapTexture, 1, internalFormat, width, height);
+    // Build the new cubemap beside the current one: a reload that fails part
+    // way keeps the sky already loaded (3D_E-0874).
+    GLuint cubemap = 0;
+    glCreateTextures(GL_TEXTURE_CUBE_MAP, 1, &cubemap);
+    glTextureStorage2D(cubemap, 1, internalFormat, width, height);
 
     // Upload first face (face 0 = +X)
-    glTextureSubImage3D(m_cubemapTexture, 0, 0, 0, 0, width, height, 1,
+    glTextureSubImage3D(cubemap, 0, 0, 0, 0, width, height, 1,
                         format, GL_UNSIGNED_BYTE, firstData);
     stbi_image_free(firstData);
 
@@ -155,32 +157,35 @@ bool Skybox::loadCubemap(const std::vector<std::string>& faces)
         {
             Logger::error("Cubemap face size differs from the first face: " + faces[i]);
             stbi_image_free(data);
-            glDeleteTextures(1, &m_cubemapTexture);
-            m_cubemapTexture = 0;
+            glDeleteTextures(1, &cubemap);
             return false;
         }
 
         if (data)
         {
-            glTextureSubImage3D(m_cubemapTexture, 0, 0, 0, static_cast<GLint>(i),
+            glTextureSubImage3D(cubemap, 0, 0, 0, static_cast<GLint>(i),
                                 faceW, faceH, 1, GL_RGBA, GL_UNSIGNED_BYTE, data);
             stbi_image_free(data);
         }
         else
         {
             Logger::error("Failed to load cubemap face: " + faces[i]);
-            glDeleteTextures(1, &m_cubemapTexture);
-            m_cubemapTexture = 0;
+            glDeleteTextures(1, &cubemap);
             return false;
         }
     }
 
-    glTextureParameteri(m_cubemapTexture, GL_TEXTURE_MIN_FILTER, GL_LINEAR);
-    glTextureParameteri(m_cubemapTexture, GL_TEXTURE_MAG_FILTER, GL_LINEAR);
-    glTextureParameteri(m_cubemapTexture, GL_TEXTURE_WRAP_S, GL_CLAMP_TO_EDGE);
-    glTextureParameteri(m_cubemapTexture, GL_TEXTURE_WRAP_T, GL_CLAMP_TO_EDGE);
-    glTextureParameteri(m_cubemapTexture, GL_TEXTURE_WRAP_R, GL_CLAMP_TO_EDGE);
+    glTextureParameteri(cubemap, GL_TEXTURE_MIN_FILTER, GL_LINEAR);
+    glTextureParameteri(cubemap, GL_TEXTURE_MAG_FILTER, GL_LINEAR);
+    glTextureParameteri(cubemap, GL_TEXTURE_WRAP_S, GL_CLAMP_TO_EDGE);
+    glTextureParameteri(cubemap, GL_TEXTURE_WRAP_T, GL_CLAMP_TO_EDGE);
+    glTextureParameteri(cubemap, GL_TEXTURE_WRAP_R, GL_CLAMP_TO_EDGE);
 
+    if (m_cubemapTexture != 0)
+    {
+        glDeleteTextures(1, &m_cubemapTexture);
+    }
+    m_cubemapTexture = cubemap;
     m_hasTexture = true;
     Logger::info("Cubemap loaded successfully");
     return true;
