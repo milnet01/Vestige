@@ -4157,6 +4157,9 @@ void Renderer::renderPointShadowPass(const std::vector<int>& shadowCasters)
                 bindShadowFluxAlbedo(m_pointShadowDepthShader, batch.material);
                 if (count >= MIN_INSTANCE_BATCH_SIZE && m_instanceBuffer)
                 {
+                    // Skinned meshes never batch (buildInstanceBatches), but a
+                    // skinned draw earlier in the loop leaves u_hasBones set.
+                    m_pointShadowDepthShader.setBool("u_hasBones", false);
                     m_pointShadowDepthShader.setBool("u_useInstancing", true);
                     m_instanceBuffer->upload(batch.modelMatrices);
                     batch.mesh->setupInstanceAttributes(m_instanceBuffer->getHandle());
@@ -4174,9 +4177,22 @@ void Renderer::renderPointShadowPass(const std::vector<int>& shadowCasters)
                 {
                     m_pointShadowDepthShader.setBool("u_useInstancing", false);
                     batch.mesh->bind();
-                    for (const auto& matrix : batch.modelMatrices)
+                    for (size_t mi = 0; mi < batch.modelMatrices.size(); mi++)
                     {
-                        m_pointShadowDepthShader.setMat4("u_model", matrix);
+                        // Pose skinned meshes, as the directional shadow pass does.
+                        const std::vector<glm::mat4>* bones =
+                            (mi < batch.boneMatrixPtrs.size()) ? batch.boneMatrixPtrs[mi] : nullptr;
+                        const bool skinned = (bones != nullptr && !bones->empty());
+                        m_pointShadowDepthShader.setBool("u_hasBones", skinned);
+                        if (skinned)
+                        {
+                            glNamedBufferSubData(m_boneMatrixSSBO, 0,
+                                static_cast<GLsizeiptr>(bones->size() * sizeof(glm::mat4)),
+                                bones->data());
+                            glBindBufferBase(GL_SHADER_STORAGE_BUFFER, 2, m_boneMatrixSSBO);
+                        }
+
+                        m_pointShadowDepthShader.setMat4("u_model", batch.modelMatrices[mi]);
                         glDrawElements(GL_TRIANGLES,
                             static_cast<GLsizei>(batch.mesh->getIndexCount()),
                             GL_UNSIGNED_INT, nullptr);

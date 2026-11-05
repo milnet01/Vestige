@@ -283,6 +283,7 @@ add_executable(vestige_tests
     test_entity_serializer_depth_cap.cpp
     test_ibl_capture_sequence.cpp
     test_skybox_depth.cpp
+    test_point_shadow_skinning.cpp
     test_motion_overlay_prev_world.cpp
     test_normal_matrix.cpp
     test_audio_stop_sound.cpp
