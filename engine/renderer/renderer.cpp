@@ -13,6 +13,7 @@
 #include "renderer/normal_matrix.h"
 #include "renderer/sampler_fallback.h"
 #include "renderer/scoped_forward_z.h"
+#include "renderer/skybox_depth.h"
 #include "renderer/scoped_shadow_depth_state.h"
 #include "animation/skeleton.h"
 #include "environment/foliage_manager.h"
@@ -3711,20 +3712,8 @@ void Renderer::renderScene(const SceneRenderData& renderData, const Camera& came
     // The skybox vertex shader now reads u_skyboxFarDepth and emits
     // z = u_skyboxFarDepth * w, so z/w = u_skyboxFarDepth after the
     // perspective divide. The right value depends on which Z convention
-    // is active for THIS render:
-    //   reverse-Z (main render, GL_GEQUAL, cleared 0): u_skyboxFarDepth = 0
-    //   forward-Z (capture passes, GL_LESS,  cleared 1): u_skyboxFarDepth ≈ 1
-    // For forward-Z we use 0.99999 (not exactly 1.0) so GL_LESS still
-    // passes against the cleared-far buffer (0.99999 < 1.0 = true) but
-    // fails against any opaque geometry (which has depth < 0.99999 in
-    // forward-Z = closer than the far plane).
-    //
-    // `geometryOnly` is the cleanest proxy for the capture path — both
-    // captureLightProbe and captureSHGrid call renderScene with
-    // geometryOnly=true under forward-Z; main rendering uses reverse-Z.
-    // The water refraction and reflection passes in Engine::run also pass
-    // geometryOnly=true, so the proxy is not capture-only; see the
-    // u_skyboxFarDepth and u_maxRadiance values below.
+    // is active for THIS render; skyboxPassStateForCurrentDepthTest()
+    // (skybox_depth.h) reads it from the live depth function.
     if (m_skybox && m_skyboxEnabled)
     {
         glDepthMask(GL_FALSE);   // Don't write to depth buffer
@@ -3735,11 +3724,9 @@ void Renderer::renderScene(const SceneRenderData& renderData, const Camera& came
         // Use the (potentially jittered) projection so TAA accumulates the skybox correctly
         m_skyboxShader.setMat4("u_projection", m_lastProjection);
         m_skyboxShader.setBool("u_hasCubemap", m_skybox->hasTexture());
-        m_skyboxShader.setFloat("u_skyboxFarDepth", geometryOnly ? 0.99999f : 0.0f);
-        // Probe captures feed lighting, so they cap the sun as the IBL does;
-        // the visible sky does not (3D_E-0772).
-        m_skyboxShader.setFloat("u_maxRadiance",
-                                geometryOnly ? Skybox::IBL_MAX_RADIANCE : 0.0f);
+        const SkyboxPassState skyState = skyboxPassStateForCurrentDepthTest();
+        m_skyboxShader.setFloat("u_skyboxFarDepth", skyState.farDepth);
+        m_skyboxShader.setFloat("u_maxRadiance", skyState.maxRadiance);
 
         if (m_skybox->hasTexture())
         {
