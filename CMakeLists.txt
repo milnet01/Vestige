@@ -89,6 +89,14 @@ if(MSVC)
     add_compile_options(/utf-8)
 endif()
 
+# The Visual Studio generator builds one project's files one at a time unless cl
+# gets /MP. vestige_engine and vestige_tests are one project each, so CI's Windows
+# job compiled them on one core (2026-11-05). Ninja (msvc-wine) already runs one
+# cl per file, so it is left alone.
+if(MSVC AND CMAKE_GENERATOR MATCHES "Visual Studio")
+    add_compile_options(/MP)
+endif()
+
 # ---------------------------------------------------------------------------
 # Memory guard: cap concurrent heavy jobs (Ninja job pools)
 #

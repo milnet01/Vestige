@@ -109,7 +109,16 @@ jobs:
         uses: hendrikmuhs/ccache-action@f09c25b45002a07be2955cbe52e8cee55643f89d  # v1.2.24
         with:
           key: ${{ github.job }}-${{ matrix.config }}
-          max-size: 500M
+          # A full Debug build's objects are about 12x a Release build's (debug
+          # info; measured 2026-11-05: 2.5 GB vs 0.2 GB raw). At 500M the Debug
+          # cache was full and evicting its own entries: 38% hits, against 81%
+          # for Release. The ceiling is generous because evict-old-files keeps
+          # the saved cache to one build's objects whatever the ceiling is.
+          max-size: ${{ matrix.config == 'Debug' && '2G' || '500M' }}
+          # Drop every entry this build did not touch before the cache is
+          # saved: the next run needs this commit's objects, not older ones, and
+          # a lean save keeps the repository under GitHub's cache limit.
+          evict-old-files: job
 
       - name: Cache CMake FetchContent deps
         uses: actions/cache@55cc8345863c7cc4c66a329aec7e433d2d1c52a9  # v5
@@ -256,7 +265,9 @@ jobs:
         uses: hendrikmuhs/ccache-action@f09c25b45002a07be2955cbe52e8cee55643f89d  # v1.2.24
         with:
           key: ${{ github.job }}-Debug
-          max-size: 500M
+          # Debug-sized, as in linux-build-test: at 500M this job hit 19%.
+          max-size: 2G
+          evict-old-files: job
 
       - name: Cache CMake FetchContent deps
         uses: actions/cache@55cc8345863c7cc4c66a329aec7e433d2d1c52a9  # v5
@@ -388,6 +399,7 @@ jobs:
         with:
           key: ${{ github.job }}-${{ matrix.cmake }}
           max-size: 500M
+          evict-old-files: job
 
       - name: Cache CMake FetchContent deps
         uses: actions/cache@55cc8345863c7cc4c66a329aec7e433d2d1c52a9  # v5

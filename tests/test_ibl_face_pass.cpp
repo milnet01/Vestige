@@ -39,6 +39,12 @@ protected:
     void SetUp() override
     {
         GLTestFixture::SetUp();
+        // GTEST_SKIP returns from the base SetUp only; with no GL context
+        // every gl* pointer is null and the calls below would crash.
+        if (IsSkipped())
+        {
+            return;
+        }
         m_fragPath = (std::filesystem::temp_directory_path()
             / ("vestige_ibl_face_pass_" + Testing::vestigeTestStamp() + ".frag.glsl")).string();
         {
@@ -57,6 +63,10 @@ protected:
 
     void TearDown() override
     {
+        if (IsSkipped())
+        {
+            return;
+        }
         glDeleteRenderbuffers(1, &m_rbo);
         glDeleteFramebuffers(1, &m_fbo);
         glDeleteBuffers(1, &m_cubeVbo);

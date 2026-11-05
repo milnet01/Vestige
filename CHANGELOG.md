@@ -25,6 +25,16 @@ may change any interface without notice.
 
 ## [Unreleased]
 
+### 2026-11-05 Fixed — CI's Windows job passes again, and the slow CI jobs build faster (3D_E-0877)
+
+On GitHub's Windows machine, which has no OpenGL 4.5, one graphics test
+called OpenGL after deciding to skip, and crashed. It now stops at the
+skip. The local check missed this because Wine provides OpenGL; its
+Windows test run now turns OpenGL off, as GitHub's machine has it. The
+Windows job now compiles several files at once (`/MP`). The Debug and
+audit jobs' compiler caches were too small to hold one Debug build; they
+now have room, and every cache keeps only the newest build's files.
+
 ### 2026-11-05 Fixed — A minimised Vestige no longer keeps a processor core busy
 
 With the window minimised, Vestige skipped drawing but kept looping as

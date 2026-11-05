@@ -341,8 +341,11 @@ MSVC_TEST_TIMEOUT="${VESTIGE_CI_MSVC_TEST_TIMEOUT:-600}"
 # Cross-compile the engine with MSVC under Wine and run the compiled gtest suite —
 # mirrors ci.yml's windows-build-test. Ninja + cl (no VS generator on Linux);
 # CMAKE_SYSTEM_NAME=Windows cross-compiles; the .exe tests run through Wine via
-# CMAKE_CROSSCOMPILING_EMULATOR. GL tests self-skip (no GL 4.5 context under Wine),
-# same as the GH windows-2022 runner.
+# CMAKE_CROSSCOMPILING_EMULATOR. GL tests must skip, as on the GH windows-2022
+# runner, which has no GL 4.5 context. Wine does supply one (on llvmpipe), so the
+# test run sets VESTIGE_TEST_NO_GL=1: without it the GL tests passed here while
+# their skip path crashed on GitHub (IblFacePassTest, 2026-11-05). The Linux
+# stages still run every GL test.
 build_and_test_msvc() {
     local label="Windows MSVC build+test" start=$SECONDS
     banner "$label — msvc-wine (real MSVC cl.exe under Wine)"
@@ -398,7 +401,7 @@ build_and_test_msvc() {
         # and blocked a push) instead of stalling the push. A shard takes about a
         # minute. ctest's kill ends the .exe under Wine too (checked 2026-10-19
         # with a forced 3 s limit: nothing was left running).
-        "${GL_WRAP[@]}" ctest --test-dir build-msvc --output-on-failure -j "$JOBS" -LE perf \
+        VESTIGE_TEST_NO_GL=1 "${GL_WRAP[@]}" ctest --test-dir build-msvc --output-on-failure -j "$JOBS" -LE perf \
             --timeout "$MSVC_TEST_TIMEOUT" \
             -E 'LocalizationAudit|ShaderLint|ShaderCompile|PerfGate|InputPollAudit|FpsFloor' || exit 1
     )

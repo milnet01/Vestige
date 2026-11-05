@@ -1,6 +1,6 @@
 <!-- ants-roadmap-format: 1 -->
 <!-- Generated from the Ants Terminal roadmap store. Edit it with roadmap_log; hand edits are discarded by the next write. -->
-<!-- ants-roadmap-id-high-water: 3D_E=876 3D_E#S=989 -->
+<!-- ants-roadmap-id-high-water: 3D_E=877 3D_E#S=989 -->
 
 # Vestige Engine Roadmap
 
@@ -7377,6 +7377,25 @@ shipped that have no invocation path at all.
   Kind: enhancement.
   Source: 3D_E-0792 2026-11-05.
   Lanes: profiler, renderer.
+
+- 🚧 [3D_E-0877] **CI's Windows job crashes in IblFacePassTest, and the Debug, audit and Windows builds run mostly uncached.**
+  Windows (no GL 4.5 on the runner): IblFacePassTest's SetUp and
+  TearDown called gl* after the base fixture's GTEST_SKIP, so a null
+  pointer crashed the shard. Local CI missed it: Wine supplies a GL
+  context on llvmpipe, so the skip path never ran before a push.
+  Fix: IsSkipped() guards; VESTIGE_TEST_NO_GL=1 in local-ci.sh's Wine
+  test run.
+
+  Speed (run 41980026542): Windows compiled vestige_engine and
+  vestige_tests on one core (no /MP); Debug and audit ccache full at
+  500M, 38% and 19% hits vs 81% for Release. Fix: /MP for the VS
+  generator; evict-old-files: job on every ccache step; 2G ceiling
+  for the two Debug-config jobs. Done when the second push run after
+  this shows the hit rates and Windows build time.
+  **Layman:** CI went red on every push since 2026-11-04 because one test crashed on GitHub's Windows machine; this fixes it, makes the local check catch that kind of crash, and speeds up the slowest CI jobs.
+  Kind: fix.
+  Source: user-request-2026-11-05.
+  Lanes: ci, tests.
 
 ## 0.3.0 — An editor a builder can use
 

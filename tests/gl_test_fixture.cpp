@@ -9,6 +9,7 @@
 #include <glad/gl.h>
 #include <GLFW/glfw3.h>
 
+#include <cstdlib>
 #include <string>
 
 namespace Vestige::Test
@@ -34,6 +35,19 @@ void GLTestEnvironment::SetUp()
     // is process-lifetime driver/windowing state; keep it off LSan's books.
     // The guard spans every early-return path (RAII), re-enabling on exit.
     ScopedLeakCheckDisable noLeakTracking;
+
+    // VESTIGE_TEST_NO_GL=1 takes the no-context path on purpose. local-ci.sh
+    // sets it for the Windows tests under Wine: Wine would otherwise supply a
+    // GL context that GitHub's Windows runner lacks, and the skip path would
+    // never run before a push.
+    if (const char* noGl = std::getenv("VESTIGE_TEST_NO_GL");
+        noGl != nullptr && std::string(noGl) == "1")
+    {
+        Logger::warning("GLTestEnvironment: VESTIGE_TEST_NO_GL=1 — GL parity "
+                        "tests will skip.");
+        g_initialized = false;
+        return;
+    }
 
     // The test window is hidden (GLFW_VISIBLE=FALSE) and never decorated, so we
     // do not need libdecor. On Wayland, GLFW otherwise loads libdecor's GTK
