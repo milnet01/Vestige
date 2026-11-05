@@ -7415,6 +7415,10 @@ shipped that have no invocation path at all.
   push. Windows is now the longest job and has no compiler cache;
   ccache or sccache for MSVC needs the Ninja generator and a dev-env
   step, so it is a separate change to weigh for flakiness.
+  User 2026-11-05: keep the recommendation. Wine (MSVC under Wine in
+  local-ci.sh) stays the pre-push Windows gate; the real Windows PC
+  (scripts/wintest.sh) is an extra check for GPU and driver work.
+  MSVC may be installed on the Windows PC if a task needs it.
   **Layman:** CI went red on every push since 2026-11-04 because one test crashed on GitHub's Windows machine; this fixes it, makes the local check catch that kind of crash, and speeds up the slowest CI jobs.
   Kind: fix.
   Source: user-request-2026-11-05.
