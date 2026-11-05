@@ -63,7 +63,8 @@ public:
     ///
     /// Defaults to `AUTO`. Game code can pin to `FORCE_CPU` for
     /// deterministic-regression tests, or `FORCE_GPU` to exercise the GPU
-    /// path on a small cloth (threshold check is bypassed).
+    /// path on a small cloth (threshold check is bypassed). Without compute
+    /// shader support `FORCE_GPU` still runs on the CPU, with a warning.
     void setBackendPolicy(ClothBackendPolicy policy) { m_backendPolicy = policy; }
 
     /// @brief Returns the policy currently in effect for the next initialize().
