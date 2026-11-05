@@ -6283,7 +6283,7 @@ shipped that have no invocation path at all.
   Source: ut-ants-review-2026-10-24.
   Lanes: profiler.
 
-- 📋 [3D_E-0792] **README recommends --visual-test for perf_gate baselines; CLAUDE.md prescribes --demo-flythrough.**
+- ✅ [3D_E-0792] **README recommends --visual-test for perf_gate baselines; CLAUDE.md prescribes --demo-flythrough.**
   Reported by UT Ants, not yet checked here: --visual-test times
   glReadPixels/PNG/report work inside frames. Pick --demo-flythrough
   --no-vsync and align README. Smaller items from the same review:
@@ -6295,6 +6295,13 @@ shipped that have no invocation path at all.
   --isolate-feature=ibl*, SystemRegistry timings, draw-call counts, GPU
   debug groups, tests for PerformanceProfiler, ProfileLog and
   fps_floor.py.
+  2026-11-05, the rest closed: GPU debug groups on every GpuTimer pass
+  (cbfb485); each system's update is a CPU profile scope, so registry
+  timings now have readers (38da1e0); draw-call figure relabelled "Scene
+  draws" and full counting filed as 3D_E-0876; --help says the ibl isolate
+  flags cannot time IBL (1bb04ae); tests added for PerformanceProfiler
+  (test_performance_profiler.cpp) and fps_floor.py (three ctest fixtures;
+  dropping the warm-up turns two red). ProfileLog already had tests.
   **Layman:** Two documents give different instructions for taking a performance baseline.
   Kind: doc-fix.
   Source: ut-ants-review-2026-10-24.

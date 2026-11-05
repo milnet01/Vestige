@@ -88,6 +88,7 @@ add_executable(vestige_tests
     test_memory_tracker.cpp
     test_gpu_timer.cpp
     test_profile_log.cpp
+    test_performance_profiler.cpp
     test_frame_ledger_log.cpp
     test_obj_loader.cpp
     test_skeleton.cpp
@@ -634,6 +635,28 @@ if(Python3_FOUND)
     )
     set_tests_properties(PerfGateCatchesRegression
                          PROPERTIES WILL_FAIL TRUE)
+
+    # tools/fps_floor.py (3D_E-0792): a steady run whose only slow frame is in
+    # the warm-up passes; one hitch after warm-up fails; a file with nothing
+    # after warm-up says so (exit 2).
+    add_test(
+        NAME FpsFloorPassesSteadyRunAfterWarmUp
+        COMMAND Python3::Interpreter ${CMAKE_SOURCE_DIR}/tools/fps_floor.py
+                ${CMAKE_CURRENT_SOURCE_DIR}/fixtures/fps_floor/steady.csv
+    )
+    add_test(
+        NAME FpsFloorCatchesOneHitch
+        COMMAND Python3::Interpreter ${CMAKE_SOURCE_DIR}/tools/fps_floor.py
+                ${CMAKE_CURRENT_SOURCE_DIR}/fixtures/fps_floor/hitch.csv
+    )
+    set_tests_properties(FpsFloorCatchesOneHitch PROPERTIES WILL_FAIL TRUE)
+    add_test(
+        NAME FpsFloorReportsNoSampleAfterWarmUp
+        COMMAND Python3::Interpreter ${CMAKE_SOURCE_DIR}/tools/fps_floor.py
+                ${CMAKE_CURRENT_SOURCE_DIR}/fixtures/fps_floor/warmup_only.csv
+    )
+    set_tests_properties(FpsFloorReportsNoSampleAfterWarmUp PROPERTIES
+                         PASS_REGULAR_EXPRESSION "no frame samples after 2.0 s")
 else()
     message(WARNING
         "Python3 not found — skipping localization_audit + shader_lint + "
