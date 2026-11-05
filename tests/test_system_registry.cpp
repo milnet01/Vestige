@@ -11,6 +11,7 @@
 #include "core/i_system.h"
 #include "core/system_registry.h"
 #include "core/system_events.h"
+#include "profiler/cpu_profiler.h"
 #include "scene/scene.h"
 
 #include <gtest/gtest.h>
@@ -634,6 +635,33 @@ TEST_F(SystemRegistryTest, GetSystemMetricsReturnsAllSystems)
 TEST_F(SystemRegistryTest, TotalUpdateTimeForEmptyRegistry)
 {
     EXPECT_FLOAT_EQ(registry.getTotalUpdateTimeMs(), 0.0f);
+}
+
+// 3D_E-0792: each system's update time reaches the CPU profiler, so the
+// performance panel and both profile logs show it. The registry measured it
+// into SystemMetrics, which nothing outside the tests read.
+TEST_F(SystemRegistryTest, EachSystemUpdateIsACpuProfileScope)
+{
+    auto* a = registry.registerSystem<MockSystem>("Alpha");
+    a->setActive(true);
+    auto* b = registry.registerSystem<MockSystem>("Beta");
+    b->setActive(false);  // inactive: not updated, so no scope
+
+    CpuProfiler& cpu = getCpuProfiler();
+    cpu.beginFrame();
+    registry.updateAll(0.016f);
+    cpu.endFrame();
+
+    bool sawAlpha = false;
+    bool sawBeta = false;
+    for (const ProfileEntry& e : cpu.getLastFrame())
+    {
+        const std::string name = e.name ? e.name : "";
+        sawAlpha = sawAlpha || name == "Alpha";
+        sawBeta = sawBeta || name == "Beta";
+    }
+    EXPECT_TRUE(sawAlpha) << "an active system's update must be a CPU scope";
+    EXPECT_FALSE(sawBeta);
 }
 
 // =============================================================================

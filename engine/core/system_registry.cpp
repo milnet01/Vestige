@@ -4,6 +4,7 @@
 /// @file system_registry.cpp
 /// @brief SystemRegistry implementation -- domain system lifecycle and dispatch.
 #include "core/system_registry.h"
+#include "profiler/cpu_profiler.h"
 #include "core/logger.h"
 #include "core/system_events.h"
 #include "scene/scene.h"
@@ -144,7 +145,13 @@ void SystemRegistry::updateAll(float deltaTime)
         }
 
         auto start = std::chrono::steady_clock::now();
-        system->update(deltaTime);
+        {
+            // A CPU profile scope per system, so the performance panel and the
+            // profile logs show each system's update (3D_E-0792). The name is
+            // the system's own member string, alive as long as the system.
+            CpuProfileScope scope(system->getSystemName().c_str());
+            system->update(deltaTime);
+        }
         auto end = std::chrono::steady_clock::now();
 
         float ms = std::chrono::duration<float, std::milli>(end - start).count();
