@@ -137,6 +137,9 @@ public:
     /// @param radius Radius of the sphere. Must be > 0.
     void addSphereCollider(const glm::vec3& center, float radius) override;
 
+    /// @brief Number of sphere colliders held.
+    uint32_t getSphereColliderCount() const { return static_cast<uint32_t>(m_sphereColliders.size()); }
+
     /// @brief Removes all sphere colliders.
     void clearSphereColliders() override;
 

@@ -6,8 +6,11 @@
 
 #include <gtest/gtest.h>
 
+#include <limits>
+
 #include "physics/cloth_backend_factory.h"
 #include "physics/cloth_component.h"
+#include "physics/gpu_cloth_simulator.h"
 #include "physics/cloth_simulator.h"  // For ClothConfig
 
 using namespace Vestige;
@@ -128,4 +131,25 @@ TEST(ClothComponentInit, RefusedConfigLeavesTheComponentNotReady)
     component.setBackendPolicy(ClothBackendPolicy::FORCE_CPU);
     component.initialize(cfg, nullptr);
     EXPECT_FALSE(component.isReady());
+}
+
+// lane-07 lead gpu_cloth_simulator.cpp:181: the GPU backend dropped a sphere
+// of radius 0 or less while the CPU backend clamped it to 1 mm and kept it.
+// Both now refuse a radius that is not positive and finite.
+TEST(ClothColliderParity, BothBackendsRefuseADegenerateSphere)
+{
+    const float nan = std::numeric_limits<float>::quiet_NaN();
+    ClothSimulator cpu;
+    GpuClothSimulator gpu;  // adding a collider needs no GL context
+    for (float radius : {0.0f, -1.0f, nan})
+    {
+        cpu.addSphereCollider(glm::vec3(0.0f), radius);
+        gpu.addSphereCollider(glm::vec3(0.0f), radius);
+    }
+    EXPECT_EQ(cpu.getSphereColliderCount(), 0u);
+    EXPECT_EQ(gpu.getSphereColliderCount(), 0u);
+    cpu.addSphereCollider(glm::vec3(0.0f), 0.5f);
+    gpu.addSphereCollider(glm::vec3(0.0f), 0.5f);
+    EXPECT_EQ(cpu.getSphereColliderCount(), 1u);
+    EXPECT_EQ(gpu.getSphereColliderCount(), 1u);
 }

@@ -178,7 +178,10 @@ void GpuClothSimulator::setConvergenceMode(ClothConvergenceMode mode)
 
 void GpuClothSimulator::addSphereCollider(const glm::vec3& center, float radius)
 {
-    if (radius <= 0.0f) return;
+    // No sphere unless the radius is positive and finite (NaN included). The
+    // CPU backend used to clamp such a radius to 1 mm and keep an unseen
+    // collider, so the two backends disagreed (lane-07 lead).
+    if (!(radius > 0.0f) || !std::isfinite(radius)) return;
     if (m_sphereColliders.size() >= static_cast<size_t>(MAX_GPU_SPHERE_COLLIDERS))
     {
         Logger::warning("[GpuClothSimulator] sphere collider cap reached ("

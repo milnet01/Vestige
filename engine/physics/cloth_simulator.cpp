@@ -585,7 +585,14 @@ bool ClothSimulator::isParticlePinned(uint32_t index) const
 
 void ClothSimulator::addSphereCollider(const glm::vec3& center, float radius)
 {
-    m_sphereColliders.push_back({center, std::max(0.001f, radius)});
+    // No sphere unless the radius is positive and finite (NaN included), as
+    // GpuClothSimulator. A 1 mm clamp kept an unseen collider that still
+    // acted at the collision margin (lane-07 lead).
+    if (!(radius > 0.0f) || !std::isfinite(radius))
+    {
+        return;
+    }
+    m_sphereColliders.push_back({center, radius});
 }
 
 void ClothSimulator::clearSphereColliders()
