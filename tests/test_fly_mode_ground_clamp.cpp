@@ -13,6 +13,8 @@
 #include "environment/terrain.h"
 
 #include <gtest/gtest.h>
+#include <limits>
+#include <cmath>
 
 namespace Vestige
 {
@@ -67,4 +69,30 @@ TEST(FlyModeGroundClamp, WithoutTerrainFloorIsClearanceAboveZero)
 }
 
 } // namespace
+// lane-02 leads first_person_controller.cpp:101 and :520.
+TEST(FirstPersonMoveDirection, WalkModeDropsVerticalBeforeNormalising)
+{
+    // W + Space in walk mode: forward must stay at full speed, not 0.707.
+    const glm::vec3 walk = FirstPersonController::normalizedMoveDirection(
+        glm::vec3(0.0f, 1.0f, 1.0f), /*keepVertical=*/false);
+    EXPECT_NEAR(walk.z, 1.0f, 1e-6f);
+    EXPECT_EQ(walk.y, 0.0f);
+
+    // Fly mode keeps the diagonal.
+    const glm::vec3 fly = FirstPersonController::normalizedMoveDirection(
+        glm::vec3(0.0f, 1.0f, 1.0f), /*keepVertical=*/true);
+    EXPECT_NEAR(fly.z, 0.70710678f, 1e-6f);
+}
+
+TEST(FirstPersonMoveDirection, NaNAxisIsNoInputNotANaNVelocity)
+{
+    const float nan = std::numeric_limits<float>::quiet_NaN();
+    const glm::vec3 d = FirstPersonController::normalizedMoveDirection(
+        glm::vec3(0.0f, nan, 1.0f), /*keepVertical=*/true);
+    EXPECT_TRUE(std::isfinite(d.x) && std::isfinite(d.y) && std::isfinite(d.z));
+    EXPECT_NEAR(d.z, 1.0f, 1e-6f);
+    EXPECT_EQ(FirstPersonController::normalizedMoveDirection(glm::vec3(nan), true),
+              glm::vec3(0.0f));
+}
+
 } // namespace Vestige

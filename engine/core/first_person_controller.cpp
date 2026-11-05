@@ -74,6 +74,7 @@ void FirstPersonController::update(float deltaTime, const std::vector<AABB>& col
     {
         Logger::info("Gamepad disconnected");
         m_gamepadId = -1;
+        m_isGamepadSprinting = false;  // a bumper held while unplugging (lane-02 lead)
     }
 
     glm::vec3 moveDir(0.0f);
@@ -82,6 +83,9 @@ void FirstPersonController::update(float deltaTime, const std::vector<AABB>& col
     processKeyboardMovement(deltaTime, moveDir);
     processMouseLook();
     processGamepad(deltaTime, moveDir);
+    // Walk mode moves on the ground: its vertical input is dropped before
+    // normalising, or W+Space walked at 0.707x (lane-02 lead).
+    moveDir = normalizedMoveDirection(moveDir, !m_walkMode);
 
     // Apply movement
     if (glm::length(moveDir) > 0.0f || m_walkMode)
@@ -98,7 +102,6 @@ void FirstPersonController::update(float deltaTime, const std::vector<AABB>& col
 
         if (glm::length(moveDir) > 0.0f)
         {
-            moveDir = glm::normalize(moveDir);
             glm::vec3 front = m_camera.getFront();
             glm::vec3 right = glm::normalize(glm::cross(front, glm::vec3(0.0f, 1.0f, 0.0f)));
 
@@ -215,6 +218,7 @@ void FirstPersonController::processGamepad(float deltaTime, glm::vec3& moveDir)
 {
     if (m_gamepadId < 0)
     {
+        m_isGamepadSprinting = false;
         return;
     }
 
@@ -458,6 +462,7 @@ void FirstPersonController::processLookOnly(float deltaTime)
     {
         Logger::info("Gamepad disconnected");
         m_gamepadId = -1;
+        m_isGamepadSprinting = false;  // a bumper held while unplugging (lane-02 lead)
     }
 
     // Mouse look
@@ -491,6 +496,10 @@ glm::vec3 FirstPersonController::computeDesiredVelocity(float /*deltaTime*/)
     }
 
     glm::vec3 moveDir(0.0f);
+    if (m_gamepadId < 0)
+    {
+        m_isGamepadSprinting = false;  // no pad: no pad sprint (lane-02 lead)
+    }
 
     // Keyboard movement — same action routing as processKeyboardMovement
     // (3D_E-0628b); this path serves the physics character controller.
@@ -525,12 +534,14 @@ glm::vec3 FirstPersonController::computeDesiredVelocity(float /*deltaTime*/)
         }
     }
 
-    if (glm::length(moveDir) < 0.001f)
+    // The physics character keeps its vertical input. A NaN trigger used to
+    // pass the length check (NaN < x is false) and reach Jolt as a NaN
+    // velocity (lane-02 lead).
+    moveDir = normalizedMoveDirection(moveDir, /*keepVertical=*/true);
+    if (moveDir == glm::vec3(0.0f))
     {
         return glm::vec3(0.0f);
     }
-
-    moveDir = glm::normalize(moveDir);
 
     // Sprint speed
     float speed = m_config.moveSpeed;
@@ -550,6 +561,26 @@ glm::vec3 FirstPersonController::computeDesiredVelocity(float /*deltaTime*/)
                        + glm::vec3(0.0f, moveDir.y * speed, 0.0f);
 
     return velocity;
+}
+
+glm::vec3 FirstPersonController::normalizedMoveDirection(glm::vec3 moveDir, bool keepVertical)
+{
+    for (int i = 0; i < 3; ++i)
+    {
+        if (!std::isfinite(moveDir[i]))
+        {
+            moveDir[i] = 0.0f;
+        }
+    }
+    if (!keepVertical)
+    {
+        moveDir.y = 0.0f;
+    }
+    if (glm::length(moveDir) < 0.001f)
+    {
+        return glm::vec3(0.0f);
+    }
+    return glm::normalize(moveDir);
 }
 
 bool FirstPersonController::tickJoystickScanTimer(float deltaTime)

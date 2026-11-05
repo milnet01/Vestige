@@ -143,6 +143,13 @@ public:
     static float flyModeFloorY(const Terrain* terrain, const glm::vec3& position,
                                float clearance);
 
+    /// @brief The unit move direction from summed inputs: non-finite axes
+    ///        (a NaN trigger) count as 0, the vertical part is dropped unless
+    ///        @a keepVertical, and an input under 0.001 is no movement.
+    ///        Dropping vertical BEFORE normalising keeps walk-mode forward
+    ///        speed whole when an up key is also held.
+    static glm::vec3 normalizedMoveDirection(glm::vec3 moveDir, bool keepVertical);
+
 private:
     void processKeyboardMovement(float deltaTime, glm::vec3& moveDir);
     void processMouseLook();

@@ -25,6 +25,15 @@ may change any interface without notice.
 
 ## [Unreleased]
 
+### 2026-11-05 Fixed — Walking speed, a stuck gamepad sprint, and bad trigger values
+
+In walk mode, holding jump while moving forward slowed the walk to about
+70% speed; it now stays at full speed. Unplugging a gamepad while
+holding its sprint button left sprint on until the pad came back; it now
+stops. A gamepad trigger reporting an invalid value could send an
+invalid speed to the physics character; such a value now counts as no
+input.
+
 ### 2026-11-05 Fixed — The mouse turns the view in first-person play
 
 Each frame, the engine cleared the mouse movement it had just collected,
