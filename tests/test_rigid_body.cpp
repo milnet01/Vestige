@@ -12,6 +12,8 @@
 
 #include <gtest/gtest.h>
 
+#include <memory>
+
 using namespace Vestige;
 
 // ---------------------------------------------------------------------------
@@ -316,6 +318,156 @@ TEST(RigidBody, DynamicBodyWritesRotationBackAsDegrees)
             EXPECT_NEAR(got[c][r], want[c][r], 1e-3f) << "column " << c << " row " << r;
         }
     }
+    world.shutdown();
+}
+
+// ---------------------------------------------------------------------------
+// Rotation from scaled, sheared, mirrored and parented world matrices
+// (3D_E-0874 cold-read leads on bead6ea)
+// ---------------------------------------------------------------------------
+
+namespace
+{
+
+void expectMat3Near(const glm::mat3& got, const glm::mat3& want)
+{
+    for (int c = 0; c < 3; ++c)
+    {
+        for (int r = 0; r < 3; ++r)
+        {
+            EXPECT_NEAR(got[c][r], want[c][r], 1e-3f) << "column " << c << " row " << r;
+        }
+    }
+}
+
+RigidBody* addBox(Entity& entity, BodyMotionType type)
+{
+    auto* rb = entity.addComponent<RigidBody>();
+    rb->motionType = type;
+    rb->shapeType = CollisionShapeType::BOX;
+    rb->shapeSize = glm::vec3(0.5f);
+    return rb;
+}
+
+} // namespace
+
+// createBody took quat_cast of the world matrix with its scale still in it,
+// so a non-uniformly scaled body started turned the wrong way.
+TEST(RigidBody, ScaledBodyStartsWithTheEntitysRotation)
+{
+    PhysicsWorld world;
+    ASSERT_TRUE(world.initialize());
+
+    Entity entity("Pillar");
+    entity.transform.rotation = glm::vec3(0.0f, 0.0f, 30.0f);
+    entity.transform.scale = glm::vec3(1.0f, 3.0f, 1.0f);
+    entity.update(0.0f);
+    auto* rb = addBox(entity, BodyMotionType::DYNAMIC);
+    rb->createBody(world);
+    ASSERT_TRUE(rb->hasBody());
+
+    const glm::mat3 want = glm::mat3_cast(glm::angleAxis(glm::radians(30.0f), glm::vec3(0, 0, 1)));
+    expectMat3Near(glm::mat3_cast(world.getBodyRotation(rb->getBodyId())), want);
+    world.shutdown();
+}
+
+// A zero scale on one axis normalised a zero vector: NaN into Jolt.
+TEST(RigidBody, KinematicFlatEntityGivesAFiniteRotation)
+{
+    PhysicsWorld world;
+    ASSERT_TRUE(world.initialize());
+
+    Entity entity("Decal");
+    entity.update(0.0f);
+    auto* rb = addBox(entity, BodyMotionType::KINEMATIC);
+    rb->createBody(world);
+    ASSERT_TRUE(rb->hasBody());
+
+    entity.transform.rotation = glm::vec3(0.0f, 45.0f, 0.0f);
+    entity.transform.scale = glm::vec3(1.0f, 1.0f, 0.0f);
+    entity.update(0.0f);
+    rb->syncTransform();
+
+    const glm::mat3 want = glm::mat3_cast(glm::angleAxis(glm::radians(45.0f), glm::vec3(0, 1, 0)));
+    expectMat3Near(glm::mat3_cast(world.getBodyRotation(rb->getBodyId())), want);
+    world.shutdown();
+}
+
+// A mirrored entity (negative scale) has a basis with determinant -1, which
+// no rotation matches; the body takes the entity's X and Y axes.
+TEST(RigidBody, KinematicMirroredEntityKeepsItsXAndYAxes)
+{
+    PhysicsWorld world;
+    ASSERT_TRUE(world.initialize());
+
+    Entity entity("Mirrored");
+    entity.update(0.0f);
+    auto* rb = addBox(entity, BodyMotionType::KINEMATIC);
+    rb->createBody(world);
+    ASSERT_TRUE(rb->hasBody());
+
+    entity.transform.rotation = glm::vec3(20.0f, 0.0f, 0.0f);
+    entity.transform.scale = glm::vec3(1.0f, 1.0f, -1.0f);
+    entity.update(0.0f);
+    rb->syncTransform();
+
+    const glm::mat3 want = glm::mat3_cast(glm::angleAxis(glm::radians(20.0f), glm::vec3(1, 0, 0)));
+    expectMat3Near(glm::mat3_cast(world.getBodyRotation(rb->getBodyId())), want);
+    world.shutdown();
+}
+
+// A non-uniformly scaled parent with a rotated child shears the child's
+// world basis. The body keeps the world X axis and the X-Y plane.
+TEST(RigidBody, KinematicShearedChildKeepsItsWorldXAxis)
+{
+    PhysicsWorld world;
+    ASSERT_TRUE(world.initialize());
+
+    Entity parent("Stretched");
+    parent.transform.scale = glm::vec3(1.0f, 3.0f, 1.0f);
+    Entity* child = parent.addChild(std::make_unique<Entity>("Rotated"));
+    child->transform.rotation = glm::vec3(0.0f, 0.0f, 45.0f);
+    parent.update(0.0f);
+    auto* rb = addBox(*child, BodyMotionType::KINEMATIC);
+    rb->createBody(world);
+    ASSERT_TRUE(rb->hasBody());
+    rb->syncTransform();
+
+    const glm::mat3 basis(child->getWorldMatrix());
+    const glm::vec3 x = glm::normalize(basis[0]);
+    const glm::vec3 z = glm::normalize(glm::cross(basis[0], basis[1]));
+    const glm::mat3 want(x, glm::cross(z, x), z);
+    expectMat3Near(glm::mat3_cast(world.getBodyRotation(rb->getBodyId())), want);
+    world.shutdown();
+}
+
+// The dynamic sync wrote the body's WORLD pose into the entity's LOCAL
+// transform, so a parented body landed offset by its parent.
+TEST(RigidBody, ParentedDynamicBodyLandsAtItsWorldPose)
+{
+    PhysicsWorld world;
+    ASSERT_TRUE(world.initialize());
+
+    Entity parent("Cart");
+    parent.transform.position = glm::vec3(10.0f, 0.0f, 0.0f);
+    parent.transform.rotation = glm::vec3(0.0f, 90.0f, 0.0f);
+    Entity* child = parent.addChild(std::make_unique<Entity>("Crate"));
+    parent.update(0.0f);
+    auto* rb = addBox(*child, BodyMotionType::DYNAMIC);
+    rb->createBody(world);
+    ASSERT_TRUE(rb->hasBody());
+
+    const glm::vec3 pos(1.0f, 2.0f, 3.0f);
+    const glm::quat q = glm::angleAxis(glm::radians(60.0f), glm::normalize(glm::vec3(1, 2, 3)));
+    world.setBodyTransform(rb->getBodyId(), pos, q);
+    rb->syncTransform();
+    parent.update(0.0f);
+
+    const glm::mat4 got = child->getWorldMatrix();
+    EXPECT_NEAR(got[3].x, pos.x, 1e-3f);
+    EXPECT_NEAR(got[3].y, pos.y, 1e-3f);
+    EXPECT_NEAR(got[3].z, pos.z, 1e-3f);
+    expectMat3Near(glm::mat3(got), glm::mat3_cast(q));
     world.shutdown();
 }
 

@@ -14,12 +14,50 @@
 #include <Jolt/Physics/Collision/Shape/ConvexHullShape.h>
 #include <Jolt/Physics/Collision/Shape/MeshShape.h>
 
+#include <cmath>
+
 #include <glm/gtc/matrix_transform.hpp>
 #include <glm/gtc/quaternion.hpp>
 #include <glm/gtx/euler_angles.hpp>
 
 namespace Vestige
 {
+
+namespace
+{
+
+/// The rotation in a matrix, with scale, shear and mirroring removed.
+/// Gram-Schmidt keeps the X axis's direction and the X-Y plane, and Z is
+/// X cross Y. So a mirrored basis (negative scale) still gives a proper
+/// rotation, and a zero Z scale does not matter. A zero-length X axis, or
+/// a Y axis parallel to X, has no rotation to recover: that gives identity,
+/// never NaN, because Jolt asserts on a quaternion that is not unit length.
+glm::quat rotationOf(const glm::mat4& matrix)
+{
+    constexpr float kMinAxisLength = 1e-6f;
+    const glm::quat identity(1.0f, 0.0f, 0.0f, 0.0f);
+
+    const glm::vec3 xIn(matrix[0]);
+    const float xLength = glm::length(xIn);
+    if (xLength < kMinAxisLength)
+    {
+        return identity;
+    }
+    const glm::vec3 x = xIn / xLength;
+
+    const glm::vec3 yColumn(matrix[1]);
+    const glm::vec3 yIn = yColumn - glm::dot(yColumn, x) * x;
+    const float yLength = glm::length(yIn);
+    if (yLength < kMinAxisLength)
+    {
+        return identity;
+    }
+    const glm::vec3 y = yIn / yLength;
+
+    return glm::normalize(glm::quat_cast(glm::mat3(x, y, glm::cross(x, y))));
+}
+
+} // namespace
 
 RigidBody::~RigidBody()
 {
@@ -42,7 +80,7 @@ void RigidBody::createBody(PhysicsWorld& world)
     if (owner)
     {
         pos = owner->getWorldPosition();
-        rot = glm::quat_cast(owner->getWorldMatrix());
+        rot = rotationOf(owner->getWorldMatrix());
     }
 
     // Create the collision shape with dimension validation per shape type
@@ -196,19 +234,41 @@ void RigidBody::syncTransform()
         // sensible — if lossy at ±90° — value.
         const glm::vec3 pos = m_world->getBodyPosition(m_bodyId);
         const glm::quat rot = m_world->getBodyRotation(m_bodyId);
-        owner->transform.position = pos;
+
+        // The body's pose is in WORLD space; the Transform is local to the
+        // parent. With no parent the two are the same. With one, build the
+        // world matrix the body wants, keeping the size the entity has in
+        // the world now, and take it into the parent's space. A parent
+        // with zero scale cannot be inverted: then the pose is written as
+        // if there were no parent, as before.
+        glm::mat4 local = glm::translate(glm::mat4(1.0f), pos) * glm::mat4_cast(rot)
+                          * glm::scale(glm::mat4(1.0f), owner->transform.scale);
+        glm::quat localRot = rot;
+        const Entity* parent = owner->getParent();
+        if (parent)
+        {
+            const glm::mat4 parentWorld = parent->getWorldMatrix();
+            if (std::abs(glm::determinant(glm::mat3(parentWorld))) > 1e-12f)
+            {
+                const glm::mat4 world = owner->getWorldMatrix();
+                const glm::vec3 worldScale =
+                    glm::vec3(glm::length(glm::vec3(world[0])), glm::length(glm::vec3(world[1])),
+                              glm::length(glm::vec3(world[2])))
+                    * glm::sign(owner->transform.scale);
+                local = glm::inverse(parentWorld) * glm::translate(glm::mat4(1.0f), pos)
+                        * glm::mat4_cast(rot) * glm::scale(glm::mat4(1.0f), worldScale);
+                localRot = rotationOf(local);
+            }
+        }
+
+        owner->transform.position = glm::vec3(local[3]);
         // Transform::rotation is Euler DEGREES applied X, then Y, then Z
         // (entity.h), so extract in that order and convert. glm::eulerAngles
         // gave radians in another order, so the inspector showed nonsense.
         glm::vec3 xyz(0.0f);
-        glm::extractEulerAngleXYZ(glm::mat4_cast(rot), xyz.x, xyz.y, xyz.z);
+        glm::extractEulerAngleXYZ(glm::mat4_cast(localRot), xyz.x, xyz.y, xyz.z);
         owner->transform.rotation = glm::degrees(xyz);
-
-        const glm::mat4 trs =
-            glm::translate(glm::mat4(1.0f), pos)
-            * glm::mat4_cast(rot)
-            * glm::scale(glm::mat4(1.0f), owner->transform.scale);
-        owner->transform.setLocalMatrix(trs);
+        owner->transform.setLocalMatrix(local);
     }
     else if (motionType == BodyMotionType::KINEMATIC)
     {
@@ -218,12 +278,7 @@ void RigidBody::syncTransform()
         // degrees applied X, Y, Z; reading it as radians turned a kinematic
         // body about 57x too little (lane-07 lead rigid_body.cpp:210).
         const glm::mat4 world = owner->getWorldMatrix();
-        glm::vec3 pos = glm::vec3(world[3]);
-        const glm::mat3 rotScale(world);
-        const glm::mat3 rotOnly(glm::normalize(rotScale[0]), glm::normalize(rotScale[1]),
-                                glm::normalize(rotScale[2]));
-        glm::quat rot = glm::normalize(glm::quat_cast(rotOnly));
-        m_world->setBodyTransform(m_bodyId, pos, rot);
+        m_world->setBodyTransform(m_bodyId, glm::vec3(world[3]), rotationOf(world));
     }
     // Static bodies: no sync needed
 }
