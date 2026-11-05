@@ -7317,6 +7317,19 @@ shipped that have no invocation path at all.
   Decisions taken as code owner: degenerate sphere colliders rejected on
   both backends; window position restored when the title-bar centre is on
   a monitor. NEEDS DECISION rows carry a recommendation in their files.
+  2026-11-05 cold read by localwebservermanager (inbox 1405): no
+  regressions in 604168a, 9088654, 639220d, 3dbd22e, 505b6fb, bead6ea.
+  Open leads it raised, unverified here:
+  - bead6ea rotation from world matrix: parent with non-uniform scale
+    plus rotated child shears the 3x3, so quat_cast approximates
+    (needs polar/QR or Gram-Schmidt); negative scale gives det -1;
+    zero scale gives a NaN quat into setBodyTransform (unguarded).
+  - rigid_body.cpp createBody quat_casts getWorldMatrix() without
+    removing scale: a scaled DYNAMIC body starts mis-rotated.
+  - DYNAMIC sync writes the body's world pose into the local
+    transform: a parented dynamic body is placed wrong.
+  - Stale doc: cloth_component.h setBackendPolicy says FORCE_GPU is
+    "to exercise the GPU path"; true only with compute support.
   **Layman:** About 290 lower-risk possible bugs and the medium findings are still unchecked.
   Kind: review-fix.
   Source: review-readability 2026-10-31 at 7b2a81d.
