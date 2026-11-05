@@ -7298,8 +7298,25 @@ shipped that have no invocation path at all.
   Source: review-readability 2026-10-31 at 7b2a81d.
   Lanes: physics.
 
-- 📋 [3D_E-0874] **Check the remaining readability possible bugs and MEDIUM findings.**
+- 🚧 [3D_E-0874] **Check the remaining readability possible bugs and MEDIUM findings.**
   Per-subsystem lists: Vestige_private/readability-2026-10-31/batches/leads-rest-1.md, -2, -3 and each lane file; progress in leads-rest-1-result.md. 3D_E-0823..0850 stay open as their index. User chose 2026-11-01 to check each when its subsystem is next worked on; a later priority list includes backlog, so they sit last in the fix order.
+  2026-11-05 progress. Lanes 02, 03, 04, 05, 06, 07, 10, 23 verified by
+  read-only sonnet agents (each REAL re-checked before fixing); verdicts
+  and fix commits, one line per lead, in Vestige_private/readability-
+  2026-10-31/batches/lane-NN-result.md. 28 leads fixed (commits a4484dc..
+  5859b53, one per lead, red-first where possible). Still open in those
+  files (verified, not yet fixed): every line marked REAL, CHECK or NEEDS
+  DECISION; highest first: lane-03 renderer.cpp:3737 (water passes may
+  draw sky over geometry: CHECK with a GL test), lane-03/06 point shadows
+  ignore skinning, lane-06 foliage/grass translucency sign, particle depth
+  remap and speed-curve compounding, lane-04 normal map double flip,
+  skybox reload leak, light probe ready after a failed pass, lane-10
+  pooled source keeps pitch/filter/send, buffer evicted while playing,
+  lane-02 F1/F2/F11/F12 rebinding not dispatched, cwd-relative demo
+  assets. Lanes 08, 09, 11-22, 24-27 not yet verified (leads-rest-1/2/3).
+  Decisions taken as code owner: degenerate sphere colliders rejected on
+  both backends; window position restored when the title-bar centre is on
+  a monitor. NEEDS DECISION rows carry a recommendation in their files.
   **Layman:** About 290 lower-risk possible bugs and the medium findings are still unchecked.
   Kind: review-fix.
   Source: review-readability 2026-10-31 at 7b2a81d.
@@ -7333,6 +7350,16 @@ shipped that have no invocation path at all.
   on RX 6600 and llvmpipe. Still owed: the Tabernacle curtains/veil visual
   check (--biblical-demo stills) on a Release build; deferred because the
   machine was at load 75 with other sessions' builds.
+  2026-11-05 cold read (oneup) of 83d6237: push-out depths right on every
+  site, no energy added. Follow-up found: CPU solves tethers (LRA) inside
+  the solver loop BEFORE collisions (cloth_simulator.cpp simulate), GPU
+  AFTER (gpu_cloth_simulator.cpp "5. Collision" then "6. LRA"). Friction
+  measures p - prevP, so on the CPU a stick cancels that substep's tether
+  correction and a touching tethered particle can end past its tether
+  length; the GPU pulls it back. Same lane-07 lead gpu_cloth_simulator.cpp:
+  909 lists two more GPU/CPU gaps (no speed cap, one collision pass). Do
+  alongside the owed Release visual check: decide the order (recommend the
+  GPU's: collisions, then tethers, on both), add a parity test.
   **Layman:** Cloth slides over surfaces the same whatever friction is set to.
   Kind: fix.
   Source: 3D_E-0873 doc fix 2026-11-03 (review-readability 2026-10-31).
