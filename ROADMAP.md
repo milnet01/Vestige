@@ -1,6 +1,6 @@
 <!-- ants-roadmap-format: 1 -->
 <!-- Generated from the Ants Terminal roadmap store. Edit it with roadmap_log; hand edits are discarded by the next write. -->
-<!-- ants-roadmap-id-high-water: 3D_E=881 3D_E#S=989 -->
+<!-- ants-roadmap-id-high-water: 3D_E=965 3D_E#S=989 -->
 
 # Vestige Engine Roadmap
 
@@ -7342,6 +7342,18 @@ shipped that have no invocation path at all.
   - lane-06 GPU particle speed curve compounded each frame (3e9b220).
   Found latent: particle depth collision remaps reverse-Z depth by
   *0.5+0.5, but nothing calls setDepthCollision, so it never runs.
+  2026-11-05 (fourth session): fixed grass/foliage backlit glow 35011a3,
+  normal map double flip c1cf9ce, skybox reload leak 7d92cf0,
+  probe/env-map ready after failed pass cbb8171 (unproven, no seam), 2D
+  audio position 6206df5, F-key rebinding + F12 label 6f2a17a. lane-02
+  engine.cpp:190 (cwd-relative demo assets) NOT fixed: routing demo
+  loads through the absolute asset root makes saved scenes store
+  absolute texture paths, which scene load rejects
+  (isSafeRelativeAsset). Needs one rule for resolving relative asset
+  paths (scene files included) against the asset root, not the cwd. Side
+  fix: audio mix graph now under getAssetPath() d4baf19. Also open:
+  LocalizationService default dir is cwd-relative "assets/localization"
+  (no setLocalizationDir caller found).
   **Layman:** About 290 lower-risk possible bugs and the medium findings are still unchecked.
   Kind: review-fix.
   Source: review-readability 2026-10-31 at 7b2a81d.
@@ -7439,6 +7451,31 @@ shipped that have no invocation path at all.
   Kind: fix.
   Source: user-request-2026-11-05.
   Lanes: ci, tests.
+
+- 📋 [3D_E-0955] **Add a field-of-view slider with a comfort note to the player settings.**
+  Sensible default, slider, a note about sickness at extremes.
+  Seen in: https://gameaccessibilityguidelines.com/basic/ (opened).
+  Done when: the slider changes the walkthrough camera and persists.
+  Code today: no FOV setting in engine/core/settings.h or the pages in
+  engine/ui/*_settings_page.*; FOV appears only in photo-mode items.
+  Priority: medium.
+  **Layman:** Players who get motion-sick can widen or narrow the view.
+  Kind: accessibility.
+  Source: research-engine-survey-2026-11-05.
+
+- 📋 [3D_E-0956] **Each player setting shows one plain sentence saying what it does and costs, checked for reading level.**
+  A description line on focus for every setting; a test flags long
+  words and sentences in player-facing strings. Seen in: XAG 114
+  https://learn.microsoft.com/en-us/gaming/accessibility/xbox-accessibility-guidelines/114 (opened).
+  Done when: every control on the four settings pages has a
+  description key and the reading-level test passes.
+  Code today: settings pages exist (engine/ui/audio_settings_page.h,
+  graphics_settings_page, controls_settings_page,
+  accessibility_settings_page); no description text found.
+  Priority: medium.
+  **Layman:** Highlighting "Shadows" says "sharper edges, uses more graphics power" in simple words.
+  Kind: accessibility.
+  Source: research-engine-survey-2026-11-05.
 
 ## 0.3.0 — An editor a builder can use
 
@@ -8116,6 +8153,655 @@ Retrofit completed across 8 commits — every Phase-10 Settings-store consumer n
   Kind: feature.
   Source: user-request-2026-11-05.
   Lanes: renderer, editor.
+
+- 📋 [3D_E-0882] **Let the builder hide the editor panels they do not need, with saved editor profiles.**
+  A saved profile (e.g. Walkthrough Builder, Everything) hides whole
+  panels, menus and component types; profiles are shareable files.
+  Seen in: Godot feature profiles
+  https://docs.godotengine.org/en/stable/classes/class_editorfeatureprofile.html
+  (opened); Unreal beginner clutter complaints
+  https://forums.unrealengine.com/t/improving-the-first-user-experience-of-the-editor-to-attract-new-developers/1307824
+  (search summary).
+  Done when: switching to a profile hides its listed panels and menu
+  items, and the choice survives a restart.
+  Code today: panel registry exists (engine/editor/panels/panel_registry.h);
+  no profile or hiding mechanism found.
+  Priority: high.
+  **Layman:** A "Walkthrough Builder" setting hides the racing, cloth and node panels, so the screen shows only what you use.
+  Kind: ux.
+  Source: research-engine-survey-2026-11-05.
+
+- 📋 [3D_E-0883] **Turn the Scene Validation panel into a Problems panel that says the cause and the fix, and runs on save.**
+  Each row: object name, plain cause, suggested fix; checks are small
+  rules in a registry; they run on save and a status-bar count opens
+  the list. Seen in: Unreal Map Check
+  https://dev.epicgames.com/documentation/unreal-engine/map-check-errors-in-unreal-engine
+  (opened); Unreal Data Validation on save
+  https://dev.epicgames.com/documentation/unreal-engine/data-validation-in-unreal-engine ;
+  Godot 4.6 clickable errors https://godotengine.org/releases/4.6/ (opened).
+  Done when: saving a scene with a missing texture shows a counted
+  warning whose row names the entity, the cause and a fix.
+  Code today: engine/editor/panels/validation_panel.{h,cpp} ("Scene
+  Validation") already has INFO/WARNING/ERROR rows that select the
+  entity on click, and checks missing textures, lights without
+  shadows, far-from-origin entities and null meshes. Missing: cause
+  and fix text, a rule registry, run-on-save, status-bar count.
+  Priority: high.
+  **Layman:** One list shows everything wrong with the scene in plain words, says how to fix each one, and clicking a row selects the culprit.
+  Kind: ux.
+  Source: research-engine-survey-2026-11-05.
+
+- 📋 [3D_E-0884] **Add lighting-fault checks to the Problems panel: thin walls, open rooms, a sun too bright for the exposure.**
+  Checks: walls under a safe thickness, rooms not closed, probes in
+  geometry, sun far outside the exposure range, shadowless lights
+  near the player; each with a "show me" jump. Seen in: Unreal Lumen
+  limits (10 cm walls, leaks)
+  https://dev.epicgames.com/documentation/en-us/unreal-engine/lumen-technical-details-in-unreal-engine ;
+  leak complaints https://forums.unrealengine.com/t/ue-5-1-lumen-light-leaks/694990
+  (search snippet only).
+  Done when: a test scene with a 2 cm wall and an open roof gets one
+  named warning for each.
+  Code today: nothing found (searched validation_panel.cpp, roadmap
+  "light leak", "thin wall"). Needs the Problems panel item above;
+  probes-in-walls is 3D_E-0736.
+  Priority: high.
+  **Layman:** The editor warns when a wall is too thin or a room is not closed, which is what makes light leak into a dark tent.
+  Kind: ux.
+  Source: research-engine-survey-2026-11-05.
+
+- 📋 [3D_E-0885] **Give every engine warning a short code and a plain "what happened, what to do" entry.**
+  Stable message codes; a catalogue page, shown in-editor, gives
+  cause and next step; log lines link to it. Pairs with the help
+  anchors in 3D_E-S0453. Seen in: Unreal Map Check
+  https://dev.epicgames.com/documentation/unreal-engine/map-check-errors-in-unreal-engine
+  (opened); Blender status messages
+  https://projects.blender.org/blender/blender/issues/56599 (search summary).
+  Done when: every Logger warning or error in engine/ carries a code
+  that resolves to a catalogue entry (checked by a test).
+  Code today: nothing found (searched engine/core/logger.h; roadmap
+  "error code", "catalogue").
+  Priority: medium.
+  **Layman:** Instead of developer jargon in the log, each message links to a plain explanation and the next step.
+  Kind: ux.
+  Source: research-engine-survey-2026-11-05.
+
+- 📋 [3D_E-0886] **Editor readability settings for low vision: font, minimum text size, thick focus outline, big handles, colour names.**
+  High-legibility font choice, minimum font size, thick always-on
+  focus outline, larger gizmo handles, thicker selection outline,
+  bigger scrollbars, tooltip delay; colour swatches also show a word
+  label ("warm yellow, bright"). Seen in: Godot 4.6 focus changes
+  https://godotengine.org/releases/4.6/ (opened); Godot 4.5 colour
+  preview icons https://godotengine.org/releases/4.5/ (read); Unity
+  contrast issue https://issuetracker.unity.com/issues/6555/editor-interface-has-low-contrast-when-any-theme-is-used
+  (search summary).
+  Done when: each setting changes the editor live and persists.
+  Code today: nothing found for these (scale, contrast and palettes
+  are 3D_E-S0446, S0447, S0449).
+  Priority: high.
+  **Layman:** One settings page makes text, the keyboard focus box, gizmo handles and selection outlines big and easy to see, and names colours in words.
+  Kind: accessibility.
+  Source: research-engine-survey-2026-11-05.
+
+- 📋 [3D_E-0887] **Spoken feedback: the editor reads the focused control, the selection and new warnings aloud.**
+  Step 1: speech through the OS speech service for focus, selection
+  and new problems, using the existing widget labels. Step 2 (later):
+  an AccessKit bridge for menus and settings; check its licence and
+  Linux AT-SPI behaviour first. Seen in: Godot 4.5 AccessKit support
+  https://godotengine.org/releases/4.5/ (read),
+  https://itsfoss.com/news/godot-4-5-release/ (opened); ImGui has no
+  native accessibility (search summary).
+  Done when: with the option on, tabbing to a button speaks its label.
+  Code today: labels exist for "a future TTS bridge"
+  (engine/ui/ui_accessible.h, ui_element.h); no speech output found.
+  3D_E-S0201 demoted the bridge claim.
+  Priority: medium.
+  **Layman:** The computer can speak what you are pointing at and any new problem, without waiting for a full screen-reader link.
+  Kind: accessibility.
+  Source: research-engine-survey-2026-11-05.
+
+- 📋 [3D_E-0888] **Read the operating system's high-contrast, reduced-motion and text-size settings at start-up.**
+  On first start, map OS high contrast, reduced motion and text scale
+  to the engine's own settings; the user can still override. Editor
+  first, player build next.
+  Seen in: Godot 4.5 via AccessKit
+  https://itsfoss.com/news/godot-4-5-release/ (search summary only),
+  https://godotengine.org/releases/4.5/ (read).
+  Done when: with KDE high contrast on, a fresh settings file starts
+  with highContrast true.
+  Code today: AccessibilitySettings has highContrast, reducedMotion,
+  uiScalePreset (engine/core/settings.h); nothing reads them from the
+  OS (searched engine/core, engine/platform).
+  Priority: high.
+  **Layman:** If your computer is already set to high contrast or bigger text, Vestige starts that way too.
+  Kind: accessibility.
+  Source: research-engine-survey-2026-11-05.
+
+- 📋 [3D_E-0889] **Add a select-only mode and a "lock position" so finished parts cannot be nudged by accident.**
+  A gizmo-less selection mode (key to switch to move/rotate/scale)
+  and a per-object "lock transform" that still allows selecting.
+  Seen in: Godot 4.6 select-only mode https://godotengine.org/releases/4.6/ (opened).
+  Done when: in select-only mode a drag on an object never changes
+  its transform; a transform-locked object can be selected but not moved.
+  Code today: Entity::setLocked blocks viewport selection entirely
+  (engine/scene/entity.h); the gizmo has only TRANSLATE/ROTATE/SCALE
+  (engine/editor/editor.cpp). No select-only mode.
+  Priority: medium.
+  **Layman:** A mode where clicking only picks things, and a lock that stops a finished part from being moved.
+  Kind: ux.
+  Source: research-engine-survey-2026-11-05.
+
+- 📋 [3D_E-0890] **Named layers that show or hide whole groups of objects with one click.**
+  Objects carry named layer tags; a list toggles each layer's
+  visibility and lock. The runtime switching of layers is the scene
+  variants item. Seen in: Unreal Data Layers
+  https://dev.epicgames.com/documentation/unreal-engine/world-partition---data-layers-in-unreal-engine
+  (search summary),
+  https://dev.epicgames.com/documentation/unreal-engine/world-partition-in-unreal-engine .
+  Done when: hiding a layer hides every member, survives save/load,
+  and is undoable.
+  Code today: per-entity isVisible / isLocked exist
+  (engine/scene/entity.h); no named groups (searched engine/scene,
+  engine/editor for layer, tags).
+  Priority: high.
+  **Layman:** Put objects into groups like "Roof", "Furniture" or "Scaffolding" and hide or show each group with one click.
+  Kind: feature.
+  Source: research-engine-survey-2026-11-05.
+
+- 📋 [3D_E-0891] **A section cut that slices the model so the builder can see inside a closed building.**
+  A movable clip plane or box in the editor viewport.
+  Seen in: unverified (architectural tools; no page read).
+  CPU / GPU placement: GPU — a clip plane in the existing scene
+  shaders, no extra pass; CPU only moves the plane.
+  Done when: a box clip hides geometry outside it in shaded, shadow
+  and picking passes, and costs under 0.2 ms on the dev GPU.
+  Code today: nothing found (searched assets/shaders for clip
+  planes; roadmap "section cut", "clipping plane").
+  Priority: medium.
+  **Layman:** Slice the building like a doll's house to see and edit the inside of a closed tent.
+  Kind: feature.
+  Source: research-engine-survey-2026-11-05.
+
+- 📋 [3D_E-0892] **True orthographic plan, front and side views, with a clickable orientation widget and a split view.**
+  Ortho projection for the view presets, a small axis widget to
+  click between them, and an optional plan + perspective split.
+  Seen in: Godot 4.6 viewport changes
+  https://godotengine.org/releases/4.6/ (opened; widget unverified).
+  CPU / GPU placement: GPU, one extra viewport render only while the
+  split is on.
+  Done when: Numpad 7 shows a true orthographic top view whose grid
+  squares measure equal at every depth.
+  Code today: EditorCamera::setTopView / setFrontView / setRightView
+  exist but are perspective (engine/editor/editor_camera.h).
+  Priority: medium.
+  **Layman:** See the layout flat from above like a floor plan, next to the normal 3D view.
+  Kind: ux.
+  Source: research-engine-survey-2026-11-05.
+
+- 📋 [3D_E-0893] **Show sizes in metres, feet or cubits, type exact values while dragging, and pick the unit at import.**
+  Units toggle for inspector, grid and ruler readouts; type a number
+  while moving or sizing; import asks "this file is in m / cm / mm /
+  cubits". Seen in: SketchUp measurements box
+  https://forums.sketchup.com/t/drawing-accuracy/74481 ,
+  https://help.sketchup.com/ru-ru/managing-units-measurement (search summary).
+  Done when: with cubits selected, a 13.35 m wall reads 30 cubits and
+  typing 20 sets it to 8.9 m.
+  Code today: import has a free "Import Scale" slider with too-small /
+  too-large warnings (engine/editor/panels/import_dialog.cpp); a
+  cubit constant appears only in an engine.cpp comment. No unit system.
+  Priority: high.
+  **Layman:** The editor can show and accept sizes in cubits, the unit the Tabernacle is described in.
+  Kind: ux.
+  Source: research-engine-survey-2026-11-05.
+
+- 📋 [3D_E-0894] **A switchable human-size figure in the viewport and the import preview.**
+  One toggle drops a 1.75 m figure at the cursor or beside an
+  imported model. Seen in: SketchUp measuring workflow
+  https://smart.macinteract.com/learn-sketchup-your-way/c1-drawing-accuracy/
+  (search summary).
+  CPU / GPU placement: GPU, one small mesh; CPU places it.
+  Done when: the figure can be shown, moved and hidden, and never
+  saves into the scene.
+  Code today: the ruler works (engine/editor/tools/ruler_tool.h,
+  3D_E-0639); no scale figure found.
+  Priority: medium.
+  **Layman:** A standing person beside your model shows at once whether a doorway or a table is the right size.
+  Kind: ux.
+  Source: research-engine-survey-2026-11-05.
+
+- 📋 [3D_E-0895] **Snap parts to each other with guide lines, and to named connection points.**
+  Snap to nearby vertices, edges and faces with coloured guide lines;
+  parts can carry typed snap points ("wall-end", "socket") that snap
+  and rotate together and refuse mismatches. Seen in: SketchUp
+  inference https://smart.macinteract.com/learn-sketchup-your-way/c1-drawing-accuracy/
+  (search summary); vendor kits (marketing, search snippet)
+  https://www.strayspark.studio/blog/modular-kit-snapping-ue5-comparison-2026 ,
+  https://www.artstation.com/marketplace/p/dLg1B/modularkit-grid-snapping-socket-kit-builder .
+  Done when: dragging a board near a socket point snaps it aligned.
+  Code today: grid snap only (m_snapTranslation / m_snapRotation /
+  m_snapScale in engine/editor/editor.h). Physics joints: 3D_E-S0762.
+  Priority: medium.
+  **Layman:** Boards, sockets and wall pieces click together at the right spot instead of being lined up by eye.
+  Kind: feature.
+  Source: research-engine-survey-2026-11-05.
+
+- 📋 [3D_E-0896] **After placing a wall, stair or roof, change its settings in place without undoing.**
+  A floating panel shows the last tool action's settings; edits redo
+  it in place as one undo step; a key repeats the last action.
+  Seen in: Blender Adjust Last Operation
+  https://docs.blender.org/manual/en/latest/interface/undo_redo.html
+  (fetch failed; unverified).
+  Done when: changing height in the panel after a wall placement
+  rebuilds that wall and one undo removes it.
+  Code today: tools take settings before placing (e.g. drawConfigPanel
+  in engine/editor/tools/path_tool.h; wall_tool, stair_tool, roof_tool).
+  Priority: medium.
+  **Layman:** Made a wall too short? Change its height right after placing it, and the wall updates.
+  Kind: ux.
+  Source: research-engine-survey-2026-11-05.
+
+- 📋 [3D_E-0897] **A status-bar strip that shows the keys and clicks that work right now.**
+  Each tool declares its live inputs; the status bar shows them.
+  Seen in: Blender status bar
+  https://projects.blender.org/blender/blender/issues/56599 (search summary).
+  Done when: every tool in engine/editor/tools/ shows its hints while
+  active.
+  Code today: no editor status bar found (searched editor.{h,cpp});
+  menu hover hints are 3D_E-S0434.
+  Priority: medium.
+  **Layman:** While a tool is on, the bottom bar says "Left click: place, Esc: cancel".
+  Kind: ux.
+  Source: research-engine-survey-2026-11-05.
+
+- 📋 [3D_E-0898] **Play controls in the editor: start from the editor camera, slow or speed up, mute or solo sound groups.**
+  Play from the editor camera's spot; speed control; mute game audio;
+  solo or mute one bus (narration, ambience, music). Seen in: Godot
+  4.6 game speed https://godotengine.org/releases/4.6/ (opened);
+  Godot 4.5 mute https://itsfoss.com/news/godot-4-5-release/ (opened);
+  Unreal Play-in-Editor
+  https://dev.epicgames.com/documentation/unreal-engine/ineditor-testing-play-and-simulate-in-unreal-engine
+  (search summary).
+  Done when: "Play from here" starts the player at the editor camera,
+  and at 0.25x speed animation and physics advance a quarter as fast.
+  Code today: Escape toggles EditorMode EDIT/PLAY (engine/core/engine.cpp);
+  entering play does not move the player to the editor camera; no
+  speed or mute controls. Buses exist (AudioBus in audio_mixer.h).
+  Priority: high.
+  **Layman:** Test the far end of a long walkthrough without walking there, slow it down, or hear only the narration.
+  Kind: ux.
+  Source: research-engine-survey-2026-11-05.
+
+- 📋 [3D_E-0899] **Step out of the running walkthrough to inspect and tweak it, then keep or discard the changes.**
+  A key detaches the editor camera from the running player; objects
+  can be picked and edited live; on stop, a list of changes offers
+  keep all / some / none. Seen in: Unreal Eject and Simulate
+  https://dev.epicgames.com/documentation/unreal-engine/ineditor-testing-play-and-simulate-in-unreal-engine
+  (search summary); Godot 4.4 embedded game editing
+  https://godotengine.org/releases/4.4 (read).
+  Done when: a value changed during play is listed on stop and is
+  reverted unless kept.
+  Code today: PLAY hides the editor UI (engine/editor/editor.h
+  EditorMode); no eject, no play snapshot or revert.
+  Priority: high.
+  **Layman:** While the walkthrough runs, fly out, click the door that will not open, fix it, and choose whether to keep the fix.
+  Kind: ux.
+  Source: research-engine-survey-2026-11-05.
+
+- 📋 [3D_E-0900] **"Used by" and "unused" views for every asset, with repair for missing files.**
+  Right-click: list users; list assets nothing uses; warn before
+  delete or rename; repoint a missing reference. Seen in: Unreal
+  Reference Viewer
+  https://dev.epicgames.com/documentation/unreal-engine/reference-viewer-in-unreal-engine ;
+  Godot 4.6 missing-dependency repair https://godotengine.org/releases/4.6/ (opened).
+  Done when: deleting a used texture warns with the list of users.
+  Code today: nothing in the editor (searched asset_browser_panel).
+  3D_E-S0818 scans unused assets at ship time; 3D_E-S0792 tracks
+  dependencies for shipping.
+  Priority: high.
+  **Layman:** Before deleting a texture, see every scene that uses it; and fix a missing file by pointing at a replacement.
+  Kind: feature.
+  Source: research-engine-survey-2026-11-05.
+
+- 📋 [3D_E-0901] **Asset browser tags, collections, type filters and saved searches.**
+  Tags and collections per asset, filter by type and tag, save a
+  search as a named collection. Seen in: Unreal Content Browser
+  https://dev.epicgames.com/documentation/unreal-engine/content-browser-in-unreal-engine ;
+  Blender Asset Browser https://docs.blender.org/manual/en/latest/editors/asset_browser.html
+  (unreadable; unverified); Unreal 5.6
+  https://forums.unrealengine.com/t/unreal-engine-5-6-released/2538952 (read).
+  Done when: tagging three textures "linen" and filtering by it shows
+  exactly those three.
+  Code today: engine/editor/panels/asset_browser_panel.{h,cpp} has
+  search bar, folder tree, thumbnail grid and file watching; no tags,
+  collections or type filter.
+  Priority: high.
+  **Layman:** Tag assets like "Tabernacle" or "linen", group them, and filter the browser to just those.
+  Kind: feature.
+  Source: research-engine-survey-2026-11-05.
+
+- 📋 [3D_E-0902] **Star the inspector properties you change often so they sit at the top.**
+  Per-component favourite properties, pinned above the rest.
+  Seen in: Godot 4.4 favourite properties https://godotengine.org/releases/4.4 (read).
+  Done when: a starred light property shows first on every light.
+  Code today: nothing found (searched inspector_panel.h).
+  Priority: low.
+  **Layman:** Fewer controls on screen: the few settings you use most appear first.
+  Kind: ux.
+  Source: research-engine-survey-2026-11-05.
+
+- 📋 [3D_E-0903] **Nested prefabs with visible overrides, prefab variants, and edit-in-place.**
+  Placed prefabs stay linked; a prefab can contain prefabs; changed
+  values show a badge with apply / revert; a variant inherits a
+  prefab; open a copy to edit in context; "break apart" unlinks.
+  Seen in: Unity nested prefabs
+  https://docs.unity.com/en-us/engine/current/manual/working-with-gameobjects/prefabs/nested ;
+  Unreal Level Instances
+  https://dev.epicgames.com/documentation/unreal-engine/level-instancing-in-unreal-engine .
+  Done when: editing a prefab updates every placed copy except
+  overridden values.
+  Code today: engine/editor/prefab_system.h saves and loads prefabs
+  as unlinked copies; no link, nesting or overrides.
+  Priority: high.
+  **Layman:** Make one tent peg, use it 200 times, and change all of them by editing the one.
+  Kind: feature.
+  Source: research-engine-survey-2026-11-05.
+
+- 📋 [3D_E-0904] **Reimport a changed model while keeping the builder's materials, placement and notes, and report what changed.**
+  Keep overrides by stable part name; list added / removed / changed
+  parts; keep the old asset if the new file is broken. Seen in: Godot
+  lost edits https://forum.godotengine.org/t/metadata-lost-on-editable-children-when-reimported-from-blender/122749
+  (search snippet),
+  https://docs.godotengine.org/en/stable/tutorials/assets_pipeline/importing_3d_scenes/import_configuration.html ;
+  Datasmith https://dev.epicgames.com/documentation/unreal-engine/datasmith-plugins-for-unreal-engine ;
+  Twinmotion threads (search result only)
+  https://forums.unrealengine.com/t/twinmotion-crash-when-updating-archicad-datasmith-file/2704145 ,
+  https://forums.unrealengine.com/t/twinmotion-datasmith-import-materials-missing/1981654/2 .
+  Done when: reimporting with one mesh renamed keeps every other
+  part's material override and reports the rename.
+  Code today: nothing found (searched engine for reimport). Asset hot
+  reload is 3D_E-S0793 and does not cover overrides.
+  Priority: high.
+  **Layman:** Re-export from Blender and your material swaps and placements stay put; a short note lists what changed.
+  Kind: feature.
+  Source: research-engine-survey-2026-11-05.
+
+- 📋 [3D_E-0905] **Import window with a per-part list, name hints like "-col", texture extraction, and folder defaults.**
+  Per part: skip, collision only, generate LODs; name suffixes set
+  this automatically; pull embedded textures to files; a folder
+  carries default settings, nearest folder wins.
+  Seen in: Godot advanced import
+  https://docs.godotengine.org/en/stable/tutorials/assets_pipeline/importing_3d_scenes/import_configuration.html ;
+  Unity presets by folder https://docs.unity3d.com/Manual/DefaultPresetsByFolder.html
+  (search snippet).
+  Done when: a part named "wall-col" imports as collision only.
+  Code today: engine/editor/panels/import_dialog.{h,cpp} has format
+  detection, analyzeFile and scale; no per-part list or folder defaults.
+  Priority: medium.
+  **Layman:** See a model's parts before importing, choose what each becomes, and set defaults once for a whole folder.
+  Kind: ux.
+  Source: research-engine-survey-2026-11-05.
+
+- 📋 [3D_E-0906] **An import report card in plain words with one-click fixes.**
+  Checks modelled on the glTF validator's rules (bad numbers, broken
+  references, flipped faces, unit guess) with severity and a fix.
+  Seen in: Khronos glTF Validator https://github.com/KhronosGroup/glTF-Validator
+  (Dart; use as a checklist, not a dependency); Unreal Data Validation
+  https://dev.epicgames.com/documentation/unreal-engine/data-validation-in-unreal-engine .
+  Done when: importing a millimetre-scale glTF offers a one-click
+  rescale.
+  Code today: import_dialog.cpp warns only on < 1 cm or > 1 km size.
+  Ship-time half is 3D_E-S0818.
+  Priority: high.
+  **Layman:** After import: "this model looks 100 times too big — fix?" with a button that fixes it.
+  Kind: ux.
+  Source: research-engine-survey-2026-11-05.
+
+- 📋 [3D_E-0907] **Open FBX files through the MIT-licensed ufbx reader.**
+  Meshes, materials, skins and cameras via ufbx (single C file, MIT
+  or public domain). Seen in: https://github.com/ufbx/ufbx
+  Done when: an FBX kit imports through the import dialog with
+  materials, and THIRD_PARTY_NOTICES.md lists ufbx.
+  Code today: loaders are glTF and OBJ only (engine/utils/gltf_loader,
+  obj_loader); import_dialog filters .gltf/.glb/.obj, yet
+  asset_browser_panel.cpp classifies .fbx as a model it cannot load.
+  Priority: medium.
+  **Layman:** Many bought or exported building kits come as FBX; Vestige should open them directly.
+  Kind: feature.
+  Source: research-engine-survey-2026-11-05.
+
+- 📋 [3D_E-0908] **A "how to export from your tool" guide inside the import window.**
+  Per-tool steps (Blender, SketchUp, CAD) for the glTF route, linked
+  from the import window; same idea as 3D_E-0881.
+  Seen in: Unreal needs vendor plugins for these tools
+  https://dev.epicgames.com/documentation/unreal-engine/datasmith-plugins-for-unreal-engine .
+  Done when: the import window links a page with steps for Blender
+  and SketchUp.
+  Code today: nothing found.
+  Priority: medium.
+  **Layman:** Plain steps for getting a model out of Blender or SketchUp in a form Vestige reads.
+  Kind: ux.
+  Source: research-engine-survey-2026-11-05.
+
+- 📋 [3D_E-0909] **Blockout shapes with add and subtract, baked to a normal mesh.**
+  Boxes, cylinders, wedges; union / subtract live; Bake gives a mesh
+  with collision and box-projected UVs. Seen in: Godot CSG (closed
+  shapes, no UV editing, slow in big trees)
+  https://docs.godotengine.org/en/stable/tutorials/3d/csg_tools.html ;
+  Unity ProBuilder https://docs.unity3d.com/Packages/com.unity.probuilder@6.0/manual/index.html .
+  CPU / GPU placement: CPU booleans; result uploads as a normal mesh.
+  Done when: subtracting a cylinder from a box and baking gives a
+  textured mesh with collision.
+  Code today: wall, room, roof, stair and cutout tools exist
+  (engine/editor/tools/); cutout cuts rectangular openings in walls
+  only. No general primitives or booleans.
+  Priority: medium.
+  **Layman:** Sketch a room from boxes and cylinders, cut holes, then freeze it into a real model, without Blender.
+  Kind: feature.
+  Source: research-engine-survey-2026-11-05.
+
+- 📋 [3D_E-0910] **Draw a fence, colonnade or curtain line by clicking points, with posts repeated along it.**
+  Polyline or spline; extrude a wall or hanging; place repeat pieces
+  at a set spacing; editable afterwards. Seen in: Unreal Modeling
+  Mode https://dev.epicgames.com/documentation/unreal-engine/modeling-mode-in-unreal-engine ;
+  Landscape Splines https://dev.epicgames.com/documentation/unreal-engine/landscape-splines-in-unreal-engine .
+  CPU / GPU placement: CPU builds the strip mesh; repeated pieces are
+  drawn through the existing instance batching.
+  Done when: a four-corner loop with 5-cubit spacing places posts and
+  hangings, and moving a corner rebuilds them.
+  Code today: wall_tool places one two-click segment; path_tool makes
+  a ground path mesh along a spline (engine/editor/tools/). No repeat
+  placement along a line.
+  Priority: high.
+  **Layman:** Click around the court of the Tabernacle and get the posts and linen hangings placed for you; reshape the line and they follow.
+  Kind: feature.
+  Source: research-engine-survey-2026-11-05.
+
+- 📋 [3D_E-0911] **A material gallery named after real materials (acacia, gold leaf, linen, bronze) with "age" and "dirt" sliders.**
+  A shipped set of named presets with thumbnails and two plain
+  sliders; the raw values stay available. Seen in: unverified (no
+  page read).
+  Done when: the material inspector opens a gallery of at least the
+  Tabernacle's listed materials, each sourced per 3D_E-0797.
+  Code today: preset save/load exists (engine/utils/material_library.h)
+  but no presets ship (no assets/materials directory) and no gallery.
+  Priority: high.
+  **Layman:** Pick "gold leaf" or "goat hair" by name and picture instead of setting roughness numbers.
+  Kind: feature.
+  Source: research-engine-survey-2026-11-05.
+
+- 📋 [3D_E-0912] **Light brightness in everyday units with named anchors like "oil lamp" and "noon sun".**
+  Enter lux, lumens or candela, or pick an anchor; colour temperature
+  in kelvin. Seen in: Unity HDRP light component
+  https://docs.unity3d.com/Packages/com.unity.render-pipelines.high-definition@17.0/manual/Light-Component.html ;
+  Unreal auto-exposure readouts
+  https://dev.epicgames.com/documentation/en-us/unreal-engine/auto-exposure-in-unreal-engine .
+  CPU / GPU placement: CPU converts on the light; shaders still get one value.
+  Done when: picking "oil lamp" sets a documented value and the
+  inspector shows its unit.
+  Code today: inspector splits colour and brightness
+  (engine/editor/light_color.h); kelvinToRgb exists in
+  engine/renderer/light_utils.h with no .cpp caller. No units.
+  Priority: medium.
+  **Layman:** Set a lamp to "one oil lamp" instead of guessing a number, so lamps and sun look right together.
+  Kind: ux.
+  Source: research-engine-survey-2026-11-05.
+
+- 📋 [3D_E-0913] **Exposure helpers: on-screen EV reading, brightness histogram, and an editor exposure lock.**
+  Overlay: current EV, target vs actual, histogram, tint for clipped
+  pixels; editor-only exposure freeze. Seen in: Unreal auto-exposure
+  https://dev.epicgames.com/documentation/en-us/unreal-engine/auto-exposure-in-unreal-engine .
+  CPU / GPU placement: GPU histogram by compute with a small async
+  readback; overlay drawn in ImGui.
+  Done when: the overlay shows EV and a histogram, and the lock keeps
+  brightness fixed while a light is moved.
+  Code today: auto-exposure with one speed, min and toggle
+  (engine/renderer/renderer.h; F10); F3 HDR debug. No histogram or EV readout.
+  Priority: high.
+  **Layman:** Answers "why is my scene too dark or too bright?" with a picture of the brightness, and lets you freeze it while placing lights.
+  Kind: ux.
+  Source: research-engine-survey-2026-11-05.
+
+- 📋 [3D_E-0914] **Extra view modes: how many lights hit each surface, reflections only, and a GI view, each with a legend.**
+  Light-complexity heat map, mirror-everything reflections view,
+  probe / GI visualisation; one key each, with an on-screen legend.
+  Seen in: Unreal view modes
+  https://dev.epicgames.com/documentation/en-us/unreal-engine/viewport-modes-in-unreal-engine ;
+  Lumen visualisation
+  https://dev.epicgames.com/documentation/en-us/unreal-engine/lumen-technical-details-in-unreal-engine ;
+  Unity Rendering Debugger
+  https://docs.unity3d.com/Packages/com.unity.render-pipelines.core@17.0/manual/Rendering-Debugger.html .
+  CPU / GPU placement: GPU, debug shader variants.
+  Done when: each mode is reachable from the viewport menu and shows a legend.
+  Code today: wireframe, collider overlay and F3 HDR debug only;
+  lighting-only and overdraw are 3D_E-S0424.
+  Priority: medium.
+  **Layman:** Special views that colour the scene to show where lighting is costly or wrong, with a key explaining the colours.
+  Kind: ux.
+  Source: research-engine-survey-2026-11-05.
+
+- 📋 [3D_E-0915] **Look presets with a draggable before/after split, plus a neutral AgX-style tone curve.**
+  Draggable split in the final pass; add a neutral modern curve to
+  the tonemap list. Seen in: Godot tonemap list
+  https://docs.godotengine.org/en/stable/tutorials/3d/environment_and_post_processing.html .
+  CPU / GPU placement: GPU, a mask in the final pass.
+  Done when: the split shows current and candidate grade at once.
+  Code today: tonemaps Reinhard / ACES / None (renderer.h); named grade
+  presets "Warm Golden", "Cool Blue" etc. (engine/renderer/color_grading_presets.h).
+  ACES 2.0 is 3D_E-S0498. No split view, no AgX.
+  Priority: medium.
+  **Layman:** Compare "Warm candle" with "Natural" side by side on screen instead of adjusting sliders blind.
+  Kind: ux.
+  Source: research-engine-survey-2026-11-05.
+
+- 📋 [3D_E-0916] **Show a preview sky and sun in any scene that has none, with buttons to make them real.**
+  Editor-only sky and sun when the scene has none; "Add sun" and "Add
+  sky" buttons. Seen in: Godot preview environment
+  https://docs.godotengine.org/en/stable/tutorials/3d/environment_and_post_processing.html .
+  CPU / GPU placement: none new; uses the existing sky and light draw.
+  Done when: opening a scene with no lights shows the preview and the
+  shipped build never does.
+  Code today: "Start Empty" adds a directional light and ground
+  (applyEmptyScene, engine/editor/panels/first_run_wizard.h); other
+  scenes get no fallback.
+  Priority: low.
+  **Layman:** A new or imported scene is never pitch black; one click turns the preview light into a real one.
+  Kind: ux.
+  Source: research-engine-survey-2026-11-05.
+
+- 📋 [3D_E-0917] **One "report a problem" bundle, with opt-in crash reports, for the editor and the player.**
+  Ring buffer of recent actions and warnings; on a crash an
+  out-of-process helper writes a dump and plain log; next start asks
+  Open folder / Send / Never; paths are scrubbed; also a "what was
+  hard to see or use" entry. Seen in: Godot 4.5 backtraces
+  https://godotengine.org/releases/4.5/ (read); consent patterns
+  (search result only) https://bugnet.io/blog/how-to-build-a-crash-dump-automatic-upload-system ,
+  https://docs.sable.moe/features/privacy/ , https://tf2classified.com/GDPR.txt ;
+  https://gameaccessibilityguidelines.com/basic/ (opened). Crashpad is
+  Apache-2.0 per the lane; verify.
+  Done when: a forced crash leaves a report folder and the next start
+  offers to open it.
+  Code today: no crash handler found (searched engine/, app/ for
+  sigaction, set_terminate). The GitHub submitter is 3D_E-S0459.
+  Priority: high.
+  **Layman:** One click packs the recent log, actions and any crash into a file you can send; nothing is sent without your yes.
+  Kind: feature.
+  Source: research-engine-survey-2026-11-05.
+
+- 📋 [3D_E-0918] **Lessons that check the learner really did each step.**
+  Steps highlight a control and wait for a real event; authors can
+  write lessons as data. Extends the tour in 3D_E-S0412.
+  Seen in: Unity tutorial framework
+  https://docs.unity3d.com/6000.0/Documentation/Manual/com.unity.learn.iet-framework.html
+  (search summary).
+  Done when: a sample lesson advances only after a wall is placed.
+  Code today: nothing found.
+  Priority: low.
+  **Layman:** A "build your first room" course that moves on only when you have actually placed the wall.
+  Kind: ux.
+  Source: research-engine-survey-2026-11-05.
+
+- 📋 [3D_E-0919] **A reset arrow beside every value changed from its default.**
+  Marker plus reset button on changed settings and inspector fields.
+  Seen in: Godot 4.6 inspector cues https://godotengine.org/releases/4.6/
+  (opened; reset arrow itself unverified).
+  Done when: every settings-editor field shows the marker when changed.
+  Code today: nothing found (searched settings_editor_panel.cpp,
+  inspector_panel.cpp).
+  Priority: low.
+  **Layman:** Tried a setting and regret it? One click puts that one value back.
+  Kind: ux.
+  Source: research-engine-survey-2026-11-05.
+
+- 📋 [3D_E-0920] **Show "Deleted 12 objects — Undo" instead of an "Are you sure?" box.**
+  Non-blocking undo notice for destructive actions; bulk edits say
+  how many items they touch. Seen in: unverified.
+  Done when: deleting objects shows the notice and its Undo restores them.
+  Code today: history panel and command history exist
+  (engine/editor/panels/history_panel.cpp); ui_notification_toast.h is
+  player UI, not editor.
+  Priority: low.
+  **Layman:** Fewer pop-up questions; a short message offers Undo instead.
+  Kind: ux.
+  Source: research-engine-survey-2026-11-05.
+
+- 📋 [3D_E-0921] **Saved editor routines run from the command palette as one undo step.**
+  Saved routines (or a recorder) on top of the command API
+  3D_E-S0437, listed in the palette 3D_E-S0406.
+  Seen in: Godot 4.5 EditorScripts in the palette
+  https://godotengine.org/releases/4.5/ (read).
+  Done when: a saved routine runs from the palette and one undo reverts it.
+  Code today: nothing found; depends on S0437.
+  Priority: low.
+  **Layman:** Save a repeated job like "rename all boards and snap them" and run it again with one command.
+  Kind: feature.
+  Source: research-engine-survey-2026-11-05.
+
+- 📋 [3D_E-0922] **Re-apply changed plant settings to plants already painted.**
+  A Reapply button pushes new scale, density and alignment to existing
+  instances. Seen in: Unreal Foliage Mode
+  https://dev.epicgames.com/documentation/unreal-engine/foliage-mode-in-unreal-engine .
+  CPU / GPU placement: CPU recompute; instance buffer re-upload.
+  Done when: changing a type's scale range and pressing Reapply
+  rescales painted instances in one undo step.
+  Code today: foliage painting exists (paint_foliage_command.h,
+  engine/environment/foliage_manager.h); no reapply found.
+  Priority: low.
+  **Layman:** Change a plant's size range and update the meadow without repainting it.
+  Kind: enhancement.
+  Source: research-engine-survey-2026-11-05.
+
+- 📋 [3D_E-0965] **The asset browser offers .fbx and .obj files as models, but opening one fails: only glTF opens.**
+  AssetBrowserPanel::classifyExtension marks .obj, .gltf, .glb and .fbx
+  as MESH; Editor opens a MESH through ResourceManager::loadModel,
+  which calls GltfLoader only. Nothing in the engine reads FBX, and OBJ
+  loads only through ResourceManager's mesh path (ObjLoader::loadMesh).
+  Decide: teach loadModel to open OBJ (and FBX once 3D_E-0907 lands), or
+  classify only what opens. Found while checking the 2026-11-05 survey.
+  Done when: every file the browser marks as a model opens in the model
+  viewer, pinned by a test over classifyExtension and loadModel.
+  **Layman:** The file browser shows some 3D files as models that the engine can't actually open; it should only offer what works, or learn to open them.
+  Kind: fix.
+  Source: found-2026-11-05.
+  Lanes: editor.
 
 ## 0.4.0 — Rendering and geometry at scale
 
@@ -9307,6 +9993,138 @@ Outdoor landscapes surrounding the Temple complex — hills, valleys, and the Ki
   Source: 3D_E-0765 split, user decision 2026-10-24.
   Lanes: renderer.
 
+- 📋 [3D_E-0923] **One "Lighting quality" choice in plain words that picks the GI, reflection and shadow mix.**
+  Maps one choice to existing GI, probe, reflection and shadow
+  settings; land with the first GI item.
+  Seen in: Godot GI chooser
+  https://docs.godotengine.org/en/stable/tutorials/3d/global_illumination/introduction_to_global_illumination.html .
+  CPU / GPU placement: none; selects existing passes.
+  Done when: each level lists its techniques and meets 60 FPS on the
+  dev GPU at the default window size.
+  Code today: separate toggles only (GraphicsSettings in
+  engine/core/settings.h).
+  Priority: high.
+  **Layman:** Choose "Fast", "Balanced" or "Best-looking" and the engine picks the right lighting methods, each with a one-line trade-off.
+  Kind: ux.
+  Source: research-engine-survey-2026-11-05.
+
+- 📋 [3D_E-0924] **Look zones: room-to-room exposure, grade, bloom and fog changes that blend as you walk.**
+  Box or sphere zones holding a reusable look file, blended over a
+  distance above a global look. Seen in: Unity URP volumes
+  https://docs.unity.com/en-us/engine/6000.0/manual/post-processing-and-full-screen-effects/urp/volumes-landing-page/volumes ;
+  Unreal lighting overview
+  https://dev.epicgames.com/documentation/en-us/unreal-engine/lighting-the-environment-in-unreal-engine .
+  CPU / GPU placement: CPU blends settings per frame; GPU applies them
+  in the existing post pass.
+  Done when: crossing a zone edge blends exposure and grade over the
+  set distance with no added pass.
+  Code today: per-scene grading only (color_grading_lut.h; 3D_E-S0505);
+  local fog volumes exist (3D_E-S0131). No look zones.
+  Priority: high.
+  **Layman:** Step from the bright courtyard into the Holy Place and the mood shifts smoothly, set up without scripting.
+  Kind: feature.
+  Source: research-engine-survey-2026-11-05.
+
+- 📋 [3D_E-0925] **Separate "to bright" and "to dark" adaptation speeds and local exposure for doorways.**
+  Two adaptation speeds; a local exposure step lifts shadows and holds
+  highlights. Seen in: Unreal auto-exposure
+  https://dev.epicgames.com/documentation/en-us/unreal-engine/auto-exposure-in-unreal-engine .
+  CPU / GPU placement: GPU per-pixel local adjustment; CPU smooths the
+  adaptation value.
+  Done when: dark-to-bright and bright-to-dark adapt at their own set
+  speeds, measured in a test.
+  Code today: one m_autoExposureSpeed (engine/renderer/renderer.h).
+  Priority: medium.
+  **Layman:** Walking from desert sun into a dim tent feels like real eyes adjusting, and the room seen through the door stays readable.
+  Kind: enhancement.
+  Source: research-engine-survey-2026-11-05.
+
+- 📋 [3D_E-0926] **Patterned light from lattice windows and pierced lamps (light cookies), then IES lamp profiles.**
+  Greyscale cookie on spot and point lights, swappable at runtime;
+  later, IES files baked to a small texture with a 3D beam preview.
+  Seen in: Unity HDRP cookies
+  https://docs.unity3d.com/Packages/com.unity.render-pipelines.high-definition@17.0/manual/Light-Component.html ;
+  Unreal IES
+  https://dev.epicgames.com/documentation/en-us/unreal-engine/using-ies-light-profiles-in-unreal-engine .
+  CPU / GPU placement: GPU texture lookup in the light shader; IES
+  baked on CPU at import.
+  Done when: a spot light with a lattice cookie projects the pattern
+  and its shadow agrees.
+  Code today: nothing found (searched engine/renderer, assets/shaders).
+  Priority: medium.
+  **Layman:** Light through a latticed window throws a lattice pattern on the floor, without extra geometry.
+  Kind: feature.
+  Source: research-engine-survey-2026-11-05.
+
+- 📋 [3D_E-0927] **Lighting scenarios: several baked looks of one scene (day, lamp-lit, night) switched at runtime.**
+  Store more than one baked probe / lightmap set per scene; switch or
+  blend two. Seen in: Unity Adaptive Probe Volumes
+  https://docs.unity.com/en-us/engine/6000.0/manual/lighting-overview/lighting/probevolumes .
+  CPU / GPU placement: data on disk and CPU; GPU blends two sets in
+  the shader.
+  Done when: switching scenario changes indirect light with no re-bake.
+  Code today: SH probe grid and radiosity baker exist
+  (engine/renderer/sh_probe_grid.h, radiosity_baker.h); one set only.
+  Builds on 3D_E-S0518, S0519.
+  Priority: medium.
+  **Layman:** The same room at midday and by lamplight, each with correct bounced light, without expensive live GI.
+  Kind: feature.
+  Source: research-engine-survey-2026-11-05.
+
+- 📋 [3D_E-0928] **A reference path-traced view to check real-time lighting against.**
+  Accumulate while still, restart on change, denoise at the end.
+  Needs the compute ray tracer (3D_E-S0584). Open Image Denoise is
+  Apache-2.0 per the lane; verify.
+  Seen in: Unreal Path Tracer
+  https://dev.epicgames.com/documentation/en-us/unreal-engine/path-tracer-in-unreal-engine .
+  CPU / GPU placement: GPU compute; denoise on GPU or CPU.
+  Done when: a still camera converges and restarts on any edit.
+  Code today: nothing found.
+  Priority: medium.
+  **Layman:** A slow, accurate picture of how the light should look, to compare with the fast one.
+  Kind: feature.
+  Source: research-engine-survey-2026-11-05.
+
+- 📋 [3D_E-0929] **One project-wide "detail" value, in screen pixels, decides when every model swaps to a simpler copy.**
+  Generate LODs at import; one pixel-error value plus per-object bias
+  and opt-out. Seen in: Godot mesh LOD
+  https://docs.godotengine.org/en/stable/tutorials/3d/mesh_lod.html .
+  CPU / GPU placement: CPU builds LODs at import; per-frame pick on
+  CPU (GPU later with clusters).
+  Done when: the meadow keeps its 60 FPS floor with the default value.
+  Code today: LOD exists only for terrain and trees (terrain.cpp,
+  tree_renderer.h). Builds on 3D_E-S0598 meshoptimizer, S0603.
+  Priority: medium.
+  **Layman:** Models get simpler far away automatically; you never set distances by hand.
+  Kind: perf.
+  Source: research-engine-survey-2026-11-05.
+
+- 📋 [3D_E-0930] **One-button merged far-view stand-ins for groups of buildings.**
+  Select a group, Build Proxy, used beyond a distance.
+  Seen in: Unreal HLOD
+  https://dev.epicgames.com/documentation/en-us/unreal-engine/hierarchical-level-of-detail-in-unreal-engine .
+  CPU / GPU placement: CPU builds offline; GPU draws.
+  Done when: a 200-tent group draws in under ten calls beyond the distance.
+  Code today: tree impostors only (engine/renderer/tree_renderer.h).
+  Priority: low.
+  **Layman:** The camp of tents around the Tabernacle draws as one cheap shape when far away.
+  Kind: perf.
+  Source: research-engine-survey-2026-11-05.
+
+- 📋 [3D_E-0931] **Season presets that change foliage tint, sky and light together.**
+  Spring / Summer / Autumn / Winter presets driving foliage tint, sky
+  and sun; visitors can use them beside the time-of-day slider
+  (3D_E-S0614). Seen in: Lumion 2025 https://lumion.com/news/lumion-2025-release ;
+  Twinmotion 2025.1 https://resources.imaginit.com/how-tos/what-to-expect-in-twinmotion-2025
+  (both search result only).
+  CPU / GPU placement: GPU uniforms; CPU holds preset state.
+  Done when: each preset changes grass and tree tint with no new pass.
+  Code today: nothing found (searched engine for season).
+  Priority: low.
+  **Layman:** Show the scene in spring or late summer with one button.
+  Kind: feature.
+  Source: research-engine-survey-2026-11-05.
+
 ## 0.5.0 — Interactivity
 
 Breaks: visual scripting graphs. 3D_E-S0042 switches scripting on, so the
@@ -10107,6 +10925,140 @@ The rendering research update (Phase 13 "2026-04 Research Update") makes pixels 
   Source: user-request-2026-10-12.
   Lanes: physics, animation.
 
+- 📋 [3D_E-0932] **Scene variants: named design options, and build stages, that a visitor switches with no script.**
+  A variant records visibility, materials and placements; visitors
+  switch from a menu or a clickable marker; ordered variants give
+  Next/Back build stages. Builds on named layers.
+  Seen in: Unreal Variant Manager
+  https://dev.epicgames.com/documentation/en-us/unreal-engine/variant-manager-template-overview (read);
+  Twinmotion configurations and phasing
+  https://resources.imaginit.com/how-tos/what-to-expect-in-twinmotion-2025 (search result only).
+  Done when: a shipped build switches between two variants from its
+  menu with no scripting.
+  Code today: nothing found (roadmap "variant", "phasing").
+  Priority: high.
+  **Layman:** Show "the curtain as most scholars read it" and "an alternative reading" in one scene, or step through how the Tabernacle was put up.
+  Kind: feature.
+  Source: research-engine-survey-2026-11-05.
+
+- 📋 [3D_E-0933] **Node graphs light up as they run, with breakpoints and a watch list.**
+  Glowing wires and nodes as they fire, values on wires, pause on a
+  node, warnings that name the node. Seen in: Unity Behavior
+  https://docs.unity.cn/Manual/com.unity.behavior.html (read); Godot
+  4.4 / 4.5 debugger https://godotengine.org/releases/4.4 ,
+  https://godotengine.org/releases/4.5/ (read).
+  Done when: a breakpoint on a node pauses play and shows its inputs.
+  Code today: graph editor exists (engine/editor/panels/script_editor_panel.h,
+  which says breakpoints "land in later steps"); no live view.
+  Priority: high.
+  **Layman:** While testing, see which step of a door's logic fired and which did not.
+  Kind: feature.
+  Source: research-engine-survey-2026-11-05.
+
+- 📋 [3D_E-0934] **Trigger rules written as sentences: "When the visitor enters the Holy Place, play the incense sound".**
+  When [event] if [condition] then [actions], dropdowns of real
+  entities; each rule compiles to the existing node graph and can be
+  opened as one. Seen in: Unity Behavior
+  https://docs.unity.cn/Manual/com.unity.behavior.html (read;
+  sentence form is the lane's extension).
+  Done when: a sentence rule and its generated graph behave the same
+  in a test.
+  Code today: graph compiler exists (engine/scripting/, 3D_E-S0056);
+  no sentence editor.
+  Priority: high.
+  **Layman:** Build interactions by filling in a sentence instead of dragging wires.
+  Kind: feature.
+  Source: research-engine-survey-2026-11-05.
+
+- 📋 [3D_E-0935] **Record a play session, then scrub back through it and read script and object state.**
+  Ring buffer of transforms and graph variables; timeline scrubbing
+  drives viewport and inspector. Seen in: Unreal Rewind Debugger
+  https://dev.epicgames.com/documentation/en-us/unreal-engine/animation-rewind-debugger-in-unreal-engine (read).
+  Done when: scrubbing to a past frame shows that frame's entity values.
+  Code today: nothing found; replay items 3D_E-S0731..S0733 are racing-focused.
+  Priority: medium.
+  **Layman:** Rewind to just before the door failed to open and see which trigger did not fire.
+  Kind: feature.
+  Source: research-engine-survey-2026-11-05.
+
+- 📋 [3D_E-0936] **Interaction points defined once on a prefab and shared by every copy.**
+  A use point (stand position, facing, prompt, behaviour) stored on
+  the prefab. Needs linked prefabs. Seen in: Unreal Smart Objects
+  https://forums.unrealengine.com/t/talks-and-demos-smart-ant-building-ai-behavior-with-state-tree-and-smart-objects/2705288
+  (search summary only).
+  Done when: editing the prefab's use point changes it on every copy.
+  Code today: per-instance interactable_component.h and door
+  component (3D_E-S0741); no shared use points.
+  Priority: medium.
+  **Layman:** Set up "stand here, press E, the lid opens" once, and every copy of the object gets it.
+  Kind: feature.
+  Source: research-engine-survey-2026-11-05.
+
+- 📋 [3D_E-0937] **Named viewpoints the visitor jumps between, in a clean viewer with a small key card.**
+  Builder saves named camera spots; visitors jump by menu or number
+  keys; a clean viewer shows only the view list and a hotkey card.
+  Seen in: Enscape standalone https://learn.enscape3d.com/?p=62554
+  (redirected, not opened); D5 https://d5render.com/feature ;
+  Twinmotion presentation mode
+  https://resources.imaginit.com/how-tos/what-to-expect-in-twinmotion-2025
+  (all search result only).
+  Done when: a shipped build lists the saved views and jumping works
+  by keyboard and pad.
+  Code today: PLAY mode hides editor UI (editor.h); editor bookmarks
+  are 3D_E-S0420 and guided paths 3D_E-S0738; no visitor view list.
+  Priority: high.
+  **Layman:** The visitor picks "Gate", "Altar" or "Holy of Holies" from a list and is taken there; nothing else clutters the screen.
+  Kind: feature.
+  Source: research-engine-survey-2026-11-05.
+
+- 📋 [3D_E-0938] **Tour and cutscene timing that stretches to each language's narration length.**
+  Bind a shot's length to its voice clip per language.
+  Seen in: Unreal 5.6 Sequencer
+  https://forums.unrealengine.com/t/unreal-engine-5-6-released/2538952 (read).
+  Done when: swapping to a longer clip lengthens the shot with no re-timing.
+  Code today: nothing found; belongs with 3D_E-S0754, S0738.
+  Priority: medium.
+  **Layman:** A longer French narration holds the camera longer instead of being cut off.
+  Kind: feature.
+  Source: research-engine-survey-2026-11-05.
+
+- 📋 [3D_E-0939] **Pseudo-translation and a live language switch in the editor viewport.**
+  Pseudo locale (accents, +40% length), live language preview,
+  string-table export for translators. Seen in: Godot 4.5 live preview
+  https://godotengine.org/releases/4.5/ (read); Unreal 5.6
+  https://forums.unrealengine.com/t/unreal-engine-5-6-released/2538952 (read).
+  Done when: the pseudo locale shows every hard-coded string untouched.
+  Code today: missing-keys panel exists
+  (engine/editor/panels/localization_debug_panel.h); no pseudo locale.
+  Translation check is 3D_E-0776.
+  Priority: medium.
+  **Layman:** A fake "stretched" language shows text that will be cut off or never translated, before real translation starts.
+  Kind: feature.
+  Source: research-engine-survey-2026-11-05.
+
+- 📋 [3D_E-0940] **Reusable camera-move templates and a one-click render of the selected view.**
+  Saved camera moves applied to a target; Quick Render from a camera
+  or bookmark; video through 3D_E-S0794.
+  Seen in: Unreal 5.6 Quick Render
+  https://forums.unrealengine.com/t/unreal-engine-5-6-released/2538952 (read).
+  Done when: applying the orbit template to an object plays it in the
+  camera track editor.
+  Code today: nothing found.
+  Priority: low.
+  **Layman:** Drop a ready "slow orbit" on any object and render it as a still or short clip with one button.
+  Kind: feature.
+  Source: research-engine-survey-2026-11-05.
+
+- 📋 [3D_E-0941] **Named markers inside an animation clip that scripts can play or loop between.**
+  Named markers in clips usable from graphs and tours.
+  Seen in: Godot 4.4 markers https://godotengine.org/releases/4.4 (read).
+  Done when: a graph node plays a clip from marker A to marker B.
+  Code today: nothing found (searched engine for marker).
+  Priority: low.
+  **Layman:** One door animation can be "open", "hold" and "close" without separate files.
+  Kind: feature.
+  Source: research-engine-survey-2026-11-05.
+
 ## 0.6.0 — Shipping a walkthrough
 
 Breaks: the command-line flags and the packaging layout.
@@ -10160,6 +11112,8 @@ The engine targets Linux and Windows from the start (CLAUDE.md). The codebase is
 ###### CI / CD Pipeline
 
 - 📋 [3D_E-S0779] **GitHub Actions workflow: Linux build (GCC + Clang)**
+  Layman: Check every change with a second compiler on Linux (Clang), so mistakes one compiler misses are caught.
+  2026-11-05: GCC half shipped long ago (ci.yml linux-build-test). Clang half PARKED (user decision 2026-11-05). Ubuntu 24.04's newest package, clang-20, cannot compile OpenAL Soft 1.25.2 against GCC 13's libstdc++; host Clang 23 can. Groundwork committed in a6c75b1 (engine warnings fixed, tinyexr and OpenAL warning flags for Clang). The drafted ci.yml job and local-ci.sh stage 8 are in Vestige_private/drafts/clang-ci-2026-11-05/clang-job.patch. Reopen when a GitHub Ubuntu runner ships Clang 21+ (Ubuntu 26.04), or OpenAL builds under clang-20.
   Kind: implement.
 
 - ✅ [3D_E-S0780] **GitHub Actions workflow: Windows build (MSVC)**
@@ -10439,6 +11393,183 @@ Vestige is public on GitHub under the MIT License, builds cleanly from a fresh c
 
 ---
 
+- 📋 [3D_E-0942] **A pre-ship walkthrough check: dead triggers, unreachable rooms, missing captions and accessibility faults.**
+  Rules added to the Problems panel: door with no trigger, trigger
+  nobody listens to, room the navmesh cannot reach, audio zone with
+  no reverb, untranslated string, spoken line with no caption, small
+  or low-contrast plaque text, flashing beyond photosensitivity limits.
+  Gate before packaging (3D_E-S0783). Seen in: Unreal Map Check
+  https://dev.epicgames.com/documentation/unreal-engine/map-check-errors-in-unreal-engine
+  (opened); request for built-in accessibility checks
+  https://forums.unrealengine.com/t/request-for-colorblind-accessibility-requirements-in-unreal-engine-feature-developments/2607760
+  (search summary).
+  Done when: packaging refuses a scene with an error-level finding.
+  Code today: Scene Validation panel (validation_panel.cpp) has none of
+  these checks. Run-time verification is 3D_E-0698.
+  Priority: high.
+  **Layman:** Before you ship, one button lists everything a visitor would trip over, with a "take me there" link.
+  Kind: feature.
+  Source: research-engine-survey-2026-11-05.
+
+- 📋 [3D_E-0943] **On first run, check the graphics card, pick a quality level, and explain any driver problem in plain words.**
+  Read GL version, renderer and VRAM; run a few seconds of timed
+  frames; pick a preset and offer "Keep / try lower"; a "Can my PC run
+  this?" page shows a green/amber/red verdict. Seen in:
+  https://gameaccessibilityguidelines.com/basic/ (opened); support
+  threads (search result only)
+  https://forums.unrealengine.com/t/twinmotion-to-ue5-1-1-missing-textures-when-packaging-to-android-oculus-quest-2-log-was-never-saved-as-an-export/1831413 ;
+  Unreal scalability https://dev.epicgames.com/documentation/unreal-engine/scalability-reference-for-unreal-engine .
+  CPU / GPU placement: CPU reads GL strings; the test run is timed
+  with the existing GPU timer.
+  Done when: a fresh install on the wintest box picks a preset and logs why.
+  Code today: GL_RENDERER/VERSION are only logged (engine/core/window.cpp);
+  presets exist (3D_E-0035); 3D_E-S0817 validates presets but does not
+  pick one at first run.
+  Priority: high.
+  **Layman:** A visitor on a weak or old PC gets a smooth walkthrough or a clear "update your graphics driver" message, never a black window.
+  Kind: feature.
+  Source: research-engine-survey-2026-11-05.
+
+- 📋 [3D_E-0944] **Visitor first launch opens on text size, contrast and subtitle choices.**
+  A short first screen with text size, contrast, subtitles and a
+  "recommended for me" button; remembered. Seen in: XAG 114
+  https://learn.microsoft.com/en-us/gaming/accessibility/xbox-accessibility-guidelines/114
+  (opened; first-launch claim via search only);
+  https://gameaccessibilityguidelines.com/basic/ (opened).
+  Done when: a fresh player build shows it once and saves the choices.
+  Code today: the first-run wizard is for builders
+  (engine/editor/panels/first_run_wizard.h); 3D_E-S0811 is the builder
+  project wizard.
+  Priority: medium.
+  **Layman:** The first screen a visitor sees lets them make text bigger and turn on subtitles before anything else.
+  Kind: accessibility.
+  Source: research-engine-survey-2026-11-05.
+
+- 📋 [3D_E-0945] **A short, skippable movement tutorial for visitors, replayable from the pause menu.**
+  In-world prompts: look, walk, interact, open menu; shown once.
+  Seen in: https://gameaccessibilityguidelines.com/basic/ (opened).
+  Done when: the tutorial runs on first play, can be skipped, and
+  replays from the pause menu.
+  Code today: interaction prompt exists (engine/ui/ui_interaction_prompt.h);
+  no tutorial. Editor tour is 3D_E-S0412.
+  Priority: medium.
+  **Layman:** People who never play games learn to look, walk and use things in a minute.
+  Kind: ux.
+  Source: research-engine-survey-2026-11-05.
+
+- 📋 [3D_E-0946] **Print-quality screenshots: tiled capture above screen size, region select, extra buffers.**
+  Render in tiles to a multiple of the window size (capped, with a
+  warning), drag a region, optionally save depth / normal / base
+  colour as 16-bit. Seen in: Unreal high-res screenshot
+  https://dev.epicgames.com/documentation/en-us/unreal-engine/taking-screenshots-in-unreal-engine .
+  CPU / GPU placement: GPU renders tiles with a projection offset;
+  CPU stitches.
+  Done when: a 4x capture matches a 1x capture downscaled, with no
+  seams in bloom or TAA.
+  Code today: F11 / menu screenshot at window size with diagnostics
+  (engine/renderer/frame_diagnostics.h). Photo mode is 3D_E-S0713.
+  Priority: high.
+  **Layman:** Make a poster-sized picture of the Tabernacle for a book or the website.
+  Kind: feature.
+  Source: research-engine-survey-2026-11-05.
+
+- 📋 [3D_E-0947] **360-degree panorama stills for phones, web viewers and cheap headsets.**
+  Render six faces from the camera spot, reproject to an
+  equirectangular image. Seen in: Enscape panorama export
+  https://blog.enscape3d.com/export-options-in-enscape (search result only);
+  the Unreal screenshot page does not cover panoramas
+  https://dev.epicgames.com/documentation/en-us/unreal-engine/taking-screenshots-in-unreal-engine .
+  CPU / GPU placement: GPU face renders and reprojection.
+  Done when: the image opens correctly in a standard 360 viewer.
+  Code today: cubemap capture exists (engine/renderer/ibl_capture_sequence.h,
+  cubemap_render.vert.glsl); equirect is used only for loading skies
+  (skybox.h). No panorama export.
+  Priority: medium.
+  **Layman:** Someone without a gaming PC can still look all around inside the Holy of Holies on a phone.
+  Kind: feature.
+  Source: research-engine-survey-2026-11-05.
+
+- 📋 [3D_E-0948] **A "recording" quality profile used only while rendering video, with sub-frame motion blur.**
+  Higher shadow / GI / sampling, render above size and downscale,
+  blend sub-frames, progress and time left. Seen in: Godot Movie Maker
+  https://docs.godotengine.org/en/stable/tutorials/animation/creating_movies.html .
+  CPU / GPU placement: GPU renders and accumulates; CPU/ffmpeg encodes.
+  Done when: a recording uses the profile and the live settings return after.
+  Code today: nothing found; video export is 3D_E-S0794, repeatable
+  runs 3D_E-0697.
+  Priority: medium.
+  **Layman:** Videos render at a higher quality than the live view can afford, with a progress bar.
+  Kind: feature.
+  Source: research-engine-survey-2026-11-05.
+
+- 📋 [3D_E-0949] **Every asset records its source, author and licence, and credits are built automatically.**
+  A small record beside each imported file; shown in asset info;
+  packaging builds a credits file and flags assets with no record.
+  Seen in: Poly Haven per-asset authors and licences
+  https://polyhaven.com/our-api .
+  Done when: packaging fails on an asset with no licence record.
+  Code today: nothing found; THIRD_PARTY_NOTICES.md covers code only.
+  Priority: medium.
+  **Layman:** The engine remembers where every model and texture came from, so nothing of unknown origin ships.
+  Kind: feature.
+  Source: research-engine-survey-2026-11-05.
+
+- 📋 [3D_E-0950] **An import cache keyed by content hash that rebuilds only what changed and survives a crash.**
+  Hash sources, reprocess dependants, write-ahead log to resume.
+  Base for cooking 3D_E-S0791 and hot reload 3D_E-S0793.
+  Seen in: Bevy 0.12 asset processor https://bevy.org/news/bevy-0-12/ .
+  Done when: killing a cook mid-run and restarting completes with no
+  corrupt output.
+  Code today: nothing found.
+  Priority: medium.
+  **Layman:** Re-processing assets is quick and a crash halfway never leaves broken files.
+  Kind: feature.
+  Source: research-engine-survey-2026-11-05.
+
+- 📋 [3D_E-0951] **A "what takes the memory" chart per scene and asset.**
+  Bar chart of disk and video memory including dependencies.
+  Seen in: Unreal Size Map
+  https://dev.epicgames.com/documentation/unreal-engine/reference-viewer-in-unreal-engine .
+  Done when: the chart totals match the cooked size within 5%.
+  Code today: nothing found; GPU memory counter work is 3D_E-0820.
+  Priority: medium.
+  **Layman:** See which textures and models make the scene heavy, and click to open them.
+  Kind: perf.
+  Source: research-engine-survey-2026-11-05.
+
+- 📋 [3D_E-0952] **List the accessibility features in the game and on its web and store page.**
+  A written list inside the app and on the published pages.
+  Seen in: https://gameaccessibilityguidelines.com/basic/ (opened);
+  Steamworks https://partner.steamgames.com/doc/accessibility_features
+  (search result only).
+  Done when: the pause menu and the release page carry the same list.
+  Code today: nothing found.
+  Priority: low.
+  **Layman:** People can see before downloading that subtitles, big text and colour-blind modes are there.
+  Kind: accessibility.
+  Source: research-engine-survey-2026-11-05.
+
+- 📋 [3D_E-0953] **Export a selection with everything it needs as one package for another project.**
+  Bundle selection plus dependencies and provenance; the sending half
+  of 3D_E-S0809. Seen in: Unreal Migrate
+  https://dev.epicgames.com/documentation/unreal-engine/content-browser-in-unreal-engine .
+  Done when: the package imports into an empty project with nothing missing.
+  Code today: nothing found.
+  Priority: low.
+  **Layman:** Share a finished piece, like the altar, with its textures and sounds in one file.
+  Kind: feature.
+  Source: research-engine-survey-2026-11-05.
+
+- 📋 [3D_E-0954] **Data-only content packs that add rooms, props, tours or translations without engine changes.**
+  Documented pack format with version checks and safe mode; code
+  plugins stay unscheduled. Seen in: unverified (no page read).
+  Done when: a sample pack adds a language and is ignored in safe mode.
+  Code today: nothing found (roadmap "modding" none).
+  Priority: low.
+  **Layman:** Others could add their own structures or languages as a pack, and a safe mode starts without them.
+  Kind: feature.
+  Source: research-engine-survey-2026-11-05.
+
 ## 1.0.0 — Tabernacle walkthrough ships
 
 Breaks nothing. This is the 1.0 exit condition in docs/standards/versioning-overrides.md.
@@ -10539,6 +11670,29 @@ Biblical rendition of the Tabernacle as described in Exodus 25-40.
   Kind: feature.
   Source: user-request-2026-10-20 (3D_E-0774).
   Lanes: ui, scripting.
+
+- 📋 [3D_E-0957] **Visitors can measure between two points and read the distance in cubits and metres.**
+  Runtime ruler in the player build, using the unit system above.
+  Seen in: unverified (no page read).
+  Done when: the shipped walkthrough measures the tent as 30 cubits.
+  Code today: ruler is editor-only (engine/editor/tools/ruler_tool.h).
+  Ties to 3D_E-0797.
+  Priority: medium.
+  **Layman:** A visitor clicks two corners and sees "30 cubits, about 13.35 m".
+  Kind: feature.
+  Source: research-engine-survey-2026-11-05.
+
+- 📋 [3D_E-0958] **A browsable glossary of biblical and building terms for visitors, with pictures.**
+  A Terms page plus highlighted words with tooltips.
+  Seen in: XAG 114
+  https://learn.microsoft.com/en-us/gaming/accessibility/xbox-accessibility-guidelines/114 (opened).
+  Done when: every term on the Tabernacle plaques has an entry.
+  Code today: nothing found; editor glossary is 3D_E-S0410; per-object
+  naming is 3D_E-0799.
+  Priority: medium.
+  **Layman:** Words like "laver" and "ephod" are explained in a Terms page and in tooltips.
+  Kind: feature.
+  Source: research-engine-survey-2026-11-05.
 
 ## 1.1.0 — Procedural generation
 
@@ -10727,6 +11881,18 @@ Biblical rendition of the Tabernacle as described in Exodus 25-40.
 - 📋 [3D_E-S0963] **Random encounters / dynamic events — region-tagged event templates (ambush / merchant-meeting / animal-attack / faction-conflict / weather-rare-event) seeded by player traversal. Uses the seeded-RNG infrastructure (currently exists in Formula Workbench's curve fitter).**
   **Layman:** Surprise events that happen while travelling, such as ambushes or merchants.
   Kind: implement.
+
+- 📋 [3D_E-0959] **Paths and riverbeds drawn as lines that also reshape and paint the terrain.**
+  Raise or lower terrain beside the line and paint a blend.
+  Seen in: Unreal Landscape Splines
+  https://dev.epicgames.com/documentation/unreal-engine/landscape-splines-in-unreal-engine .
+  CPU / GPU placement: CPU bakes into the heightmap; terrain shader reads it.
+  Done when: editing the line updates heights and paint, undoably.
+  Code today: path_tool builds a path mesh only (engine/editor/tools/path_tool.h).
+  Priority: low.
+  **Layman:** Draw a path and the ground flattens and changes texture along it.
+  Kind: feature.
+  Source: research-engine-survey-2026-11-05.
 
 ## 1.3.0 — AI assistant
 
@@ -11054,6 +12220,18 @@ Biblical rendition of the Tabernacle as described in Exodus 25-40.
 - 📋 [3D_E-S0905] **Fuzz testing: random edit sequences from multiple clients, assert final state converges across all clients**
   **Layman:** Random edits from many simulated users must always end in the same scene.
   Kind: implement.
+
+- 📋 [3D_E-0960] **Save scenes as one file per object so two people can edit without clashing.**
+  Each object or chunk in its own file; region loading.
+  Decide the format before 0.6.0.
+  Seen in: Unreal One File Per Actor
+  https://dev.epicgames.com/documentation/unreal-engine/world-partition-in-unreal-engine .
+  Done when: two edits to different objects merge in git with no conflict.
+  Code today: one scene file (engine/editor/scene_serializer.h).
+  Priority: low.
+  **Layman:** Two builders can work on different parts of a scene and merge cleanly.
+  Kind: feature.
+  Source: research-engine-survey-2026-11-05.
 
 ## 1.6.0 — Racing and vehicles
 
@@ -12150,3 +13328,54 @@ record, and a real clearance before commercial release needs counsel.
   Kind: feature.
   Source: doom-ants-31 request 2026-10-26 (DOOM-0103 § 4.1).
   Lanes: formula_workbench.
+
+- 📋 [3D_E-0961] **Browse and download free CC0 textures, skies and models from Poly Haven inside the editor.**
+  In-editor tab with tags and sizes; downloads with dependencies and
+  a provenance record; needs a unique User-Agent and a visible credit.
+  Unscheduled until online access is decided against 3D_E-S0912.
+  Seen in: Poly Haven API https://polyhaven.com/our-api .
+  Done when: a downloaded texture arrives with its licence record.
+  Code today: nothing found.
+  Priority: medium.
+  **Layman:** Fill the library with free, legally clean materials and skies without leaving Vestige.
+  Kind: feature.
+  Source: research-engine-survey-2026-11-05.
+
+- 📋 [3D_E-0962] **Import building models (IFC) through an offline converter first.**
+  Start with a documented IFC-to-glTF conversion; IfcOpenShell is
+  LGPL-3.0, so no static linking.
+  Seen in: Datasmith format list
+  https://dev.epicgames.com/documentation/unreal-engine/datasmith-plugins-for-unreal-engine ;
+  https://github.com/IfcOpenShell/IfcOpenShell .
+  Done when: a sample IFC converts and imports with element names.
+  Code today: nothing found.
+  Priority: low.
+  **Layman:** Architects' IFC files could become Vestige scenes that keep each wall's and door's name.
+  Kind: research.
+  Source: research-engine-survey-2026-11-05.
+
+- 📋 [3D_E-0963] **A scanned point cloud as a view-only reference for tracing real sites.**
+  Reference layer, never shipped. Seen in: Unreal LiDAR plugin
+  https://dev.epicgames.com/documentation/unreal-engine/lidar-point-cloud-plugin-for-unreal-engine ;
+  https://github.com/zeux/meshoptimizer/tree/master/gltf ;
+  https://github.com/PDAL/PDAL (unverified).
+  CPU / GPU placement: GPU point sprites with LOD; CPU loads in a job.
+  Done when: a 10-million-point scan displays at 60 FPS in the editor.
+  Code today: nothing found.
+  Priority: low.
+  **Layman:** Load a 3D scan of a real site and model on top of it.
+  Kind: feature.
+  Source: research-engine-survey-2026-11-05.
+
+- 📋 [3D_E-0964] **Draw a river or basin with a line and get a ready water surface.**
+  Spline-built water bodies with flow, shore blend and underwater tint.
+  Seen in: Unreal Water
+  https://dev.epicgames.com/documentation/en-us/unreal-engine/water-system-in-unreal-engine .
+  CPU / GPU placement: CPU builds the mesh; GPU shades.
+  Done when: a drawn basin renders through the existing water renderer.
+  Code today: water renderer and surfaces exist (water_renderer.h,
+  water_surface.h; 3D_E-S0007); no spline authoring.
+  Priority: low.
+  **Layman:** Draw where the water goes; the engine builds the surface and shore.
+  Kind: feature.
+  Source: research-engine-survey-2026-11-05.
