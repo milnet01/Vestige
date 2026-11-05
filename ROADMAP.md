@@ -10100,7 +10100,10 @@ The engine targets Linux and Windows from the start (CLAUDE.md). The codebase is
 - 📋 [3D_E-S0779] **GitHub Actions workflow: Linux build (GCC + Clang)**
   Kind: implement.
 
-- 📋 [3D_E-S0780] **GitHub Actions workflow: Windows build (MSVC)**
+- ✅ [3D_E-S0780] **GitHub Actions workflow: Windows build (MSVC)**
+  2026-11-05: found stale. Shipped 2026-06-25 as ci.yml's
+  windows-build-test job (ba4d601); MSVC under Wine mirrors it locally
+  (local-ci.sh stage 3).
   Kind: implement.
 
 - 📋 [3D_E-S0781] **Automated test run on both platforms (unit tests + visual test runner)**
@@ -10112,7 +10115,7 @@ The engine targets Linux and Windows from the start (CLAUDE.md). The codebase is
 - 📋 [3D_E-S0783] **Release packaging script (zip/tar with executable + assets)**
   Kind: implement.
 
-- 📋 [3D_E-S0784] **Local "pre-push CI" script — run what CI runs, before pushing. A single**
+- ✅ [3D_E-S0784] **Local "pre-push CI" script — run what CI runs, before pushing. A single**
   entrypoint (e.g. `scripts/ci-local.sh` or a `make ci` target) that mirrors the
   push-triggered `CI` workflow: configure + build (Debug + Release), full `ctest`,
   **and the gating `python3 tools/audit/audit.py -t 1 --ci --no-tests`** (the exact
@@ -10122,6 +10125,10 @@ The engine targets Linux and Windows from the start (CLAUDE.md). The codebase is
   red-main windows. Keep it the single source of truth the `.github/workflows/*.yml`
   steps also call, so the two can't drift. Optionally wire as an opt-in
   `pre-push` git hook.
+  2026-11-05: found stale. Shipped as scripts/local-ci.sh (3cdd7e1,
+  2026-06-19), which mirrors every ci.yml job, run by the
+  .githooks/pre-push hook (3de94f7, 2026-08-21). It mirrors ci.yml rather than being
+  called by it, so the two are kept in step by hand.
   Kind: implement.
 
 ###### Cross-Compilation (Optional)
