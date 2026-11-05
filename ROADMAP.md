@@ -7330,6 +7330,18 @@ shipped that have no invocation path at all.
     transform: a parented dynamic body is placed wrong.
   - Stale doc: cloth_component.h setBackendPolicy says FORCE_GPU is
     "to exercise the GPU path"; true only with compute support.
+  2026-11-05 (third session) fixed, one commit each, red first:
+  - Cold-read rigid-body leads, all REAL: scaled body started
+    mis-rotated, zero/negative/sheared scale in the kinematic sync,
+    parented dynamic body written in world space (ffe9bdb). Cloth
+    FORCE_GPU comment (d71250f).
+  - lane-03 renderer.cpp:3737 REAL: water reflection/refraction drew
+    the sky over the scene; sky depth now follows the live depth test
+    (93d1a11).
+  - lane-03/06 point shadows ignored skinning (6b93100).
+  - lane-06 GPU particle speed curve compounded each frame (3e9b220).
+  Found latent: particle depth collision remaps reverse-Z depth by
+  *0.5+0.5, but nothing calls setDepthCollision, so it never runs.
   **Layman:** About 290 lower-risk possible bugs and the medium findings are still unchecked.
   Kind: review-fix.
   Source: review-readability 2026-10-31 at 7b2a81d.
