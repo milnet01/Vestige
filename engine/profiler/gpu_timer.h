@@ -104,6 +104,9 @@ public:
     static constexpr int RESULT_LATENCY_FRAMES = BUFFER_COUNT - 1;
 
 private:
+    /// @brief Pops the debug group of every pass still open, and resets the depth.
+    void closeOpenDebugGroups();
+
     static constexpr int MAX_PASSES = 16;
 
     GLuint m_queries[BUFFER_COUNT][MAX_PASSES * 2] = {};  // start+end per pass

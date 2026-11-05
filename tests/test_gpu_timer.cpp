@@ -145,6 +145,30 @@ TEST_F(GpuTimerTest, EachPassIsADebugGroupAndTheStackBalances)
     EXPECT_EQ(glGetError(), static_cast<GLenum>(GL_NO_ERROR));
 }
 
+// Cold read 2026-11-05 (album-builder): a pass left open when the next frame
+// begins must not leave its debug group on the stack, or a per-frame leak
+// overflows GL_MAX_DEBUG_GROUP_STACK_DEPTH.
+TEST_F(GpuTimerTest, BeginFrameClosesAPassLeftOpen)
+{
+    GpuTimer timer;
+    timer.init();
+    GLint base = 0;
+    glGetIntegerv(GL_DEBUG_GROUP_STACK_DEPTH, &base);
+
+    timer.beginFrame();
+    timer.beginPass("LeftOpen");
+    timer.markFrameEnd();
+    timer.endFrame();
+    timer.beginFrame();  // the open pass's group must go here
+    GLint after = 0;
+    glGetIntegerv(GL_DEBUG_GROUP_STACK_DEPTH, &after);
+    timer.markFrameEnd();
+    timer.endFrame();
+
+    EXPECT_EQ(after, base);
+    EXPECT_EQ(glGetError(), static_cast<GLenum>(GL_NO_ERROR));
+}
+
 // 3D_E-0789: the remainder is the frame span minus the passes, never negative.
 TEST(GpuTimerRemainder, SpanMinusPasses)
 {

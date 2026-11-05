@@ -39,6 +39,7 @@ void GpuTimer::init()
 void GpuTimer::shutdown()
 {
     if (!m_initialized) return;
+    closeOpenDebugGroups();
 
     for (int buf = 0; buf < BUFFER_COUNT; ++buf)
     {
@@ -56,10 +57,29 @@ void GpuTimer::shutdown()
     m_initialized = false;
 }
 
+void GpuTimer::closeOpenDebugGroups()
+{
+    // A pass still open here pushed a debug group that endPass never popped;
+    // left alone, one per frame overflows GL_MAX_DEBUG_GROUP_STACK_DEPTH.
+    if (m_initialized && m_depth > 0)
+    {
+        if (!m_loggedNesting)
+        {
+            m_loggedNesting = true;
+            Logger::warning("GpuTimer: a pass was still open at the frame's start; closed it.");
+        }
+        for (int i = 0; i < m_depth; ++i)
+        {
+            glPopDebugGroup();
+        }
+    }
+    m_depth = 0;
+}
+
 void GpuTimer::beginFrame()
 {
     m_passCount = 0;
-    m_depth = 0;
+    closeOpenDebugGroups();
     m_openPassDropped = false;
     if (!m_initialized) return;
 

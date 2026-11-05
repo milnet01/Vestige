@@ -77,7 +77,8 @@ public:
 
     /// @brief Accumulate this frame; write an averaged row-group once ~1 s has
     ///        elapsed. @p elapsedSec is cumulative seconds on any clock; the
-    ///        first call's value is time_s 0, so start-up never shifts the rows.
+    ///        first call's value is the origin of time_s, so start-up never
+    ///        shifts the rows (each row is stamped at its interval's end).
     void sample(PerformanceProfiler& profiler, double elapsedSec);
 
 private:
