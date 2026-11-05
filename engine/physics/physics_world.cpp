@@ -37,6 +37,11 @@ namespace Vestige
 // Jolt requires a trace function and an assertion failure handler.
 // Route both through our Logger.
 
+// Jolt calls this printf-style; the attribute lets GCC and Clang check the
+// format string Jolt passes through.
+#if defined(__GNUC__) || defined(__clang__)
+__attribute__((format(printf, 1, 2)))
+#endif
 static void joltTraceImpl(const char* fmt, ...)
 {
     va_list args;

@@ -64,7 +64,6 @@ private:
     void drawPressurePlate(Entity& entity);
 
     MaterialPreview m_materialPreview;
-    uint32_t m_lastPreviewMaterialId = 0;  ///< Track which material is being previewed
 
     // Undo support
     CommandHistory* m_commandHistory = nullptr;

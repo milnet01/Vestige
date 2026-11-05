@@ -340,10 +340,6 @@ private:
     bool m_reducedMotion         = false;
     bool m_modalCapture          = false;
     bool m_cursorOverInteractive = false;
-    // Kept for ABI continuity but no longer the canonical capture source —
-    // the union of m_modalCapture and m_cursorOverInteractive is what
-    // wantsCaptureInput() returns.
-    bool m_wantsCaptureInput     = false;
 
     // Phase 10 slice 12.2 — screen state machine + modal stack.
     TextRenderer*                             m_textRenderer = nullptr;

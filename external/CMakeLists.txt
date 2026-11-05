@@ -128,6 +128,13 @@ FetchContent_Declare(
 _vestige_silence_upstream_dep_warnings()
 FetchContent_MakeAvailable(tinyexr)
 _vestige_restore_dep_warnings()
+# tinyexr's own CMakeLists compiles tinyexr.cc with -Weverything -Werror under
+# Clang, so any new Clang warning breaks our build. Third-party warnings are
+# silenced as for implot above.
+if(CMAKE_CXX_COMPILER_ID MATCHES "Clang" AND NOT MSVC)
+    set_source_files_properties(${tinyexr_SOURCE_DIR}/tinyexr.cc
+        DIRECTORY ${tinyexr_SOURCE_DIR} PROPERTIES COMPILE_FLAGS "-w")
+endif()
 
 # tinygltf — glTF 2.0 model loading
 FetchContent_Declare(
@@ -370,6 +377,17 @@ set(ALSOFT_INSTALL_HRTF_DATA OFF CACHE BOOL "" FORCE)
 set(ALSOFT_INSTALL_AMBDEC_PRESETS OFF CACHE BOOL "" FORCE)
 set(ALSOFT_INSTALL_UTILS OFF CACHE BOOL "" FORCE)
 FetchContent_MakeAvailable(openal-soft)
+# Clang 20+ only: OpenAL Soft turns -Wfunction-effects into an error even with
+# ALSOFT_WERROR OFF, and its own code trips it (alc/alu.cpp, 1.25.2 under Clang
+# 23). A warning in upstream code is upstream's to fix; keep it a warning so the
+# Clang CI build compiles. GCC and MSVC never see the flag.
+if(CMAKE_CXX_COMPILER_ID MATCHES "Clang" AND NOT MSVC)
+    foreach(_alsoft_target OpenAL alsoft.common)
+        if(TARGET ${_alsoft_target})
+            target_compile_options(${_alsoft_target} PRIVATE -Wno-error=function-effects -Wno-unknown-warning-option)
+        endif()
+    endforeach()
+endif()
 
 # libebur128 — EBU R128 / ITU-R BS.1770 loudness measurement (MIT, Phase 10 AX9).
 # Used at clip-decode time (engine/audio/audio_loudness.cpp) to measure each
