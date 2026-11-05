@@ -127,12 +127,20 @@ void LightProbe::generateFromCubemap(GLuint capturedCubemap)
     // Wrap the irradiance + prefilter passes in a forward-Z guard; the
     // engine's scene draw runs reverse-Z and `glClipControl` is global
     // state (Phase 10.9 Slice 4 R1).
+    // An incomplete capture framebuffer draws nothing; the probe then stays
+    // not ready and the scene skips it (3D_E-0874).
+    bool ok = false;
     runIblCaptureSequence({
-        [&]() { generateIrradiance(capturedCubemap); },
-        [&]() { generatePrefilter(capturedCubemap); },
+        [&]() { ok = generateIrradiance(capturedCubemap); },
+        [&]() { if (ok) { generatePrefilter(capturedCubemap); } },
     });
 
-    m_ready = true;
+    m_ready = ok;
+    if (!ok)
+    {
+        Logger::error("Light probe IBL not generated: the irradiance pass failed");
+        return;
+    }
     Logger::info("Light probe IBL generated (irradiance "
         + std::to_string(IRRADIANCE_RESOLUTION) + "x"
         + std::to_string(IRRADIANCE_RESOLUTION) + ", prefilter "
@@ -141,7 +149,7 @@ void LightProbe::generateFromCubemap(GLuint capturedCubemap)
         + std::to_string(MAX_MIP_LEVELS) + " mips)");
 }
 
-void LightProbe::generateIrradiance(GLuint envCubemap)
+bool LightProbe::generateIrradiance(GLuint envCubemap)
 {
     glCreateTextures(GL_TEXTURE_CUBE_MAP, 1, &m_irradianceMap);
     glTextureStorage2D(m_irradianceMap, 1, GL_RGB16F,
@@ -164,7 +172,7 @@ void LightProbe::generateIrradiance(GLuint envCubemap)
     pass.target = m_irradianceMap;
     pass.resolution = IRRADIANCE_RESOLUTION;
     pass.drawCube = [this]() { drawIblCube(m_cubeVao); };
-    runIblFacePass(pass);
+    return runIblFacePass(pass);
 }
 
 void LightProbe::generatePrefilter(GLuint envCubemap)

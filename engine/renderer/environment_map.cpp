@@ -104,15 +104,19 @@ void EnvironmentMap::generate(GLuint skyboxCubemap, bool hasCubemap,
     // sequence so the cubemap captures see forward-Z and the caller's
     // reverse-Z state is restored before the next scene draw. (Phase 10.9
     // Slice 4 R1.)
+    // A pass whose framebuffer is incomplete draws nothing; the maps are then
+    // not ready, so the scene skips IBL rather than lighting from an empty
+    // texture (3D_E-0874).
+    bool ok = true;
     runIblCaptureSequence({
         [&]() {
-            captureEnvironment(skyboxCubemap, hasCubemap, m_captureShader);
+            ok = captureEnvironment(skyboxCubemap, hasCubemap, m_captureShader) && ok;
             GLenum err = glGetError();
             if (err != GL_NO_ERROR)
                 Logger::error("GL error after captureEnvironment: " + std::to_string(err));
         },
         [&]() {
-            generateIrradiance();
+            ok = ok && generateIrradiance();
             GLenum err = glGetError();
             if (err != GL_NO_ERROR)
                 Logger::error("GL error after generateIrradiance: " + std::to_string(err));
@@ -131,7 +135,12 @@ void EnvironmentMap::generate(GLuint skyboxCubemap, bool hasCubemap,
         },
     });
 
-    m_ready = true;
+    m_ready = ok;
+    if (!ok)
+    {
+        Logger::error("IBL environment maps not generated: a capture pass failed");
+        return;
+    }
     Logger::info("IBL environment maps generated (irradiance "
         + std::to_string(IRRADIANCE_RESOLUTION) + "x"
         + std::to_string(IRRADIANCE_RESOLUTION) + ", prefilter "
@@ -142,7 +151,7 @@ void EnvironmentMap::generate(GLuint skyboxCubemap, bool hasCubemap,
         + std::to_string(BRDF_LUT_RESOLUTION) + ")");
 }
 
-void EnvironmentMap::captureEnvironment(GLuint skyboxCubemap, bool hasCubemap,
+bool EnvironmentMap::captureEnvironment(GLuint skyboxCubemap, bool hasCubemap,
                                          const Shader& captureShader)
 {
     // Create HDR environment cubemap (DSA)
@@ -177,7 +186,7 @@ void EnvironmentMap::captureEnvironment(GLuint skyboxCubemap, bool hasCubemap,
     pass.drawCube = [this]() { drawIblCube(m_cubeVao); };
     if (!runIblFacePass(pass))
     {
-        return;
+        return false;
     }
 
     // Generate mipmaps for the environment map (used by prefilter shader for anti-aliasing)
@@ -185,9 +194,10 @@ void EnvironmentMap::captureEnvironment(GLuint skyboxCubemap, bool hasCubemap,
 
     Logger::debug("Environment cubemap captured ("
         + std::to_string(ENV_RESOLUTION) + "x" + std::to_string(ENV_RESOLUTION) + ")");
+    return true;
 }
 
-void EnvironmentMap::generateIrradiance()
+bool EnvironmentMap::generateIrradiance()
 {
     // Create irradiance cubemap (low-res, holds diffuse irradiance) (DSA)
     glCreateTextures(GL_TEXTURE_CUBE_MAP, 1, &m_irradianceMap);
@@ -215,12 +225,13 @@ void EnvironmentMap::generateIrradiance()
     pass.drawCube = [this]() { drawIblCube(m_cubeVao); };
     if (!runIblFacePass(pass))
     {
-        return;
+        return false;
     }
 
     Logger::debug("Irradiance map generated ("
         + std::to_string(IRRADIANCE_RESOLUTION) + "x"
         + std::to_string(IRRADIANCE_RESOLUTION) + ")");
+    return true;
 }
 
 void EnvironmentMap::generatePrefilter()

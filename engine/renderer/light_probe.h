@@ -81,7 +81,7 @@ public:
     static constexpr int MAX_MIP_LEVELS = 5;
 
 private:
-    void generateIrradiance(GLuint envCubemap);
+    bool generateIrradiance(GLuint envCubemap);
     void generatePrefilter(GLuint envCubemap);
 
     glm::vec3 m_position = glm::vec3(0.0f);

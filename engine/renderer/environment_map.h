@@ -64,9 +64,9 @@ public:
     static constexpr int MAX_MIP_LEVELS = 5;
 
 private:
-    void captureEnvironment(GLuint skyboxCubemap, bool hasCubemap,
+    bool captureEnvironment(GLuint skyboxCubemap, bool hasCubemap,
                             const Shader& skyboxShader);
-    void generateIrradiance();
+    bool generateIrradiance();
     void generatePrefilter();
     void generateBrdfLut(const FullscreenQuad& quad);
 
