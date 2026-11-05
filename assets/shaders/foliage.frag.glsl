@@ -54,6 +54,19 @@ int getCascadeIndex()
     return u_cascadeCount - 1;
 }
 
+// Backlit glow factor for grass blades (3D_E-0874). viewDir points from the
+// fragment to the camera, lightDir from the fragment toward the sun. Copied in
+// grass.frag.glsl and foliage.frag.glsl; tests/test_shader_copies_registry.cpp
+// keeps the two equal and tests/test_foliage_translucency.cpp pins the behaviour.
+// The glow fades in as the sun clears the horizon; below it no sunlight reaches
+// the blades. TODO: revisit via Formula Workbench (fade width 0.1, power 3, 0.4).
+float grassTranslucency(vec3 viewDir, vec3 lightDir)
+{
+    float viewLightAlign = pow(max(dot(viewDir, -lightDir), 0.0), 3.0);
+    float sunAboveHorizon = smoothstep(0.0, 0.1, lightDir.y);
+    return sunAboveHorizon * viewLightAlign * 0.4;
+}
+
 // ---------------------------------------------------------------------------
 // Simplified 4-sample Poisson PCF shadow for grass
 // (cheaper than the 32-sample PCSS used for scene objects)
@@ -133,8 +146,7 @@ void main()
 
         // Translucency: backlit glow when sun is behind grass
         vec3 viewDir = normalize(u_cameraPos - v_fragPosition);
-        float viewLightAlign = pow(max(dot(viewDir, -lightDir), 0.0), 3.0);
-        float translucency = max(dot(vec3(0.0, -1.0, 0.0), lightDir), 0.0) * viewLightAlign * 0.4;
+        float translucency = grassTranslucency(viewDir, lightDir);
 
         // Shadow
         float shadow = 0.0;

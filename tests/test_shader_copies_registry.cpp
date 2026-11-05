@@ -58,6 +58,7 @@ const std::vector<Copy> kCopies = {
      {"foliage.frag.glsl", "grass.frag.glsl", "scene.frag.glsl", "terrain.frag.glsl",
       "tree_mesh.frag.glsl"}, {}, ""},
     {"giSliceCoord", {"gi_inject.comp.glsl", "scene.frag.glsl"}, {}, ""},
+    {"grassTranslucency", {"foliage.frag.glsl", "grass.frag.glsl"}, {}, ""},
     {"hammersley", {"brdf_lut.frag.glsl", "prefilter.frag.glsl"}, {}, ""},
     {"importanceSampleGGX", {"brdf_lut.frag.glsl", "prefilter.frag.glsl"}, {}, ""},
     {"interleavedGradientNoise",

@@ -16,6 +16,7 @@ add_executable(vestige_tests
     test_skybox_cubemap_load.cpp
     test_color_grading_parity.cpp
     test_subsurface_parity.cpp
+    test_foliage_translucency.cpp
     test_terrain_ggx_parity.cpp
     test_terrain_material_set.cpp
     test_terrain_edges.cpp
