@@ -8,6 +8,7 @@
 #include "physics/cloth_component.h"
 #include "physics/cloth_simulator.h"  // For ClothConfig definition.
 #include "profiler/cpu_profiler.h"
+#include "core/logger.h"
 
 namespace Vestige
 {
@@ -16,12 +17,20 @@ void ClothComponent::initialize(const ClothConfig& config, std::shared_ptr<Mater
                                 uint32_t seed)
 {
     m_material = std::move(material);
+    m_ready = false;
 
     // Backend selection — factory consults particle-count threshold +
     // GpuClothSimulator::isSupported() to pick CPU vs GPU. Callers override
     // via setBackendPolicy() before initialize().
     m_simulator = createClothSolverBackend(config, m_backendPolicy, m_shaderPath);
     m_simulator->initialize(config, seed);
+    if (!m_simulator->isInitialized())
+    {
+        // A refused config (grid under 2x2, a bad mass) leaves nothing to
+        // draw: stay not-ready instead of building an empty mesh (lane-07 lead).
+        Logger::warning("ClothComponent: the cloth config was refused; the cloth is not created");
+        return;
+    }
 
     uint32_t count = m_simulator->getParticleCount();
     const glm::vec3* positions = m_simulator->getPositions();

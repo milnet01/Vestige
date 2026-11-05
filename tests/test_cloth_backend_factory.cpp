@@ -7,6 +7,7 @@
 #include <gtest/gtest.h>
 
 #include "physics/cloth_backend_factory.h"
+#include "physics/cloth_component.h"
 #include "physics/cloth_simulator.h"  // For ClothConfig
 
 using namespace Vestige;
@@ -114,4 +115,17 @@ TEST(ClothBackendFactory, ChooseAutoCountsParticlesWithoutWrapping)
     cfg.height = 65536;
     EXPECT_EQ(chooseClothBackend(cfg, ClothBackendPolicy::AUTO, /*gpuSupported=*/true),
               ClothBackendChoice::GPU);
+}
+
+// lane-07 lead cloth_component.cpp:49: initialize() never checked whether the
+// solver accepted the config, so a refused one still reported isReady().
+TEST(ClothComponentInit, RefusedConfigLeavesTheComponentNotReady)
+{
+    ClothConfig cfg;
+    cfg.width = 1;   // under the 2x2 minimum: the solver refuses it
+    cfg.height = 1;
+    ClothComponent component;
+    component.setBackendPolicy(ClothBackendPolicy::FORCE_CPU);
+    component.initialize(cfg, nullptr);
+    EXPECT_FALSE(component.isReady());
 }
