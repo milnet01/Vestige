@@ -137,6 +137,7 @@ void GPUParticleSystem::shutdown()
     if (m_indirectDrawSSBO) { glDeleteBuffers(1, &m_indirectDrawSSBO); m_indirectDrawSSBO = 0; }
     if (m_behaviorSSBO) { glDeleteBuffers(1, &m_behaviorSSBO); m_behaviorSSBO = 0; }
     if (m_sortKeySSBO) { glDeleteBuffers(1, &m_sortKeySSBO); m_sortKeySSBO = 0; }
+    if (m_aliveListSSBO) { glDeleteBuffers(1, &m_aliveListSSBO); m_aliveListSSBO = 0; }
     m_initialized = false;
 }
 
@@ -205,6 +206,12 @@ void GPUParticleSystem::createBuffers(uint32_t maxParticles)
                          nextPowerOf2(maxParticles) * 2 * sizeof(uint32_t),
                          nullptr,
                          GL_DYNAMIC_STORAGE_BIT);
+
+    // Alive list SSBO (binding 6): compact() writes the live indices densely
+    // for the unsorted draw (3D_E-0874).
+    glCreateBuffers(1, &m_aliveListSSBO);
+    glNamedBufferStorage(m_aliveListSSBO, maxParticles * sizeof(uint32_t),
+                         nullptr, GL_DYNAMIC_STORAGE_BIT);
 }
 
 void GPUParticleSystem::initializeFreeList(uint32_t maxParticles)
@@ -331,6 +338,7 @@ void GPUParticleSystem::compact()
     glBindBufferBase(GL_SHADER_STORAGE_BUFFER, 0, m_particleSSBO);
     glBindBufferBase(GL_SHADER_STORAGE_BUFFER, 1, m_counterSSBO);
     glBindBufferBase(GL_SHADER_STORAGE_BUFFER, 2, m_freeListSSBO);
+    glBindBufferBase(GL_SHADER_STORAGE_BUFFER, 6, m_aliveListSSBO);
 
     uint32_t groups = (m_maxParticles + 255) / 256;
     glDispatchCompute(groups, 1, 1);
@@ -414,6 +422,7 @@ void GPUParticleSystem::bindForRendering() const
 {
     glBindBufferBase(GL_SHADER_STORAGE_BUFFER, 0, m_particleSSBO);
     glBindBufferBase(GL_SHADER_STORAGE_BUFFER, 5, m_sortKeySSBO);
+    glBindBufferBase(GL_SHADER_STORAGE_BUFFER, 6, m_aliveListSSBO);
     glBindBuffer(GL_DRAW_INDIRECT_BUFFER, m_indirectDrawSSBO);
 }
 
@@ -425,6 +434,7 @@ void GPUParticleSystem::bindForRendering() const
 GLuint GPUParticleSystem::getParticleSSBO() const { return m_particleSSBO; }
 GLuint GPUParticleSystem::getIndirectBuffer() const { return m_indirectDrawSSBO; }
 GLuint GPUParticleSystem::getSortKeySSBO() const { return m_sortKeySSBO; }
+GLuint GPUParticleSystem::getAliveListSSBO() const { return m_aliveListSSBO; }
 
 uint32_t GPUParticleSystem::readAliveCount() const
 {

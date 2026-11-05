@@ -45,6 +45,14 @@ layout(std430, binding = 2) buffer FreeList
     uint freeIndices[];
 };
 
+// Live particle indices, dense from 0, for the unsorted draw (3D_E-0874).
+// Emission fills the highest free slots first, so live particles are not
+// slots 0..aliveCount-1; drawing instance i as slot i drew dead slots.
+layout(std430, binding = 6) buffer AliveList
+{
+    uint aliveIndices[];
+};
+
 void main()
 {
     uint idx = gl_GlobalInvocationID.x;
@@ -62,6 +70,6 @@ void main()
     }
     else
     {
-        atomicAdd(aliveCount, 1u);
+        aliveIndices[atomicAdd(aliveCount, 1u)] = idx;
     }
 }

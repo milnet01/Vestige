@@ -147,3 +147,39 @@ TEST_F(GpuParticleSortTest, KeyBufferSpansTheFullNetworkWidth)
 
     sys.shutdown();
 }
+
+// lane-06 lead particle_gpu.vert.glsl:66: the unsorted (additive) draw took
+// instance i as particle slot i, but emission fills the HIGHEST free slots
+// first, so with N particles alive slots 0..N-1 were dead and nothing drew.
+// compact() now writes the live indices densely; the draw reads them.
+TEST_F(GpuParticleSortTest, CompactListsTheLiveSlotsForTheUnsortedDraw)
+{
+    GPUParticleSystem sys;
+    ASSERT_TRUE(sys.init(VESTIGE_SHADER_DIR, MAX_PARTICLES))
+        << "particle compute shaders failed to load";
+
+    // Live particles in the top slots, where emission puts the first ones.
+    std::vector<SortTestParticle> particles(MAX_PARTICLES, SortTestParticle{});
+    for (uint32_t i = 0; i < MAX_PARTICLES; ++i)
+    {
+        particles[i].flags = (i >= MAX_PARTICLES - ALIVE_COUNT) ? ALIVE_FLAG : 0u;
+    }
+    glNamedBufferSubData(sys.getParticleSSBO(), 0,
+                         static_cast<GLsizeiptr>(particles.size() * sizeof(SortTestParticle)),
+                         particles.data());
+
+    sys.compact();
+    glMemoryBarrier(GL_BUFFER_UPDATE_BARRIER_BIT);
+    ASSERT_EQ(sys.readAliveCount(), ALIVE_COUNT);
+
+    std::vector<uint32_t> alive(ALIVE_COUNT);
+    glGetNamedBufferSubData(sys.getAliveListSSBO(), 0,
+                            static_cast<GLsizeiptr>(alive.size() * sizeof(uint32_t)), alive.data());
+    std::sort(alive.begin(), alive.end());
+    for (uint32_t i = 0; i < ALIVE_COUNT; ++i)
+    {
+        EXPECT_EQ(alive[i], MAX_PARTICLES - ALIVE_COUNT + i)
+            << "instance " << i << " of the unsorted draw must be a live slot";
+    }
+    sys.shutdown();
+}

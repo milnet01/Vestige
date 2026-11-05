@@ -25,6 +25,13 @@ may change any interface without notice.
 
 ## [Unreleased]
 
+### 2026-11-05 Fixed — Additive GPU particles (sparks, fire) are drawn
+
+GPU particle effects that glow (additive blending) looked in the wrong
+places for their particles, so they drew nothing until the effect had
+cycled through all its particle slots. They now draw every live
+particle. Effects that blend normally were not affected.
+
 ### 2026-11-05 Fixed — GPU particle forces, colours and size curves read the right values
 
 GPU particle effects read their settings (gravity, drag, orbit and

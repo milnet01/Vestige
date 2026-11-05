@@ -34,6 +34,12 @@ layout(std430, binding = 5) buffer SortKeys
     uvec2 sortKeys[];    // .y = particle index
 };
 
+// Live particle indices written by particle_compact.comp.glsl (3D_E-0874).
+layout(std430, binding = 6) readonly buffer AliveList
+{
+    uint aliveIndices[];
+};
+
 uniform mat4 u_viewProjection;
 uniform vec3 u_cameraRight;
 uniform vec3 u_cameraUp;
@@ -63,7 +69,7 @@ void main()
     if (u_useSortIndices)
         particleIdx = sortKeys[instanceIdx].y;
     else
-        particleIdx = instanceIdx;
+        particleIdx = aliveIndices[instanceIdx];  // live slots are not 0..n-1
 
     GPUParticle p = particles[particleIdx];
 

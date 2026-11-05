@@ -172,6 +172,10 @@ public:
     /// @brief Returns the sort key buffer handle (for sorted rendering).
     GLuint getSortKeySSBO() const;
 
+    /// @brief Live particle indices, dense from 0, written by compact() for
+    ///        the unsorted draw (SSBO binding 6).
+    GLuint getAliveListSSBO() const;
+
     // --- Debug ---
 
     /// @brief Reads alive count from GPU (causes sync stall — debug only).
@@ -204,6 +208,7 @@ private:
     GLuint m_indirectDrawSSBO = 0;   ///< DrawArraysIndirectCommand (binding 3)
     GLuint m_behaviorSSBO = 0;        ///< BehaviorBlock storage buffer (SSBO binding 4, std430)
     GLuint m_sortKeySSBO = 0;        ///< Sort key pairs (binding 5)
+    GLuint m_aliveListSSBO = 0;      ///< Live indices for the unsorted draw (binding 6)
 
     // Depth collision state
     bool m_depthCollisionEnabled = false;
