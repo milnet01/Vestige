@@ -1610,6 +1610,11 @@ void Engine::run()
         // 1. Timer — calculate delta time
         float deltaTime = m_timer->update();
 
+        // Start the profiler's frame here, so the CPU work time includes the
+        // job queue, input and editor tools, not only the systems and
+        // rendering (3D_E-0789).
+        m_profiler.beginFrame();
+
         // 1b. Job system — run work marshalled back to the main thread from
         // worker threads last frame, then reap completed fire-and-forget tasks
         // (MT2; docs/phases/phase_10_6_design.md §3.4).
@@ -1839,9 +1844,6 @@ void Engine::run()
                 }
             }
         }
-
-        // Start profiler early to capture CPU systems (cloth, physics) not just rendering
-        m_profiler.beginFrame();
 
         // 3b. Environment — now handled by AtmosphereSystem via SystemRegistry::updateAll()
 
@@ -2243,6 +2245,8 @@ void Engine::run()
                     if (planarPasses.refraction)
                     {
                         VESTIGE_PROFILE_SCOPE("WaterRefraction");
+                        // Flat GPU scope: renderScene's geometryOnly path opens none.
+                        m_profiler.getGpuTimer().beginPass("WaterRefraction");
                         glm::vec4 refrClipPlane(0.0f, -1.0f, 0.0f, waterY + 0.1f);
                         glEnable(GL_CLIP_DISTANCE0);
 
@@ -2256,12 +2260,14 @@ void Engine::run()
                         }
 
                         glDisable(GL_CLIP_DISTANCE0);
+                        m_profiler.getGpuTimer().endPass();
                     }
 
                     // --- Reflection pass: render scene above water with reflected camera ---
                     if (planarPasses.reflection)
                     {
                         VESTIGE_PROFILE_SCOPE("WaterReflection");
+                        m_profiler.getGpuTimer().beginPass("WaterReflection");
                         glm::vec4 reflClipPlane(0.0f, 1.0f, 0.0f, -waterY + 0.1f);
 
                         // Create reflected camera: mirror position and pitch around water plane
@@ -2302,6 +2308,7 @@ void Engine::run()
                         }
 
                         glDisable(GL_CLIP_DISTANCE0);
+                        m_profiler.getGpuTimer().endPass();
                     }
 
                     // Restore main scene FBO and view state after water passes
@@ -2348,7 +2355,9 @@ void Engine::run()
             // Process pending pick request (renders ID buffer on demand)
             if (m_editor->isPickRequested())
             {
+                m_profiler.getGpuTimer().beginPass("Pick");
                 m_renderer->renderIdBuffer(m_renderData, *m_camera, aspectRatio);
+                m_profiler.getGpuTimer().endPass();
                 int pickX = 0;
                 int pickY = 0;
                 m_editor->getPickCoords(pickX, pickY);
@@ -2378,7 +2387,9 @@ void Engine::run()
             int bx0, by0, bx1, by1;
             if (m_editor->consumeBoxSelect(bx0, by0, bx1, by1))
             {
+                m_profiler.getGpuTimer().beginPass("Pick");
                 m_renderer->renderIdBuffer(m_renderData, *m_camera, aspectRatio);
+                m_profiler.getGpuTimer().endPass();
                 auto ids = m_renderer->pickEntitiesInRect(bx0, by0, bx1, by1);
                 Selection& sel = m_editor->getSelection();
                 sel.clearSelection();
@@ -2497,6 +2508,9 @@ void Engine::run()
             glViewport(0, 0, m_window->getWidth(), m_window->getHeight());
             glClearColor(0.08f, 0.08f, 0.10f, 1.0f);
             glClear(GL_COLOR_BUFFER_BIT);
+            // The editor UI is GPU work too: the ImGui draw lists render in
+            // m_editor->endFrame() below.
+            m_profiler.getGpuTimer().beginPass("UI");
             m_editor->drawPanels(m_renderer.get(), activeScene, m_camera.get(),
                                  m_timer.get(), m_window.get());
 
@@ -2523,13 +2537,17 @@ void Engine::run()
             }
 
             m_editor->endFrame();
+            m_profiler.getGpuTimer().endPass();
         }
         else
         {
             // Play mode: blit render FBO to screen (may scale if resolutions differ)
+            m_profiler.getGpuTimer().beginPass("Blit");
             m_renderer->blitToScreen(m_window->getWidth(), m_window->getHeight());
+            m_profiler.getGpuTimer().endPass();
 
-            // Render in-game UI overlay (after scene, before editor)
+            // In-game UI overlay, then the editor's (hidden-panel) ImGui frame.
+            m_profiler.getGpuTimer().beginPass("UI");
             if (m_uiSystem && m_uiSystem->isActive())
             {
                 m_uiSystem->renderUI(m_window->getWidth(), m_window->getHeight());
@@ -2541,6 +2559,7 @@ void Engine::run()
                                      m_timer.get(), m_window.get());
                 m_editor->endFrame();
             }
+            m_profiler.getGpuTimer().endPass();
         }
 
         // 8.5. Visual test runner — capture screenshots at predefined viewpoints

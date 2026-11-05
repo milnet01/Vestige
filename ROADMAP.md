@@ -6234,7 +6234,7 @@ shipped that have no invocation path at all.
   Source: ut-ants-review-2026-10-24.
   Lanes: profiler.
 
-- 📋 [3D_E-0789] **GPU timings miss whole passes, and Total GPU is the sum of passes, not the frame.**
+- ✅ [3D_E-0789] **GPU timings miss whole passes, and Total GPU is the sum of passes, not the frame.**
   Reported by UT Ants, not yet checked here: the water
   refraction/reflection re-renders, blitToScreen, in-game UI, ImGui and
   the editor pick pass open no GPU scope. Add a whole-frame GPU span and
@@ -6245,6 +6245,17 @@ shipped that have no invocation path at all.
   remainder as a row, and bases the CPU-bound label on work time. Open:
   input handling is outside the CPU window; no separate scopes for
   water, blit or UI.
+  2026-11-05: the profile log's gpu,total was still the passes' sum (only
+  the panel used the span); it is now the frame span, with a new
+  gpu,unattributed row. Test GpuTimerTest.ProfileLogTotalIsTheFrameAndNamesTheRemainder:
+  red before (no unattributed row) on RX 6600 and llvmpipe; green after;
+  total-back-to-sum mutation -> red. Flat GPU scopes added for
+  WaterRefraction, WaterReflection, Pick, Blit, UI; a Debug flythrough
+  logged all but Pick in every sample (Pick needs an editor click), no
+  nesting or dropped-pass warning. profiler.beginFrame() moved to just after
+  the timer update, so CPU work time includes the job queue, input and
+  editor tools (no red run: needs the full engine loop). gpu,total
+  baselines from before are not comparable (CHANGELOG).
   **Layman:** Some drawing work (water reflections, UI, editor) is never timed, so the GPU total under-reports.
   Kind: fix.
   Source: ut-ants-review-2026-10-24.

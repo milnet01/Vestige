@@ -6,9 +6,16 @@
 
 #include "gl_test_fixture.h"
 #include "profiler/gpu_timer.h"
+#include "profiler/performance_profiler.h"
+#include "profiler/profile_log.h"
+#include "test_helpers.h"
 
 #include <glad/gl.h>
 #include <gtest/gtest.h>
+
+#include <filesystem>
+#include <fstream>
+#include <string>
 
 using namespace Vestige;
 using Vestige::Test::GLTestFixture;
@@ -123,4 +130,61 @@ TEST_F(GpuTimerTest, UnattributedIsZeroBeforeAnySpan)
     GpuTimer timer;
     timer.init();
     EXPECT_DOUBLE_EQ(timer.getUnattributedMs(), 0.0);
+}
+
+// 3D_E-0789: the profile log's gpu,total is the whole frame, as the
+// performance panel shows it, and the GPU work outside every pass gets its own
+// gpu,unattributed row. It used to write the sum of the passes as the total, so
+// untimed work vanished from the log.
+TEST_F(GpuTimerTest, ProfileLogTotalIsTheFrameAndNamesTheRemainder)
+{
+    const std::string path = (std::filesystem::temp_directory_path()
+        / ("vestige_gpu_total_" + Testing::vestigeTestStamp() + ".csv")).string();
+    PerformanceProfiler profiler;
+    profiler.init();
+    GpuTimer& timer = profiler.getGpuTimer();
+    ProfileLog log;
+    ASSERT_TRUE(log.open(path));
+
+    for (int i = 0; i < 4 * GpuTimer::BUFFER_COUNT; ++i)
+    {
+        timer.beginFrame();
+        glClear(GL_COLOR_BUFFER_BIT);  // GPU work outside every pass
+        glFinish();
+        timer.beginPass("Pass");
+        timer.endPass();
+        timer.markFrameEnd();
+        glFinish();  // test only: make sure the queries are done
+        profiler.endFrame(0.016f);
+        log.sample(profiler, i * 0.25);
+    }
+    log.close();
+
+    double total = -1.0;
+    double pass = -1.0;
+    double unattributed = -1.0;
+    std::ifstream in(path);
+    for (std::string line; std::getline(in, line);)
+    {
+        auto valueOf = [&line](const std::string& key, double& out)
+        {
+            const auto at = line.find(key);
+            if (at != std::string::npos && out < 0.0)
+            {
+                const auto start = at + key.size();
+                out = std::stod(line.substr(start, line.rfind(',') - start));
+            }
+        };
+        valueOf(",gpu,total,0,", total);
+        valueOf(",gpu,Pass,0,", pass);
+        valueOf(",gpu,unattributed,0,", unattributed);
+    }
+    in.close();
+    std::filesystem::remove(path);
+
+    if (!timer.hasFrameSpan()) GTEST_SKIP() << "no GPU timestamp queries in this context";
+    ASSERT_GE(unattributed, 0.0) << "the log has no gpu,unattributed row";
+    ASSERT_GE(pass, 0.0);
+    EXPECT_NEAR(total, pass + unattributed, 0.002)
+        << "gpu,total must be the whole frame: its passes plus the remainder";
 }

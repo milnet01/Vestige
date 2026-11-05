@@ -168,8 +168,19 @@ void ProfileLog::sample(PerformanceProfiler& profiler, double elapsedSec)
     GpuTimer& gpu = profiler.getGpuTimer();
     if (gpu.hasResults() && gpu.hasFreshResults())
     {
-        addSample(ProfileCategory::Gpu, "total", 0,
-                  static_cast<double>(gpu.getTotalGpuTimeMs()));
+        // total is the whole frame, as the performance panel shows it; the GPU
+        // work outside every pass gets its own row (3D_E-0789). Without a frame
+        // span (no timestamp queries) the passes' sum is all there is.
+        if (gpu.hasFrameSpan())
+        {
+            addSample(ProfileCategory::Gpu, "total", 0, gpu.getFrameSpanMs());
+            addSample(ProfileCategory::Gpu, "unattributed", 0, gpu.getUnattributedMs());
+        }
+        else
+        {
+            addSample(ProfileCategory::Gpu, "total", 0,
+                      static_cast<double>(gpu.getTotalGpuTimeMs()));
+        }
         for (const auto& p : gpu.getResults())
         {
             addSample(ProfileCategory::Gpu, p.name, 0,

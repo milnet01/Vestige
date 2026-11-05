@@ -25,6 +25,17 @@ may change any interface without notice.
 
 ## [Unreleased]
 
+### 2026-11-05 Fixed — The profile log's GPU total covers the whole frame
+
+In a `--profile-log` file, the `gpu,total` row was the sum of the timed
+passes, so GPU work outside them never showed. It is now the whole
+frame's GPU time, as the performance panel already showed it, and a new
+`gpu,unattributed` row holds the part no pass covers. Water reflection
+and refraction, the screen blit, the in-game and editor UI, and editor
+picking now have their own GPU rows. The CPU work time now includes
+input handling and editor tools. A `gpu,total` baseline recorded before
+this change is not comparable with one recorded after it. (3D_E-0789)
+
 ### 2026-11-05 Fixed — Cloth friction now holds and slows cloth on surfaces
 
 Cloth slid over floors, walls and colliders the same whatever its
