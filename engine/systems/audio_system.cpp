@@ -34,7 +34,7 @@ bool AudioSystem::initialize(Engine& engine)
     // AX13 — load optional side-chain duck routes. Absent file ⟹ the
     // router stays empty and only the global manual duck applies (the
     // pre-AX13 default). Parse failures degrade the same way.
-    std::ifstream mixGraph("assets/audio/mix_graph.json");
+    std::ifstream mixGraph(engine.getAssetPath() + "/audio/mix_graph.json");
     if (mixGraph)
     {
         try
