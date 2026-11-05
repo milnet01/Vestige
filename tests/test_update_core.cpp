@@ -177,6 +177,12 @@ TEST(UpdateNotes, MarkupBecomesHeadingsBulletsAndPlainText)
     EXPECT_EQ(lines[4].kind, NotesLine::Kind::Paragraph);
 }
 
+// lane-23 lead notes_markup.cpp:34: link text is stripped too.
+TEST(UpdateNotes, LinkTextLosesItsMarkupToo)
+{
+    EXPECT_EQ(stripInlineMarkup("see [**the** `docs`](https://x) now"), "see the docs now");
+}
+
 // ---------------------------------------------------------------- INV-4 (asset choice)
 
 const char* const kLatestJson = R"({

@@ -31,7 +31,8 @@ std::string stripInlineMarkup(const std::string& text)
                 const size_t paren = text.find(')', close + 2);
                 if (paren != std::string::npos)
                 {
-                    out.append(text, i + 1, close - i - 1);
+                    // The link text gets the same stripping (lane-23 lead).
+                    out += stripInlineMarkup(text.substr(i + 1, close - i - 1));
                     i = paren;
                     continue;
                 }
