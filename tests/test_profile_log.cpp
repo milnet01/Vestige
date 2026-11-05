@@ -178,3 +178,42 @@ TEST(ProfileLog, FrameMsIsTheIntervalsOwnFramesSoAHitchShows)
     ASSERT_EQ(ms.size(), 1u);
     EXPECT_EQ(ms[0], "19.608");
 }
+
+// 3D_E-0822: time_s counts from the first frame, not from open(). The first
+// frame's elapsed time holds all of start-up (measured 2026-11-05: the Debug
+// build's first row read time_s 108.58), and tools/fps_floor.py skips the
+// rows before an absolute 2 s, so start-up used to defeat its warm-up.
+TEST(ProfileLog, TimeCountsFromTheFirstFrameNotFromStartUp)
+{
+    const std::string path = (std::filesystem::temp_directory_path()
+        / ("vestige_profile_log_" + Testing::vestigeTestStamp() + ".csv")).string();
+    PerformanceProfiler profiler;
+    ProfileLog log;
+    ASSERT_TRUE(log.open(path));
+
+    constexpr double startUpSec = 100.0;  // the first frame's elapsed time
+    profiler.endFrame(0.016f);
+    log.sample(profiler, startUpSec);
+    for (int i = 1; i <= 60; ++i)
+    {
+        profiler.endFrame(1.0f / 60.0f);
+        log.sample(profiler, startUpSec + (i / 60.0));
+    }
+    log.close();
+
+    std::vector<double> times;
+    std::ifstream in(path);
+    for (std::string line; std::getline(in, line);)
+    {
+        if (line.find(",frame,total,") != std::string::npos)
+        {
+            times.push_back(std::stod(line.substr(0, line.find(','))));
+        }
+    }
+    in.close();
+    std::filesystem::remove(path);
+
+    ASSERT_EQ(times.size(), 1u);
+    EXPECT_NEAR(times[0], 1.0, 0.01)
+        << "the first second of frames must read time_s 1, whatever start-up took";
+}

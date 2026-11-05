@@ -25,6 +25,15 @@ may change any interface without notice.
 
 ## [Unreleased]
 
+### 2026-11-05 Fixed — The profile log's time column starts at the first frame
+
+In a `--profile-log` file, `time_s` counted from when logging opened, so
+it included all of start-up. Measured 2026-11-05: a Debug build's first
+row read 108.58 s. `tools/fps_floor.py` skips rows before 2 s as
+warm-up, so a slow start-up meant it skipped nothing, and the first
+frames' shader compiles counted against the 60 FPS floor. `time_s` now
+counts from the first sampled frame. (3D_E-0822)
+
 ### 2026-11-05 Fixed — The profile log's GPU total covers the whole frame
 
 In a `--profile-log` file, the `gpu,total` row was the sum of the timed

@@ -100,6 +100,7 @@ bool ProfileLog::open(const std::string& path)
     m_intervalFrames = 0;
     m_lastWriteSec = 0.0;
     m_lastSampleSec = 0.0;
+    m_originSec = 0.0;
     m_started = false;
     return true;
 }
@@ -147,6 +148,9 @@ void ProfileLog::sample(PerformanceProfiler& profiler, double elapsedSec)
     if (!m_started)
     {
         m_lastWriteSec = elapsedSec;  // anchor the first interval to first sample
+        // time_s counts from here: the first frame's elapsed time holds all
+        // of start-up, which defeated fps_floor.py's warm-up (3D_E-0822).
+        m_originSec = elapsedSec;
         m_started = true;
     }
     m_lastSampleSec = elapsedSec;
@@ -219,7 +223,7 @@ void ProfileLog::flush(double elapsedSec)
     }
 
     ProfileSample s;
-    s.timeSec = elapsedSec;
+    s.timeSec = elapsedSec - m_originSec;
     // Frames over wall time, not a mean of per-frame FPS: a mean of rates lets
     // one long frame among fast ones read far above the real rate (3D_E-0800).
     const double spanSec = elapsedSec - m_lastWriteSec;

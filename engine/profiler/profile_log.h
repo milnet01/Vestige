@@ -40,7 +40,7 @@ struct ProfileSampleEntry
 /// @brief A single throttled sample: top-level time + fps + reduced entries.
 struct ProfileSample
 {
-    double timeSec = 0.0;  ///< Seconds since logging began (the time_s column).
+    double timeSec = 0.0;  ///< Seconds since the first sampled frame (the time_s column).
     double fps = 0.0;      ///< Emitted onto the frame,total row only.
     std::vector<ProfileSampleEntry> entries;
 };
@@ -76,7 +76,8 @@ public:
     bool isOpen() const { return m_file != nullptr; }
 
     /// @brief Accumulate this frame; write an averaged row-group once ~1 s has
-    ///        elapsed. @p elapsedSec is cumulative seconds since `open()`.
+    ///        elapsed. @p elapsedSec is cumulative seconds on any clock; the
+    ///        first call's value is time_s 0, so start-up never shifts the rows.
     void sample(PerformanceProfiler& profiler, double elapsedSec);
 
 private:
@@ -98,8 +99,9 @@ private:
     std::vector<Accum> m_accum;  ///< Interval accumulators, in first-seen order.
     long m_frameCount = 0;         ///< Frames sampled this interval (pass averages).
     long m_intervalFrames = 0;     ///< Frames ending after the interval start (fps).
-    double m_lastWriteSec = 0.0;   ///< time_s of the last flush (interval start).
-    double m_lastSampleSec = 0.0;  ///< time_s of the last sample (final flush).
+    double m_lastWriteSec = 0.0;   ///< elapsedSec of the last flush (interval start).
+    double m_lastSampleSec = 0.0;  ///< elapsedSec of the last sample (final flush).
+    double m_originSec = 0.0;      ///< elapsedSec of the first sample: time_s 0.
     bool m_started = false;        ///< False until the first sample sets origin.
 
     static constexpr double WRITE_INTERVAL_SEC = 1.0;

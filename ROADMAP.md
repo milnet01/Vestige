@@ -6736,13 +6736,19 @@ shipped that have no invocation path at all.
   Source: 3D_E-0786 first run file 2026-10-31.
   Lanes: profiler.
 
-- 📋 [3D_E-0822] **The profile log's time and frame rows use the clamped frame time, so a hitch over 250 ms is under-counted.**
+- ✅ [3D_E-0822] **The profile log's time and frame rows use the clamped frame time, so a hitch over 250 ms is under-counted.**
   Engine::run adds Timer::update()'s delta to m_profileElapsedSec, and that
   delta is clamped to 0.25 s, so a longer frame shortens the interval that
   fps divides by. From reading the code; no measurement with a hitch over
   250 ms in this log yet. The first frame's raw delta includes start-up time,
   so a fix must skip it. The --frame-log run file uses the unclamped clock
   and does not have this fault. Measured there: frame 524 took 410.386 ms.
+  2026-11-05: the clamp half was already fixed by b5d25d5 (3D_E-0791): the
+  engine adds Timer::getRealDeltaTime(), unclamped. The start-up half was
+  live: measured a Debug flythrough's first row at time_s 108.58, which
+  defeated fps_floor.py's absolute 2 s warm-up. ProfileLog now writes
+  time_s from the first sample. Test ProfileLog.TimeCountsFromTheFirstFrameNotFromStartUp:
+  red before (101 vs 1), green after.
   **Layman:** The per-second log can report a higher frame rate than the game had when a very long stutter happens.
   Kind: fix.
   Source: 3D_E-0786 first run file 2026-10-31.
