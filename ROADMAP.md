@@ -7267,6 +7267,12 @@ shipped that have no invocation path at all.
   subsurface fields (red test, CHANGELOG). Path rule passed in, unchanged:
   scenes sandboxed, presets any path. Whether presets should be sandboxed
   too is a separate question put to the user 2026-11-05.
+  Waiting-on: user (should material presets be sandboxed to the project
+  like scene files? Recommendation: no for now. Presets are listed from the
+  project's materials folder and picked by name (MaterialLibrary), and a
+  preset's texture paths may point anywhere. A hostile preset could make the
+  editor load an image file from outside the project as a texture. File an item only if the answer is yes,
+  2026-11-05)
   **Layman:** Material saving has two copies that have already drifted apart.
   Kind: refactor.
   Source: review-readability 2026-10-31 at 7b2a81d.
