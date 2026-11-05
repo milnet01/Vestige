@@ -1624,9 +1624,6 @@ void Engine::run()
         // 2. Window — poll OS events
         m_window->pollEvents();
 
-        // 3. Update input state (reset per-frame deltas)
-        m_inputManager->update();
-
         // Start ImGui frame early (so editor camera can read ImGui IO state)
         if (m_editor)
         {
@@ -1973,6 +1970,14 @@ void Engine::run()
             Logger::info("Demo fly-through finished");
             m_isRunning = false;
         }
+
+        // 5c. Reset the per-frame input deltas now that their only reader (the
+        //     first-person controller's mouse look, on both movement paths)
+        //     has run. Resetting right after pollEvents() zeroed the movement
+        //     the poll had just gathered, so the controller read zero
+        //     (lane-02 lead). Movement arriving from here to the next read,
+        //     including any a platform delivers during buffer swap, counts.
+        m_inputManager->update();
 
         // 6. Renderer — draw the frame
         int winHeight = m_window->getHeight();

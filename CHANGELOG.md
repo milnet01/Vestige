@@ -25,6 +25,13 @@ may change any interface without notice.
 
 ## [Unreleased]
 
+### 2026-11-05 Fixed — The mouse turns the view in first-person play
+
+Each frame, the engine cleared the mouse movement it had just collected,
+before the first-person camera read it, so in play mode moving the mouse
+did not turn the view. The movement is now cleared after the camera has
+used it. Not yet tried by hand in a window.
+
 ### 2026-11-05 Fixed — Additive GPU particles (sparks, fire) are drawn
 
 GPU particle effects that glow (additive blending) looked in the wrong
