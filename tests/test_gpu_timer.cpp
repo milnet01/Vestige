@@ -114,6 +114,37 @@ TEST_F(GpuTimerTest, FlatPassesRaiseNoViolations)
     EXPECT_EQ(timer.getDroppedPasses(), 0);
 }
 
+// 3D_E-0792 (CODING_STANDARDS section 29): every pass is a GL debug group, so a
+// RenderDoc or apitrace capture reads as named passes. A refused nested pass
+// still pushes and pops, so the debug-group stack stays balanced.
+TEST_F(GpuTimerTest, EachPassIsADebugGroupAndTheStackBalances)
+{
+    GpuTimer timer;
+    timer.init();
+    GLint base = 0;
+    glGetIntegerv(GL_DEBUG_GROUP_STACK_DEPTH, &base);
+
+    timer.beginFrame();
+    timer.beginPass("Outer");
+    GLint inPass = 0;
+    glGetIntegerv(GL_DEBUG_GROUP_STACK_DEPTH, &inPass);
+    timer.beginPass("Nested");
+    GLint nested = 0;
+    glGetIntegerv(GL_DEBUG_GROUP_STACK_DEPTH, &nested);
+    timer.endPass();
+    timer.endPass();
+    timer.endPass();  // unmatched: refused, must not pop the caller's group
+    GLint after = 0;
+    glGetIntegerv(GL_DEBUG_GROUP_STACK_DEPTH, &after);
+    timer.markFrameEnd();
+    timer.endFrame();
+
+    EXPECT_EQ(inPass, base + 1);
+    EXPECT_EQ(nested, base + 2);
+    EXPECT_EQ(after, base);
+    EXPECT_EQ(glGetError(), static_cast<GLenum>(GL_NO_ERROR));
+}
+
 // 3D_E-0789: the remainder is the frame span minus the passes, never negative.
 TEST(GpuTimerRemainder, SpanMinusPasses)
 {

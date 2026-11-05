@@ -79,6 +79,10 @@ void GpuTimer::beginPass(const char* name)
 {
     if (!m_initialized) return;
 
+    // Every pass is also a GL debug group, so a RenderDoc or apitrace capture
+    // reads as named passes (CODING_STANDARDS section 29). Pushed even for a
+    // refused pass, so endPass's pop always has a matching push.
+    glPushDebugGroup(GL_DEBUG_SOURCE_APPLICATION, 0, -1, name ? name : "pass");
     ++m_depth;
     if (m_depth > 1)
     {
@@ -125,6 +129,7 @@ void GpuTimer::endPass()
         return;
     }
     --m_depth;
+    glPopDebugGroup();
     if (m_depth > 0) return;  // closes a nested pass that was refused
 
     if (m_openPassDropped)
