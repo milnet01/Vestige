@@ -1,6 +1,6 @@
 <!-- ants-roadmap-format: 1 -->
 <!-- Generated from the Ants Terminal roadmap store. Edit it with roadmap_log; hand edits are discarded by the next write. -->
-<!-- ants-roadmap-id-high-water: 3D_E=875 3D_E#S=989 -->
+<!-- ants-roadmap-id-high-water: 3D_E=876 3D_E#S=989 -->
 
 # Vestige Engine Roadmap
 
@@ -7324,6 +7324,19 @@ shipped that have no invocation path at all.
   Kind: fix.
   Source: 3D_E-0873 doc fix 2026-11-03 (review-readability 2026-10-31).
   Lanes: physics.
+
+- 📋 [3D_E-0876] **Count every renderer's draw calls, not only the scene renderer's.**
+  Renderer::m_cullingStats.drawCalls counts the scene renderer's draws
+  only. Terrain, foliage, tree, grass, water and particle renderers issue
+  their own and are not counted. 3D_E-0792 relabelled the figure "Scene
+  draws" in the panel, the editor overlay and the frame report; a full
+  count needs each sub-renderer to report its draws per frame, summed in
+  one place (the profiler, so the logs can carry it too).
+  CPU / GPU placement: counting on the CPU at each draw submit.
+  **Layman:** The draw-call count leaves out the ground, plants, water and particles, so it under-reports how much the GPU is asked to draw.
+  Kind: enhancement.
+  Source: 3D_E-0792 2026-11-05.
+  Lanes: profiler, renderer.
 
 ## 0.3.0 — An editor a builder can use
 

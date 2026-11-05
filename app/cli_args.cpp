@@ -116,6 +116,8 @@ void printUsage(const char* argv0)
         << "  --isolate-feature=NAME  Disable one feature for visual-test\n"
         << "                          bisection. NAME is one of:\n"
         << "                          " << isolateFeatureNameList() << ".\n"
+        << "                          The ibl names remove IBL's light,\n"
+        << "                          not its cost, so they cannot time it.\n"
         << "  --profile-log[=PATH]    Enable the profiler and append ~1 Hz\n"
         << "                          per-pass CPU/GPU timings to PATH as CSV\n"
         << "                          (default: vestige_profile_<ts>.csv in the\n"

@@ -398,7 +398,9 @@ void PerformancePanel::drawDrawCallsTab(const Renderer* renderer)
         row("After Frustum Cull", stats.culledItems);
         row("Transparent Items", stats.transparentTotal);
         row("Shadow Casters", stats.shadowCastersTotal);
-        row("Draw Calls", stats.drawCalls);
+        // Scene objects only: terrain, vegetation, water and particles draw
+        // through their own renderers and are not counted (3D_E-0792).
+        row("Scene Draw Calls", stats.drawCalls);
         row("Instanced Batches", stats.instanceBatches);
 
         // Batch efficiency

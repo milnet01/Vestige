@@ -257,8 +257,11 @@ static std::string captureImpl(const Renderer& renderer,
 
     // Culling & draw calls
     report << "[Rendering]\n";
-    report << "  Draw calls:  " << culling.drawCalls
-           << " (" << culling.instanceBatches << " instanced)\n";
+    // Scene objects only: terrain, vegetation, water and particles draw
+    // through their own renderers and are not counted (3D_E-0792).
+    report << "  Scene draws: " << culling.drawCalls
+           << " (" << culling.instanceBatches << " instanced; terrain, vegetation,"
+           << " water and particles not counted)\n";
     report << "  Opaque:      " << culling.culledItems << " / " << culling.totalItems
            << " visible (culled " << (culling.totalItems - culling.culledItems) << ")\n";
     report << "  Transparent: " << culling.transparentCulled << " / " << culling.transparentTotal

@@ -1495,7 +1495,9 @@ void Editor::drawPanels(Renderer* renderer, Scene* scene, Camera* camera,
             {
                 const auto& stats = renderer->getCullingStats();
                 ImGui::Separator();
-                ImGui::Text("Draw calls:      %d  (%d instanced)", stats.drawCalls, stats.instanceBatches);
+                // Scene objects only: terrain, vegetation, water and particles
+                // draw through their own renderers and are not counted (3D_E-0792).
+                ImGui::Text("Scene draws:     %d  (%d instanced)", stats.drawCalls, stats.instanceBatches);
                 ImGui::Text("Opaque objects:  %d / %d visible", stats.culledItems, stats.totalItems);
                 ImGui::Text("Transparent:     %d / %d visible", stats.transparentCulled, stats.transparentTotal);
                 ImGui::Text("Shadow casters:  %d total", stats.shadowCastersTotal);
