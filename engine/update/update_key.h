@@ -11,7 +11,8 @@
 /// The key is held twice: the `update-public-key:` comment line below, which
 /// tools/sign_release.py reads, and the `kUpdatePublicKey` array, which the
 /// engine compiles. Both must hold the same key. Keep the comment's hex on one
-/// line in that format. Nothing checks that the two agree.
+/// line in that format. UpdateKey.CommentLineMatchesTheCompiledKey checks that
+/// the two agree.
 #pragma once
 
 #include "update/update_signature.h"

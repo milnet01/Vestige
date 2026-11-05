@@ -7,6 +7,10 @@
 ///        (INV-4) and install detection (INV-7). No network, no files.
 
 #include <gtest/gtest.h>
+#include <sstream>
+#include <regex>
+#include <fstream>
+#include <filesystem>
 
 #include "update/notes_markup.h"
 #include "update/update_installer.h"
@@ -181,6 +185,24 @@ TEST(UpdateNotes, MarkupBecomesHeadingsBulletsAndPlainText)
 TEST(UpdateNotes, LinkTextLosesItsMarkupToo)
 {
     EXPECT_EQ(stripInlineMarkup("see [**the** `docs`](https://x) now"), "see the docs now");
+}
+
+// lane-23 lead update_key.h:19: the key is held twice, the comment line that
+// tools/sign_release.py reads and the array the engine compiles. A mismatch
+// would sign releases the release check accepts and the shipped engine rejects.
+TEST(UpdateKey, CommentLineMatchesTheCompiledKey)
+{
+    const std::filesystem::path header = std::filesystem::path(VESTIGE_SHADER_DIR) / ".." / ".."
+                                         / "engine" / "update" / "update_key.h";
+    std::ifstream in(header);
+    ASSERT_TRUE(in.is_open()) << header;
+    std::stringstream buf;
+    buf << in.rdbuf();
+    // The same pattern sign_release.py's engine_public_key() uses.
+    std::smatch m;
+    const std::string text = buf.str();
+    ASSERT_TRUE(std::regex_search(text, m, std::regex(R"(update-public-key:\s*([0-9a-f]{64})\b)")));
+    EXPECT_EQ(fromHex<32>(m[1].str()), kUpdatePublicKey);
 }
 
 // ---------------------------------------------------------------- INV-4 (asset choice)
