@@ -1,6 +1,6 @@
 <!-- ants-roadmap-format: 1 -->
 <!-- Generated from the Ants Terminal roadmap store. Edit it with roadmap_log; hand edits are discarded by the next write. -->
-<!-- ants-roadmap-id-high-water: 3D_E=877 3D_E#S=989 -->
+<!-- ants-roadmap-id-high-water: 3D_E=881 3D_E#S=989 -->
 
 # Vestige Engine Roadmap
 
@@ -8054,6 +8054,68 @@ Retrofit completed across 8 commits — every Phase-10 Settings-store consumer n
   Kind: investigate.
   Source: in-session-2026-09-25 (3D_E-0699 verification).
   Lanes: editor.
+
+- 📋 [3D_E-0878] **Cubemap seam check: a sky whose faces are swapped or turned is reported on load, with the fix.**
+  Skybox::loadCubemap compares the edge pixels each pair of
+  neighbouring faces share (12 edges). Where a face's edges match
+  better after a swap, a 90/180/270 turn or a mirror, log a warning
+  naming the face and the change, and offer it in the editor.
+  User decision 2026-11-05: all four cubemap helpers wanted
+  (this, smart import, alignment panel, test sky + guide).
+  CPU / GPU placement: CPU, once at load; it reads the decoded face
+  pixels already in memory and is a few thousand comparisons.
+  Done when: a test cubemap with one face turned 90 degrees and one
+  pair swapped is reported correctly, and a correct one is not.
+  **Layman:** When you load a six-picture sky, the engine checks that the pictures meet cleanly and tells you in plain words which one is in the wrong place or turned, and how to fix it.
+  Kind: feature.
+  Source: user-request-2026-11-05.
+  Lanes: renderer, editor.
+
+- 📋 [3D_E-0879] **Cubemap smart import: one cross or strip image, or six files with common names, loads without a face-order list.**
+  Detect horizontal/vertical cross and 6x1 / 1x6 strip layouts from
+  the aspect ratio; map folder file names in the common conventions
+  (px/nx/py/ny/pz/nz, posx/negx, right/left/top/bottom/front/back)
+  onto GL face order, with each convention's axis flip documented.
+  Ambiguous names are an error naming the files, not a guess.
+  User decision 2026-11-05.
+  CPU / GPU placement: CPU, at load (slicing a decoded image).
+  Done when: a cross, a strip and each naming convention load to the
+  same six faces as the explicit-list loader, pinned by tests.
+  **Layman:** Load a sky from a single picture laid out as a cross or a strip, or from a folder of six pictures with the usual names, and the engine works out which picture goes where.
+  Kind: feature.
+  Source: user-request-2026-11-05.
+  Lanes: renderer, editor.
+
+- 📋 [3D_E-0880] **Sky alignment panel: see the six faces labelled, swap or turn any face, turn the whole sky, saved with the scene.**
+  Editor panel over Skybox: face thumbnails labelled +X Right .. -Z
+  Back, per-face swap/rotate/mirror, a sky yaw angle, and a 'match
+  sun' action that turns the sky so its brightest point lies under
+  the directional light. Settings saved in the scene file and
+  reapplied on load; the seam check's suggestion is one click here.
+  User decision 2026-11-05.
+  CPU / GPU placement: face edits are CPU remaps of the decoded faces
+  before upload; sky yaw is a GPU rotation uniform in the skybox
+  shader (per frame, free).
+  Done when: a scene saved with a turned face and a yaw reloads
+  looking the same, checked by a capture test.
+  **Layman:** An editor window that shows the sky's six pictures with labels, lets you swap or turn any of them, spin the whole sky (for example to line its sun up with the scene's sun) and saves that with the scene.
+  Kind: feature.
+  Source: user-request-2026-11-05.
+  Lanes: renderer, editor.
+
+- 📋 [3D_E-0881] **Labelled test sky and a cubemap guide covering how common tools export face order.**
+  Ship a generated test cubemap (each face labelled with its name
+  and an up arrow) selectable from the sky panel, and a docs page on
+  face order, axis conventions (Y-up vs Z-up) and the export settings
+  of common tools, with the engine's expected layout.
+  User decision 2026-11-05.
+  CPU / GPU placement: none new (an asset and a document).
+  Done when: the test sky loads from the panel, and the guide's
+  steps were followed once with a real exported sky.
+  **Layman:** A built-in test sky with each side labelled, and a short guide that explains how skies exported from Blender, Unity and Unreal map onto this engine.
+  Kind: feature.
+  Source: user-request-2026-11-05.
+  Lanes: renderer, editor.
 
 ## 0.4.0 — Rendering and geometry at scale
 
