@@ -7405,6 +7405,16 @@ shipped that have no invocation path at all.
   generator; evict-old-files: job on every ccache step; 2G ceiling
   for the two Debug-config jobs. Done when the second push run after
   this shows the hit rates and Windows build time.
+  2026-11-05 run 41991371434 (b97487d), all green. Against run
+  41980026542: Windows 16 -> 13 min (engine project 6 -> 4.2 min,
+  tests 7.5 -> 4.8 min with /MP); audit 16.8 -> 6.2 min; Linux Debug
+  12.2 -> 5.2 min. Debug and audit ccache hits 38% / 19% -> 70%,
+  restored from the old 500M caches; one Debug build's cache is
+  0.6 GB. evict-old-files cut each Release cache's save from about
+  457 MB to 98 MB. Still open: confirm the hit rates on the next code
+  push. Windows is now the longest job and has no compiler cache;
+  ccache or sccache for MSVC needs the Ninja generator and a dev-env
+  step, so it is a separate change to weigh for flakiness.
   **Layman:** CI went red on every push since 2026-11-04 because one test crashed on GitHub's Windows machine; this fixes it, makes the local check catch that kind of crash, and speeds up the slowest CI jobs.
   Kind: fix.
   Source: user-request-2026-11-05.
