@@ -116,3 +116,56 @@ TEST_F(TextureUploadTest, PngInMemoryWithUnalignedRowsReadsBackIntact)
     EXPECT_EQ(readBack(texture), flippedRows(src));
     std::filesystem::remove(path);
 }
+
+// 3D_E-0874 lane 04: generateNormalFromHeight flipped the height rows on load
+// and loadFromMemory flipped them again, so the generated bumps sat upside down
+// against the albedo loaded from the same image. A height map with one bright
+// row must give a normal map whose slopes flank the row where loadFromFile puts
+// it, tilted away from it in v (OpenGL green-up convention).
+TEST_F(TextureUploadTest, GeneratedNormalMapLinesUpWithItsAlbedo)
+{
+    constexpr int w = 4;
+    constexpr int h = 6;
+    constexpr int ridgeImageRow = 1;  // near the top of the image as written
+    std::vector<uint8_t> height(static_cast<size_t>(w * h), 0);
+    std::fill_n(height.begin() + ridgeImageRow * w, w, uint8_t{255});
+
+    const std::string path = (std::filesystem::temp_directory_path()
+        / ("vestige_height_ridge_" + Testing::vestigeTestStamp() + ".png")).string();
+    ASSERT_NE(stbi_write_png(path.c_str(), w, h, 1, height.data(), w), 0);
+
+    Texture albedo;
+    ASSERT_TRUE(albedo.loadFromFile(path, /*linear=*/true));
+    auto normal = Texture::generateNormalFromHeight(path, 4.0f);
+    std::filesystem::remove(path);
+    ASSERT_NE(normal, nullptr);
+
+    auto readRows = [&](const Texture& t)
+    {
+        std::vector<uint8_t> out(static_cast<size_t>(w * h * 3), 0);
+        glPixelStorei(GL_PACK_ALIGNMENT, 1);
+        glGetTextureImage(t.getId(), 0, GL_RGB, GL_UNSIGNED_BYTE,
+                          static_cast<GLsizei>(out.size()), out.data());
+        glPixelStorei(GL_PACK_ALIGNMENT, 4);
+        return out;
+    };
+    const auto albedoPx = readRows(albedo);
+    const auto normalPx = readRows(*normal);
+
+    // The row the albedo texture holds the ridge in (texture row 0 = v of 0).
+    int ridge = -1;
+    for (int row = 0; row < h; ++row)
+    {
+        if (albedoPx[static_cast<size_t>(row * w * 3)] == 255)
+        {
+            ridge = row;
+        }
+    }
+    ASSERT_GE(ridge, 1);
+    ASSERT_LE(ridge, h - 2);
+
+    auto green = [&](int row) { return int{normalPx[static_cast<size_t>(row * w * 3 + 1)]}; };
+    EXPECT_GT(green(ridge + 1), 160) << "above the ridge (higher v) the surface falls away: normal tilts +v";
+    EXPECT_LT(green(ridge - 1), 96) << "below the ridge (lower v) the surface rises: normal tilts -v";
+    EXPECT_NEAR(green(ridge), 127, 2) << "the ridge top is flat";
+}

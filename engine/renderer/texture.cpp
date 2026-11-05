@@ -422,8 +422,11 @@ bool Texture::isLoaded() const
 std::shared_ptr<Texture> Texture::generateNormalFromHeight(
     const std::string& heightMapPath, float strength)
 {
-    // Load the height map as a greyscale image (flip to match OpenGL Y-up convention)
-    stbi_set_flip_vertically_on_load_thread(true);
+    // Read the height map top row first, as stored: loadFromMemory below flips
+    // the generated rows into OpenGL's bottom-up order, the same single flip
+    // loadFromFile gives the albedo. Flipping here as well put the bumps upside
+    // down against the albedo (3D_E-0874).
+    stbi_set_flip_vertically_on_load_thread(false);
     int w = 0;
     int h = 0;
     int channels = 0;
@@ -462,9 +465,11 @@ std::shared_ptr<Texture> Texture::generateNormalFromHeight(
             float dx = (tr + 2.0f * r + br) - (tl + 2.0f * l + bl);
             float dy = (bl + 2.0f * b + br) - (tl + 2.0f * t + tr);
 
-            // Construct normal vector: (-dx * strength, -dy * strength, 1.0), normalized
+            // Tangent-space normal (-dh/du, -dh/dv, 1), OpenGL convention
+            // (green = +v = up the image). Row y + 1 is DOWN the image, so dy
+            // is -dh/dv and enters with a plus sign.
             float nx = -dx * strength;
-            float ny = -dy * strength;
+            float ny = dy * strength;
             float nz = 1.0f;
             float len = std::sqrt(nx * nx + ny * ny + nz * nz);
             nx /= len;
