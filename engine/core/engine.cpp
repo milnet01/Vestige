@@ -1983,7 +1983,10 @@ void Engine::run()
         int winHeight = m_window->getHeight();
         if (winHeight <= 0)
         {
-            m_window->pollEvents();
+            // Minimised: nothing to draw, no swap and no frame cap, so a bare
+            // poll spun a CPU core at 100% (lane-02 lead). Sleep until an
+            // event arrives, at most 0.1 s, so the loop still ticks.
+            m_window->waitEvents(0.1);
             continue;  // Skip rendering when minimized
         }
 

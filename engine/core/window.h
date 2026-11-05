@@ -42,6 +42,10 @@ public:
     /// @brief Polls OS events (keyboard, mouse, window events).
     static void pollEvents();
 
+    /// @brief Sleeps until an event arrives or @p timeoutSeconds pass, then
+    ///        processes events. For a minimised window, which renders nothing.
+    static void waitEvents(double timeoutSeconds);
+
     /// @brief Swaps the front and back framebuffers.
     void swapBuffers();
 

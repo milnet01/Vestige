@@ -115,6 +115,11 @@ Window::~Window()
     Logger::debug("GLFW terminated");
 }
 
+/*static*/ void Window::waitEvents(double timeoutSeconds)
+{
+    glfwWaitEventsTimeout(timeoutSeconds);
+}
+
 /*static*/ void Window::pollEvents()
 {
     glfwPollEvents();

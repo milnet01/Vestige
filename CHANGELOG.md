@@ -25,6 +25,12 @@ may change any interface without notice.
 
 ## [Unreleased]
 
+### 2026-11-05 Fixed — A minimised Vestige no longer keeps a processor core busy
+
+With the window minimised, Vestige skipped drawing but kept looping as
+fast as it could, holding one processor core at full load. It now waits
+for input, checking ten times a second.
+
 ### 2026-11-05 Fixed — Walking speed, a stuck gamepad sprint, and bad trigger values
 
 In walk mode, holding jump while moving forward slowed the walk to about
