@@ -151,3 +151,35 @@ TEST_F(MaterialJsonTest, SceneDoesNotLoadAnAbsoluteTexturePath)
     EXPECT_FALSE(loaded->hasDiffuseTexture());
     std::filesystem::remove(png);
 }
+
+// 3D_E-0874 INV-2: a texture picked in the editor arrives by its absolute
+// path under the asset root. The scene must save it root-relative, or scene
+// load rejects it and the texture is lost on reopen.
+TEST_F(MaterialJsonTest, EditorPickedTextureSurvivesSceneRoundTrip)
+{
+    const std::filesystem::path root = std::filesystem::temp_directory_path()
+        / ("vestige_material_json_root_" + Testing::vestigeTestStamp());
+    std::filesystem::remove_all(root);
+    std::filesystem::create_directories(root / "textures");
+    const std::filesystem::path png = root / "textures" / "a.png";
+    const std::array<std::uint8_t, 4> pixel = {255, 0, 0, 255};
+    ASSERT_NE(stbi_write_png(png.string().c_str(), 1, 1, 4, pixel.data(), 4), 0);
+
+    ResourceManager resources;
+    resources.setSandboxRoots({root});
+    resources.setAssetRoot(root);
+    auto material = resources.createMaterial("picked");
+    material->setDiffuseTexture(resources.loadTexture(png.string(), false));
+    ASSERT_NE(material->getDiffuseTexture(), resources.getDefaultTexture());
+
+    Scene sceneOut("Out");
+    Entity* src = sceneOut.createEntity("Host");
+    src->addComponent<MeshRenderer>(resources.getMeshByKey("__builtin_cube"), material);
+    const json j = EntitySerializer::serializeEntity(*src, resources);
+    EXPECT_EQ(j["components"]["MeshRenderer"]["material"]["diffuseTexture"], "textures/a.png");
+
+    auto loaded = sceneRoundTrip(j, resources);
+    ASSERT_NE(loaded, nullptr);
+    EXPECT_TRUE(loaded->hasDiffuseTexture());
+    std::filesystem::remove_all(root);
+}

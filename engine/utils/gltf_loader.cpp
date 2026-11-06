@@ -217,7 +217,13 @@ static void loadTextures(const tinygltf::Model& gltfModel,
             }
             else
             {
-                auto texture = resourceManager.loadTexture(fullPath, linear);
+                // resolveUri decided the sandbox question on the canonical
+                // path. Load by the lexical join instead, so a model under a
+                // linked folder keys its textures below the asset root and a
+                // saved scene keeps them (3D_E-0874).
+                const std::string lexicalPath =
+                    (std::filesystem::path(gltfDir) / image.uri).lexically_normal().string();
+                auto texture = resourceManager.loadTexture(lexicalPath, linear);
                 outModel.m_textures.push_back(texture);
             }
         }

@@ -8,6 +8,7 @@
 #include "utils/obj_loader.h"
 #include "utils/gltf_loader.h"
 #include "utils/path_sandbox.h"
+#include "utils/asset_path.h"
 #include "core/logger.h"
 
 #include <stdexcept>
@@ -37,13 +38,27 @@ std::string ResourceManager::validatePath(const std::string& filePath) const
     return canon;
 }
 
+std::string ResourceManager::openPathFor(const std::string& key) const
+{
+    // The key is already root-relative (AssetPath::toKey), so join it directly:
+    // AssetPath::resolve would apply the legacy-prefix rule a second time.
+    const std::filesystem::path given(key);
+    if (m_assetRoot.empty() || key.empty() || given.is_absolute())
+    {
+        return key;
+    }
+    return (m_assetRoot / given).lexically_normal().string();
+}
+
 std::shared_ptr<Texture> ResourceManager::loadTexture(const std::string& filePath, bool linear)
 {
     // Include linear flag in cache key so the same file can be loaded with different formats.
-    // The cache key uses the *original* filePath (not canonical) so callers can lookup
-    // by the same string they passed in. Only a cache miss reaches validatePath, so a
-    // cached entry is not re-checked against roots set after it was loaded.
-    std::string cacheKey = filePath + (linear ? ":linear" : ":srgb");
+    // The cache key is the root-relative form (3D_E-0874), so every spelling of one
+    // file shares an entry and findTexturePath returns what a scene can save. Only a
+    // cache miss reaches validatePath, so a cached entry is not re-checked against
+    // roots set after it was loaded.
+    const std::string key = AssetPath::toKey(m_assetRoot, filePath);
+    std::string cacheKey = key + (linear ? ":linear" : ":srgb");
 
     // Check cache
     auto it = m_textures.find(cacheKey);
@@ -54,7 +69,7 @@ std::shared_ptr<Texture> ResourceManager::loadTexture(const std::string& filePat
     }
 
     // Path sandbox (Slice 5 D1): reject before opening file.
-    std::string safePath = validatePath(filePath);
+    std::string safePath = validatePath(openPathFor(key));
     if (safePath.empty())
     {
         return getDefaultTexture();
@@ -85,8 +100,9 @@ std::shared_ptr<Texture> ResourceManager::getDefaultTexture()
 
 std::shared_ptr<Mesh> ResourceManager::loadMesh(const std::string& filePath)
 {
-    // Check cache
-    auto it = m_meshes.find(filePath);
+    // Check cache (root-relative key, as loadTexture).
+    const std::string key = AssetPath::toKey(m_assetRoot, filePath);
+    auto it = m_meshes.find(key);
     if (it != m_meshes.end())
     {
         touchCache(m_meshes, m_meshOrder, it);
@@ -94,7 +110,7 @@ std::shared_ptr<Mesh> ResourceManager::loadMesh(const std::string& filePath)
     }
 
     // Path sandbox (Slice 5 D1).
-    std::string safePath = validatePath(filePath);
+    std::string safePath = validatePath(openPathFor(key));
     if (safePath.empty())
     {
         return nullptr;
@@ -108,7 +124,7 @@ std::shared_ptr<Mesh> ResourceManager::loadMesh(const std::string& filePath)
         return nullptr;
     }
 
-    insertAndEnforceCache(m_meshes, m_meshOrder, filePath, mesh, m_meshLimit);
+    insertAndEnforceCache(m_meshes, m_meshOrder, key, mesh, m_meshLimit);
     return mesh;
 }
 
@@ -228,23 +244,26 @@ std::shared_ptr<Material> ResourceManager::getMaterial(const std::string& name)
 
 std::shared_ptr<Model> ResourceManager::loadModel(const std::string& filePath)
 {
-    // Check cache
-    auto it = m_models.find(filePath);
+    // Check cache (root-relative key, as loadTexture).
+    const std::string key = AssetPath::toKey(m_assetRoot, filePath);
+    auto it = m_models.find(key);
     if (it != m_models.end())
     {
         touchCache(m_models, m_modelOrder, it);
         return it->second.value;
     }
 
-    // Path sandbox (Slice 5 D1).
-    std::string safePath = validatePath(filePath);
-    if (safePath.empty())
+    // Path sandbox (Slice 5 D1). The check uses the canonical path; the loader
+    // gets the lexical one, so a model under a linked folder hands its textures
+    // paths below the asset root, which a scene can save (3D_E-0874).
+    const std::string openPath = openPathFor(key);
+    if (validatePath(openPath).empty())
     {
         return nullptr;
     }
 
     // Load new
-    auto model = GltfLoader::load(safePath, *this);
+    auto model = GltfLoader::load(openPath, *this);
     if (!model)
     {
         Logger::error("Failed to load model: " + filePath);
@@ -252,7 +271,7 @@ std::shared_ptr<Model> ResourceManager::loadModel(const std::string& filePath)
     }
 
     auto shared = std::shared_ptr<Model>(std::move(model));
-    insertAndEnforceCache(m_models, m_modelOrder, filePath, shared, m_modelLimit);
+    insertAndEnforceCache(m_models, m_modelOrder, key, shared, m_modelLimit);
     return shared;
 }
 

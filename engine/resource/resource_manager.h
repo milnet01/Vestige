@@ -11,6 +11,7 @@
 #include "resource/lru_cache.h"
 
 #include <filesystem>
+#include <utility>
 #include <list>
 #include <memory>
 #include <string>
@@ -130,6 +131,12 @@ public:
     /// @brief Returns the configured sandbox roots (for diagnostics).
     const std::vector<std::filesystem::path>& getSandboxRoots() const { return m_sandboxRoots; }
 
+    /// @brief Sets the asset root a relative path resolves against
+    ///        (docs/specs/3D_E-0874-asset-relative-paths.md). Cache keys, and
+    ///        so the paths findTexturePath and findMeshKey return for saving,
+    ///        are root-relative. Empty (the default) keeps paths as given.
+    void setAssetRoot(std::filesystem::path root) { m_assetRoot = std::move(root); }
+
     // --- LRU cache limits (Phase 10.9 Slice 13 Pe5) -----------------------
     //
     // Each on-disk cache (textures, meshes, models) tracks recency in a
@@ -173,6 +180,10 @@ private:
     ///        roots → returns the input unchanged for backwards compat.
     std::string validatePath(const std::string& filePath) const;
 
+    /// @brief The file a root-relative cache key names: root / key, or the key
+    ///        unchanged when it is absolute or no asset root is set.
+    std::string openPathFor(const std::string& key) const;
+
     // LRU helpers live in `resource/lru_cache.h` so they can be unit-
     // tested against a non-GL value type.
     Cache<Texture>  m_textures;
@@ -188,6 +199,7 @@ private:
     std::unordered_map<std::string, std::shared_ptr<Material>> m_materials;
     std::shared_ptr<Texture> m_defaultTexture;
     std::vector<std::filesystem::path> m_sandboxRoots;
+    std::filesystem::path m_assetRoot;
 };
 
 } // namespace Vestige

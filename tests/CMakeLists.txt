@@ -260,6 +260,7 @@ add_executable(vestige_tests
     test_entity_serializer_registry.cpp
     test_atomic_write_routing.cpp
     test_path_sandbox.cpp
+    test_asset_path.cpp
     test_resource_manager_sandbox.cpp
     test_resource_manager_lru.cpp
     test_physics_layer_filter.cpp

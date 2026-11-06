@@ -117,6 +117,7 @@ set(ENGINE_SOURCES
     utils/config_path.cpp
     utils/atomic_write.cpp
     utils/path_sandbox.cpp
+    utils/asset_path.cpp
     # Self-updater (3D_E-0729)
     update/update_version.cpp
     update/update_release.cpp
