@@ -17,6 +17,14 @@
 #include "editor/tools/cutout_tool.h"
 #include "editor/tools/roof_tool.h"
 #include "editor/tools/stair_tool.h"
+#include "editor/command_history.h"
+#include "gl_test_fixture.h"
+#include "resource/resource_manager.h"
+#include "scene/entity.h"
+#include "scene/scene.h"
+
+#include <glm/glm.hpp>
+#include <string>
 
 #include <gtest/gtest.h>
 
@@ -149,6 +157,48 @@ TEST(WallToolTest, DoubleActivateStaysInWaitingStart)
     tool.activate();
     EXPECT_EQ(tool.getState(), WallTool::State::WAITING_START);
     EXPECT_TRUE(tool.isActive());
+}
+
+// A placed wall runs from the first click to the second and stands on the
+// clicked ground: its bottom-edge ends land on the two click points, whatever
+// the drag direction. Mesh upload needs a GL context.
+class WallToolPlacementTest : public Vestige::Test::GLTestFixture
+{
+};
+
+TEST_F(WallToolPlacementTest, WallSpansTheTwoClicksAndStandsOnTheGround)
+{
+    Scene scene;
+    ResourceManager resources;
+    CommandHistory history;
+    WallTool tool;
+    tool.activate();
+
+    // Ground at y = 0.5. First wall dragged along +X, second along +Z.
+    const glm::vec3 a(0.0f, 0.5f, 0.0f);
+    const glm::vec3 b(4.0f, 0.5f, 0.0f);
+    const glm::vec3 c(4.0f, 0.5f, 3.0f);
+    ASSERT_TRUE(tool.processClick(a, scene, resources, history));
+    ASSERT_TRUE(tool.processClick(b, scene, resources, history));
+    ASSERT_TRUE(tool.processClick(c, scene, resources, history));
+
+    scene.update(0.0f);  // refreshes the cached world matrices
+
+    const auto& walls = scene.getRoot()->getChildren();
+    ASSERT_EQ(walls.size(), 2u);
+
+    const glm::vec3 starts[] = {a, b};
+    const glm::vec3 ends[] = {b, c};
+    for (size_t i = 0; i < 2; ++i)
+    {
+        const float halfWidth = glm::length(ends[i] - starts[i]) * 0.5f;
+        const glm::mat4 world = walls[i]->getWorldMatrix();
+        const glm::vec3 lowEnd = glm::vec3(world * glm::vec4(-halfWidth, 0.0f, 0.0f, 1.0f));
+        const glm::vec3 highEnd = glm::vec3(world * glm::vec4(halfWidth, 0.0f, 0.0f, 1.0f));
+        SCOPED_TRACE("wall " + std::to_string(i));
+        EXPECT_NEAR(glm::length(lowEnd - starts[i]), 0.0f, 1e-3f);
+        EXPECT_NEAR(glm::length(highEnd - ends[i]), 0.0f, 1e-3f);
+    }
 }
 
 // =============================================================================

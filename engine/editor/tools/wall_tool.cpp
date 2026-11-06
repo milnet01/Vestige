@@ -61,12 +61,14 @@ bool WallTool::processClick(const glm::vec3& hitPoint, Scene& scene,
             return true;
         }
 
-        // Calculate rotation angle (Y-axis) from the wall direction
-        float angle = glm::degrees(std::atan2(dx, dz));
+        // The wall mesh runs along local +X. A Y rotation of theta sends +X
+        // to (cos theta, 0, -sin theta), so this angle points it from the
+        // start click to the end click.
+        float angle = glm::degrees(std::atan2(-dz, dx));
 
-        // Calculate midpoint for wall position
+        // The mesh's base is at y = 0, so the midpoint of the clicks puts
+        // the wall's foot on the clicked ground.
         glm::vec3 midpoint = (m_startPoint + endPoint) * 0.5f;
-        midpoint.y = height * 0.5f;
 
         // Create the wall entity
         Entity* entity = scene.createEntity("Wall");
