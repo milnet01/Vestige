@@ -7374,6 +7374,16 @@ shipped that have no invocation path at all.
   sprite/particle/localization; INV-6 headless run from an empty folder
   clean). Also covers lane-20 sprite_system.cpp:66. Pushed with a full
   local gate. Remaining 0874 work: the lane result files' REAL rows.
+  2026-11-06: nine REAL leads fixed, each re-checked, red test first, one commit per lead,
+  pushed to f9ae458 with the full local gate: 9bce6ff scene Replacement
+  mid-update use-after-free (ASan red); 7339349 navmesh bake stride
+  (sizeof(Vertex)); f31c0f1 wall tool angle + height; 259265f gable
+  normals; 0493711 shed winding; 11b648e wall-opening reveals (side
+  reveal normals were wrong too, beyond the lead); 9546c46 straight stair
+  winding; f9ae458 audit step summary build_ok key. Marked DONE <sha> in
+  the lane files. Not checked: spiral stair winding (no lead; the
+  expectNormalsMatchWinding helper in test_procedural_mesh.cpp can test
+  it). Next: remaining REAL rows, highest impact first.
   **Layman:** About 290 lower-risk possible bugs and the medium findings are still unchecked.
   Kind: review-fix.
   Source: review-readability 2026-10-31 at 7b2a81d.
@@ -7530,6 +7540,10 @@ shipped that have no invocation path at all.
   job restored its FetchContent cache, save skipped on the exact hit) and
   on e329527 (run 42217763918, all seven jobs). The Full Audit's 2G ccache
   takes effect from tonight's run.
+  2026-11-06 Full Audit run 42227847810 (first with the 2G ccache): green,
+  Build step 11m07s (13:45:31-13:56:38 UTC), down from 14m18s on
+  2026-11-05 but not back to ~6m. Possibly a cold 2G cache filling on its
+  first run; read the next night's Build step before digging further.
   **Layman:** After a failed CI run the next one rebuilds its downloads from scratch, and the nightly audit's build step now takes longer than it used to.
   Kind: chore.
   Source: claude-config CI tuning request 2026-11-05 (inbox 1458), ci_report 2026-11-06.

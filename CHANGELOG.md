@@ -25,6 +25,22 @@ may change any interface without notice.
 
 ## [Unreleased]
 
+### 2026-11-06 Fixed — walls, roofs, stairs and window holes face the right way, and navmesh baking and scene loading no longer misread memory (3D_E-0874)
+
+- **Replacing a scene during an update no longer writes into freed memory**
+  Spawns queued before the replacement are dropped with the old scene.
+
+- **Baking a navmesh from scene meshes reads their real vertex positions**
+  It stepped through the vertex data at 56 bytes instead of the real vertex size.
+
+- **The wall tool builds each wall between the two clicks, standing on the clicked ground**
+
+- **Gable roof slopes are lit as facing the sky**
+
+- **Shed roof end walls, the inner faces of window and door holes, and stair treads and risers show from the side you see them**
+
+- **The Full Audit's GitHub summary shows a passing build as Pass**
+
 ### 2026-11-06 Fixed — the engine finds its assets wherever it is started from, and saved scenes keep editor-picked textures (3D_E-0874)
 
 Started from anywhere but the source folder (the taskbar, another
