@@ -8,6 +8,7 @@
 #include "scene/scene.h"
 #include "scene/entity.h"
 #include "scene/mesh_renderer.h"
+#include "renderer/mesh.h"
 
 #include <Recast.h>
 #include <DetourNavMesh.h>
@@ -16,6 +17,7 @@
 #include <glad/gl.h>
 
 #include <chrono>
+#include <cstddef>
 #include <cstring>
 
 namespace Vestige
@@ -71,9 +73,6 @@ void NavMeshBuilder::collectSceneGeometry(Scene& scene,
             return;
         }
 
-        // Vertex struct: position(vec3), normal(vec3), texCoords(vec2), tangent(vec3), bitangent(vec3)
-        // = 14 floats = 56 bytes per vertex
-
         glBindVertexArray(vao);
 
         // Read index buffer
@@ -98,8 +97,10 @@ void NavMeshBuilder::collectSceneGeometry(Scene& scene,
 
         glBindVertexArray(0);
 
-        // Extract positions (stride = 56 bytes for Vertex struct, position at offset 0)
-        constexpr size_t VERTEX_STRIDE = 56;  // sizeof(Vertex) = 14 floats
+        // The VBO holds Mesh's interleaved Vertex structs; take each one's
+        // position from where Mesh::upload declares it.
+        constexpr size_t VERTEX_STRIDE = sizeof(Vertex);
+        constexpr size_t POSITION_OFFSET = offsetof(Vertex, position);
         size_t numVertices = static_cast<size_t>(vboSize) / VERTEX_STRIDE;
 
         // Get entity world transform
@@ -117,7 +118,7 @@ void NavMeshBuilder::collectSceneGeometry(Scene& scene,
         for (size_t v = 0; v < numVertices; ++v)
         {
             float pos[3];
-            std::memcpy(pos, vboData.data() + v * VERTEX_STRIDE, sizeof(pos));
+            std::memcpy(pos, vboData.data() + v * VERTEX_STRIDE + POSITION_OFFSET, sizeof(pos));
             glm::vec4 worldPos = worldMatrix * glm::vec4(pos[0], pos[1], pos[2], 1.0f);
             vertices.push_back(worldPos.x);
             vertices.push_back(worldPos.y);

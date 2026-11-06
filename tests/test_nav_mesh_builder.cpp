@@ -1,0 +1,68 @@
+// Copyright (c) 2026 Anthony Schemel
+// SPDX-License-Identifier: MIT
+
+/// @file test_nav_mesh_builder.cpp
+/// @brief Baking a navmesh from a scene's meshes reads their real vertex
+///        positions back from the GPU (3D_E-0874).
+///
+/// Contract: a 20 m x 20 m floor on a MeshRenderer bakes to a navmesh lying
+/// on that floor (y = 0) and reaching close to its edges. The walkable area
+/// stops one agent radius short of each edge, so "close" allows 2 m.
+
+#include "gl_test_fixture.h"
+#include "navigation/nav_mesh_builder.h"
+#include "renderer/mesh.h"
+#include "scene/entity.h"
+#include "scene/mesh_renderer.h"
+#include "scene/scene.h"
+
+#include <glm/glm.hpp>
+#include <gtest/gtest.h>
+
+#include <limits>
+#include <memory>
+#include <vector>
+
+using namespace Vestige;
+using Vestige::Test::GLTestFixture;
+
+class NavMeshBuilderTest : public GLTestFixture
+{
+};
+
+TEST_F(NavMeshBuilderTest, FloorMeshBakesToNavmeshCoveringTheFloor)
+{
+    constexpr float HALF_SIZE = 10.0f;
+
+    Scene scene;
+    Entity* floor = scene.createEntity("Floor");
+    auto* renderer = floor->addComponent<MeshRenderer>();
+    renderer->setMesh(std::make_shared<Mesh>(Mesh::createPlane(HALF_SIZE)));
+
+    NavMeshBuilder builder;
+    ASSERT_TRUE(builder.buildFromScene(scene));
+    ASSERT_GT(builder.getPolyCount(), 0);
+
+    std::vector<glm::vec3> edges;
+    builder.extractPolygonEdges(edges);
+    ASSERT_FALSE(edges.empty());
+
+    glm::vec3 lo(std::numeric_limits<float>::max());
+    glm::vec3 hi(std::numeric_limits<float>::lowest());
+    for (const glm::vec3& p : edges)
+    {
+        lo = glm::min(lo, p);
+        hi = glm::max(hi, p);
+    }
+
+    EXPECT_LT(lo.x, -(HALF_SIZE - 2.0f));
+    EXPECT_GT(hi.x, HALF_SIZE - 2.0f);
+    EXPECT_LT(lo.z, -(HALF_SIZE - 2.0f));
+    EXPECT_GT(hi.z, HALF_SIZE - 2.0f);
+    EXPECT_GE(lo.x, -HALF_SIZE);
+    EXPECT_LE(hi.x, HALF_SIZE);
+    EXPECT_GE(lo.z, -HALF_SIZE);
+    EXPECT_LE(hi.z, HALF_SIZE);
+    EXPECT_NEAR(lo.y, 0.0f, 0.5f);
+    EXPECT_NEAR(hi.y, 0.0f, 0.5f);
+}
