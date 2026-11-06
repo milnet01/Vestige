@@ -1,7 +1,7 @@
 <!-- ants-spec-format: 1 -->
 # 3D_E-0874 — Resolve relative asset paths against the asset root
 
-**Status:** spec draft (2026-11-06).
+**Status:** accepted (2026-11-06).
 **Kind:** fix.
 **Source:** ROADMAP 3D_E-0874 (readability review lead lane-02 `Engine::initialize`, 2026-11-05 note).
 
@@ -79,12 +79,14 @@ std::string toKey(const std::filesystem::path& root, const std::string& path);
 /// The file a key or a caller's path names.
 /// - absolute                -> unchanged
 /// - relative, root empty    -> unchanged (working directory, as today)
-/// - relative                -> root / path, lexically normalised
+/// - relative                -> root / toKey(root, path), lexically normalised
 std::filesystem::path resolve(const std::filesystem::path& root, const std::string& path);
 }
 ```
 
-Both are lexical: neither follows a symbolic link. A file under a linked
+Both are lexical: neither follows a symbolic link. Both normalise
+(`lexically_normal`) before comparing or joining, so the key of a file under
+the root holds no `.` or `..` part. A file under a linked
 folder (`assets/models/nature_local/*`) keeps its path below the root, so it
 saves as root-relative. The sandbox check stays in `validateInsideRoots`,
 which does follow links, and still runs on every load.
@@ -96,6 +98,7 @@ which does follow links, and still runs on every load.
 | `ResourceManager` | New `setAssetRoot(path)`. `loadTexture`, `loadMesh` and `loadModel` key their caches by `toKey` and open `resolve(key)`. `findTexturePath` therefore returns a root-relative key, and so does `findMeshKey`. |
 | `AudioEngine` | New `setAssetRoot(path)`. `validatePath` and `resolveSandboxedPath` resolve with `resolve` before the sandbox check. |
 | `GltfLoader` | `loadModel` passes `GltfLoader::load` the lexical `resolve(key)`, not the canonical path `validatePath` returns; the canonical path only decides the sandbox check. The cache key for an external image is the lexical join of that model's directory and the URI. The canonical path from `resolveUriIntoBase` is still what the sandbox checks. |
+| `app/main.cpp` | Makes the settled `config.assetPath` absolute (`std::filesystem::absolute`), so the editor, the asset browser and both `setAssetRoot`s get one absolute root. |
 | `Engine::initialize` | Calls both `setAssetRoot`s with `config.assetPath`, and `LocalizationService::setLocalizationDir(config.assetPath + "/localization")` right after registering the service, before settings are live-applied. |
 | `engine.cpp` demo scenes | Literals lose the `"assets/"` prefix. Loads that bypass `ResourceManager` (`Texture::loadFromFile`, `Texture::generateNormalFromHeight`, `Renderer::loadSkyboxHDRI`, the terrain ground-texture, foliage and prop (`propPath`) path builders) join through `AssetPath::resolve`, and so do those builders' `fs::exists` override probes. |
 | `SpriteSystem::initialize` | `engine.getAssetPath()` instead of `"assets"`. |
@@ -178,9 +181,8 @@ is today, with the existing warning. That case is out of scope (§ 9).
 
 - **Root empty** (tests, or a caller that never sets it): `resolve` and
   `toKey` leave paths unchanged, so behaviour is as today.
-- **Root relative** (`--assets assets`): `resolve` gives a relative result,
-  which the loader resolves against the working directory. That is what the
-  user asked for by passing a relative root.
+- **Root relative** (`--assets foo`): `app/main.cpp` makes it absolute against
+  the starting working directory, so it behaves as any other root.
 - **A file missing under the root**: the loader fails and logs as today. The
   log names the path as given.
 - **Two spellings of one file** (absolute, legacy, relative): one key, so one
