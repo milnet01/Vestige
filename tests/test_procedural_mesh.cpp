@@ -267,6 +267,13 @@ TEST(ProceduralMeshTest, GableRoofSlopesFaceUpAndOut)
     EXPECT_EQ(expectNormalsMatchWinding(data), 4);
 }
 
+TEST(ProceduralMeshTest, ShedRoofFacesPointOutward)
+{
+    auto data = ProceduralMeshBuilder::generateRoof(RoofType::SHED, 4.0f, 6.0f, 1.5f, 0.3f);
+    // The slope is the only face with an upward normal: one quad.
+    EXPECT_EQ(expectNormalsMatchWinding(data), 2);
+}
+
 // =============================================================================
 // Stair tests
 // =============================================================================

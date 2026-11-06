@@ -532,7 +532,7 @@ ProceduralMeshData ProceduralMeshBuilder::generateRoof(RoofType type, float widt
                 glm::vec3(hw, 0.0f, hd), glm::vec3(-hw, 0.0f, hd),
                 glm::vec3(0.0f, -1.0f, 0.0f));
 
-        // Left side triangle (high end)
+        // Left side (-X), the high end: a quad, wound counter-clockwise seen from -X
         {
             auto base = static_cast<uint32_t>(vertices.size());
             Vertex v{};
@@ -556,14 +556,14 @@ ProceduralMeshData ProceduralMeshBuilder::generateRoof(RoofType type, float widt
             vertices.push_back(v);
 
             indices.push_back(base);
+            indices.push_back(base + 2);
             indices.push_back(base + 1);
-            indices.push_back(base + 2);
             indices.push_back(base);
-            indices.push_back(base + 2);
             indices.push_back(base + 3);
+            indices.push_back(base + 2);
         }
 
-        // Front face (+Z) — trapezoid
+        // Front end (+Z): a triangle, wound counter-clockwise seen from +Z
         {
             auto base = static_cast<uint32_t>(vertices.size());
             Vertex v{};
@@ -583,11 +583,11 @@ ProceduralMeshData ProceduralMeshBuilder::generateRoof(RoofType type, float widt
             vertices.push_back(v);
 
             indices.push_back(base);
-            indices.push_back(base + 1);
             indices.push_back(base + 2);
+            indices.push_back(base + 1);
         }
 
-        // Back face (-Z) — trapezoid
+        // Back end (-Z): a triangle, wound counter-clockwise seen from -Z
         {
             auto base = static_cast<uint32_t>(vertices.size());
             Vertex v{};
@@ -607,8 +607,8 @@ ProceduralMeshData ProceduralMeshBuilder::generateRoof(RoofType type, float widt
             vertices.push_back(v);
 
             indices.push_back(base);
-            indices.push_back(base + 1);
             indices.push_back(base + 2);
+            indices.push_back(base + 1);
         }
     }
 
