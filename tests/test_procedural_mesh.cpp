@@ -12,7 +12,9 @@
 
 #include <gtest/gtest.h>
 
+#include <cmath>
 #include <limits>
+#include <string>
 
 using namespace Vestige;
 
@@ -224,6 +226,45 @@ TEST(ProceduralMeshTest, RoofOverhang)
     auto size = computeBounds(data).getSize();
     EXPECT_NEAR(size.x, 5.0f, 0.01f);
     EXPECT_NEAR(size.z, 7.0f, 0.01f);
+}
+
+// Every triangle's stored normals agree with the way its winding faces
+// (counter-clockwise = front). Lighting reads the stored normal and face
+// culling reads the winding, so a mismatch lights a face as if it pointed
+// the other way, or culls it from the side it should be seen from.
+// Returns the number of triangles whose normals point up.
+static int expectNormalsMatchWinding(const ProceduralMeshData& data)
+{
+    EXPECT_EQ(data.indices.size() % 3, 0u);
+    int upward = 0;
+    for (size_t t = 0; t + 2 < data.indices.size(); t += 3)
+    {
+        const Vertex& a = data.vertices[data.indices[t]];
+        const Vertex& b = data.vertices[data.indices[t + 1]];
+        const Vertex& c = data.vertices[data.indices[t + 2]];
+        const glm::vec3 facing = glm::normalize(
+            glm::cross(b.position - a.position, c.position - a.position));
+        for (const Vertex* v : {&a, &b, &c})
+        {
+            EXPECT_GT(glm::dot(facing, v->normal), 0.5f)
+                << "triangle starting at index " << t << " faces ("
+                << facing.x << ", " << facing.y << ", " << facing.z
+                << "), normal (" << v->normal.x << ", " << v->normal.y
+                << ", " << v->normal.z << ")";
+        }
+        if (a.normal.y > 0.1f)
+        {
+            ++upward;
+        }
+    }
+    return upward;
+}
+
+TEST(ProceduralMeshTest, GableRoofSlopesFaceUpAndOut)
+{
+    auto data = ProceduralMeshBuilder::generateRoof(RoofType::GABLE, 4.0f, 6.0f, 1.5f, 0.3f);
+    // The two slopes are the only faces with an upward normal: two quads.
+    EXPECT_EQ(expectNormalsMatchWinding(data), 4);
 }
 
 // =============================================================================

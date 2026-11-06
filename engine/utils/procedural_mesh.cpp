@@ -431,13 +431,13 @@ ProceduralMeshData ProceduralMeshBuilder::generateRoof(RoofType type, float widt
         glm::vec3 ridgeFront(0.0f, peakHeight, hd);
         glm::vec3 ridgeBack(0.0f, peakHeight, -hd);
 
-        // Left slope normal
+        // Slope normals face up and out: (-peak, hw) on the left,
+        // (peak, hw) on the right, matching the slopes' winding.
         glm::vec3 leftEdge = glm::vec3(-hw, 0.0f, 0.0f) - glm::vec3(0.0f, peakHeight, 0.0f);
-        glm::vec3 leftNormal = glm::normalize(glm::cross(glm::vec3(0.0f, 0.0f, 1.0f), leftEdge));
+        glm::vec3 leftNormal = glm::normalize(glm::cross(leftEdge, glm::vec3(0.0f, 0.0f, 1.0f)));
 
-        // Right slope normal
         glm::vec3 rightEdge = glm::vec3(hw, 0.0f, 0.0f) - glm::vec3(0.0f, peakHeight, 0.0f);
-        glm::vec3 rightNormal = glm::normalize(glm::cross(rightEdge, glm::vec3(0.0f, 0.0f, 1.0f)));
+        glm::vec3 rightNormal = glm::normalize(glm::cross(glm::vec3(0.0f, 0.0f, 1.0f), rightEdge));
 
         float slopeLen = std::sqrt(hw * hw + peakHeight * peakHeight);
         float roofDepth = hd * 2.0f;
