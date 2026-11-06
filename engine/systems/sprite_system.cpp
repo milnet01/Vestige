@@ -61,9 +61,9 @@ void composeAffine(const glm::mat4& world,
 bool SpriteSystem::initialize(Engine& engine)
 {
     m_engine = &engine;
-    // Asset path convention matches UISystem / renderer — "assets" at the
-    // working directory root. Headless tests skip initialize().
-    if (!m_renderer.initialize("assets"))
+    // The asset root, as UISystem and the renderer use (3D_E-0874; this was
+    // "assets" under the working directory). Headless tests skip initialize().
+    if (!m_renderer.initialize(engine.getAssetPath()))
     {
         Logger::warning("[SpriteSystem] Renderer init failed — running "
                         "headless (no sprite pass).");

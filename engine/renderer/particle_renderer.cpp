@@ -4,6 +4,7 @@
 /// @file particle_renderer.cpp
 /// @brief Instanced billboard renderer for particle systems.
 #include "renderer/particle_renderer.h"
+#include "utils/asset_path.h"
 #include "renderer/scoped_blend_state.h"
 #include "scene/gpu_particle_emitter.h"
 #include "core/logger.h"
@@ -205,8 +206,10 @@ GLuint ParticleRenderer::getOrLoadTexture(const std::string& path)
         return it->second->getId();
     }
 
+    // A scene's texturePath is root-relative (3D_E-0874); m_assetPath is the
+    // asset root init() was given.
     auto tex = std::make_unique<Texture>();
-    if (!tex->loadFromFile(path, true))  // Linear — particle textures are not sRGB
+    if (!tex->loadFromFile(AssetPath::resolve(m_assetPath, path).string(), true))  // Linear — particle textures are not sRGB
     {
         Logger::warning("Failed to load particle texture: " + path);
         return 0;

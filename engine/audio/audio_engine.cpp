@@ -7,6 +7,7 @@
 #include "audio/audio_source_state.h"
 #include "core/logger.h"
 #include "utils/path_sandbox.h"
+#include "utils/asset_path.h"
 
 #include <AL/al.h>
 #include <AL/alc.h>
@@ -467,11 +468,12 @@ void AudioEngine::setSandboxRoots(std::vector<std::filesystem::path> roots)
 
 std::string AudioEngine::validatePath(const std::string& filePath) const
 {
+    // A relative clip path names a file under the asset root (3D_E-0874).
+    const std::filesystem::path resolved = AssetPath::resolve(m_assetRoot, filePath);
     if (m_sandboxRoots.empty())
-        return filePath;  // Sandbox disabled.
+        return resolved.string();  // Sandbox disabled.
 
-    auto canon = PathSandbox::validateInsideRoots(
-        std::filesystem::path(filePath), m_sandboxRoots);
+    auto canon = PathSandbox::validateInsideRoots(resolved, m_sandboxRoots);
     if (canon.empty())
     {
         Logger::warning("[AudioEngine] path rejected (escapes sandbox): " + filePath);

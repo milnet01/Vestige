@@ -86,7 +86,18 @@ static int runEngine(int argc, char* argv[])
         {
             Vestige::writeRememberedAssetPath(choice.path);
         }
-        config.assetPath = choice.path;
+        // Absolute, so every relative asset path resolves against one fixed
+        // folder however the root was given (--assets foo, a picker, the
+        // environment), and the editor's asset browser builds paths from the
+        // same root (3D_E-0874).
+        std::error_code absEc;
+        std::filesystem::path absRoot =
+            std::filesystem::absolute(choice.path, absEc).lexically_normal();
+        if (!absRoot.has_filename())
+        {
+            absRoot = absRoot.parent_path();  // "foo/" normalises with a trailing separator
+        }
+        config.assetPath = absEc ? choice.path : absRoot.string();
     }
     Vestige::Logger::info("Asset root: " + config.assetPath);
 

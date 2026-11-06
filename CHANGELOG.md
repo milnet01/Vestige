@@ -25,6 +25,28 @@ may change any interface without notice.
 
 ## [Unreleased]
 
+### 2026-11-06 Fixed — the engine finds its assets wherever it is started from, and saved scenes keep editor-picked textures (3D_E-0874)
+
+Started from anywhere but the source folder (the taskbar, another
+directory), the demo scenes lost their sky, ground textures, flowers,
+props, ambient sound, sprites and translations: they were looked up in the
+working directory instead of the asset folder. A texture picked in the
+editor's asset browser, or one belonging to an imported glTF model, was
+saved into the scene as a full path, which scene loading rejects, so it was
+gone after reopening the scene. Now a relative asset path always means
+"under the asset folder", scenes save textures that way, and scenes saved
+with the old `assets/...` paths still load. Contract:
+`docs/specs/3D_E-0874-asset-relative-paths.md`.
+
+### 2026-11-06 Changed — CI keeps its caches after a failed job, and the local push check stays within its share of the machine (3D_E-0966)
+
+The nightly audit's compiler cache was too small for a Debug build and
+emptied itself every night; it is now sized like the other Debug jobs. A
+failed CI build no longer makes the next run download every dependency
+again. Locally, `scripts/local-ci.sh` can now actually run its two lanes
+side by side when there is room, gives each lane half the job cap instead
+of the whole of it, and caps clang-tidy's workers the same way.
+
 ### 2026-11-05 Fixed — CI's Windows job passes again, and the slow CI jobs build faster (3D_E-0877)
 
 On GitHub's Windows machine, which has no OpenGL 4.5, one graphics test

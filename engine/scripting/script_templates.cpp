@@ -55,7 +55,7 @@ ScriptGraph buildDoorTemplate()
 
     setNodeProperty(graph, playAnim,  "clipName", ScriptValue(std::string("DoorOpen")));
     setNodeProperty(graph, playAnim,  "blendTime", ScriptValue(0.2f));
-    setNodeProperty(graph, playSound, "clipPath", ScriptValue(std::string("assets/sounds/door_open.ogg")));
+    setNodeProperty(graph, playSound, "clipPath", ScriptValue(std::string("sounds/door_open.ogg")));
     setNodeProperty(graph, playSound, "volume",   ScriptValue(0.8f));
 
     return graph;
@@ -86,7 +86,7 @@ ScriptGraph buildCollectibleTemplate()
     graph.addConnection(playSound, "Then",    setScore,  "Exec");
     graph.addConnection(setScore,  "Then",    destroy,   "Exec");
 
-    setNodeProperty(graph, playSound, "clipPath", ScriptValue(std::string("assets/sounds/pickup.ogg")));
+    setNodeProperty(graph, playSound, "clipPath", ScriptValue(std::string("sounds/pickup.ogg")));
     setNodeProperty(graph, playSound, "volume",   ScriptValue(1.0f));
     setNodeProperty(graph, setScore,  "Name",     ScriptValue(std::string("score")));
     setNodeProperty(graph, setScore,  "Value",    ScriptValue(1.0f));

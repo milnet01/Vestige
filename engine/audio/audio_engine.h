@@ -27,6 +27,7 @@
 #include <cstdint>
 #include <filesystem>
 #include <functional>
+#include <utility>
 #include <mutex>
 #include <random>
 #include <string>
@@ -109,6 +110,11 @@ public:
     {
         return m_sandboxRoots;
     }
+
+    /// @brief Sets the asset root a relative clip path resolves against
+    ///        (docs/specs/3D_E-0874-asset-relative-paths.md). Empty (the
+    ///        default) keeps paths as given.
+    void setAssetRoot(std::filesystem::path root) { m_assetRoot = std::move(root); }
 
     /// @brief Phase 10.9 W8 — public sandbox check for streaming
     ///        consumers (`AudioMusicPlayer`) that open decoders
@@ -961,6 +967,9 @@ private:
     ///        force `loadBuffer` to reject paths that don't lie inside
     ///        any of them. Empty = sandbox disabled.
     std::vector<std::filesystem::path> m_sandboxRoots;
+
+    /// @brief Asset root relative clip paths resolve against; empty = as given.
+    std::filesystem::path m_assetRoot;
 
     /// @brief Validates @a filePath against `m_sandboxRoots`; returns
     ///        the canonical path (or @a filePath unchanged when the

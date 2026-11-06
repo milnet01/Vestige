@@ -5,6 +5,7 @@
 /// @brief Engine implementation — main loop and subsystem orchestration.
 #include "core/engine.h"
 #include "utils/path_sandbox.h"
+#include "utils/asset_path.h"
 #include "utils/asset_locator.h"
 #include "update/update_installer.h"
 #include "update/update_version.h"
@@ -187,8 +188,9 @@ bool Engine::initialize(const EngineConfig& config)
         rootEc.clear();
         // A folder linked into the asset tree (assets/models/nature_local/*)
         // is part of it; without this every linked tree and prop is refused.
-        // The demo scenes load "assets/..." relative to the working directory,
-        // not the asset root, so that folder's links count too.
+        // The working directory and its "assets" links stay roots so a path
+        // outside the asset root that loaded before 3D_E-0874 still does
+        // (dropping them is out of that spec's scope, § 9).
         for (const auto& dir : {std::filesystem::path(config.assetPath),
                                 std::filesystem::path("assets")})
         {
@@ -210,6 +212,10 @@ bool Engine::initialize(const EngineConfig& config)
             m_sandboxRoots = assetRoots;  // AudioEngine is wired once AudioSystem exists
         }
     }
+
+    // A relative asset path names a file under the asset root, sandbox or not
+    // (docs/specs/3D_E-0874-asset-relative-paths.md).
+    m_resourceManager->setAssetRoot(config.assetPath);
 
     // Create scene manager
     m_sceneManager = std::make_unique<SceneManager>();
@@ -299,7 +305,10 @@ bool Engine::initialize(const EngineConfig& config)
     // Localization first — a foundational, no-per-frame-work service that UI /
     // menu / plaque systems resolve strings through via the free tr() (Phase 10
     // Localization L4). Its initialize() captures the engine pointer tr() uses.
-    m_systemRegistry.registerSystem<LocalizationService>();
+    // Translations live under the asset root, not the working directory
+    // (3D_E-0874). Set before settings are live-applied, which loads a table.
+    m_systemRegistry.registerSystem<LocalizationService>()->setLocalizationDir(
+        config.assetPath + "/localization");
     auto* atmoSys    = m_systemRegistry.registerSystem<AtmosphereSystem>();
     auto* particleSys = m_systemRegistry.registerSystem<ParticleVfxSystem>();
     auto* waterSys   = m_systemRegistry.registerSystem<WaterSystem>();
@@ -341,6 +350,7 @@ bool Engine::initialize(const EngineConfig& config)
     {
         audioSys->getAudioEngine().setSandboxRoots(m_sandboxRoots);
     }
+    audioSys->getAudioEngine().setAssetRoot(config.assetPath);
 
     m_musicPlayer = std::make_unique<AudioMusicPlayer>(audioSys->getAudioEngine());
     m_systemRegistry.registerSystem<MusicSystem>(*m_musicPlayer);
@@ -2999,7 +3009,8 @@ void Engine::setupDemoScene()
     // CC0 1K HDRI (Poly Haven, partly cloudy midday, sky only — 3D_E-0034).
     // Committed to the public repo; resolved relative to the working dir like
     // the other demo assets.
-    m_renderer->loadSkyboxHDRI("assets/hdri/kloofendal_48d_partly_cloudy_puresky_1k.hdr");
+    m_renderer->loadSkyboxHDRI(
+        AssetPath::resolve(m_assetPath, "hdri/kloofendal_48d_partly_cloudy_puresky_1k.hdr").string());
 
     Scene* scene = m_sceneManager->createScene("Meadow");
     // 3D_E-0730: createScene returns the existing scene when this runs again
@@ -3138,15 +3149,15 @@ void Engine::finalizeMeadowTerrain()
     // look-target dataset is captured.
     if (m_terrainRenderer)
     {
-        auto groundPath = [](const std::string& file) -> std::string
+        auto groundPath = [this](const std::string& file) -> std::string
         {
             namespace fs = std::filesystem;
-            const std::string local = "assets/textures/terrain_local/" + file;
+            const fs::path local = AssetPath::resolve(m_assetPath, "textures/terrain_local/" + file);
             if (fs::exists(local))
             {
-                return local;
+                return local.string();
             }
-            return "assets/textures/terrain/" + file;
+            return AssetPath::resolve(m_assetPath, "textures/terrain/" + file).string();
         };
         std::array<TerrainLayerDesc, 4> groundLayers{{
             {groundPath("grass_albedo.jpg"), groundPath("grass_normal.png"),
@@ -3249,10 +3260,12 @@ void Engine::finalizeMeadowTerrain()
     // species patch (design §4.3). Sparse accent colour, not a carpet.
     if (m_foliageRenderer && m_foliageManager)
     {
-        const auto foliagePath = [](const std::string& file) -> std::string {
+        const auto foliagePath = [this](const std::string& file) -> std::string {
             namespace fs = std::filesystem;
-            const std::string local = "assets/textures/foliage_local/" + file;
-            return fs::exists(local) ? local : "assets/textures/foliage/" + file;
+            const fs::path local = AssetPath::resolve(m_assetPath, "textures/foliage_local/" + file);
+            return fs::exists(local)
+                ? local.string()
+                : AssetPath::resolve(m_assetPath, "textures/foliage/" + file).string();
         };
         constexpr uint32_t FL_YELLOW = 1, FL_PURPLE = 2, FL_WHITE = 3;
         m_foliageRenderer->setTypeTexture(FL_YELLOW, foliagePath("flower_yellow.png"));
@@ -3314,13 +3327,13 @@ void Engine::finalizeMeadowTerrain()
     // art-directed (no reference dataset), hand-authored per project Rule 6.
     {
         namespace fs = std::filesystem;
-        const auto propPath = [](const std::string& file) -> std::string {
-            const std::string local = "assets/models/nature_local/" + file;
+        const auto propPath = [this](const std::string& file) -> std::string {
+            const fs::path local = AssetPath::resolve(m_assetPath, "models/nature_local/" + file);
             if (fs::exists(local))
             {
-                return local;
+                return local.string();
             }
-            return "assets/models/nature/" + file;
+            return AssetPath::resolve(m_assetPath, "models/nature/" + file).string();
         };
 
         // Load each distinct model once, then round-robin the variants across a
@@ -3737,11 +3750,11 @@ void Engine::finalizeMeadowTerrain()
             amb->zone.maxVolume = volume;
             amb->windows = windows;
         };
-        addBed("Ambience: wind", "assets/audio/ambience/meadow_wind_loop.ogg",
+        addBed("Ambience: wind", "audio/ambience/meadow_wind_loop.ogg",
                0.55f, kAllTimeOfDayWindows);
-        addBed("Ambience: birdsong", "assets/audio/ambience/meadow_birds_loop.ogg",
+        addBed("Ambience: birdsong", "audio/ambience/meadow_birds_loop.ogg",
                0.6f, DAWN | DAY | DUSK);
-        addBed("Ambience: insects", "assets/audio/ambience/meadow_insects_loop.ogg",
+        addBed("Ambience: insects", "audio/ambience/meadow_insects_loop.ogg",
                0.35f, DAY | DUSK);
     }
 
@@ -3800,10 +3813,10 @@ void Engine::setupMaterialDemoScene()
     redBrickMat->setRoughness(1.0f);
     redBrickMat->setClearcoat(0.5f);
     redBrickMat->setClearcoatRoughness(0.1f);
-    redBrickMat->setDiffuseTexture(m_resourceManager->loadTexture("assets/textures/red_brick_diff_2k.jpg"));
-    redBrickMat->setNormalMap(m_resourceManager->loadTexture("assets/textures/red_brick_nor_gl_2k.jpg", true));
+    redBrickMat->setDiffuseTexture(m_resourceManager->loadTexture("textures/red_brick_diff_2k.jpg"));
+    redBrickMat->setNormalMap(m_resourceManager->loadTexture("textures/red_brick_nor_gl_2k.jpg", true));
     redBrickMat->setMetallicRoughnessTexture(
-        m_resourceManager->loadTexture("assets/textures/red_brick_rough_2k.jpg", true));
+        m_resourceManager->loadTexture("textures/red_brick_rough_2k.jpg", true));
     redBrickMat->setUvScale(0.5f);
 
     // Block 2 — Gold (center)
@@ -3826,10 +3839,10 @@ void Engine::setupMaterialDemoScene()
     woodMat->setAlbedo(glm::vec3(1.0f));
     woodMat->setMetallic(0.0f);
     woodMat->setRoughness(0.9f);
-    woodMat->setDiffuseTexture(m_resourceManager->loadTexture("assets/textures/plank_flooring_04_diff_2k.jpg"));
-    woodMat->setNormalMap(m_resourceManager->loadTexture("assets/textures/plank_flooring_04_nor_gl_2k.jpg", true));
+    woodMat->setDiffuseTexture(m_resourceManager->loadTexture("textures/plank_flooring_04_diff_2k.jpg"));
+    woodMat->setNormalMap(m_resourceManager->loadTexture("textures/plank_flooring_04_nor_gl_2k.jpg", true));
     woodMat->setMetallicRoughnessTexture(
-        m_resourceManager->loadTexture("assets/textures/plank_flooring_04_rough_2k.jpg", true));
+        m_resourceManager->loadTexture("textures/plank_flooring_04_rough_2k.jpg", true));
 
     // Block 4 — Rough Brick (back)
     auto roughBrickMat = m_resourceManager->createMaterial("rough_brick");
@@ -3837,8 +3850,8 @@ void Engine::setupMaterialDemoScene()
     roughBrickMat->setAlbedo(glm::vec3(1.0f));
     roughBrickMat->setMetallic(0.0f);
     roughBrickMat->setRoughness(0.9f);
-    roughBrickMat->setDiffuseTexture(m_resourceManager->loadTexture("assets/textures/brick_wall_005_diff_2k.jpg"));
-    roughBrickMat->setNormalMap(m_resourceManager->loadTexture("assets/textures/brick_wall_005_nor_gl_2k.jpg", true));
+    roughBrickMat->setDiffuseTexture(m_resourceManager->loadTexture("textures/brick_wall_005_diff_2k.jpg"));
+    roughBrickMat->setNormalMap(m_resourceManager->loadTexture("textures/brick_wall_005_nor_gl_2k.jpg", true));
 
     // --- Height maps for POM ---
 
@@ -3848,21 +3861,24 @@ void Engine::setupMaterialDemoScene()
 
     // Block 1 — embossed label "1" over red brick displacement
     auto redBrickHeightTex = std::make_shared<Texture>();
-    if (redBrickHeightTex->loadFromFile("assets/textures/red_brick_disp_2k.jpg", true))
+    if (redBrickHeightTex->loadFromFile(
+            AssetPath::resolve(m_assetPath, "textures/red_brick_disp_2k.jpg").string(), true))
     {
         redBrickMat->setHeightMap(redBrickHeightTex);
         redBrickMat->setHeightScale(0.05f);
     }
 
     // Block 2 — normal map label "2" (generated from height map, visible from all angles)
-    auto goldLabelNormal = Texture::generateNormalFromHeight("assets/textures/label_2.png", 12.0f);
+    auto goldLabelNormal = Texture::generateNormalFromHeight(
+        AssetPath::resolve(m_assetPath, "textures/label_2.png").string(), 12.0f);
     if (goldLabelNormal)
     {
         goldMat->setNormalMap(goldLabelNormal);
     }
 
     // Block 3 — normal map label "3" (generated from height map, visible from all angles)
-    auto woodLabelNormal = Texture::generateNormalFromHeight("assets/textures/label_3.png", 12.0f);
+    auto woodLabelNormal = Texture::generateNormalFromHeight(
+        AssetPath::resolve(m_assetPath, "textures/label_3.png").string(), 12.0f);
     if (woodLabelNormal)
     {
         woodMat->setNormalMap(woodLabelNormal);
@@ -3870,7 +3886,8 @@ void Engine::setupMaterialDemoScene()
 
     // Block 4 — brick wall displacement (deeper to show off self-shadowing)
     auto roughBrickHeightTex = std::make_shared<Texture>();
-    if (roughBrickHeightTex->loadFromFile("assets/textures/brick_wall_005_disp_2k.jpg", true))
+    if (roughBrickHeightTex->loadFromFile(
+            AssetPath::resolve(m_assetPath, "textures/brick_wall_005_disp_2k.jpg").string(), true))
     {
         roughBrickMat->setHeightMap(roughBrickHeightTex);
         roughBrickMat->setHeightScale(0.08f);
@@ -4006,7 +4023,7 @@ void Engine::setupMaterialDemoScene()
     wedgeMR->setBounds(wedgeMesh->getLocalBounds());
 
     // --- Optional glTF model loading ---
-    auto testModel = m_resourceManager->loadModel("assets/models/test_model.glb");
+    auto testModel = m_resourceManager->loadModel("models/test_model.glb");
     if (testModel)
     {
         Entity* modelRoot = testModel->instantiate(*scene, nullptr, "TestModel");
@@ -4015,7 +4032,7 @@ void Engine::setupMaterialDemoScene()
     }
 
     // --- Animated glTF model (skeletal animation test) ---
-    auto cesiumMan = m_resourceManager->loadModel("assets/models/CesiumMan.glb");
+    auto cesiumMan = m_resourceManager->loadModel("models/CesiumMan.glb");
     if (cesiumMan)
     {
         Entity* animRoot = cesiumMan->instantiate(*scene, nullptr, "CesiumMan");
@@ -4169,7 +4186,7 @@ void Engine::setupTabernacleScene()
     // of the engine. Local maintainers retain it for development; the call below
     // will silently fail to load when the file is absent, leaving the previous
     // skybox state in place.
-    m_renderer->loadSkyboxHDRI("assets/textures/tabernacle/goegap_2k.hdr");
+    m_renderer->loadSkyboxHDRI(AssetPath::resolve(m_assetPath, "textures/tabernacle/goegap_2k.hdr").string());
 
     Scene* scene = m_sceneManager->createScene("Tabernacle");
     // 3D_E-0730: createScene returns the existing scene when this runs again
@@ -4212,7 +4229,7 @@ void Engine::setupTabernacleScene()
     auto sphereMesh = m_resourceManager->getSphereMesh(16, 8);
 
     // --- Texture paths ---
-    const std::string texBase = "assets/textures/tabernacle/";
+    const std::string texBase = "textures/tabernacle/";
 
     // =====================================================================
     // MATERIALS
