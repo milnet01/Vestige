@@ -636,6 +636,8 @@ ProceduralMeshData ProceduralMeshBuilder::generateStraightStairs(
     float actualRise = totalHeight / static_cast<float>(stepCount);
     float hw = width * 0.5f;
 
+    // Steps climb toward +Z; every face is wound counter-clockwise seen
+    // from outside, matching its normal.
     for (int i = 0; i < stepCount; ++i)
     {
         float fi = static_cast<float>(i);
@@ -647,24 +649,24 @@ ProceduralMeshData ProceduralMeshBuilder::generateStraightStairs(
 
         // Tread (top of step) — horizontal face
         addQuad(vertices, indices,
-                glm::vec3(-hw, topY, frontZ), glm::vec3(hw, topY, frontZ),
-                glm::vec3(hw, topY, backZ), glm::vec3(-hw, topY, backZ),
+                glm::vec3(-hw, topY, backZ), glm::vec3(hw, topY, backZ),
+                glm::vec3(hw, topY, frontZ), glm::vec3(-hw, topY, frontZ),
                 glm::vec3(0.0f, 1.0f, 0.0f),
                 glm::vec2(0.0f, 0.0f), glm::vec2(width, 0.0f),
                 glm::vec2(width, treadDepth), glm::vec2(0.0f, treadDepth));
 
         // Riser (vertical front face of step)
         addQuad(vertices, indices,
-                glm::vec3(-hw, stepY, frontZ), glm::vec3(hw, stepY, frontZ),
-                glm::vec3(hw, topY, frontZ), glm::vec3(-hw, topY, frontZ),
+                glm::vec3(hw, stepY, frontZ), glm::vec3(-hw, stepY, frontZ),
+                glm::vec3(-hw, topY, frontZ), glm::vec3(hw, topY, frontZ),
                 glm::vec3(0.0f, 0.0f, -1.0f),
                 glm::vec2(0.0f, 0.0f), glm::vec2(width, 0.0f),
                 glm::vec2(width, actualRise), glm::vec2(0.0f, actualRise));
 
         // Bottom of tread (underside)
         addQuad(vertices, indices,
-                glm::vec3(-hw, stepY, backZ), glm::vec3(hw, stepY, backZ),
-                glm::vec3(hw, stepY, frontZ), glm::vec3(-hw, stepY, frontZ),
+                glm::vec3(-hw, stepY, frontZ), glm::vec3(hw, stepY, frontZ),
+                glm::vec3(hw, stepY, backZ), glm::vec3(-hw, stepY, backZ),
                 glm::vec3(0.0f, -1.0f, 0.0f));
 
         // Left side of step
@@ -733,8 +735,8 @@ ProceduralMeshData ProceduralMeshBuilder::generateStraightStairs(
     // Back riser of the last step (rear wall)
     float lastZ = static_cast<float>(stepCount) * treadDepth;
     addQuad(vertices, indices,
-            glm::vec3(hw, 0.0f, lastZ), glm::vec3(-hw, 0.0f, lastZ),
-            glm::vec3(-hw, totalHeight, lastZ), glm::vec3(hw, totalHeight, lastZ),
+            glm::vec3(-hw, 0.0f, lastZ), glm::vec3(hw, 0.0f, lastZ),
+            glm::vec3(hw, totalHeight, lastZ), glm::vec3(-hw, totalHeight, lastZ),
             glm::vec3(0.0f, 0.0f, 1.0f),
             glm::vec2(0.0f, 0.0f), glm::vec2(width, 0.0f),
             glm::vec2(width, totalHeight), glm::vec2(0.0f, totalHeight));
