@@ -7368,6 +7368,12 @@ shipped that have no invocation path at all.
   None fixed yet; each REAL is re-checked before its fix. Related lead
   found: lane-20 sprite_system.cpp passes the literal "assets" (covered
   by the spec's SpriteSystem row).
+  2026-11-06: asset-path lead (lane-02 engine.cpp:190) built to the spec in
+  a4b8159 (AssetPath helper, ResourceManager/glTF; red runs for INV-1/2/3,
+  mutations for INV-4/5) and e329527 (engine wiring, demo literals,
+  sprite/particle/localization; INV-6 headless run from an empty folder
+  clean). Also covers lane-20 sprite_system.cpp:66. Pushed with a full
+  local gate. Remaining 0874 work: the lane result files' REAL rows.
   **Layman:** About 290 lower-risk possible bugs and the medium findings are still unchecked.
   Kind: review-fix.
   Source: review-readability 2026-10-31 at 7b2a81d.
@@ -7491,7 +7497,7 @@ shipped that have no invocation path at all.
   Kind: accessibility.
   Source: research-engine-survey-2026-11-05.
 
-- 📋 [3D_E-0966] **GitHub CI starts cold after a failed job, and the nightly audit build got slower.**
+- ✅ [3D_E-0966] **GitHub CI starts cold after a failed job, and the nightly audit build got slower.**
   ci_report 2026-11-06 (30 days), all advice-level:
   - cache_save_skipped: the combined actions/cache step "Cache CMake
     FetchContent deps" saves in a post step that does not run when the
@@ -7520,6 +7526,10 @@ shipped that have no invocation path at all.
   Not done, by choice: Windows compiler cache (MSVC PCH mostly
   uncacheable; would swap the release generator); release.yml keeps its
   combined cache (runs once per release).
+  2026-11-06: pushed; GitHub CI green on f292b36 (run 42212321003: every
+  job restored its FetchContent cache, save skipped on the exact hit) and
+  on e329527 (run 42217763918, all seven jobs). The Full Audit's 2G ccache
+  takes effect from tonight's run.
   **Layman:** After a failed CI run the next one rebuilds its downloads from scratch, and the nightly audit's build step now takes longer than it used to.
   Kind: chore.
   Source: claude-config CI tuning request 2026-11-05 (inbox 1458), ci_report 2026-11-06.
