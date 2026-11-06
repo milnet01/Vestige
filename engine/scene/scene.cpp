@@ -243,6 +243,11 @@ Scene::Replacement::~Replacement()
 void Scene::clearEntities()
 {
     m_activeCameraEntityId = 0;
+    // Mutations queued during an update walk belong to the old scene: their
+    // parents die with the old root, so draining them would write into freed
+    // memory. Drop them with it.
+    m_pendingAdds.clear();
+    m_pendingRemovals.clear();
     m_root = std::make_unique<Entity>("Root");
     m_entityIndex.clear();
     m_entityIndex[m_root->getId()] = m_root.get();

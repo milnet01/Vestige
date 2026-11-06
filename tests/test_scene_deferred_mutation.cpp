@@ -328,3 +328,30 @@ TEST(SceneDeferredMutation, ReparentOfPendingSpawnIsRefused)
 
     EXPECT_FALSE(moved);
 }
+
+// A scene replaced during an update walk (a script loading a level, say)
+// must drop the spawns queued before it: their parent was the old root,
+// which the replacement destroyed. Draining them wrote into freed memory
+// (AddressSanitizer: heap-use-after-free) before the fix.
+TEST(SceneDeferredMutation, ReplacementDropsSpawnsQueuedBeforeIt)
+{
+    Scene scene;
+    Entity* original = scene.createEntity("Original");
+    const uint32_t originalId = original->getId();
+
+    scene.beginUpdate();
+    scene.createEntity("QueuedSpawn");
+    scene.duplicateEntity(originalId);
+    {
+        Scene::Replacement replacement(scene);
+        scene.createEntity("NewSceneEntity");
+    }
+    scene.endUpdate();
+
+    std::vector<std::string> names;
+    for (const auto& child : scene.getRoot()->getChildren())
+    {
+        names.push_back(child->getName());
+    }
+    EXPECT_EQ(names, std::vector<std::string>{"NewSceneEntity"});
+}
