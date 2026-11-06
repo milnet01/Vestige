@@ -65,7 +65,7 @@ def format_step_summary(results_dict: dict[str, Any]) -> str:
         f"| Medium | {counts.get('medium', 0)} |",
         f"| Low | {counts.get('low', 0)} |",
         f"| Total | {len(findings)} |",
-        f"| Build | {'Pass' if build.get('ok') else 'Fail'} |",
+        f"| Build | {'Pass' if build.get('build_ok') else 'Fail'} |",
         f"| Tests | {tests.get('passed', 0)} passed, {tests.get('failed', 0)} failed |",
         f"| Duration | {duration}s |",
     ]

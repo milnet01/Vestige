@@ -125,7 +125,7 @@ class TestFormatStepSummary:
                 {"severity": "medium"},
             ],
             "tier1_summary": {
-                "build": {"ok": True},
+                "build": {"build_ok": True},
                 "tests": {"passed": 10, "failed": 0},
             },
             "duration": 5.5,
@@ -135,6 +135,17 @@ class TestFormatStepSummary:
         assert "Critical" in result
         assert "High" in result
         assert "Total" in result
+
+    @pytest.mark.parametrize("build_ok, shown", [(True, "Pass"), (False, "Fail")])
+    def test_build_row_reads_tier1_build_result(self, build_ok, shown):
+        # tier1_build.run_build stores its result as "build_ok", and
+        # tier1_build.run puts that dict under tier1_summary["build"].
+        results_dict = {
+            "findings": [],
+            "tier1_summary": {"build": {"warnings": 0, "errors": 0, "build_ok": build_ok}},
+            "duration": 1,
+        }
+        assert f"| Build | {shown} |" in format_step_summary(results_dict)
 
     def test_empty_findings(self):
         result = format_step_summary({"findings": [], "tier1_summary": {}, "duration": 0})
