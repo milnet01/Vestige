@@ -133,11 +133,17 @@ def _clangtidy_workers(ct_config: dict) -> int:
     config wins; otherwise cap by both CPU count and total RAM (~2 GB/worker)
     so the step doesn't OOM small CI runners or pile onto a loaded dev box.
     The hard ceiling of 6 mirrors the build job-pool's memory budget.
+    ``AUDIT_CLANG_TIDY_JOBS`` lowers the ceiling further: scripts/local-ci.sh
+    passes its own job cap, so the audit stays inside the gate's share of a
+    shared machine.
     """
     configured = ct_config.get("jobs", 0)
     if configured:
         return max(1, int(configured))
     workers = os.cpu_count() or 2
+    env_cap = os.environ.get("AUDIT_CLANG_TIDY_JOBS", "")
+    if env_cap.isdigit() and int(env_cap) > 0:
+        workers = min(workers, int(env_cap))
     try:
         total_gb = (os.sysconf("SC_PAGE_SIZE") * os.sysconf("SC_PHYS_PAGES")
                     / (1024 ** 3))

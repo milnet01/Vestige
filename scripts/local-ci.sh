@@ -258,7 +258,7 @@ in_ci() {  # in_ci <tree-name> <bash command> — run in the container, tree at 
     timeout -k 30 "$CI_STAGE_TIMEOUT" \
     podman run --rm --init --userns=keep-id --security-opt label=disable \
         -e HOME=/tmp -e CCACHE_DIR=/ccache -e CCACHE_MAXSIZE=10G \
-        -e CCACHE_SLOPPINESS="$CCACHE_SLOPPINESS" \
+        -e CCACHE_SLOPPINESS="$CCACHE_SLOPPINESS" -e AUDIT_CLANG_TIDY_JOBS="$JOBS" \
         -v "$CI_DIR/src:$REPO_ROOT" -v "$CI_DIR/$1:$REPO_ROOT/build" \
         -v "$REPO_ROOT/.ci-tools:$REPO_ROOT/.ci-tools:ro" \
         -v "$CI_DIR/ccache:/ccache" -w "$REPO_ROOT" \
@@ -492,10 +492,13 @@ lanes_parallel_ok() {
         echo "  lanes serial: $((mem_kb / 1048576)) GB free, parallel needs $PAR_MIN_MEM_GB"
         return 1
     fi
-    d="$(in_ci debug "ninja -C build -n 2>/dev/null" | dry_steps)"
-    r="$(in_ci release "ninja -C build -n 2>/dev/null" | dry_steps)"
+    # Regenerate build.ninja first (the build would do it anyway): nearly every
+    # fix commit adds a test to tests/CMakeLists.txt, and a dry run on a stale
+    # build.ninja only says "Re-running CMake", so the lanes never ran together.
+    d="$(in_ci debug "ninja -C build build.ninja >/dev/null 2>&1; ninja -C build -n 2>/dev/null" | dry_steps)"
+    r="$(in_ci release "ninja -C build build.ninja >/dev/null 2>&1; ninja -C build -n 2>/dev/null" | dry_steps)"
     if [[ $WINDOWS -eq 1 && -x "$MSVC_WINE_BIN/cl" ]]; then
-        m="$(ninja -C build-msvc -n 2>/dev/null | dry_steps)"
+        m="$( { ninja -C build-msvc build.ninja >/dev/null 2>&1; ninja -C build-msvc -n 2>/dev/null; } | dry_steps)"
     fi
     echo "  build steps left: Debug $d, Release $r, Windows $m (parallel at $PAR_MAX_STEPS or fewer each)"
     (( d <= PAR_MAX_STEPS && r <= PAR_MAX_STEPS && m <= PAR_MAX_STEPS ))
@@ -534,7 +537,11 @@ preflight
 
 banner "stages 1-4 — Debug + audit, Release + Windows"
 if lanes_parallel_ok; then
-    echo "  running the two lanes side by side; each log prints whole when both end"
+    # The lanes share the job cap rather than each taking all of it, so a
+    # side-by-side run never uses more of the machine than a serial one.
+    lane_jobs_total=$JOBS
+    JOBS=$(( JOBS > 1 ? JOBS / 2 : 1 ))
+    echo "  running the two lanes side by side at -j $JOBS each; each log prints whole when both end"
     lane_dir="$(mktemp -d)"
     run_lane lane_a "$lane_dir/a.log" "$lane_dir/a.tsv" & lane_a_pid=$!
     run_lane lane_b "$lane_dir/b.log" "$lane_dir/b.tsv" & lane_b_pid=$!
@@ -542,6 +549,7 @@ if lanes_parallel_ok; then
     merge_lane "Lane A" "$lane_dir/a.log" "$lane_dir/a.tsv"
     merge_lane "Lane B" "$lane_dir/b.log" "$lane_dir/b.tsv"
     rm -rf "$lane_dir"
+    JOBS=$lane_jobs_total
 else
     # --- stage 1: Debug build + test (container tree $CI_DIR/debug) ---------
     build_and_test "Debug build+test" debug Debug || true

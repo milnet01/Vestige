@@ -16,6 +16,7 @@ import json
 
 from lib.tier1_clangtidy import (
     FALLBACK_CHECKS,
+    _clangtidy_workers,
     _detect_analysis_failures,
     _resolve_checks,
     _write_pch_free_compile_db,
@@ -153,3 +154,15 @@ def test_a_missing_clang_tidy_file_falls_back_rather_than_analysing_nothing(
     assert got == FALLBACK_CHECKS
     # The fallback is a degraded mode, so it must not be silent.
     assert ".clang-tidy is missing" in caplog.text
+
+
+def test_the_job_cap_from_the_environment_limits_the_workers(monkeypatch):
+    # local-ci.sh passes its job cap so clang-tidy (about 2 GB per worker)
+    # stays inside the gate's share of a shared machine (3D_E-0966).
+    monkeypatch.setenv("AUDIT_CLANG_TIDY_JOBS", "1")
+    assert _clangtidy_workers({}) == 1
+
+
+def test_a_configured_job_count_still_wins_over_the_environment(monkeypatch):
+    monkeypatch.setenv("AUDIT_CLANG_TIDY_JOBS", "1")
+    assert _clangtidy_workers({"jobs": 3}) == 3

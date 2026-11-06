@@ -112,7 +112,7 @@ jobs:
       # Re-open this if either premise stops holding: a shared key prefix, or a
       # trigger reachable without maintainer access.
       - name: Cache CMake FetchContent deps
-        uses: actions/cache@55cc8345863c7cc4c66a329aec7e433d2d1c52a9  # v5
+        uses: actions/cache@55cc8345863c7cc4c66a329aec7e433d2d1c52a9  # v6.1.0
         with:
           path: |
             build/_deps
@@ -325,7 +325,7 @@ jobs:
       # Re-open this if either premise stops holding: a shared key prefix, or a
       # trigger reachable without maintainer access.
       - name: Cache CMake FetchContent deps
-        uses: actions/cache@55cc8345863c7cc4c66a329aec7e433d2d1c52a9  # v5
+        uses: actions/cache@55cc8345863c7cc4c66a329aec7e433d2d1c52a9  # v6.1.0
         with:
           path: |
             build/_deps

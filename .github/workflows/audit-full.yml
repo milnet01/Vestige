@@ -71,7 +71,12 @@ jobs:
         uses: hendrikmuhs/ccache-action@f09c25b45002a07be2955cbe52e8cee55643f89d  # v1.2.24
         with:
           key: audit-full-Debug
-          max-size: 500M
+          # Debug-sized, as in ci.yml: a Debug build's objects are about 2.5 GB,
+          # so at 500M this cache evicted its own entries every night and its
+          # Build step rose from about 6 to about 11 minutes (3D_E-0966).
+          max-size: 2G
+          # Keep only this build's objects in the saved cache.
+          evict-old-files: job
 
       # zizmor: cache-poisoning (low confidence) — REVIEWED AND KEPT, 3D_E-0635.
       # Decision 2026-09-21. The trade is real: dropping the cache makes these
@@ -83,8 +88,10 @@ jobs:
       # poisoning anything else in the repo.
       # Re-open this if either premise stops holding: a shared key prefix, or a
       # trigger reachable without maintainer access.
-      - name: Cache CMake FetchContent deps
-        uses: actions/cache@55cc8345863c7cc4c66a329aec7e433d2d1c52a9  # v5
+      - name: Restore CMake FetchContent deps
+        # Restore and save are split, as in ci.yml (3D_E-0966).
+        id: deps
+        uses: actions/cache/restore@55cc8345863c7cc4c66a329aec7e433d2d1c52a9  # v6.1.0
         with:
           path: |
             build/_deps
@@ -100,6 +107,14 @@ jobs:
             -DCMAKE_CXX_COMPILER_LAUNCHER=ccache \
             -DCMAKE_EXPORT_COMPILE_COMMANDS=ON \
             -DVESTIGE_FETCH_ASSETS=OFF
+
+      - name: Save CMake FetchContent deps
+        if: steps.deps.outputs.cache-hit != 'true'
+        uses: actions/cache/save@55cc8345863c7cc4c66a329aec7e433d2d1c52a9  # v6.1.0
+        with:
+          path: |
+            build/_deps
+          key: ${{ steps.deps.outputs.cache-primary-key }}
 
       - name: Build
         # Warm the build so the audit's internal `cmake --build` is a no-op and

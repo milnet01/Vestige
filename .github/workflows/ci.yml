@@ -120,8 +120,12 @@ jobs:
           # a lean save keeps the repository under GitHub's cache limit.
           evict-old-files: job
 
-      - name: Cache CMake FetchContent deps
-        uses: actions/cache@55cc8345863c7cc4c66a329aec7e433d2d1c52a9  # v5
+      - name: Restore CMake FetchContent deps
+        # Split from its save (after Configure below): a combined actions/cache
+        # saves only when the whole job succeeds, so a failed build or test made
+        # the next run download every dependency again (3D_E-0966).
+        id: deps
+        uses: actions/cache/restore@55cc8345863c7cc4c66a329aec7e433d2d1c52a9  # v6.1.0
         with:
           path: |
             build/_deps
@@ -147,6 +151,15 @@ jobs:
             -DVESTIGE_USE_MOLD=OFF \
             -DVESTIGE_FETCH_ASSETS=OFF \
             -DVESTIGE_REQUIRE_GLSLANG=ON
+
+      - name: Save CMake FetchContent deps
+        # Configure has fetched them; an exact hit has nothing new to save.
+        if: steps.deps.outputs.cache-hit != 'true'
+        uses: actions/cache/save@55cc8345863c7cc4c66a329aec7e433d2d1c52a9  # v6.1.0
+        with:
+          path: |
+            build/_deps
+          key: ${{ steps.deps.outputs.cache-primary-key }}
 
       - name: Build
         run: cmake --build build -j "$(nproc)"
@@ -185,8 +198,10 @@ jobs:
           # job later runs or uploads.
           persist-credentials: false
 
-      - name: Cache CMake FetchContent deps
-        uses: actions/cache@55cc8345863c7cc4c66a329aec7e433d2d1c52a9  # v5
+      - name: Restore CMake FetchContent deps
+        # Restore and save are split; see linux-build-test.
+        id: deps
+        uses: actions/cache/restore@55cc8345863c7cc4c66a329aec7e433d2d1c52a9  # v6.1.0
         with:
           path: |
             build/_deps
@@ -199,6 +214,14 @@ jobs:
           cmake -S . -B build -A x64 `
             -DCMAKE_BUILD_TYPE=Release `
             -DVESTIGE_FETCH_ASSETS=OFF
+
+      - name: Save CMake FetchContent deps
+        if: steps.deps.outputs.cache-hit != 'true'
+        uses: actions/cache/save@55cc8345863c7cc4c66a329aec7e433d2d1c52a9  # v6.1.0
+        with:
+          path: |
+            build/_deps
+          key: ${{ steps.deps.outputs.cache-primary-key }}
 
       - name: Build
         run: cmake --build build --config Release -j
@@ -269,8 +292,10 @@ jobs:
           max-size: 2G
           evict-old-files: job
 
-      - name: Cache CMake FetchContent deps
-        uses: actions/cache@55cc8345863c7cc4c66a329aec7e433d2d1c52a9  # v5
+      - name: Restore CMake FetchContent deps
+        # Restore and save are split; see linux-build-test.
+        id: deps
+        uses: actions/cache/restore@55cc8345863c7cc4c66a329aec7e433d2d1c52a9  # v6.1.0
         with:
           path: |
             build/_deps
@@ -290,6 +315,14 @@ jobs:
             -DCMAKE_EXPORT_COMPILE_COMMANDS=ON \
             -DVESTIGE_USE_MOLD=OFF \
             -DVESTIGE_FETCH_ASSETS=OFF
+
+      - name: Save CMake FetchContent deps
+        if: steps.deps.outputs.cache-hit != 'true'
+        uses: actions/cache/save@55cc8345863c7cc4c66a329aec7e433d2d1c52a9  # v6.1.0
+        with:
+          path: |
+            build/_deps
+          key: ${{ steps.deps.outputs.cache-primary-key }}
 
       - name: Build
         # Tier 1 invokes `cmake --build build` internally (audit_config.yaml
@@ -401,8 +434,10 @@ jobs:
           max-size: 500M
           evict-old-files: job
 
-      - name: Cache CMake FetchContent deps
-        uses: actions/cache@55cc8345863c7cc4c66a329aec7e433d2d1c52a9  # v5
+      - name: Restore CMake FetchContent deps
+        # Restore and save are split; see linux-build-test.
+        id: deps
+        uses: actions/cache/restore@55cc8345863c7cc4c66a329aec7e433d2d1c52a9  # v6.1.0
         with:
           path: |
             build/_deps
@@ -419,6 +454,14 @@ jobs:
             -DCMAKE_EXPORT_COMPILE_COMMANDS=ON \
             -DVESTIGE_USE_MOLD=OFF \
             -DVESTIGE_FETCH_ASSETS=OFF
+
+      - name: Save CMake FetchContent deps
+        if: steps.deps.outputs.cache-hit != 'true'
+        uses: actions/cache/save@55cc8345863c7cc4c66a329aec7e433d2d1c52a9  # v6.1.0
+        with:
+          path: |
+            build/_deps
+          key: ${{ steps.deps.outputs.cache-primary-key }}
 
       - name: Build
         run: cmake --build build -j "$(nproc)"
