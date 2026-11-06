@@ -70,9 +70,10 @@ New `engine/utils/asset_path.{h,cpp}`:
 namespace Vestige::AssetPath
 {
 /// Root-relative, '/'-separated form of `path`, for caching and saving.
-/// - absolute and lexically inside `root`  -> the part below root
-/// - relative                              -> legacy-stripped (4.3), else unchanged
-/// - absolute outside `root`, or root empty -> `path` unchanged
+/// - root empty, any path                 -> `path` unchanged
+/// - absolute and lexically inside `root` -> the part below root
+/// - relative                             -> legacy-stripped (4.3), else unchanged
+/// - absolute outside `root`              -> `path` unchanged
 std::string toKey(const std::filesystem::path& root, const std::string& path);
 
 /// The file a key or a caller's path names.
@@ -94,9 +95,9 @@ which does follow links, and still runs on every load.
 |------|--------|
 | `ResourceManager` | New `setAssetRoot(path)`. `loadTexture`, `loadMesh` and `loadModel` key their caches by `toKey` and open `resolve(key)`. `findTexturePath` therefore returns a root-relative key, and so does `findMeshKey`. |
 | `AudioEngine` | New `setAssetRoot(path)`. `validatePath` and `resolveSandboxedPath` resolve with `resolve` before the sandbox check. |
-| `GltfLoader` | The cache key for an external image is the lexical join of the model's directory and the URI. The canonical path from `resolveUriIntoBase` is still what the sandbox checks. |
+| `GltfLoader` | `loadModel` passes `GltfLoader::load` the lexical `resolve(key)`, not the canonical path `validatePath` returns; the canonical path only decides the sandbox check. The cache key for an external image is the lexical join of that model's directory and the URI. The canonical path from `resolveUriIntoBase` is still what the sandbox checks. |
 | `Engine::initialize` | Calls both `setAssetRoot`s with `config.assetPath`, and `LocalizationService::setLocalizationDir(config.assetPath + "/localization")` right after registering the service, before settings are live-applied. |
-| `engine.cpp` demo scenes | Literals lose the `"assets/"` prefix. Loads that bypass `ResourceManager` (`Texture::loadFromFile`, `Texture::generateNormalFromHeight`, `Renderer::loadSkyboxHDRI`, the terrain ground-texture and foliage path builders) join through `AssetPath::resolve`. |
+| `engine.cpp` demo scenes | Literals lose the `"assets/"` prefix. Loads that bypass `ResourceManager` (`Texture::loadFromFile`, `Texture::generateNormalFromHeight`, `Renderer::loadSkyboxHDRI`, the terrain ground-texture, foliage and prop (`propPath`) path builders) join through `AssetPath::resolve`, and so do those builders' `fs::exists` override probes. |
 | `SpriteSystem::initialize` | `engine.getAssetPath()` instead of `"assets"`. |
 | `ParticleRenderer` | A scene's `texturePath` is opened through `AssetPath::resolve`. |
 | `script_templates.cpp` | Stored clip paths lose the `"assets/"` prefix. |
@@ -140,7 +141,8 @@ is today, with the existing warning. That case is out of scope (§ 9).
   root-relative form, and both share one cache entry.
   *Test:* `tests/test_asset_path.cpp` `LegacyAssetsPrefixSharesCacheEntry`:
   `loadTexture("assets/textures/a.png")` and `loadTexture("textures/a.png")`
-  return the same pointer, under a root with no `assets/` subfolder.
+  return the same pointer, which is not the default texture, under a root with
+  no `assets/` subfolder.
   *Breaks when:* `toKey` does not strip the prefix, so the legacy path opens
   `<root>/assets/textures/a.png`, which does not exist, and returns the
   default texture.
@@ -157,9 +159,9 @@ is today, with the existing warning. That case is out of scope (§ 9).
   *Test:* the existing `tests/test_path_sandbox.cpp`,
   `tests/test_material_json.cpp` `SceneDoesNotLoadAnAbsoluteTexturePath` and
   `tests/test_resource_manager_sandbox.cpp` stay green, plus
-  `tests/test_asset_path.cpp` `RootRelativeTraversalIsRefused`:
-  `loadTexture("../outside.png")` with a file one level above the root returns
-  the default texture.
+  `tests/test_asset_path.cpp` `RootRelativeTraversalIsRefused`: with sandbox
+  roots set to the root only, `loadTexture("../outside.png")` with a file one
+  level above the root returns the default texture.
   *Breaks when:* `resolve` joins `root / "../outside.png"` and the result
   reaches the loader without the sandbox check.
 
@@ -167,8 +169,8 @@ is today, with the existing warning. That case is out of scope (§ 9).
   is started from a folder other than the repository root.
   *Test:* manual: from an empty folder, run
   `<repo>/build-release/bin/vestige --demo-flythrough` headless under cage,
-  then search the log for `Failed to load`, `using default` and
-  `StringTable`. None appear for a demo asset.
+  then search the log, ignoring case, for `fail`, `rejected`, `using default`
+  and `StringTable`. None appear for a demo asset.
   *Breaks when:* any listed literal keeps its `"assets/"` prefix, or
   `setLocalizationDir` is not called before settings are live-applied.
 
@@ -187,10 +189,14 @@ is today, with the existing warning. That case is out of scope (§ 9).
 ## 7. Tests
 
 New `tests/test_asset_path.cpp` locks INV-1, INV-3, INV-4 and the new half of
-INV-5. A new case in `tests/test_material_json.cpp` locks INV-2. Each new test
-must be seen to fail against the pre-change code before the fix lands; INV-4
-fails only against a mutation that strips unconditionally. INV-6 is the
-manual run, because the demo scenes need a GL context and the full engine.
+INV-5. Its fixture derives from `GLTestFixture`, because a texture loads only
+with a GL context; without one every load returns the default texture. A new
+case in `tests/test_material_json.cpp` locks INV-2. Each new test must be seen
+to fail against the pre-change code before the fix lands, except two that fail
+only against a mutation: INV-4's, against one that strips unconditionally, and
+`RootRelativeTraversalIsRefused`, against one that skips the sandbox check.
+INV-6 is the manual run, because the demo scenes need a GL context and the
+full engine.
 
 ## 8. Alternatives considered (and rejected)
 
