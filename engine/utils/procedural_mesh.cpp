@@ -277,26 +277,30 @@ ProceduralMeshData ProceduralMeshBuilder::generateWallWithOpenings(
         float by = op.yOffset;
         float ty = op.yOffset + op.height;
 
+        // Each reveal faces into the opening: wound counter-clockwise seen
+        // from inside the hole, with a matching normal, so it is drawn and
+        // lit when seen through the opening.
+
         // Left reveal (facing +X inside the opening)
         addQuad(vertices, indices,
-                glm::vec3(lx0, by, -ht), glm::vec3(lx0, by, ht),
-                glm::vec3(lx0, ty, ht), glm::vec3(lx0, ty, -ht),
-                glm::vec3(-1.0f, 0.0f, 0.0f),
+                glm::vec3(lx0, by, ht), glm::vec3(lx0, by, -ht),
+                glm::vec3(lx0, ty, -ht), glm::vec3(lx0, ty, ht),
+                glm::vec3(1.0f, 0.0f, 0.0f),
                 glm::vec2(0.0f, 0.0f), glm::vec2(thickness, 0.0f),
                 glm::vec2(thickness, op.height), glm::vec2(0.0f, op.height));
 
         // Right reveal (facing -X inside the opening)
         addQuad(vertices, indices,
-                glm::vec3(lx1, by, ht), glm::vec3(lx1, by, -ht),
-                glm::vec3(lx1, ty, -ht), glm::vec3(lx1, ty, ht),
-                glm::vec3(1.0f, 0.0f, 0.0f),
+                glm::vec3(lx1, by, -ht), glm::vec3(lx1, by, ht),
+                glm::vec3(lx1, ty, ht), glm::vec3(lx1, ty, -ht),
+                glm::vec3(-1.0f, 0.0f, 0.0f),
                 glm::vec2(0.0f, 0.0f), glm::vec2(thickness, 0.0f),
                 glm::vec2(thickness, op.height), glm::vec2(0.0f, op.height));
 
         // Top reveal (header, facing -Y inside the opening)
         addQuad(vertices, indices,
-                glm::vec3(lx0, ty, ht), glm::vec3(lx1, ty, ht),
-                glm::vec3(lx1, ty, -ht), glm::vec3(lx0, ty, -ht),
+                glm::vec3(lx0, ty, -ht), glm::vec3(lx1, ty, -ht),
+                glm::vec3(lx1, ty, ht), glm::vec3(lx0, ty, ht),
                 glm::vec3(0.0f, -1.0f, 0.0f),
                 glm::vec2(0.0f, 0.0f), glm::vec2(op.width, 0.0f),
                 glm::vec2(op.width, thickness), glm::vec2(0.0f, thickness));
@@ -305,8 +309,8 @@ ProceduralMeshData ProceduralMeshBuilder::generateWallWithOpenings(
         if (op.yOffset > 0.001f)
         {
             addQuad(vertices, indices,
-                    glm::vec3(lx0, by, -ht), glm::vec3(lx1, by, -ht),
-                    glm::vec3(lx1, by, ht), glm::vec3(lx0, by, ht),
+                    glm::vec3(lx0, by, ht), glm::vec3(lx1, by, ht),
+                    glm::vec3(lx1, by, -ht), glm::vec3(lx0, by, -ht),
                     glm::vec3(0.0f, 1.0f, 0.0f),
                     glm::vec2(0.0f, 0.0f), glm::vec2(op.width, 0.0f),
                     glm::vec2(op.width, thickness), glm::vec2(0.0f, thickness));

@@ -260,6 +260,74 @@ static int expectNormalsMatchWinding(const ProceduralMeshData& data)
     return upward;
 }
 
+// Each reveal (the hole's sill, top and sides) faces into the hole, by
+// winding and by normal, so it is drawn and lit when seen through it.
+static void expectRevealsFaceIntoHole(const ProceduralMeshData& data,
+                                      float wallWidth, const WallOpening& op)
+{
+    expectNormalsMatchWinding(data);
+
+    const float x0 = op.xOffset - wallWidth * 0.5f;
+    const float x1 = x0 + op.width;
+    const float y0 = op.yOffset;
+    const float y1 = op.yOffset + op.height;
+    const glm::vec2 holeCentre((x0 + x1) * 0.5f, (y0 + y1) * 0.5f);
+    const float eps = 1e-4f;
+
+    int reveals = 0;
+    for (size_t t = 0; t + 2 < data.indices.size(); t += 3)
+    {
+        const Vertex& a = data.vertices[data.indices[t]];
+        const Vertex& b = data.vertices[data.indices[t + 1]];
+        const Vertex& c = data.vertices[data.indices[t + 2]];
+        if (std::abs(a.normal.z) > 0.5f)
+        {
+            continue;  // front or back face of the wall
+        }
+        bool onHoleEdge = true;
+        for (const Vertex* v : {&a, &b, &c})
+        {
+            onHoleEdge = onHoleEdge
+                && v->position.x > x0 - eps && v->position.x < x1 + eps
+                && v->position.y > y0 - eps && v->position.y < y1 + eps;
+        }
+        if (!onHoleEdge)
+        {
+            continue;  // an outer edge of the wall
+        }
+        ++reveals;
+        const glm::vec3 centroid = (a.position + b.position + c.position) / 3.0f;
+        const glm::vec2 towardHole = holeCentre - glm::vec2(centroid.x, centroid.y);
+        EXPECT_GT(glm::dot(glm::vec2(a.normal.x, a.normal.y), towardHole), 0.0f)
+            << "reveal triangle at index " << t << " has normal ("
+            << a.normal.x << ", " << a.normal.y << ", " << a.normal.z << ")";
+    }
+    // Sides and top always; the sill only where the hole is off the floor.
+    const int expectedQuads = op.yOffset > 0.001f ? 4 : 3;
+    EXPECT_EQ(reveals, expectedQuads * 2);
+}
+
+TEST(ProceduralMeshTest, WallOpeningRevealsFaceIntoTheHole)
+{
+    WallOpening window;
+    window.xOffset = 1.0f;
+    window.yOffset = 0.9f;
+    window.width = 1.0f;
+    window.height = 1.2f;
+    expectRevealsFaceIntoHole(
+        ProceduralMeshBuilder::generateWallWithOpenings(3.0f, 3.0f, 0.3f, {window}),
+        3.0f, window);
+
+    WallOpening door;
+    door.xOffset = 1.0f;
+    door.yOffset = 0.0f;
+    door.width = 1.0f;
+    door.height = 2.1f;
+    expectRevealsFaceIntoHole(
+        ProceduralMeshBuilder::generateWallWithOpenings(3.0f, 3.0f, 0.3f, {door}),
+        3.0f, door);
+}
+
 TEST(ProceduralMeshTest, GableRoofSlopesFaceUpAndOut)
 {
     auto data = ProceduralMeshBuilder::generateRoof(RoofType::GABLE, 4.0f, 6.0f, 1.5f, 0.3f);
