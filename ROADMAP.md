@@ -7354,6 +7354,20 @@ shipped that have no invocation path at all.
   fix: audio mix graph now under getAssetPath() d4baf19. Also open:
   LocalizationService default dir is cwd-relative "assets/localization"
   (no setLocalizationDir caller found).
+  2026-11-06: the asset-path lead (lane-02 engine.cpp:190) is specced:
+  docs/specs/3D_E-0874-asset-relative-paths.md, gated by review-contract
+  (2 loops, 8 verified, 8 fixed, cap reached, Status accepted; no
+  deferred tail). Next: build it. It also fixes editor-picked and
+  imported-glTF textures being lost on scene save and reopen.
+  Lanes 08, 09, 11-22, 24-27 verified 2026-11-06 by read-only sonnet
+  agents (lane 13 has no leads), verdicts in
+  Vestige_private/readability-2026-10-31/batches/lane-NN-result.md:
+  156 REAL, 14 REAL documented, 8 NOT REAL, 6 DONE, 4 CHECK,
+  2 NEEDS DECISION (lane-12 workbench CSV append, lane-19
+  ScriptComponent instance storage; each carries a recommendation).
+  None fixed yet; each REAL is re-checked before its fix. Related lead
+  found: lane-20 sprite_system.cpp passes the literal "assets" (covered
+  by the spec's SpriteSystem row).
   **Layman:** About 290 lower-risk possible bugs and the medium findings are still unchecked.
   Kind: review-fix.
   Source: review-readability 2026-10-31 at 7b2a81d.
@@ -7490,6 +7504,22 @@ shipped that have no invocation path at all.
   - flaky "Dependabot" is GitHub's own updater job; nothing of ours.
   ci-gate: local gate OK; secret-scan.yml has no cache (gitleaks needs
   none: no action).
+  2026-11-06 full CI audit (user request): fixed in ba13e40, awaiting the
+  push and a green CI run.
+  - Full Audit ccache 500M -> 2G + evict-old-files (cause of the Build
+    rise, not a26afb3 itself).
+  - FetchContent cache restore/save split in every ci.yml job and the Full
+    Audit; saved right after Configure.
+  - Local gate: the side-by-side lanes never ran (dry run met a stale
+    build.ninja after each test-adding commit; now regenerates first);
+    lanes share the -j cap; clang-tidy follows it (AUDIT_CLANG_TIDY_JOBS).
+  Checked, no action: 30 days of runs. The six red CI pushes of
+  2026-11-04/05 were IblFacePassTest crashing without GL on Windows, fixed
+  with local parity in b97487d (3D_E-0877). Dependabot reds are GitHub's
+  updater. Cancelled PR runs are the concurrency rule.
+  Not done, by choice: Windows compiler cache (MSVC PCH mostly
+  uncacheable; would swap the release generator); release.yml keeps its
+  combined cache (runs once per release).
   **Layman:** After a failed CI run the next one rebuilds its downloads from scratch, and the nightly audit's build step now takes longer than it used to.
   Kind: chore.
   Source: claude-config CI tuning request 2026-11-05 (inbox 1458), ci_report 2026-11-06.
