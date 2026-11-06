@@ -1,6 +1,6 @@
 <!-- ants-roadmap-format: 1 -->
 <!-- Generated from the Ants Terminal roadmap store. Edit it with roadmap_log; hand edits are discarded by the next write. -->
-<!-- ants-roadmap-id-high-water: 3D_E=965 3D_E#S=989 -->
+<!-- ants-roadmap-id-high-water: 3D_E=966 3D_E#S=989 -->
 
 # Vestige Engine Roadmap
 
@@ -7476,6 +7476,24 @@ shipped that have no invocation path at all.
   **Layman:** Highlighting "Shadows" says "sharper edges, uses more graphics power" in simple words.
   Kind: accessibility.
   Source: research-engine-survey-2026-11-05.
+
+- 📋 [3D_E-0966] **GitHub CI starts cold after a failed job, and the nightly audit build got slower.**
+  ci_report 2026-11-06 (30 days), all advice-level:
+  - cache_save_skipped: the combined actions/cache step "Cache CMake
+    FetchContent deps" saves in a post step that does not run when the
+    job fails, in CI (Linux, CMake matrix, Windows, Tier 1 audit), Full
+    Audit and Release. Fix: split into actions/cache/restore +
+    actions/cache/save with `if: always()` (local-gate.md § 9 caches row).
+  - budget_trend: Full audit job median rose 16m42s -> 23m50s against a
+    60m budget; step "Build" 6m06s -> 10m43s, rise starting at a26afb3.
+    Find whether that commit added build work or lost a cache.
+  - flaky "Dependabot" is GitHub's own updater job; nothing of ours.
+  ci-gate: local gate OK; secret-scan.yml has no cache (gitleaks needs
+  none: no action).
+  **Layman:** After a failed CI run the next one rebuilds its downloads from scratch, and the nightly audit's build step now takes longer than it used to.
+  Kind: chore.
+  Source: claude-config CI tuning request 2026-11-05 (inbox 1458), ci_report 2026-11-06.
+  Lanes: ci.
 
 ## 0.3.0 — An editor a builder can use
 
