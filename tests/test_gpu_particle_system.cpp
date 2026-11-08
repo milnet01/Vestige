@@ -583,3 +583,43 @@ TEST(GPUParticleStructTest, StructSizes)
     // ParticleBehaviorType is a uint32_t enum
     EXPECT_EQ(sizeof(ParticleBehaviorType), 4u);
 }
+
+// A clone simulates with the same over-lifetime curves as its source: the
+// curves live in the behaviour block, which setConfig fills (3D_E-0874).
+TEST_F(GPUParticleEmitterTest, CloneKeepsOverLifetimeCurves)
+{
+    ParticleEmitterConfig config;
+    config.useColorOverLifetime = true;
+    config.useSizeOverLifetime = true;
+    config.useSpeedOverLifetime = true;
+    emitter.setConfig(config);
+
+    const BehaviorBlock& src = emitter.getBehaviorBlock();
+    ASSERT_GT(src.colorStopCount, 0);
+    ASSERT_GT(src.sizeKeyCount, 0);
+    ASSERT_GT(src.speedKeyCount, 0);
+
+    auto cloned = emitter.clone();
+    auto* copy = dynamic_cast<GPUParticleEmitter*>(cloned.get());
+    ASSERT_NE(copy, nullptr);
+    const BehaviorBlock& dst = copy->getBehaviorBlock();
+
+    ASSERT_EQ(dst.colorStopCount, src.colorStopCount);
+    for (int i = 0; i < src.colorStopCount; ++i)
+    {
+        EXPECT_EQ(dst.colorStops[i], src.colorStops[i]) << "colour stop " << i;
+        EXPECT_FLOAT_EQ(dst.colorStopTimes[i], src.colorStopTimes[i]);
+    }
+    ASSERT_EQ(dst.sizeKeyCount, src.sizeKeyCount);
+    for (int i = 0; i < src.sizeKeyCount; ++i)
+    {
+        EXPECT_FLOAT_EQ(dst.sizeKeys[i], src.sizeKeys[i]) << "size key " << i;
+        EXPECT_FLOAT_EQ(dst.sizeKeyTimes[i], src.sizeKeyTimes[i]);
+    }
+    ASSERT_EQ(dst.speedKeyCount, src.speedKeyCount);
+    for (int i = 0; i < src.speedKeyCount; ++i)
+    {
+        EXPECT_FLOAT_EQ(dst.speedKeys[i], src.speedKeys[i]) << "speed key " << i;
+        EXPECT_FLOAT_EQ(dst.speedKeyTimes[i], src.speedKeyTimes[i]);
+    }
+}

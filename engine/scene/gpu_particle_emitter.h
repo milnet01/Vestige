@@ -105,6 +105,9 @@ public:
     GPUParticleSystem* getGPUSystem();
     const GPUParticleSystem* getGPUSystem() const;
 
+    /// @brief The behaviours and over-lifetime curves the simulate pass reads.
+    const BehaviorBlock& getBehaviorBlock() const { return m_behaviorBlock; }
+
     /// @brief Returns the blend mode for rendering.
     ParticleEmitterConfig::BlendMode getBlendMode() const;
 

@@ -78,6 +78,9 @@ std::unique_ptr<Component> GPUParticleEmitter::clone() const
     auto copy = std::make_unique<GPUParticleEmitter>();
     copy->m_config = m_config;
     copy->m_behaviors = m_behaviors;
+    // The over-lifetime curves live only in the block (setConfig fills them);
+    // update() rebuilds just the behaviour entries, so copy the block whole.
+    copy->m_behaviorBlock = m_behaviorBlock;
     copy->m_behaviorsDirty = true;
     copy->m_shaderPath = m_shaderPath;
     // GPU system will be initialized separately
