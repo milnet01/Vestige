@@ -25,6 +25,22 @@ may change any interface without notice.
 
 ## [Unreleased]
 
+### 2026-11-08 Fixed — imported models and starter templates are found by id, swapped meshes are culled by their own size, and cloned particles keep their fades (3D_E-0874)
+
+- **The scene finds an imported model's parts by id**
+  They were missing from the id lookup the editor's selection uses.
+
+- **Every entity a 2D starter template creates is found by id**
+  Only the template's root was; the player, platforms and camera were missed.
+
+- **A mesh renderer's bounds follow the mesh it draws**
+  A swapped-in mesh kept the old mesh's box, so it could be culled while still on screen. Renderers given their mesh in the constructor were never culled at all.
+
+- **A duplicated GPU particle emitter keeps its colour, size and speed fades**
+  The copy's particles stayed constant until its settings were edited.
+
+- **A navmesh build that Detour rejects no longer leaks its tile data**
+
 ### 2026-11-06 Fixed — walls, roofs, stairs and window holes face the right way, and navmesh baking and scene loading no longer misread memory (3D_E-0874)
 
 - **Replacing a scene during an update no longer writes into freed memory**

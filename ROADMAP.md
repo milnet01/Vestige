@@ -1,6 +1,6 @@
 <!-- ants-roadmap-format: 1 -->
 <!-- Generated from the Ants Terminal roadmap store. Edit it with roadmap_log; hand edits are discarded by the next write. -->
-<!-- ants-roadmap-id-high-water: 3D_E=966 3D_E#S=989 -->
+<!-- ants-roadmap-id-high-water: 3D_E=967 3D_E#S=989 -->
 
 # Vestige Engine Roadmap
 
@@ -7544,10 +7544,35 @@ shipped that have no invocation path at all.
   Build step 11m07s (13:45:31-13:56:38 UTC), down from 14m18s on
   2026-11-05 but not back to ~6m. Possibly a cold 2G cache filling on its
   first run; read the next night's Build step before digging further.
+  2026-11-08: confirmed. The cold-cache guess held: Full Audit Build step
+  42s on 2026-11-07 (run 42372553594) and 39s on 2026-11-08 (run
+  42481691016), well under the ~6m target. Whole run now ~13m; nearly
+  all of it is the "Run full audit (all tiers)" step (~11.5m), which is
+  the analysis itself and out of this item's scope.
   **Layman:** After a failed CI run the next one rebuilds its downloads from scratch, and the nightly audit's build step now takes longer than it used to.
   Kind: chore.
   Source: claude-config CI tuning request 2026-11-05 (inbox 1458), ci_report 2026-11-06.
   Lanes: ci.
+
+- 📋 [3D_E-0967] **Walls, rooms, roofs, stairs and paths the editor builds vanish when the scene is saved and reopened.**
+  Found 2026-11-08 while re-checking 0874's cutout lead (lane-16
+  cutout_tool.cpp:156, a second cut drops the first hole).
+  serializeMeshRenderer saves a mesh only by its ResourceManager key
+  (findMeshKey). Meshes built with std::make_shared<Mesh> in the editor
+  (entity_factory.cpp, and the wall, room, roof, stair, path and cutout
+  tools) have no key, so the saved JSON has no "mesh" and the entity
+  loads with no MeshRenderer. Scene save uses this serializer
+  (scene_serializer.cpp).
+  Proof: red test FactoryWallKeepsItsMeshThroughSaveAndLoad (factory
+  wall with door, serializeEntity, deserializeEntity: no MeshRenderer),
+  parked at Vestige_private/drafts/test_procedural_mesh_save.cpp.
+  A save-format change across editor, scene and resource: needs a spec
+  (spec-format.md §1) before building. The cutout lead depends on it:
+  a wall keeps earlier openings only if they are stored with it.
+  **Layman:** Anything made with the building tools comes back as an empty, invisible object after you save and reopen the scene.
+  Kind: fix.
+  Source: 3D_E-0874 cutout lead re-check 2026-11-08.
+  Lanes: editor, scene, resource.
 
 ## 0.3.0 — An editor a builder can use
 
