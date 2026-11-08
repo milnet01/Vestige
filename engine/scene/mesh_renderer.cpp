@@ -12,14 +12,19 @@ MeshRenderer::MeshRenderer(std::shared_ptr<Mesh> mesh, std::shared_ptr<Material>
     : m_mesh(std::move(mesh))
     , m_material(std::move(material))
 {
+    if (m_mesh)
+    {
+        m_bounds = m_mesh->getLocalBounds();
+    }
 }
 
 void MeshRenderer::setMesh(std::shared_ptr<Mesh> mesh)
 {
     m_mesh = std::move(mesh);
 
-    // Auto-populate bounds from the mesh's local AABB if no explicit bounds were set
-    if (m_mesh && m_bounds.getSize() == glm::vec3(0.0f))
+    // Bounds follow the mesh, so a swapped-in mesh is culled by its own box.
+    // A caller wanting other bounds calls setBounds after this.
+    if (m_mesh)
     {
         m_bounds = m_mesh->getLocalBounds();
     }

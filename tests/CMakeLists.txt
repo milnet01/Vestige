@@ -174,6 +174,7 @@ add_executable(vestige_tests
     test_navigation_panel.cpp
     test_nav_mesh_query.cpp
     test_nav_mesh_builder.cpp
+    test_mesh_renderer.cpp
     test_cloth_solver_backend.cpp
     test_cloth_constraint_graph.cpp
     test_cloth_wind_model.cpp

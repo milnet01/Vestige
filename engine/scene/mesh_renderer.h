@@ -22,7 +22,7 @@ public:
     MeshRenderer() = default;
     MeshRenderer(std::shared_ptr<Mesh> mesh, std::shared_ptr<Material> material);
 
-    /// @brief Sets the mesh to render.
+    /// @brief Sets the mesh to render, and the bounds to the mesh's local bounds.
     void setMesh(std::shared_ptr<Mesh> mesh);
 
     /// @brief Sets the material to use.
