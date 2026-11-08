@@ -6,6 +6,8 @@
 #include <gtest/gtest.h>
 
 #include "resource/model.h"
+#include "scene/entity.h"
+#include "scene/scene.h"
 
 #include <glm/glm.hpp>
 #include <glm/gtc/quaternion.hpp>
@@ -179,4 +181,57 @@ TEST(ModelTest, BoundsComputedFromPrimitives)
     EXPECT_FLOAT_EQ(bounds.max.x, 5.0f);
     EXPECT_FLOAT_EQ(bounds.max.y, 2.0f);
     EXPECT_FLOAT_EQ(bounds.max.z, 4.0f);
+}
+
+// =============================================================================
+// ModelTest — instantiated entities are in the scene's id index (3D_E-0874)
+// =============================================================================
+
+namespace
+{
+
+/// A two-level node tree with no meshes: Base -> Arm -> Hand.
+Model makeNodeTreeModel()
+{
+    Model model;
+    model.m_nodes.resize(3);
+    model.m_nodes[0].name = "Base";
+    model.m_nodes[0].childIndices = {1};
+    model.m_nodes[1].name = "Arm";
+    model.m_nodes[1].childIndices = {2};
+    model.m_nodes[2].name = "Hand";
+    model.m_rootNodes = {0};
+    return model;
+}
+
+void expectSubtreeIndexed(Scene& scene, Entity& entity)
+{
+    EXPECT_EQ(scene.findEntityById(entity.getId()), &entity)
+        << "not indexed: " << entity.getName();
+    for (const auto& child : entity.getChildren())
+    {
+        expectSubtreeIndexed(scene, *child);
+    }
+}
+
+} // namespace
+
+TEST(ModelTest, InstantiatedNodesAreFoundById)
+{
+    Scene scene("ModelIndex");
+    const Model model = makeNodeTreeModel();
+    Entity* root = model.instantiate(scene, nullptr, "Robot");
+    ASSERT_NE(root, nullptr);
+    ASSERT_EQ(root->getChildren().size(), 1u);
+    expectSubtreeIndexed(scene, *root);
+}
+
+TEST(ModelTest, InstantiatedUnderAParentIsFoundById)
+{
+    Scene scene("ModelIndexParent");
+    Entity* holder = scene.createEntity("Holder");
+    const Model model = makeNodeTreeModel();
+    Entity* root = model.instantiate(scene, holder, "Robot");
+    ASSERT_NE(root, nullptr);
+    expectSubtreeIndexed(scene, *root);
 }

@@ -65,6 +65,9 @@ Entity* Model::instantiate(Scene& scene, Entity* parent, const std::string& name
             + std::to_string(m_animationClips.size()) + " clip(s) to '" + name + "'");
     }
 
+    // Nodes were added with Entity::addChild, which the scene does not see;
+    // index the whole subtree so findEntityById (editor selection) reaches them.
+    scene.registerEntityRecursive(root);
     return root;
 }
 
