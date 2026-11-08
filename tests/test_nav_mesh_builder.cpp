@@ -16,9 +16,12 @@
 #include "scene/mesh_renderer.h"
 #include "scene/scene.h"
 
+#include <DetourAlloc.h>
+#include <DetourNavMesh.h>
 #include <glm/glm.hpp>
 #include <gtest/gtest.h>
 
+#include <cstring>
 #include <limits>
 #include <memory>
 #include <vector>
@@ -65,4 +68,21 @@ TEST_F(NavMeshBuilderTest, FloorMeshBakesToNavmeshCoveringTheFloor)
     EXPECT_LE(hi.z, HALF_SIZE);
     EXPECT_NEAR(lo.y, 0.0f, 0.5f);
     EXPECT_NEAR(hi.y, 0.0f, 0.5f);
+}
+
+// Detour takes ownership of tile data only once the tile is added, so data it
+// rejects is still the caller's. initNavMeshTakingData must free it; under
+// ASan a leak here fails the run at exit (3D_E-0874).
+TEST(NavMeshInit, RejectedTileDataIsFreed)
+{
+    auto* data = static_cast<unsigned char*>(
+        dtAlloc(sizeof(dtMeshHeader), DT_ALLOC_PERM));
+    ASSERT_NE(data, nullptr);
+    std::memset(data, 0, sizeof(dtMeshHeader));  // magic 0: Detour rejects it
+
+    dtNavMesh* navMesh = dtAllocNavMesh();
+    ASSERT_NE(navMesh, nullptr);
+    EXPECT_FALSE(initNavMeshTakingData(*navMesh, data,
+                                       static_cast<int>(sizeof(dtMeshHeader))));
+    dtFreeNavMesh(navMesh);
 }

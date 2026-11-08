@@ -23,6 +23,17 @@
 namespace Vestige
 {
 
+bool initNavMeshTakingData(dtNavMesh& navMesh, unsigned char* data, int dataSize)
+{
+    const dtStatus status = navMesh.init(data, dataSize, DT_TILE_FREE_DATA);
+    if (dtStatusFailed(status))
+    {
+        dtFree(data);  // Detour never added the tile, so it never took the data
+        return false;
+    }
+    return true;
+}
+
 NavMeshBuilder::NavMeshBuilder() = default;
 
 NavMeshBuilder::~NavMeshBuilder()
@@ -343,8 +354,7 @@ bool NavMeshBuilder::buildFromScene(Scene& scene, const NavMeshBuildConfig& conf
         return false;
     }
 
-    dtStatus status = m_navMesh->init(navData, navDataSize, DT_TILE_FREE_DATA);
-    if (dtStatusFailed(status))
+    if (!initNavMeshTakingData(*m_navMesh, navData, navDataSize))
     {
         Logger::error("[NavMeshBuilder] Failed to initialize Detour navmesh");
         dtFreeNavMesh(m_navMesh);

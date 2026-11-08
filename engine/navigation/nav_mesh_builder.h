@@ -20,6 +20,14 @@ namespace Vestige
 
 class Scene;
 
+/// @brief Initialises a single-tile @a navMesh from Detour tile @a data.
+///
+/// Detour owns @a data only once its tile is added. On success it frees the
+/// data with the navmesh; on failure this function frees it, so the caller
+/// never does either way.
+/// @return True if the navmesh was initialised.
+bool initNavMeshTakingData(dtNavMesh& navMesh, unsigned char* data, int dataSize);
+
 /// @brief Generates a navigation mesh from scene triangle geometry using Recast.
 ///
 /// Collects vertex/index data from all static mesh entities in a scene,
