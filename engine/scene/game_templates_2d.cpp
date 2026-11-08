@@ -117,6 +117,9 @@ Entity* createSideScrollerTemplate(Scene& scene, const GameTemplate2DConfig& con
 
     // Player pointer used by callers wanting to name the target entity.
     (void)player;
+    // Children were added with Entity::addChild, which the scene does not
+    // see; index the whole subtree so findEntityById reaches them.
+    scene.registerEntityRecursive(root);
     return root;
 }
 
@@ -176,6 +179,9 @@ Entity* createShmupTemplate(Scene& scene, const GameTemplate2DConfig& config)
         root->addChild(std::move(cam));
     }
 
+    // Children were added with Entity::addChild, which the scene does not
+    // see; index the whole subtree so findEntityById reaches them.
+    scene.registerEntityRecursive(root);
     return root;
 }
 

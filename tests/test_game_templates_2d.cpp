@@ -163,3 +163,36 @@ TEST(GameTemplates2D, BothTemplatesProduceDistinctRoots)
     EXPECT_NE(r2, nullptr);
     EXPECT_NE(r1, r2);
 }
+
+// Every entity a template creates is in the scene's id index, so the editor's
+// selection and id-based actions reach the children too (3D_E-0874).
+namespace
+{
+
+void expectSubtreeIndexed(Scene& scene, Entity& entity)
+{
+    EXPECT_EQ(scene.findEntityById(entity.getId()), &entity)
+        << "not indexed: " << entity.getName();
+    for (const auto& child : entity.getChildren())
+    {
+        expectSubtreeIndexed(scene, *child);
+    }
+}
+
+} // namespace
+
+TEST(GameTemplates2D, SideScrollerEntitiesAreFoundById)
+{
+    Scene scene("SideScrollerIndex");
+    auto* root = createSideScrollerTemplate(scene);
+    ASSERT_NE(root, nullptr);
+    expectSubtreeIndexed(scene, *root);
+}
+
+TEST(GameTemplates2D, ShmupEntitiesAreFoundById)
+{
+    Scene scene("ShmupIndex");
+    auto* root = createShmupTemplate(scene);
+    ASSERT_NE(root, nullptr);
+    expectSubtreeIndexed(scene, *root);
+}
