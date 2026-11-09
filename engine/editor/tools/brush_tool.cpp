@@ -8,6 +8,7 @@
 #include "editor/commands/paint_scatter_command.h"
 #include "editor/commands/place_tree_command.h"
 #include "editor/commands/composite_command.h"
+#include "editor/commands/density_paint_command.h"
 #include "editor/command_history.h"
 #include "renderer/camera.h"
 
@@ -145,11 +146,29 @@ void BrushTool::beginStroke()
     m_scatterRemoved.clear();
     m_treesAdded.clear();
     m_treesRemoved.clear();
+    m_densityBefore.clear();
+    if (mode == Mode::DENSITY && densityMap)
+    {
+        m_densityBefore = densityMap->snapshot();
+    }
 }
 
 void BrushTool::endStroke(FoliageManager& manager, CommandHistory& history)
 {
     m_painting = false;
+
+    // A density stroke changes the map, not the instance lists.
+    if (!m_densityBefore.empty() && densityMap)
+    {
+        std::vector<float> after = densityMap->snapshot();
+        if (after != m_densityBefore)
+        {
+            history.execute(std::make_unique<DensityPaintCommand>(
+                *densityMap, std::move(m_densityBefore), std::move(after)));
+        }
+        m_densityBefore.clear();
+        return;
+    }
 
     // Phase 10.9 Slice 12 Ed8: collect every sub-command produced by the
     // stroke and push as a single CompositeCommand so one Ctrl+Z reverts

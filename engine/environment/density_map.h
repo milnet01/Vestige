@@ -75,6 +75,9 @@ public:
     void setTexel(int x, int z, float value);
 
     /// @brief Gets the map width in texels.
+    /// @brief A copy of every texel, row-major (an undo snapshot).
+    std::vector<float> snapshot() const { return m_data; }
+
     int getWidth() const { return m_width; }
 
     /// @brief Gets the map height in texels.

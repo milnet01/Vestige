@@ -4,6 +4,8 @@
 /// @file test_density_map.cpp
 /// @brief Unit tests for DensityMap, path clearing, and bank blending.
 
+#include "editor/command_history.h"
+#include "editor/tools/brush_tool.h"
 #include "environment/density_map.h"
 #include "environment/foliage_manager.h"
 #include "environment/spline_path.h"
@@ -327,3 +329,33 @@ TEST(BankBlendTest, ConfigDefaults)
     EXPECT_EQ(config.bankChannel, 3);
     EXPECT_FLOAT_EQ(config.bankStrength, 0.8f);
 }
+
+// 3D_E-0874: a density stroke is one undo step, like every other brush stroke.
+TEST(DensityMapTest, DensityStrokeCanBeUndone)
+{
+    DensityMap map;
+    map.initialize(-8.0f, -8.0f, 16.0f, 16.0f, 1.0f);
+    map.fill(1.0f);
+
+    BrushTool brush;
+    brush.setEnabled(true);
+    brush.mode = BrushTool::Mode::DENSITY;
+    brush.densityMap = &map;
+    brush.densityPaintValue = 0.0f;
+    brush.densityPaintStrength = 1.0f;
+    brush.radius = 2.0f;
+
+    Ray ray;
+    ray.origin = glm::vec3(0.0f, 10.0f, 0.0f);
+    ray.direction = glm::vec3(0.0f, -1.0f, 0.0f);
+    FoliageManager manager;
+    CommandHistory history;
+    brush.processInput(ray, true, 0.016f, manager, history);
+    brush.processInput(ray, false, 0.016f, manager, history);
+    ASSERT_LT(map.sample(0.0f, 0.0f), 1.0f) << "the stroke painted nothing";
+
+    ASSERT_TRUE(history.canUndo());
+    history.undo();
+    EXPECT_FLOAT_EQ(map.sample(0.0f, 0.0f), 1.0f);
+}
+

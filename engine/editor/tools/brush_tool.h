@@ -135,6 +135,9 @@ private:
     /// Accumulated tree instances for the current stroke (for undo).
     std::vector<std::pair<uint64_t, TreeInstance>> m_treesAdded;
     std::vector<std::pair<uint64_t, TreeInstance>> m_treesRemoved;
+    // Density texels before the open DENSITY stroke; empty when the stroke
+    // is not a density stroke.
+    std::vector<float> m_densityBefore;
 
     /// @brief Converts (key, instance) pairs to TreeInstanceRef vector.
     static std::vector<TreeInstanceRef> convertTreeRefs(
