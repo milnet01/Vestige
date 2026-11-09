@@ -1,7 +1,7 @@
 <!-- ants-spec-format: 1 -->
 # 3D_E-0967 — Save editor-built meshes as a build recipe
 
-**Status:** spec draft (2026-11-09).
+**Status:** accepted (2026-11-09).
 **Kind:** fix.
 **Source:** ROADMAP 3D_E-0967 (3D_E-0874 cutout lead re-check, 2026-11-08).
 **Blocker for:** the 3D_E-0874 lane-16 lead `cutout_tool` (a second cut drops the first hole).
@@ -169,8 +169,10 @@ check holds, so a hostile file cannot make the builder allocate without bound:
 - `openings` holds at most 64 entries;
 - `points` holds 2 to 4096 entries; `samplesPerSegment` is 1 to 64.
 
-Each limit is far above anything the tools make; each bounds a loop or an
-allocation in the builder.
+A tool must not make a recipe these limits refuse, or its mesh vanishes on
+reload. So `StairTool` places no spiral whose `innerRadius` is not less than
+`outerRadius`, and `applyOpening` (§ 4.6) adds no 65th opening. Nothing
+tests these two refusals.
 
 ### 4.6 Cutting an opening
 
@@ -223,7 +225,9 @@ opening fields.
   valid recipe with one check broken, and `fromJson` returns `nullopt`. For a
   numeric bound, a twin with the field at the bound returns a value; for a
   strict bound (greater than, less than) the twin takes the nearest value that
-  passes. The finiteness and name checks have no twin.
+  passes. The `totalHeight` and `riseHeight` twins also set the other field so
+  the step count stays within 1024. The finiteness and name checks have no
+  twin.
   `tests/test_procedural_mesh_save.cpp` `RefusedRecipeLoadsWithoutMeshRenderer`
   loads an entity whose recipe breaks a limit.
   *Breaks when:* any one check is missing. The twin shows the refusal comes
@@ -272,7 +276,9 @@ opening fields.
 Each new test is run red against the current code before the fix. No case
 goes through ImGui: the `PathTool` case drives `processClick` and
 `finishPath`, and the `CutoutTool` cases drive `selectWall` and
-`applyOpening` (§ 4.6).
+`applyOpening` (§ 4.6). `RoofTool` and `StairTool` place only after their
+ImGui Place button, so each gains a public `beginPlacing()`, which the button
+calls; their cases call `activate`, `beginPlacing`, then `processClick`.
 
 ## 8. Alternatives considered (and rejected)
 
@@ -325,8 +331,7 @@ goes through ImGui: the `PathTool` case drives `processClick` and
 - `ROADMAP.md`: 3D_E-0967 shipped; the lane-16 cutout row unblocked.
 - No other spec binds `serializeMeshRenderer`, the scene format version or
   `ProceduralMeshBuilder` (`invariant_check` over the touched files,
-  2026-11-09; `3D_E-0874-asset-relative-paths.md` cites
-  `entity_serializer.cpp` for texture paths only).
+  2026-11-09).
 
 ## 12. Cold-eyes loop log
 
