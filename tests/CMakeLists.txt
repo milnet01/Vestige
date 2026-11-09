@@ -20,6 +20,7 @@ add_executable(vestige_tests
     test_terrain_ggx_parity.cpp
     test_terrain_material_set.cpp
     test_terrain_edges.cpp
+    test_terrain_brush.cpp
     test_volumetric_fog_gpu.cpp
     test_gi_gpu.cpp
     test_gi_probe_gpu.cpp

@@ -183,13 +183,15 @@ void TerrainBrush::applyBrush(const glm::vec3& center, float dt, Terrain& terrai
     float tcx = (center.x - cfg.origin.x) / cfg.spacingX;
     float tcz = (center.z - cfg.origin.z) / cfg.spacingZ;
 
-    // Brush radius in texels
-    float texelRadius = radius / cfg.spacingX;
+    // Brush radius in texels, per axis: texels can be spaced differently
+    // along X and Z, and the brush is a circle in world metres.
+    float texelRadiusX = radius / cfg.spacingX;
+    float texelRadiusZ = radius / cfg.spacingZ;
 
-    int minX = static_cast<int>(std::floor(tcx - texelRadius));
-    int maxX = static_cast<int>(std::ceil(tcx + texelRadius));
-    int minZ = static_cast<int>(std::floor(tcz - texelRadius));
-    int maxZ = static_cast<int>(std::ceil(tcz + texelRadius));
+    int minX = static_cast<int>(std::floor(tcx - texelRadiusX));
+    int maxX = static_cast<int>(std::ceil(tcx + texelRadiusX));
+    int minZ = static_cast<int>(std::floor(tcz - texelRadiusZ));
+    int maxZ = static_cast<int>(std::ceil(tcz + texelRadiusZ));
 
     minX = std::max(0, minX);
     maxX = std::min(cfg.width - 1, maxX);
@@ -200,14 +202,14 @@ void TerrainBrush::applyBrush(const glm::vec3& center, float dt, Terrain& terrai
     {
         for (int x = minX; x <= maxX; ++x)
         {
-            // Distance from brush center in texels
-            float dx = static_cast<float>(x) - tcx;
-            float dz = static_cast<float>(z) - tcz;
+            // Distance from brush center in world metres
+            float dx = (static_cast<float>(x) - tcx) * cfg.spacingX;
+            float dz = (static_cast<float>(z) - tcz) * cfg.spacingZ;
             float dist = std::sqrt(dx * dx + dz * dz);
 
-            if (dist > texelRadius) continue;
+            if (dist > radius) continue;
 
-            float weight = computeFalloff(dist / texelRadius);
+            float weight = computeFalloff(dist / radius);
 
             switch (mode)
             {
