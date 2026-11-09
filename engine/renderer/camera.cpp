@@ -86,8 +86,12 @@ void Camera::rotate(float xOffset, float yOffset)
 
 void Camera::adjustFov(float offset)
 {
-    m_fov -= offset;
-    m_fov = std::clamp(m_fov, 1.0f, 120.0f);
+    setFov(m_fov - offset);
+}
+
+void Camera::setFov(float degrees)
+{
+    m_fov = std::clamp(degrees, 1.0f, 120.0f);
 }
 
 glm::vec3 Camera::getPosition() const

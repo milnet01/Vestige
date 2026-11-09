@@ -157,6 +157,8 @@ const Camera& CameraComponent::getCamera() const
         m_cameraDirty = false;
     }
 
+    // fov is a public field, so a change to it never marks the camera dirty.
+    m_camera.setFov(fov);
     return m_camera;
 }
 
@@ -177,6 +179,7 @@ void CameraComponent::syncFromCamera(const Camera& camera)
 
 void CameraComponent::syncToCamera(Camera& camera) const
 {
+    camera.setFov(fov);
     if (m_owner)
     {
         camera.setPosition(m_owner->getWorldPosition());

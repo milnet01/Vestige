@@ -210,6 +210,22 @@ TEST(CameraComponent, SyncToCamera)
     EXPECT_NEAR(cam.getPitch(), -30.0f, 0.001f);
 }
 
+// 3D_E-0874: the component's field of view reaches the camera it drives.
+TEST(CameraComponent, SyncToCameraAppliesFov)
+{
+    Entity entity("CamEntity");
+    auto* comp = entity.addComponent<CameraComponent>();
+    comp->fov = 70.0f;
+
+    Camera cam;
+    comp->syncToCamera(cam);
+    EXPECT_FLOAT_EQ(cam.getFov(), 70.0f);
+
+    EXPECT_FLOAT_EQ(comp->getCamera().getFov(), 70.0f);
+    comp->fov = 30.0f;
+    EXPECT_FLOAT_EQ(comp->getCamera().getFov(), 30.0f);
+}
+
 // --- Scene active camera ---
 
 TEST(CameraComponent, SceneActiveCamera)

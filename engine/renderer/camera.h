@@ -69,6 +69,9 @@ public:
     /// @param offset Scroll amount.
     void adjustFov(float offset);
 
+    /// @brief Sets the field of view in degrees, clamped to 1-120.
+    void setFov(float degrees);
+
     /// @brief Gets the camera's world position.
     glm::vec3 getPosition() const;
 
