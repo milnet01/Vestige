@@ -7384,6 +7384,10 @@ shipped that have no invocation path at all.
   the lane files. Not checked: spiral stair winding (no lead; the
   expectNormalsMatchWinding helper in test_procedural_mesh.cpp can test
   it). Next: remaining REAL rows, highest impact first.
+  2026-11-09: eight more leads fixed, one commit each with a red test first: 3d4be84 camera fov, d17e689 emissive on a disabled
+  renderer, 5299e08 pressure plate floor, d8b74d6 stair step count, 98d9463 gradient selection, ab2a09d terrain brush circle,
+  c2fc581 terrain stroke keeps its mode (was a CHECK row; real), 4cfd28a density stroke undo. Left: path_tool NaN and both
+  cutout rows, done with 3D_E-0967 (the spec moves that code); a new CHECK row: brush_tool endStroke reads the live mode.
   **Layman:** About 290 lower-risk possible bugs and the medium findings are still unchecked.
   Kind: review-fix.
   Source: review-readability 2026-10-31 at 7b2a81d.

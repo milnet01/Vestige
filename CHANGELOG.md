@@ -25,6 +25,31 @@ may change any interface without notice.
 
 ## [Unreleased]
 
+### 2026-11-09 Fixed — cameras, glowing objects, pressure plates and five editor tools behave as shown (3D_E-0874)
+
+- **A camera entity's field of view is used**
+  The camera it drives kept the default 45 degrees.
+
+- **A switched-off glowing object no longer lights its surroundings**
+  It was hidden but still cast its glow.
+
+- **The floor under a pressure plate no longer presses it**
+  Only things that move press a plate now; floors, walls and trigger volumes do not.
+
+- **The stair panel's step count matches the stairs it builds**
+  It showed one step too few for most heights.
+
+- **The colour-gradient editor keeps the stop you selected**
+  Dragging a stop past another, or deleting an earlier one, moved the selection to a different stop.
+
+- **The terrain brush is round on terrain with uneven texel spacing**
+  It was stretched along one axis.
+
+- **A terrain stroke keeps sculpting when the panel switches to painting mid-stroke**
+  It started painting instead, and finishing the stroke could read past the end of its undo snapshot.
+
+- **A density brush stroke can be undone, and marks the scene unsaved**
+
 ### 2026-11-08 Fixed — imported models and starter templates are found by id, swapped meshes are culled by their own size, and cloned particles keep their fades (3D_E-0874)
 
 - **The scene finds an imported model's parts by id**
