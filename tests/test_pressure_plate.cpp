@@ -3,8 +3,9 @@
 
 /// @file test_pressure_plate.cpp
 /// @brief Unit tests for PressurePlateComponent configuration and state.
-/// @note Physics overlap queries require a full Jolt setup and are not tested here.
 
+#include "physics/physics_world.h"
+#include "physics/rigid_body.h"
 #include "scene/entity.h"
 #include "scene/pressure_plate_component.h"
 
@@ -200,6 +201,45 @@ TEST(PressurePlateTest, SetPhysicsWorldToNull)
     PressurePlateComponent plate;
     plate.setPhysicsWorld(nullptr);
     EXPECT_NO_THROW(plate.update(0.016f));
+}
+
+// 3D_E-0874: the floor a plate sits on is not something standing on it.
+// Only moving bodies press a plate; static scenery never does.
+TEST(PressurePlateTest, FloorUnderPlateDoesNotPressIt)
+{
+    PhysicsWorld world;
+    ASSERT_TRUE(world.initialize());
+
+    // Static floor whose top sits at Y=0, the plate's own height.
+    Entity floor("Floor");
+    floor.transform.position = glm::vec3(0.0f, -0.5f, 0.0f);
+    auto* floorBody = floor.addComponent<RigidBody>();
+    floorBody->motionType = BodyMotionType::STATIC;
+    floorBody->shapeType = CollisionShapeType::BOX;
+    floorBody->shapeSize = glm::vec3(50.0f, 0.5f, 50.0f);
+    floor.update(0.0f);
+    floorBody->createBody(world);
+
+    Entity plateEntity("Plate");
+    auto* plate = plateEntity.addComponent<PressurePlateComponent>();
+    plate->setPhysicsWorld(&world);
+
+    plate->update(1.0f);
+    EXPECT_FALSE(plate->isActivated()) << "the floor alone pressed the plate";
+
+    // Control: a loose box on the plate does press it.
+    Entity box("Box");
+    box.transform.position = glm::vec3(0.0f, 0.5f, 0.0f);
+    auto* boxBody = box.addComponent<RigidBody>();
+    boxBody->motionType = BodyMotionType::DYNAMIC;
+    boxBody->shapeType = CollisionShapeType::BOX;
+    boxBody->shapeSize = glm::vec3(0.25f);
+    box.update(0.0f);
+    boxBody->createBody(world);
+
+    plate->update(1.0f);
+    EXPECT_TRUE(plate->isActivated());
+    EXPECT_EQ(plate->getOverlapCount(), 1u);
 }
 
 // =============================================================================

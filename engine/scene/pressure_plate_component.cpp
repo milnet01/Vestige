@@ -6,6 +6,7 @@
 #include "scene/pressure_plate_component.h"
 #include "scene/entity.h"
 #include "physics/physics_world.h"
+#include "physics/physics_layers.h"
 #include "core/logger.h"
 
 #include <Jolt/Physics/Collision/Shape/SphereShape.h>
@@ -14,6 +15,22 @@
 
 namespace Vestige
 {
+
+namespace
+{
+
+/// @brief Lets only bodies that can move press a plate. The floor a plate sits
+///        on, walls beside it and trigger volumes would otherwise count.
+class PressingBodyLayerFilter final : public JPH::ObjectLayerFilter
+{
+public:
+    bool ShouldCollide(JPH::ObjectLayer inLayer) const override
+    {
+        return inLayer != ObjectLayers::STATIC && inLayer != ObjectLayers::TRIGGER;
+    }
+};
+
+} // anonymous namespace
 
 glm::vec3 computePressurePlateCenter(const Entity& owner,
                                      float detectionHeight)
@@ -76,7 +93,9 @@ void PressurePlateComponent::update(float deltaTime)
         queryTransform,
         settings,
         JPH::RVec3::sZero(),
-        collector);
+        collector,
+        JPH::BroadPhaseLayerFilter{},
+        PressingBodyLayerFilter{});
 
     // Collect overlapping body IDs
     std::vector<uint32_t> currentBodies;
