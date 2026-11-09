@@ -161,7 +161,8 @@ check holds, so a hostile file cannot make the builder allocate without bound:
 - `generator` is one of the six names, and `type` one of the three;
 - every float is finite;
 - every length, radius and height is greater than 0 and at most 1000 m,
-  except `overhang` and the opening offsets, which are at least 0 and at most 1000 m;
+  except `overhang`, `peakHeight` and the opening offsets, which are at least 0
+  and at most 1000 m;
 - `innerRadius` is less than `outerRadius`;
 - `totalAngle` is greater than 0 and at most 3600 degrees;
 - `totalHeight / riseHeight` is at most 1024 (the step count);
@@ -178,13 +179,19 @@ mesh's `WALL` recipe, and builds the new mesh from the recipe's `openings` plus
 the new one. Where the mesh has no `WALL` recipe it keeps today's behaviour:
 size from the bounds, one opening.
 
+That build now sits inside `drawConfigDialog`'s ImGui Apply button. It moves
+to a public `CutoutTool::applyOpening(Scene&, CommandHistory&)`, which the
+button calls. It acts on the wall `selectWall` chose, with the tool's public
+opening fields.
+
 ## 5. Invariants
 
 - **INV-1** — An entity made by each `EntityFactory` architectural preset,
   and by each of `WallTool`, `RoomTool`, `RoofTool`, `StairTool` (straight and
   spiral) and `PathTool`, still has a `MeshRenderer` after
   `serializeEntity` then `deserializeEntity`, and its mesh has the same local
-  bounds and index count as the original.
+  bounds and index count as the original. `createRoom` and `RoomTool` return
+  a group with no mesh; for them this holds for each child that has one.
   *Test:* `tests/test_procedural_mesh_save.cpp`, one case per builder; the
   factory-wall case is the parked red test.
   *Breaks when:* a `create*` function does not stamp its recipe, or `build`
@@ -204,7 +211,8 @@ size from the bounds, one opening.
   such as on `MeshRenderer`.
 
 - **INV-4** — A keyed mesh is saved by its key alone: a `MeshRenderer` on
-  `getCubeMesh()` saves `"mesh": "__builtin_cube"` and no `"procedural"`.
+  `getCubeMesh()`, after a `WALL` recipe is set on that mesh, saves
+  `"mesh": "__builtin_cube"` and no `"procedural"`.
   *Test:* `tests/test_procedural_mesh_save.cpp`
   `KeyedMeshSavesKeyNotRecipe`.
   *Breaks when:* the writer checks the recipe before the key.
@@ -212,11 +220,14 @@ size from the bounds, one opening.
 - **INV-5** — A recipe that breaks any limit in § 4.5 is refused, and the
   entity loads with no `MeshRenderer`. This is the trust boundary.
   *Test:* `tests/test_mesh_recipe.cpp`, one case per limit: each fixture is a
-  valid recipe with one field moved just past its limit, and `fromJson`
-  returns `nullopt`; the same recipe with the field at its limit returns a
-  value.
-  *Breaks when:* any one check is missing. The at-the-limit twin shows the
-  refusal comes from that check and not from another.
+  valid recipe with one check broken, and `fromJson` returns `nullopt`. For a
+  numeric bound, a twin with the field at the bound returns a value; for a
+  strict bound (greater than, less than) the twin takes the nearest value that
+  passes. The finiteness and name checks have no twin.
+  `tests/test_procedural_mesh_save.cpp` `RefusedRecipeLoadsWithoutMeshRenderer`
+  loads an entity whose recipe breaks a limit.
+  *Breaks when:* any one check is missing. The twin shows the refusal comes
+  from that check and not from another.
 
 - **INV-6** — `toJson` then `fromJson` returns an equal recipe for every
   generator.
@@ -225,9 +236,8 @@ size from the bounds, one opening.
 
 - **INV-7** — A saved scene has `format_version` 3, and a version-2 scene
   still loads.
-  *Test:* `tests/test_scene_serializer.cpp`: the existing cases that load
-  `tests/fixtures/scenes/pre_v2_no_music.scene` stay green, plus
-  `SavedSceneIsVersion3`.
+  *Test:* `tests/test_scene_serializer.cpp` `SavedSceneIsVersion3`, and
+  `Version2SceneStillLoads`, which loads a scene whose `format_version` is 2.
   *Breaks when:* `CURRENT_FORMAT_VERSION` is not raised, or `migrateScene`
   refuses version 2.
 
@@ -254,13 +264,15 @@ size from the bounds, one opening.
 | one case per builder | `tests/test_procedural_mesh_save.cpp` (new; GL fixture) | INV-1 |
 | `SecondCutKeepsTheFirstOpening` | same | INV-2 |
 | `KeyedMeshSavesKeyNotRecipe` | same | INV-4 |
+| `RefusedRecipeLoadsWithoutMeshRenderer` | same | INV-5 |
 | `UndoRestoresTheRecipe` | `tests/test_cutout_opening_command.cpp` | INV-3 |
 | one case per limit, `RoundTripsEveryGenerator` | `tests/test_mesh_recipe.cpp` (new; no GL) | INV-5, INV-6 |
-| `SavedSceneIsVersion3` | `tests/test_scene_serializer.cpp` | INV-7 |
+| `SavedSceneIsVersion3`, `Version2SceneStillLoads` | `tests/test_scene_serializer.cpp` | INV-7 |
 
-Each new test is run red against the current code before the fix. The
-`PathTool` and `CutoutTool` cases drive the tools' build functions, not
-ImGui.
+Each new test is run red against the current code before the fix. No case
+goes through ImGui: the `PathTool` case drives `processClick` and
+`finishPath`, and the `CutoutTool` cases drive `selectWall` and
+`applyOpening` (§ 4.6).
 
 ## 8. Alternatives considered (and rejected)
 
@@ -302,7 +314,7 @@ ImGui.
 | INV-2 | `tests/test_procedural_mesh_save.cpp` `SecondCutKeepsTheFirstOpening` |
 | INV-3 | `tests/test_cutout_opening_command.cpp` `UndoRestoresTheRecipe` |
 | INV-4 | `tests/test_procedural_mesh_save.cpp` `KeyedMeshSavesKeyNotRecipe` |
-| INV-5 | `tests/test_mesh_recipe.cpp` limit cases |
+| INV-5 | `tests/test_mesh_recipe.cpp` limit cases; `tests/test_procedural_mesh_save.cpp` `RefusedRecipeLoadsWithoutMeshRenderer` |
 | INV-6 | `tests/test_mesh_recipe.cpp` `RoundTripsEveryGenerator` |
 | INV-7 | `tests/test_scene_serializer.cpp` |
 | A new builder call site gets a recipe | Partial: a site through `ProceduralMeshBuilder::create*` gets one by § 4.3; a site building vertices inline, as `PathTool` did, gets none and nothing catches it |
