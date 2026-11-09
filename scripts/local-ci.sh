@@ -346,6 +346,20 @@ MSVC_TEST_TIMEOUT="${VESTIGE_CI_MSVC_TEST_TIMEOUT:-600}"
 # test run sets VESTIGE_TEST_NO_GL=1: without it the GL tests passed here while
 # their skip path crashed on GitHub (IblFacePassTest, 2026-11-05). The Linux
 # stages still run every GL test.
+# The MSVC cross-compile environment. Call it inside a subshell, so it cannot
+# poison the Linux stages' PATH or compiler choice. Every command that may run
+# CMake on build-msvc needs it, the step estimate in lanes_parallel_ok included:
+# a regenerate there without it once cached the host's PipeWire for the Windows
+# target (2026-11-09).
+msvc_cross_env() {
+    export PATH="$MSVC_WINE_BIN:$PATH" CC=cl CXX=cl
+    # Cross-compile hygiene: empty pkg-config registry so host Linux libs (e.g.
+    # PipeWire's spa headers → unistd.h) can't leak into the Windows-target build.
+    # A native Windows build has none of these; this reproduces that.
+    mkdir -p "$REPO_ROOT/.ci-tools/empty-pkgconfig"
+    export PKG_CONFIG_LIBDIR="$REPO_ROOT/.ci-tools/empty-pkgconfig" PKG_CONFIG_PATH=""
+}
+
 build_and_test_msvc() {
     local label="Windows MSVC build+test" start=$SECONDS
     banner "$label — msvc-wine (real MSVC cl.exe under Wine)"
@@ -361,12 +375,7 @@ build_and_test_msvc() {
     # Subshell scopes the MSVC toolchain + cross-compile env so it can't poison the
     # Linux stages' PATH / compiler selection.
     (
-        export PATH="$MSVC_WINE_BIN:$PATH" CC=cl CXX=cl
-        # Cross-compile hygiene: empty pkg-config registry so host Linux libs (e.g.
-        # PipeWire's spa headers → unistd.h) can't leak into the Windows-target build.
-        # A native Windows build has none of these; this reproduces that.
-        mkdir -p "$REPO_ROOT/.ci-tools/empty-pkgconfig"
-        export PKG_CONFIG_LIBDIR="$REPO_ROOT/.ci-tools/empty-pkgconfig" PKG_CONFIG_PATH=""
+        msvc_cross_env
         # -DCMAKE_MSVC_DEBUG_INFORMATION_FORMAT=Embedded (+CMP0141 NEW): avoid the
         # separate-PDB compiler probe msvc-wine can't do (README "Does it work with
         # CMake?"); keep debug info in the .obj.
@@ -498,7 +507,9 @@ lanes_parallel_ok() {
     d="$(in_ci debug "ninja -C build build.ninja >/dev/null 2>&1; ninja -C build -n 2>/dev/null" | dry_steps)"
     r="$(in_ci release "ninja -C build build.ninja >/dev/null 2>&1; ninja -C build -n 2>/dev/null" | dry_steps)"
     if [[ $WINDOWS -eq 1 && -x "$MSVC_WINE_BIN/cl" ]]; then
-        m="$( { ninja -C build-msvc build.ninja >/dev/null 2>&1; ninja -C build-msvc -n 2>/dev/null; } | dry_steps)"
+        m="$( ( msvc_cross_env
+                ninja -C build-msvc build.ninja >/dev/null 2>&1
+                ninja -C build-msvc -n 2>/dev/null ) | dry_steps)"
     fi
     echo "  build steps left: Debug $d, Release $r, Windows $m (parallel at $PAR_MAX_STEPS or fewer each)"
     (( d <= PAR_MAX_STEPS && r <= PAR_MAX_STEPS && m <= PAR_MAX_STEPS ))
