@@ -7569,6 +7569,11 @@ shipped that have no invocation path at all.
   A save-format change across editor, scene and resource: needs a spec
   (spec-format.md §1) before building. The cutout lead depends on it:
   a wall keeps earlier openings only if they are stored with it.
+  Spec docs/specs/3D_E-0967-procedural-mesh-save.md accepted 2026-11-09
+  after review-contract reached its two-loop cap (calm cap; 10 verified
+  findings fixed, none deferred). Record:
+  docs/reviews/3D_E-0967-procedural-mesh-save-loop-log.md. The last
+  loop's fixes were read by no lane; the build is the next reader.
   **Layman:** Anything made with the building tools comes back as an empty, invisible object after you save and reopen the scene.
   Kind: fix.
   Source: 3D_E-0874 cutout lead re-check 2026-11-08.
