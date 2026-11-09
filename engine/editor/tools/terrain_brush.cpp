@@ -59,6 +59,7 @@ void TerrainBrush::beginStroke(Terrain& terrain)
 {
     m_painting = true;
     m_hasDirtyRegion = false;
+    m_strokeMode = mode;
 
     // Snapshot the entire heightmap/splatmap for undo
     // (we'll trim to dirty region when creating the command)
@@ -66,7 +67,7 @@ void TerrainBrush::beginStroke(Terrain& terrain)
     int d = terrain.getDepth();
     int total = w * d;
 
-    if (mode == TerrainBrushMode::PAINT)
+    if (m_strokeMode == TerrainBrushMode::PAINT)
     {
         m_beforeSplat.resize(static_cast<size_t>(total));
         for (int z = 0; z < d; ++z)
@@ -89,7 +90,7 @@ void TerrainBrush::beginStroke(Terrain& terrain)
         }
 
         // For flatten mode, sample the reference height at the cursor
-        if (mode == TerrainBrushMode::FLATTEN)
+        if (m_strokeMode == TerrainBrushMode::FLATTEN)
         {
             m_flattenHeight = terrain.getRawHeight(
                 static_cast<int>((m_hitPoint.x - terrain.getConfig().origin.x)
@@ -120,7 +121,7 @@ void TerrainBrush::endStroke(Terrain& terrain, CommandHistory& history)
 
     if (regionW <= 0 || regionH <= 0) return;
 
-    if (mode == TerrainBrushMode::PAINT)
+    if (m_strokeMode == TerrainBrushMode::PAINT)
     {
         // Extract before/after splatmap for just the dirty region
         std::vector<glm::vec4> beforeRegion(static_cast<size_t>(regionW * regionH));
@@ -169,7 +170,7 @@ void TerrainBrush::endStroke(Terrain& terrain, CommandHistory& history)
     m_beforeSplat.clear();
 
     // Rebuild quadtree after sculpting to update min/max heights
-    if (mode != TerrainBrushMode::PAINT)
+    if (m_strokeMode != TerrainBrushMode::PAINT)
     {
         terrain.buildQuadtree();
     }
@@ -211,7 +212,7 @@ void TerrainBrush::applyBrush(const glm::vec3& center, float dt, Terrain& terrai
 
             float weight = computeFalloff(dist / radius);
 
-            switch (mode)
+            switch (m_strokeMode)
             {
                 case TerrainBrushMode::RAISE:
                     applyRaise(x, z, weight, dt, terrain);
@@ -239,7 +240,7 @@ void TerrainBrush::applyBrush(const glm::vec3& center, float dt, Terrain& terrai
     int uploadH = maxZ - minZ + 1;
     if (uploadW > 0 && uploadH > 0)
     {
-        if (mode == TerrainBrushMode::PAINT)
+        if (m_strokeMode == TerrainBrushMode::PAINT)
         {
             terrain.updateSplatmapRegion(minX, minZ, uploadW, uploadH);
         }

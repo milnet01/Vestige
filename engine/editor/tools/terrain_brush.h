@@ -86,6 +86,10 @@ private:
 
     bool m_enabled = false;
     bool m_painting = false;
+    // The mode the open stroke started in. The panel can change `mode` mid-
+    // stroke; the stroke keeps sculpting or painting as it began, so its undo
+    // snapshot matches what it changed.
+    TerrainBrushMode m_strokeMode = TerrainBrushMode::RAISE;
 
     // Hit state
     glm::vec3 m_hitPoint{0.0f};

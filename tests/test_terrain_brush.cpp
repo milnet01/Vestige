@@ -59,5 +59,50 @@ TEST_F(TerrainBrushTest, BrushIsACircleWhenSpacingDiffersByAxis)
     EXPECT_FLOAT_EQ(terrain.getRawHeight(21, 16), 0.0f) << "5 m along X is outside 4 m";
 }
 
+// The terrain panel switches the brush to PAINT when a layer is picked, which
+// can happen while a sculpt stroke is still open. The stroke keeps the mode it
+// started with, and its undo restores what that mode changed.
+TEST_F(TerrainBrushTest, StrokeKeepsTheModeItStartedWith)
+{
+    TerrainConfig config;
+    config.width = 33;
+    config.depth = 33;
+    Terrain terrain;
+    ASSERT_TRUE(terrain.initialize(config));
+    for (int z = 0; z < config.depth; ++z)
+    {
+        for (int x = 0; x < config.width; ++x)
+        {
+            terrain.setRawHeight(x, z, 0.0f);
+        }
+    }
+    const glm::vec4 splatBefore = terrain.getSplatWeight(16, 16);
+
+    TerrainBrush brush;
+    brush.setEnabled(true);
+    brush.mode = TerrainBrushMode::RAISE;
+    brush.radius = 3.0f;
+    brush.paintChannel = 2;
+
+    Ray ray;
+    ray.origin = glm::vec3(16.0f, 100.0f, 16.0f);
+    ray.direction = glm::vec3(0.0f, -1.0f, 0.0f);
+    CommandHistory history;
+
+    ASSERT_TRUE(brush.processInput(ray, true, 0.1f, terrain, history));
+    const float raisedOnce = terrain.getRawHeight(16, 16);
+    ASSERT_GT(raisedOnce, 0.0f);
+
+    brush.mode = TerrainBrushMode::PAINT;  // switched mid-stroke
+    ASSERT_TRUE(brush.processInput(ray, true, 0.1f, terrain, history));
+    EXPECT_GT(terrain.getRawHeight(16, 16), raisedOnce) << "stroke stopped raising";
+    EXPECT_EQ(terrain.getSplatWeight(16, 16), splatBefore) << "stroke started painting";
+
+    brush.processInput(ray, false, 0.1f, terrain, history);  // release: ends the stroke
+    ASSERT_TRUE(history.canUndo());
+    history.undo();
+    EXPECT_FLOAT_EQ(terrain.getRawHeight(16, 16), 0.0f) << "undo did not restore the heights";
+}
+
 } // namespace
 } // namespace Vestige
