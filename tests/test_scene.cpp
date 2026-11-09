@@ -4,7 +4,9 @@
 /// @file test_scene.cpp
 /// @brief Unit tests for the Scene and SceneManager systems.
 #include "scene/camera_component.h"
+#include "renderer/material.h"
 #include "scene/light_component.h"
+#include "scene/mesh_renderer.h"
 #include "scene/scene.h"
 #include "scene/scene_manager.h"
 
@@ -304,4 +306,21 @@ TEST(SceneTest, SpotLightDirectionFollowsEntityRotation_0857)
     SceneRenderData squashed = scene.collectRenderData();
     ASSERT_EQ(squashed.spotLights.size(), 1u);
     EXPECT_FLOAT_EQ(squashed.spotLights[0].direction.y, -1.0f);
+}
+
+// 3D_E-0874: a glowing object that is switched off (its MeshRenderer
+// disabled) is not drawn, so it must not light its surroundings either.
+TEST(SceneTest, DisabledRendererGivesNoEmissiveLight)
+{
+    Scene scene("Glow");
+    Entity* lamp = scene.createEntity("Lamp");
+    auto material = std::make_shared<Material>();
+    material->setEmissive(glm::vec3(1.0f, 0.5f, 0.0f));
+    auto* renderer = lamp->addComponent<MeshRenderer>(nullptr, material);
+    lamp->addComponent<EmissiveLightComponent>();
+
+    EXPECT_EQ(scene.collectRenderData().pointLights.size(), 1u);
+
+    renderer->setEnabled(false);
+    EXPECT_EQ(scene.collectRenderData().pointLights.size(), 0u);
 }

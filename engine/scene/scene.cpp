@@ -479,9 +479,10 @@ void Scene::collectRenderDataRecursive(
         data.spotLights.push_back(sl);
     }
 
-    // Emissive light auto-generation: create a synthetic point light from emissive material
+    // Emissive light auto-generation: create a synthetic point light from emissive material.
+    // A disabled renderer is not drawn, so its glow lights nothing either.
     auto* emissiveLight = entity.getComponent<EmissiveLightComponent>();
-    if (emissiveLight && emissiveLight->isEnabled() && meshRenderer)
+    if (emissiveLight && emissiveLight->isEnabled() && meshRenderer && meshRenderer->isEnabled())
     {
         auto mat = meshRenderer->getMaterial();
         if (mat)
