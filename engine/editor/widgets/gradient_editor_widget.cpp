@@ -143,7 +143,8 @@ bool drawGradientEditor(const char* label, ColorGradient& gradient, float width,
         {
             dragStop = -1;
             storage->SetInt(dragKey, dragStop);
-            gradient.sort();
+            selectedStop = gradient.sortTracking(selectedStop);
+            storage->SetInt(selectedKey, selectedStop);
             modified = true;
         }
 
@@ -153,11 +154,8 @@ bool drawGradientEditor(const char* label, ColorGradient& gradient, float width,
             if (gradient.stops.size() > 2)
             {
                 gradient.removeStop(i);
-                if (selectedStop >= static_cast<int>(gradient.stops.size()))
-                {
-                    selectedStop = static_cast<int>(gradient.stops.size()) - 1;
-                    storage->SetInt(selectedKey, selectedStop);
-                }
+                selectedStop = ColorGradient::indexAfterRemoval(selectedStop, i);
+                storage->SetInt(selectedKey, selectedStop);
                 modified = true;
                 --i;
                 continue;

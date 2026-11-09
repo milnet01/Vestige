@@ -78,6 +78,52 @@ void ColorGradient::sort()
               });
 }
 
+int ColorGradient::sortTracking(int index)
+{
+    if (index < 0 || index >= static_cast<int>(stops.size()))
+    {
+        sort();
+        return -1;
+    }
+
+    // Sort an index permutation so the tracked stop can be found afterwards;
+    // equal positions keep their order, so the stop is never confused with a twin.
+    std::vector<int> order(stops.size());
+    for (size_t i = 0; i < order.size(); ++i)
+    {
+        order[i] = static_cast<int>(i);
+    }
+    std::stable_sort(order.begin(), order.end(),
+                     [this](int a, int b)
+                     {
+                         return stops[static_cast<size_t>(a)].position
+                              < stops[static_cast<size_t>(b)].position;
+                     });
+
+    std::vector<ColorStop> sorted;
+    sorted.reserve(stops.size());
+    int newIndex = -1;
+    for (size_t i = 0; i < order.size(); ++i)
+    {
+        sorted.push_back(stops[static_cast<size_t>(order[i])]);
+        if (order[i] == index)
+        {
+            newIndex = static_cast<int>(i);
+        }
+    }
+    stops = std::move(sorted);
+    return newIndex;
+}
+
+int ColorGradient::indexAfterRemoval(int index, int removed)
+{
+    if (index == removed)
+    {
+        return -1;
+    }
+    return (index > removed) ? index - 1 : index;
+}
+
 nlohmann::json ColorGradient::toJson() const
 {
     nlohmann::json j = nlohmann::json::array();

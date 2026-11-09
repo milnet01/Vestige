@@ -220,3 +220,25 @@ TEST(ColorGradientTest, JsonRoundTrip)
         EXPECT_FLOAT_EQ(restored.stops[i].color.a, grad.stops[i].color.a);
     }
 }
+
+// 3D_E-0874: the gradient editor's selection follows its stop when a drag
+// re-sorts the stops or another stop is removed.
+TEST(ColorGradientTest, SortTrackingFollowsADraggedStop)
+{
+    ColorGradient grad;
+    grad.stops = {{0.0f, glm::vec4(1.0f)}, {0.5f, glm::vec4(0.5f)}, {1.0f, glm::vec4(0.0f)}};
+    grad.stops[0].position = 0.8f;  // dragged past the middle stop
+
+    const int now = grad.sortTracking(0);
+    ASSERT_EQ(now, 1);
+    EXPECT_FLOAT_EQ(grad.stops[1].position, 0.8f);
+    EXPECT_EQ(grad.sortTracking(-1), -1);
+}
+
+TEST(ColorGradientTest, IndexAfterRemovalFollowsTheSelectedStop)
+{
+    EXPECT_EQ(ColorGradient::indexAfterRemoval(2, 0), 1);   // an earlier stop went
+    EXPECT_EQ(ColorGradient::indexAfterRemoval(1, 1), -1);  // the selected stop went
+    EXPECT_EQ(ColorGradient::indexAfterRemoval(0, 2), 0);   // a later stop went
+}
+

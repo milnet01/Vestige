@@ -42,6 +42,14 @@ struct ColorGradient
     /// @brief Ensures stops are sorted by position.
     void sort();
 
+    /// @brief Sorts, and returns where the stop that was at @a index now is
+    ///        (-1 stays -1), so an editor's selection follows its stop.
+    int sortTracking(int index);
+
+    /// @brief Where the stop at @a index is after the stop at @a removed was
+    ///        erased: one earlier if it came after, -1 if it was the one removed.
+    static int indexAfterRemoval(int index, int removed);
+
     /// @brief Serializes the gradient to JSON.
     nlohmann::json toJson() const;
 
