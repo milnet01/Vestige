@@ -59,6 +59,9 @@ public:
     /// @brief Returns true if the ImGui panel should be displayed.
     bool showingPanel() const { return m_state == State::CONFIGURE; }
 
+    /// @brief The number of steps the placed stairs will have.
+    int getStepCount() const;
+
     // Parameters
     StairType stairType = StairType::STRAIGHT;  ///< Straight or spiral.
     float totalHeight = 3.0f;       ///< Total height of the staircase in meters.

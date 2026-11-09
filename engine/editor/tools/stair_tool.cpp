@@ -76,10 +76,8 @@ bool StairTool::processClick(const glm::vec3& hitPoint, Scene& scene,
     auto cmd = std::make_unique<CreateEntityCommand>(scene, entity->getId());
     history.execute(std::move(cmd));
 
-    // Calculate approximate step count for logging
-    int stepCount = static_cast<int>(totalHeight / stepHeight);
     Logger::info("StairTool: placed " + entityName + " ("
-                 + std::to_string(stepCount) + " steps, "
+                 + std::to_string(getStepCount()) + " steps, "
                  + std::to_string(totalHeight) + "m height)");
 
     // Return to configure state for placing more stairs
@@ -124,9 +122,8 @@ void StairTool::drawConfigPanel()
         }
 
         // Display calculated step count
-        int stepCount = (stepHeight > 0.01f) ? static_cast<int>(totalHeight / stepHeight) : 0;
         ImGui::Separator();
-        ImGui::Text("Calculated steps: %d", stepCount);
+        ImGui::Text("Calculated steps: %d", getStepCount());
 
         ImGui::Separator();
         if (ImGui::Button("Place", ImVec2(120, 0)))
@@ -141,6 +138,11 @@ void StairTool::drawConfigPanel()
         }
     }
     ImGui::End();
+}
+
+int StairTool::getStepCount() const
+{
+    return ProceduralMeshBuilder::stairStepCount(totalHeight, stepHeight);
 }
 
 } // namespace Vestige

@@ -624,6 +624,11 @@ ProceduralMeshData ProceduralMeshBuilder::generateRoof(RoofType type, float widt
 // createStraightStairs
 // =============================================================================
 
+int ProceduralMeshBuilder::stairStepCount(float totalHeight, float riseHeight)
+{
+    return std::max(1, static_cast<int>(std::round(totalHeight / riseHeight)));
+}
+
 ProceduralMeshData ProceduralMeshBuilder::generateStraightStairs(
     float totalHeight, float riseHeight, float treadDepth, float width)
 {
@@ -632,7 +637,7 @@ ProceduralMeshData ProceduralMeshBuilder::generateStraightStairs(
 
     // Clamp riseHeight to sensible bounds
     riseHeight = std::max(0.05f, std::min(riseHeight, totalHeight));
-    int stepCount = std::max(1, static_cast<int>(std::round(totalHeight / riseHeight)));
+    int stepCount = stairStepCount(totalHeight, riseHeight);
     float actualRise = totalHeight / static_cast<float>(stepCount);
     float hw = width * 0.5f;
 
@@ -757,7 +762,7 @@ ProceduralMeshData ProceduralMeshBuilder::generateSpiralStairs(
     std::vector<uint32_t> indices;
 
     riseHeight = std::max(0.05f, std::min(riseHeight, totalHeight));
-    int stepCount = std::max(1, static_cast<int>(std::round(totalHeight / riseHeight)));
+    int stepCount = stairStepCount(totalHeight, riseHeight);
     float actualRise = totalHeight / static_cast<float>(stepCount);
     float anglePerStep = glm::radians(totalAngle) / static_cast<float>(stepCount);
 

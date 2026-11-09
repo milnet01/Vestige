@@ -414,3 +414,13 @@ TEST(StairToolTest, ParametersModifiable)
     EXPECT_FLOAT_EQ(tool.outerRadius, 2.0f);
     EXPECT_FLOAT_EQ(tool.totalAngle, 720.0f);
 }
+
+// 3D_E-0874: the panel's step count is the count the builder makes.
+// 3.0 m / 0.178 m = 16.85: the builder rounds to 17 steps.
+TEST(StairToolTest, StepCountMatchesTheBuiltStairs)
+{
+    StairTool tool;
+    tool.totalHeight = 3.0f;
+    tool.stepHeight = 0.178f;
+    EXPECT_EQ(tool.getStepCount(), 17);
+}

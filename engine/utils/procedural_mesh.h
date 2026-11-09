@@ -75,6 +75,10 @@ public:
                                                     float innerRadius, float outerRadius,
                                                     float totalAngle);
 
+    /// @brief Number of steps a staircase of this height and rise has: the
+    ///        nearest whole number, at least one. Both stair generators use it.
+    static int stairStepCount(float totalHeight, float riseHeight);
+
     /// @brief Convenience: generates data and uploads to a Mesh. Requires GL context.
     static Mesh createWall(float width, float height, float thickness);
     static Mesh createWallWithOpenings(float width, float height, float thickness,
