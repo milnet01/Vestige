@@ -9892,6 +9892,12 @@ Outdoor landscapes surrounding the Temple complex — hills, valleys, and the Ki
   lowering the peak. Score edge agreement against a full-res reference,
   not gradient energy. Our TAA (taa_resolve.frag.glsl) already blends
   0.1 current on still pixels.
+  Negative result 2026-11-10 (DOOM Ants, same know_how topic, revision
+  2): YCoCg variance clipping doubled flicker and cut edge detail
+  against a plain per-channel min/max clamp, on noisy path-traced input,
+  at every width tried. Our taa_resolve.frag.glsl uses YCoCg variance
+  clipping on raster input; untested here whether the result carries
+  over.
   **Layman:** Rendering smaller and upscaling well is what gets the weak graphics card to 60 FPS without looking blurry.
   Kind: perf.
   Source: tech-survey-2026-09-02.
