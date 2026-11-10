@@ -7615,6 +7615,18 @@ shipped that have no invocation path at all.
   loaded run inconclusive. Unblocks trusting A/B runs for 0704, 0658,
   0795 on a shared machine. CPU / GPU placement: CPU file reads at run
   start; nothing on the GPU.
+  2026-11-10: frameledger FLED-0030 (agreed by Vestige) adds load.peak
+  and gpu_busy_pct.peak: the share OTHER programs used during the run,
+  never the run's own work. Compare marks a run over --max-load 0.25 or
+  --max-gpu-busy 20 as under load, exit 2. Method sent to frameledger.
+  Linux CPU: /proc/stat busy minus our /proc/self/stat utime+stime.
+  Linux GPU: whole-GPU busy minus our own engine time from DRM fdinfo
+  (drm-engine-gfx). Windows (later, with 0820): GetSystemTimes minus
+  GetProcessTimes; PDH "GPU Engine" per pid. Read gpu_clock_mhz.end
+  after the last frame, before shutdown (amdgpu drops to idle clock
+  within ms). Its A/B runner is frameledger `alternate` (FLED-0029):
+  `--old '<old>/bin/vestige --demo-flythrough --no-vsync
+  --frame-log={run}' --new ... --out DIR --warmup 1`.
   **Layman:** Speed tests will say when another program was using the graphics card, so a slow reading caused by that is not trusted.
   Kind: enhancement.
   Source: frameledger-2026-11-10.
