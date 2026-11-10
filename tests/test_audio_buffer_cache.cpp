@@ -13,11 +13,16 @@
 /// `loadBuffer` short-circuits to 0 without a device, so we can't
 /// directly populate the cache from disk in this test. Coverage here
 /// focuses on the API contract: defaults, setter retroactive
-/// enforcement, flush idempotency. The end-to-end loadBuffer→evict
-/// path is exercised by integration tests on machines with audio.
+/// enforcement, flush idempotency. The eviction test at the end opens
+/// OpenAL's null device to drive loadBuffer→evict end to end.
 
 #include <gtest/gtest.h>
 #include "audio/audio_engine.h"
+#include "audio_device_helpers.h"
+
+#include <AL/al.h>
+
+#include <filesystem>
 
 namespace Vestige::AudioBufferCache::Test
 {
@@ -75,5 +80,44 @@ TEST_F(AudioBufferCacheTest, DefaultLimitIs256)
 {
     EXPECT_EQ(AudioEngine::kDefaultBufferCacheLimit, 256u);
 }
+
+#ifndef _WIN32
+
+// 3D_E-0874 lane 10 — eviction must skip a buffer a playing source holds.
+// OpenAL refuses to delete it, so deleting leaked it and left an
+// AL_INVALID_OPERATION that the next upload read as its own failure.
+TEST(AudioBufferCacheEviction, AttachedBufferIsKeptAndLaterLoadsSucceed)
+{
+    AudioEngine engine;
+    if (!TestAudio::openNullAudioDevice(engine))
+    {
+        GTEST_SKIP() << "no OpenAL device could be opened";
+    }
+    engine.setBufferCacheLimit(1);
+
+    const auto a = TestAudio::writeTestWav("vestige_evict_a.wav", 0.5f, 1);
+    const auto b = TestAudio::writeTestWav("vestige_evict_b.wav", 0.5f, 1);
+    const auto c = TestAudio::writeTestWav("vestige_evict_c.wav", 0.5f, 1);
+
+    const ALuint bufferA = engine.loadBuffer(a.string());
+    ASSERT_NE(bufferA, 0u);
+    const unsigned int voice = engine.playSound2D(a.string(), 1.0f, AudioBus::Ui,
+                                                  SoundPriority::Normal, /*loop=*/true);
+    ASSERT_NE(voice, 0u);
+
+    EXPECT_NE(engine.loadBuffer(b.string()), 0u);
+    EXPECT_NE(engine.loadBuffer(c.string()), 0u)
+        << "a load after evicting a playing buffer failed";
+    EXPECT_EQ(alIsBuffer(bufferA), AL_TRUE);
+    EXPECT_EQ(engine.loadBuffer(a.string()), bufferA)
+        << "the playing buffer left the cache, so its handle leaked";
+
+    engine.stopSound(voice);
+    std::filesystem::remove(a);
+    std::filesystem::remove(b);
+    std::filesystem::remove(c);
+}
+
+#endif
 
 }  // namespace Vestige::AudioBufferCache::Test

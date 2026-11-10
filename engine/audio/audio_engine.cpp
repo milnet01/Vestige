@@ -553,37 +553,53 @@ unsigned int AudioEngine::loadBuffer(const std::string& filePath)
 
     // Phase 10.9 Slice 8 W8: insert at MRU-front, then evict from the
     // LRU tail until cache size is at-or-below the configured cap.
-    // Unlike ResourceManager, we don't have a use_count gate because
-    // OpenAL buffer handles are unsigned ints, not shared_ptrs — but
-    // dropping a cache entry while a source is still bound is NOT safe
-    // to rely on: OpenAL refuses to delete an attached buffer
-    // (AL_INVALID_OPERATION), so that buffer is not freed. Future `loadBuffer`
-    // calls will re-decode and create a fresh OpenAL buffer, which
-    // is the same trade ResourceManager's eviction makes (re-decode
-    // beats unbounded growth).
     m_bufferCache[filePath] = buffer;
     m_bufferOrder.push_front(filePath);
     enforceBufferCacheLimit();
     return buffer;
 }
 
+bool AudioEngine::isBufferAttached(unsigned int buffer) const
+{
+    for (ALuint source : m_sourcePool)
+    {
+        ALint attached = 0;
+        alGetSourcei(source, AL_BUFFER, &attached);
+        if (static_cast<ALuint>(attached) == buffer)
+        {
+            return true;
+        }
+    }
+    return false;
+}
+
 void AudioEngine::enforceBufferCacheLimit()
 {
-    while (m_bufferCache.size() > m_bufferCacheLimit && !m_bufferOrder.empty())
+    // Evict least-recently-used first, but skip a buffer a source still
+    // holds: OpenAL refuses to delete it (AL_INVALID_OPERATION), which would
+    // leak the buffer and leave an error that fails the next upload. A
+    // skipped buffer stays cached, so the cache can sit over its limit until
+    // that source lets go; a later eviction pass then frees it.
+    auto it = m_bufferOrder.end();
+    while (m_bufferCache.size() > m_bufferCacheLimit && it != m_bufferOrder.begin())
     {
-        const std::string victim = m_bufferOrder.back();
-        m_bufferOrder.pop_back();
-        m_loudnessLufs.erase(victim);  // AX9 — keep the loudness map bounded
-        auto it = m_bufferCache.find(victim);
-        if (it != m_bufferCache.end())
+        --it;
+        auto cached = m_bufferCache.find(*it);
+        if (cached != m_bufferCache.end())
         {
-            ALuint buffer = it->second;
+            ALuint buffer = cached->second;
             if (m_available && buffer != 0)
             {
+                if (isBufferAttached(buffer))
+                {
+                    continue;
+                }
                 alDeleteBuffers(1, &buffer);
             }
-            m_bufferCache.erase(it);
+            m_bufferCache.erase(cached);
         }
+        m_loudnessLufs.erase(*it);  // AX9 — keep the loudness map bounded
+        it = m_bufferOrder.erase(it);
     }
 }
 

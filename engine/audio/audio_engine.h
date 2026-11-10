@@ -1006,9 +1006,13 @@ private:
 
     /// @brief Phase 10.9 Slice 8 W8 — pops LRU-tail entries from
     ///        `m_bufferCache` (with `alDeleteBuffers`) until size ≤
-    ///        `m_bufferCacheLimit`. Called automatically after every
+    ///        `m_bufferCacheLimit`, skipping a buffer a pooled source
+    ///        still holds. Called automatically after every
     ///        `loadBuffer` insert and from `setBufferCacheLimit`.
     void enforceBufferCacheLimit();
+
+    /// @brief True when any pooled source has @p buffer attached.
+    bool isBufferAttached(unsigned int buffer) const;
 
     /// @brief AX2 R2 — deletes the evicted IR buffer IDs a pool operation
     ///        returned, then logs if the pool still exceeds its cap because the
