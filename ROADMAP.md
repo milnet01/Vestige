@@ -1,6 +1,6 @@
 <!-- ants-roadmap-format: 1 -->
 <!-- Generated from the Ants Terminal roadmap store. Edit it with roadmap_log; hand edits are discarded by the next write. -->
-<!-- ants-roadmap-id-high-water: 3D_E=967 3D_E#S=989 -->
+<!-- ants-roadmap-id-high-water: 3D_E=968 3D_E#S=989 -->
 
 # Vestige Engine Roadmap
 
@@ -7595,6 +7595,22 @@ shipped that have no invocation path at all.
   Kind: fix.
   Source: 3D_E-0874 cutout lead re-check 2026-11-08.
   Lanes: editor, scene, resource.
+
+- 📋 [3D_E-0968] **Fill the frame log's load and GPU-busy header fields so a run on a busy machine is flagged.**
+  frameledger's format spec § 4.2 has optional header fields load,
+  gpu_busy_pct and gpu_clock_mhz; report, floor and compare warn at
+  load.start > 0.5 or gpu_busy_pct.start > 20 (frameledger, 2026-11-10;
+  not yet read against the spec here). --frame-log writes none of them.
+  Fill them at run start from /proc/loadavg and amdgpu sysfs
+  (gpu_busy_percent, pp_dpm_sclk); a missing file leaves the field out.
+  FLED-0030 (frameledger 0.4.0) will add a during-run peak and make a
+  loaded run inconclusive. Unblocks trusting A/B runs for 0704, 0658,
+  0795 on a shared machine. CPU / GPU placement: CPU file reads at run
+  start; nothing on the GPU.
+  **Layman:** Speed tests will say when another program was using the graphics card, so a slow reading caused by that is not trusted.
+  Kind: enhancement.
+  Source: frameledger-2026-11-10.
+  Lanes: profiler.
 
 ## 0.3.0 — An editor a builder can use
 
