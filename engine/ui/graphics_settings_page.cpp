@@ -329,21 +329,36 @@ void wireSettingsScreen(UISystem& ui, SettingsEditor& editor,
                 buildAccessibilitySettingsPage(canvas, theme, text, *ed).root;
             showPage(*roots, *active);
         });
-    ui.onModalPopped.connect([ed, active](GameScreen popped)
+    // Whether Settings is open. The editor is shared with the in-editor
+    // settings panel, so a close reverts only edits made while it was open.
+    auto open = std::make_shared<bool>(false);
+    ui.onModalPushed.connect([open](GameScreen pushed)
+    {
+        if (pushed == GameScreen::Settings)
+        {
+            *open = true;
+        }
+    });
+    auto closeSettings = [ed, active, open]
+    {
+        *active = kDisplayCategory;
+        if (*open && ed->isDirty())
+        {
+            ed->revert();
+        }
+        *open = false;
+    };
+    ui.onModalPopped.connect([closeSettings](GameScreen popped)
     {
         if (popped == GameScreen::Settings)
         {
-            *active = kDisplayCategory;
-            if (ed->isDirty())
-            {
-                ed->revert();
-            }
+            closeSettings();
         }
     });
     // Changing the root screen drops any open modal without a pop.
-    ui.onRootScreenChanged.connect([active](GameScreen)
+    ui.onRootScreenChanged.connect([closeSettings](GameScreen)
     {
-        *active = kDisplayCategory;
+        closeSettings();
     });
 }
 

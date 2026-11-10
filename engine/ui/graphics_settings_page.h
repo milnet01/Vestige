@@ -50,8 +50,9 @@ struct GraphicsSettingsPage
 GraphicsSettingsPage buildGraphicsSettingsPage(UICanvas& canvas, const UITheme& theme,
                                                TextRenderer* text, SettingsEditor& editor);
 
-/// @brief Registers the Settings builder and connects `onModalPopped`: when
-///        Settings closes with unsaved changes, `editor.revert()`. The engine
+/// @brief Registers the Settings builder and connects `onModalPopped` and
+///        `onRootScreenChanged`: when the Settings modal closes, by a pop or
+///        by a root-screen change, with unsaved changes, `editor.revert()`. The engine
 ///        and the tests both call this, so they run the same wiring.
 ///
 /// The builder adds the chrome with a working footer and a sidebar of

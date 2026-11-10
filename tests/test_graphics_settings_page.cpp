@@ -154,3 +154,39 @@ TEST(GraphicsSettingsPage, CloseWithoutApplyReverts)
     EXPECT_FALSE(editor.isDirty());
     EXPECT_TRUE(sink.bloom);
 }
+
+// 3D_E-0874 lane 21: a root-screen change drops the open Settings modal with
+// no pop, and the unsaved edits must still revert.
+TEST(GraphicsSettingsPage, RootChangeWhileSettingsIsOpenReverts)
+{
+    BloomSink sink;
+    SettingsEditor::ApplyTargets targets{};
+    targets.rendererQuality = &sink;
+    SettingsEditor editor(Settings{}, targets);
+    editor.forceLiveApply();
+
+    UISystem ui;
+    wireSettingsScreen(ui, editor, std::filesystem::path("unused-settings.json"));
+    ui.pushModalScreen(GameScreen::Settings);
+    editor.mutate([](Settings& s) { s.display.graphics.bloom = false; });
+    ASSERT_TRUE(editor.isDirty());
+
+    ui.setRootScreen(GameScreen::MainMenu);
+    EXPECT_FALSE(editor.isDirty());
+    EXPECT_TRUE(sink.bloom);
+}
+
+// The editor is shared with the in-editor settings panel: a root change with
+// Settings closed must leave that panel's pending edits alone.
+TEST(GraphicsSettingsPage, RootChangeWithSettingsClosedKeepsPendingEdits)
+{
+    SettingsEditor editor(Settings{}, SettingsEditor::ApplyTargets{});
+
+    UISystem ui;
+    wireSettingsScreen(ui, editor, std::filesystem::path("unused-settings.json"));
+    editor.mutate([](Settings& s) { s.display.graphics.bloom = false; });
+    ASSERT_TRUE(editor.isDirty());
+
+    ui.setRootScreen(GameScreen::MainMenu);
+    EXPECT_TRUE(editor.isDirty());
+}
