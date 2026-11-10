@@ -127,6 +127,7 @@ void HierarchyPanel::draw(Scene* scene, Selection& selection)
     // --- Delete hotkey (multi-select aware) ---
     if (selection.hasSelection()
         && ImGui::IsWindowFocused()
+        && !ImGui::GetIO().WantTextInput
         && ImGui::IsKeyPressed(ImGuiKey_Delete))
     {
         m_pendingDeleteSelected = true;
