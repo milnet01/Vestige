@@ -127,6 +127,7 @@ add_executable(vestige_tests
     test_material_json.cpp
     test_inspector_transform_undo.cpp
     test_hierarchy_delete_key.cpp
+    test_asset_browser_unreadable.cpp
     test_audio_channel_formats.cpp
     test_localization_format.cpp
     test_localization_tables.cpp

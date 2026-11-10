@@ -11,9 +11,49 @@
 
 #include <algorithm>
 #include <cctype>
+#include <filesystem>
+#include <vector>
 
 namespace Vestige
 {
+
+namespace
+{
+
+/// One directory entry, read without throwing.
+struct ListedEntry
+{
+    std::filesystem::path path;
+    bool isDirectory = false;
+    bool isRegularFile = false;
+    std::filesystem::file_time_type writeTime{};
+};
+
+/// Lists @p dir without throwing: a folder deleted or made unreadable while
+/// the browser shows it must not throw out of draw(). A folder that cannot be
+/// read lists as empty, or as far as it was read.
+std::vector<ListedEntry> listDirectory(const std::string& dir)
+{
+    namespace fs = std::filesystem;
+    std::vector<ListedEntry> listed;
+    std::error_code ec;
+    for (fs::directory_iterator it(dir, ec), end; !ec && it != end; it.increment(ec))
+    {
+        ListedEntry entry;
+        entry.path = it->path();
+        std::error_code statEc;
+        entry.isDirectory = it->is_directory(statEc);
+        entry.isRegularFile = !entry.isDirectory && it->is_regular_file(statEc);
+        if (entry.isRegularFile)
+        {
+            entry.writeTime = it->last_write_time(statEc);
+        }
+        listed.push_back(std::move(entry));
+    }
+    return listed;
+}
+
+} // namespace
 
 // ---------------------------------------------------------------------------
 // Initialization
@@ -71,18 +111,11 @@ void AssetBrowserPanel::scanDirectory(const std::string& path)
         m_thumbnailQueue.pop();
     }
 
-    namespace fs = std::filesystem;
-
-    if (!fs::exists(path) || !fs::is_directory(path))
-    {
-        return;
-    }
-
-    for (const auto& entry : fs::directory_iterator(path))
+    for (const auto& entry : listDirectory(path))
     {
         AssetEntry ae;
-        ae.fullPath = entry.path().string();
-        ae.name = entry.path().filename().string();
+        ae.fullPath = entry.path.string();
+        ae.name = entry.path.filename().string();
 
         // Skip hidden files
         if (!ae.name.empty() && ae.name[0] == '.')
@@ -90,14 +123,14 @@ void AssetBrowserPanel::scanDirectory(const std::string& path)
             continue;
         }
 
-        if (entry.is_directory())
+        if (entry.isDirectory)
         {
             ae.isDirectory = true;
             ae.type = AssetType::DIRECTORY;
         }
-        else if (entry.is_regular_file())
+        else if (entry.isRegularFile)
         {
-            ae.extension = entry.path().extension().string();
+            ae.extension = entry.path.extension().string();
             // Lowercase the extension for comparison
             std::transform(ae.extension.begin(), ae.extension.end(),
                            ae.extension.begin(),
@@ -188,7 +221,8 @@ void AssetBrowserPanel::pollFileChanges()
 
     namespace fs = std::filesystem;
 
-    if (!fs::exists(m_currentPath))
+    std::error_code ec;
+    if (!fs::exists(m_currentPath, ec))
     {
         return;
     }
@@ -197,14 +231,11 @@ void AssetBrowserPanel::pollFileChanges()
 
     // Build current snapshot
     std::unordered_map<std::string, fs::file_time_type> current;
-    for (const auto& entry : fs::directory_iterator(m_currentPath))
+    for (const auto& entry : listDirectory(m_currentPath))
     {
-        if (entry.is_regular_file() || entry.is_directory())
+        if (entry.isRegularFile || entry.isDirectory)
         {
-            std::string path = entry.path().string();
-            current[path] = entry.is_regular_file()
-                ? entry.last_write_time()
-                : fs::file_time_type{};
+            current[entry.path.string()] = entry.writeTime;
         }
     }
 
@@ -340,8 +371,6 @@ void AssetBrowserPanel::drawBreadcrumbs()
 void AssetBrowserPanel::drawFolderTree(const std::string& path,
                                        const std::string& displayName)
 {
-    namespace fs = std::filesystem;
-
     ImGuiTreeNodeFlags flags = ImGuiTreeNodeFlags_OpenOnArrow
                              | ImGuiTreeNodeFlags_SpanAvailWidth;
 
@@ -352,18 +381,15 @@ void AssetBrowserPanel::drawFolderTree(const std::string& path,
 
     // Check if directory has subdirectories
     bool hasSubdirs = false;
-    if (fs::exists(path) && fs::is_directory(path))
+    for (const auto& entry : listDirectory(path))
     {
-        for (const auto& entry : fs::directory_iterator(path))
+        if (entry.isDirectory)
         {
-            if (entry.is_directory())
+            std::string name = entry.path.filename().string();
+            if (!name.empty() && name[0] != '.')
             {
-                std::string name = entry.path().filename().string();
-                if (!name.empty() && name[0] != '.')
-                {
-                    hasSubdirs = true;
-                    break;
-                }
+                hasSubdirs = true;
+                break;
             }
         }
     }
@@ -384,27 +410,24 @@ void AssetBrowserPanel::drawFolderTree(const std::string& path,
 
     if (open)
     {
-        if (fs::exists(path) && fs::is_directory(path))
+        // Collect and sort subdirectories
+        std::vector<std::string> subdirs;
+        for (const auto& entry : listDirectory(path))
         {
-            // Collect and sort subdirectories
-            std::vector<std::string> subdirs;
-            for (const auto& entry : fs::directory_iterator(path))
+            if (entry.isDirectory)
             {
-                if (entry.is_directory())
+                std::string name = entry.path.filename().string();
+                if (!name.empty() && name[0] != '.')
                 {
-                    std::string name = entry.path().filename().string();
-                    if (!name.empty() && name[0] != '.')
-                    {
-                        subdirs.push_back(name);
-                    }
+                    subdirs.push_back(name);
                 }
             }
-            std::sort(subdirs.begin(), subdirs.end());
+        }
+        std::sort(subdirs.begin(), subdirs.end());
 
-            for (const auto& subdir : subdirs)
-            {
-                drawFolderTree(path + "/" + subdir, subdir);
-            }
+        for (const auto& subdir : subdirs)
+        {
+            drawFolderTree(path + "/" + subdir, subdir);
         }
 
         ImGui::TreePop();
