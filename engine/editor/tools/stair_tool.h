@@ -47,6 +47,10 @@ public:
     bool processClick(const glm::vec3& hitPoint, Scene& scene,
                       ResourceManager& resources, CommandHistory& history);
 
+    /// @brief Ends configuring: the next viewport click places. The panel's
+    ///        Place button calls it.
+    void beginPlacing();
+
     /// @brief Draws the ImGui configuration panel.
     void drawConfigPanel();
 

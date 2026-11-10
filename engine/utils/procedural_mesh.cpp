@@ -4,9 +4,11 @@
 /// @file procedural_mesh.cpp
 /// @brief ProceduralMeshBuilder implementation — generates architectural geometry.
 #include "utils/procedural_mesh.h"
+#include "utils/catmull_rom_spline.h"
 
 #include <algorithm>
 #include <cmath>
+#include <memory>
 
 namespace Vestige
 {
@@ -828,57 +830,225 @@ ProceduralMeshData ProceduralMeshBuilder::generateSpiralStairs(
 // Convenience wrappers: generate + upload to Mesh (requires GL context)
 // =============================================================================
 
-Mesh ProceduralMeshBuilder::createWall(float width, float height, float thickness)
+namespace
 {
-    auto data = generateWall(width, height, thickness);
+
+// Uploads generated data and stamps the recipe it was generated from, so the
+// recipe can never disagree with the geometry (3D_E-0967).
+Mesh uploadWithRecipe(const ProceduralMeshData& data, const MeshRecipe& recipe)
+{
     Mesh mesh;
     mesh.upload(data.vertices, data.indices);
+    mesh.setRecipe(std::make_shared<const MeshRecipe>(recipe));
     return mesh;
+}
+
+}  // namespace
+
+Mesh ProceduralMeshBuilder::createWall(float width, float height, float thickness)
+{
+    MeshRecipe r;
+    r.generator = MeshRecipe::Generator::WALL;
+    r.width = width;
+    r.height = height;
+    r.thickness = thickness;
+    return uploadWithRecipe(generateWall(width, height, thickness), r);
 }
 
 Mesh ProceduralMeshBuilder::createWallWithOpenings(float width, float height, float thickness,
                                                     const std::vector<WallOpening>& openings)
 {
-    auto data = generateWallWithOpenings(width, height, thickness, openings);
-    Mesh mesh;
-    mesh.upload(data.vertices, data.indices);
-    return mesh;
+    MeshRecipe r;
+    r.generator = MeshRecipe::Generator::WALL;
+    r.width = width;
+    r.height = height;
+    r.thickness = thickness;
+    r.openings = openings;
+    return uploadWithRecipe(generateWallWithOpenings(width, height, thickness, openings), r);
 }
 
 Mesh ProceduralMeshBuilder::createFloor(float width, float depth, float thickness)
 {
-    auto data = generateFloor(width, depth, thickness);
-    Mesh mesh;
-    mesh.upload(data.vertices, data.indices);
-    return mesh;
+    MeshRecipe r;
+    r.generator = MeshRecipe::Generator::FLOOR;
+    r.width = width;
+    r.depth = depth;
+    r.thickness = thickness;
+    return uploadWithRecipe(generateFloor(width, depth, thickness), r);
 }
 
 Mesh ProceduralMeshBuilder::createRoof(RoofType type, float width, float depth,
                                         float peakHeight, float overhang)
 {
-    auto data = generateRoof(type, width, depth, peakHeight, overhang);
-    Mesh mesh;
-    mesh.upload(data.vertices, data.indices);
-    return mesh;
+    MeshRecipe r;
+    r.generator = MeshRecipe::Generator::ROOF;
+    r.roofType = type;
+    r.width = width;
+    r.depth = depth;
+    r.peakHeight = peakHeight;
+    r.overhang = overhang;
+    return uploadWithRecipe(generateRoof(type, width, depth, peakHeight, overhang), r);
 }
 
 Mesh ProceduralMeshBuilder::createStraightStairs(float totalHeight, float riseHeight,
                                                   float treadDepth, float width)
 {
-    auto data = generateStraightStairs(totalHeight, riseHeight, treadDepth, width);
-    Mesh mesh;
-    mesh.upload(data.vertices, data.indices);
-    return mesh;
+    MeshRecipe r;
+    r.generator = MeshRecipe::Generator::STAIRS_STRAIGHT;
+    r.totalHeight = totalHeight;
+    r.riseHeight = riseHeight;
+    r.treadDepth = treadDepth;
+    r.width = width;
+    return uploadWithRecipe(generateStraightStairs(totalHeight, riseHeight, treadDepth, width),
+                            r);
 }
 
 Mesh ProceduralMeshBuilder::createSpiralStairs(float totalHeight, float riseHeight,
                                                 float innerRadius, float outerRadius,
                                                 float totalAngle)
 {
-    auto data = generateSpiralStairs(totalHeight, riseHeight, innerRadius, outerRadius, totalAngle);
-    Mesh mesh;
-    mesh.upload(data.vertices, data.indices);
-    return mesh;
+    MeshRecipe r;
+    r.generator = MeshRecipe::Generator::STAIRS_SPIRAL;
+    r.totalHeight = totalHeight;
+    r.riseHeight = riseHeight;
+    r.innerRadius = innerRadius;
+    r.outerRadius = outerRadius;
+    r.totalAngle = totalAngle;
+    return uploadWithRecipe(
+        generateSpiralStairs(totalHeight, riseHeight, innerRadius, outerRadius, totalAngle), r);
+}
+
+ProceduralMeshData ProceduralMeshBuilder::generatePath(const std::vector<glm::vec3>& points,
+                                                       float width, int samplesPerSegment)
+{
+    ProceduralMeshData data;
+    CatmullRomSpline spline;
+    for (const glm::vec3& p : points)
+    {
+        spline.addPoint(p);
+    }
+
+    std::vector<glm::vec3> samples = spline.sample(samplesPerSegment);
+    if (samples.size() < 2)
+    {
+        return data;
+    }
+
+    const glm::vec3 up(0.0f, 1.0f, 0.0f);
+    const size_t sampleCount = samples.size();
+    data.vertices.reserve(sampleCount * 2);
+
+    // Cumulative distance along the path, for the UV v-coordinate.
+    std::vector<float> cumulativeDistances;
+    cumulativeDistances.reserve(sampleCount);
+    cumulativeDistances.push_back(0.0f);
+    for (size_t i = 1; i < sampleCount; ++i)
+    {
+        cumulativeDistances.push_back(cumulativeDistances[i - 1]
+                                      + glm::distance(samples[i - 1], samples[i]));
+    }
+    const float totalLength = cumulativeDistances.back();
+
+    // A left and a right edge vertex at each sample.
+    const float maxT = static_cast<float>(spline.getPointCount() - 1);
+    glm::vec3 right(1.0f, 0.0f, 0.0f);
+    for (size_t i = 0; i < sampleCount; ++i)
+    {
+        float t = static_cast<float>(i) / static_cast<float>(samplesPerSegment);
+        t = glm::clamp(t, 0.0f, maxT);
+
+        glm::vec3 tangent = spline.evaluateTangent(t);
+
+        // Fallback tangent from neighbouring samples if degenerate
+        if (glm::length(tangent) < 0.0001f)
+        {
+            if (i + 1 < sampleCount)
+            {
+                tangent = samples[i + 1] - samples[i];
+            }
+            else if (i > 0)
+            {
+                tangent = samples[i] - samples[i - 1];
+            }
+            else
+            {
+                tangent = glm::vec3(0.0f, 0.0f, 1.0f);
+            }
+        }
+
+        // A vertical tangent is parallel to `up`: their cross product is zero
+        // and normalising it gives NaN. There, keep the previous sample's
+        // sideways direction (world +X if the path starts vertical).
+        const glm::vec3 side = glm::cross(glm::normalize(tangent), up);
+        if (glm::length(side) > 1e-4f)
+        {
+            right = glm::normalize(side);
+        }
+
+        // V coordinate: tile proportionally along path length
+        const float vCoord = (totalLength > 0.0001f) ? cumulativeDistances[i] / width : 0.0f;
+
+        Vertex edge{};
+        edge.normal = up;
+        edge.color = glm::vec3(1.0f);
+
+        edge.position = samples[i] - right * (width * 0.5f);
+        edge.texCoord = glm::vec2(0.0f, vCoord);
+        data.vertices.push_back(edge);
+
+        edge.position = samples[i] + right * (width * 0.5f);
+        edge.texCoord = glm::vec2(1.0f, vCoord);
+        data.vertices.push_back(edge);
+    }
+
+    // Two triangles per pair of samples (a quad strip).
+    data.indices.reserve((sampleCount - 1) * 6);
+    for (size_t i = 0; i < sampleCount - 1; ++i)
+    {
+        const auto bl = static_cast<uint32_t>(i * 2);
+        const uint32_t br = bl + 1;
+        const uint32_t tl = bl + 2;
+        const uint32_t tr = bl + 3;
+        data.indices.insert(data.indices.end(), {bl, br, tl, br, tr, tl});
+    }
+
+    calculateTangents(data.vertices, data.indices);
+    return data;
+}
+
+Mesh ProceduralMeshBuilder::createPath(const std::vector<glm::vec3>& points,
+                                       float width, int samplesPerSegment)
+{
+    MeshRecipe r;
+    r.generator = MeshRecipe::Generator::PATH;
+    r.points = points;
+    r.width = width;
+    r.samplesPerSegment = samplesPerSegment;
+    return uploadWithRecipe(generatePath(points, width, samplesPerSegment), r);
+}
+
+Mesh ProceduralMeshBuilder::build(const MeshRecipe& r)
+{
+    using G = MeshRecipe::Generator;
+    switch (r.generator)
+    {
+        case G::WALL:
+            return r.openings.empty()
+                ? createWall(r.width, r.height, r.thickness)
+                : createWallWithOpenings(r.width, r.height, r.thickness, r.openings);
+        case G::FLOOR:
+            return createFloor(r.width, r.depth, r.thickness);
+        case G::ROOF:
+            return createRoof(r.roofType, r.width, r.depth, r.peakHeight, r.overhang);
+        case G::STAIRS_STRAIGHT:
+            return createStraightStairs(r.totalHeight, r.riseHeight, r.treadDepth, r.width);
+        case G::STAIRS_SPIRAL:
+            return createSpiralStairs(r.totalHeight, r.riseHeight, r.innerRadius,
+                                      r.outerRadius, r.totalAngle);
+        case G::PATH:
+            return createPath(r.points, r.width, r.samplesPerSegment);
+    }
+    return Mesh();
 }
 
 } // namespace Vestige

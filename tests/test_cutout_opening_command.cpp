@@ -7,11 +7,15 @@
 
 #include "editor/commands/cutout_opening_command.h"
 #include "renderer/mesh.h"
+#include "resource/resource_manager.h"
 #include "scene/entity.h"
 #include "scene/mesh_renderer.h"
 #include "scene/scene.h"
+#include "utils/entity_serializer.h"
+#include "utils/mesh_recipe.h"
 
 #include <gtest/gtest.h>
+#include <nlohmann/json.hpp>
 
 #include <memory>
 
@@ -62,4 +66,31 @@ TEST(CutoutOpeningCommand, DeletedEntityMakesExecuteAndUndoDoNothing)
     cmd.undo();
     cmd.execute();
     EXPECT_EQ(w.scene.findEntityById(w.id), nullptr);
+}
+
+// 3D_E-0967 INV-3: the recipe travels with the mesh, so undoing a cut and
+// saving gives the wall as it was before the cut, with no openings.
+TEST(CutoutOpeningCommand, UndoRestoresTheRecipe)
+{
+    Wall w;
+    auto uncut = std::make_shared<MeshRecipe>();
+    uncut->width = 3.0f;
+    uncut->height = 3.0f;
+    uncut->thickness = 0.3f;
+    auto cut = std::make_shared<MeshRecipe>(*uncut);
+    cut->openings.push_back(WallOpening{});
+    w.oldMesh->setRecipe(uncut);
+    w.newMesh->setRecipe(cut);
+
+    CutoutOpeningCommand cmd(w.scene, w.id, w.oldMesh, w.newMesh,
+                             "Wall", "Wall with Door", "cut");
+    cmd.execute();
+    cmd.undo();
+
+    ResourceManager resources;
+    const nlohmann::json j =
+        EntitySerializer::serializeEntity(*w.scene.findEntityById(w.id), resources);
+    const nlohmann::json& mr = j.at("components").at("MeshRenderer");
+    ASSERT_TRUE(mr.contains("procedural")) << j.dump();
+    EXPECT_TRUE(mr["procedural"].value("openings", nlohmann::json::array()).empty());
 }

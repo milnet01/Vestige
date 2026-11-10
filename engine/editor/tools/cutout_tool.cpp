@@ -22,6 +22,27 @@
 namespace Vestige
 {
 
+namespace
+{
+
+// The WALL recipe of the entity's mesh; nullptr when it has none.
+const MeshRecipe* wallRecipe(const Entity& entity)
+{
+    const auto* renderer = entity.getComponent<MeshRenderer>();
+    if (renderer == nullptr || !renderer->getMesh())
+    {
+        return nullptr;
+    }
+    const MeshRecipe* recipe = renderer->getMesh()->getRecipe();
+    if (recipe == nullptr || recipe->generator != MeshRecipe::Generator::WALL)
+    {
+        return nullptr;
+    }
+    return recipe;
+}
+
+}  // namespace
+
 void CutoutTool::activate()
 {
     m_state = State::SELECT_WALL;
@@ -50,11 +71,13 @@ void CutoutTool::selectWall(uint32_t entityId, Scene& scene)
         return;
     }
 
-    // Verify the entity has a MeshRenderer (i.e., it is a visible wall)
-    auto* renderer = entity->getComponent<MeshRenderer>();
-    if (!renderer)
+    // Only a wall the builder made can be cut: its recipe holds the size and
+    // the openings already in it. Anything else (a cube, a model) would be
+    // replaced by a box wall on Apply.
+    if (wallRecipe(*entity) == nullptr)
     {
-        Logger::warning("CutoutTool: selected entity has no MeshRenderer, cannot cut openings");
+        Logger::warning("CutoutTool: '" + entity->getName()
+                        + "' is not a built wall, cannot cut openings");
         return;
     }
 
@@ -62,6 +85,83 @@ void CutoutTool::selectWall(uint32_t entityId, Scene& scene)
     m_state = State::CONFIGURE;
     Logger::info("CutoutTool: wall selected '" + entity->getName()
                  + "', configure opening parameters");
+}
+
+void CutoutTool::applyOpening(Scene& scene, CommandHistory& history)
+{
+    if (m_state != State::CONFIGURE)
+    {
+        return;
+    }
+    Entity* entity = scene.findEntityById(m_selectedWallId);
+    const MeshRecipe* wall = entity ? wallRecipe(*entity) : nullptr;
+    if (wall == nullptr)
+    {
+        Logger::warning("CutoutTool: wall mesh not available");
+        return;
+    }
+    // A saved wall with more openings than this would be refused on load.
+    if (wall->openings.size() >= MeshRecipe::MAX_OPENINGS)
+    {
+        Logger::warning("CutoutTool: a wall holds at most "
+                        + std::to_string(MeshRecipe::MAX_OPENINGS) + " openings");
+        return;
+    }
+
+    // Clamp opening to fit within the wall
+    float maxXOffset = wall->width - openingWidth;
+    if (maxXOffset < 0.0f)
+    {
+        maxXOffset = 0.0f;
+    }
+    float xOffset = xPosition * maxXOffset;
+
+    // Clamp sill + opening height to wall height
+    if (sillHeight + openingHeight > wall->height)
+    {
+        openingHeight = wall->height - sillHeight;
+        if (openingHeight < 0.1f)
+        {
+            openingHeight = 0.1f;
+            sillHeight = wall->height - openingHeight;
+        }
+    }
+
+    WallOpening opening;
+    opening.xOffset = xOffset;
+    opening.yOffset = sillHeight;
+    opening.width = openingWidth;
+    opening.height = openingHeight;
+
+    // 3D_E-0967: rebuild from every opening the wall already has, plus this
+    // one, so a second cut keeps the first.
+    std::vector<WallOpening> openings = wall->openings;
+    openings.push_back(opening);
+    auto newMesh = std::make_shared<Mesh>(ProceduralMeshBuilder::createWallWithOpenings(
+        wall->width, wall->height, wall->thickness, openings));
+
+    std::string typeName = (openingType == OpeningType::DOOR) ? "Door" : "Window";
+
+    // 3D_E-0632: go through the undo stack rather than mutating in place.
+    // Beyond undo itself, FileMenu::isDirty() delegates entirely to
+    // CommandHistory -- so before this, cutting an opening left the scene
+    // "clean" and quitting discarded it with no unsaved-changes prompt.
+    //
+    // The command APPLIES the change; do not also apply it here.
+    // CommandHistory::execute() runs execute() on the first push, not only on
+    // redo (see place_tree_command.h, where doing both placed every tree twice).
+    history.execute(std::make_unique<CutoutOpeningCommand>(
+        scene,
+        entity->getId(),
+        entity->getComponent<MeshRenderer>()->getMesh(),
+        newMesh,
+        entity->getName(),
+        "Wall with " + typeName,
+        "Cut " + typeName + " opening"));
+
+    Logger::info("CutoutTool: applied " + typeName + " opening ("
+                 + std::to_string(openingWidth) + "m x "
+                 + std::to_string(openingHeight) + "m)");
 }
 
 void CutoutTool::drawConfigDialog(Scene& scene, ResourceManager& /*resources*/,
@@ -117,81 +217,7 @@ void CutoutTool::drawConfigDialog(Scene& scene, ResourceManager& /*resources*/,
         ImGui::Separator();
         if (ImGui::Button("Apply", ImVec2(120, 0)))
         {
-            auto* renderer = entity->getComponent<MeshRenderer>();
-            if (renderer && renderer->getMesh())
-            {
-                // Get wall dimensions from the mesh AABB
-                const AABB& bounds = renderer->getMesh()->getLocalBounds();
-                glm::vec3 size = bounds.getSize();
-                float wallWidth = size.x;
-                float wallHeight = size.y;
-                float wallThickness = size.z;
-
-                // Clamp opening to fit within the wall
-                float maxXOffset = wallWidth - openingWidth;
-                if (maxXOffset < 0.0f)
-                {
-                    maxXOffset = 0.0f;
-                }
-                float xOffset = xPosition * maxXOffset;
-
-                // Clamp sill + opening height to wall height
-                if (sillHeight + openingHeight > wallHeight)
-                {
-                    openingHeight = wallHeight - sillHeight;
-                    if (openingHeight < 0.1f)
-                    {
-                        openingHeight = 0.1f;
-                        sillHeight = wallHeight - openingHeight;
-                    }
-                }
-
-                // Build the opening
-                WallOpening opening;
-                opening.xOffset = xOffset;
-                opening.yOffset = sillHeight;
-                opening.width = openingWidth;
-                opening.height = openingHeight;
-
-                std::vector<WallOpening> openings;
-                openings.push_back(opening);
-
-                // Regenerate the wall mesh with the opening
-                auto newMesh = std::make_shared<Mesh>(
-                    ProceduralMeshBuilder::createWallWithOpenings(
-                        wallWidth, wallHeight, wallThickness, openings));
-
-                std::string typeName = (openingType == OpeningType::DOOR)
-                                           ? "Door"
-                                           : "Window";
-
-                // 3D_E-0632: go through the undo stack rather than mutating in
-                // place. Beyond undo itself, FileMenu::isDirty() delegates
-                // entirely to CommandHistory -- so before this, cutting an
-                // opening left the scene "clean" and quitting discarded it with
-                // no unsaved-changes prompt.
-                //
-                // The command APPLIES the change; do not also apply it here.
-                // CommandHistory::execute() runs execute() on the first push,
-                // not only on redo (see place_tree_command.h, where doing both
-                // placed every tree twice).
-                history.execute(std::make_unique<CutoutOpeningCommand>(
-                    scene,
-                    entity->getId(),
-                    renderer->getMesh(),
-                    newMesh,
-                    entity->getName(),
-                    "Wall with " + typeName,
-                    "Cut " + typeName + " opening"));
-
-                Logger::info("CutoutTool: applied " + typeName + " opening ("
-                             + std::to_string(openingWidth) + "m x "
-                             + std::to_string(openingHeight) + "m)");
-            }
-            else
-            {
-                Logger::warning("CutoutTool: wall mesh not available");
-            }
+            applyOpening(scene, history);
         }
         ImGui::SameLine();
         if (ImGui::Button("Cancel", ImVec2(80, 0)))

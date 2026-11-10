@@ -6,6 +6,7 @@
 #pragma once
 
 #include "renderer/mesh.h"
+#include "utils/mesh_recipe.h"
 
 #include <glm/glm.hpp>
 
@@ -14,23 +15,6 @@
 
 namespace Vestige
 {
-
-/// @brief Describes a rectangular opening (door or window) in a wall.
-struct WallOpening
-{
-    float xOffset = 1.0f;   ///< Distance from wall left edge to opening left edge (m).
-    float yOffset = 0.0f;   ///< Distance from wall bottom to opening bottom (m).
-    float width   = 1.0f;   ///< Opening width (m).
-    float height  = 2.1f;   ///< Opening height (m).
-};
-
-/// @brief Roof type for procedural generation.
-enum class RoofType
-{
-    FLAT,    ///< Simple flat slab.
-    GABLE,   ///< Two slopes meeting at a ridge along the length.
-    SHED     ///< Single slope from high edge to low edge.
-};
 
 /// @brief Stair type for procedural generation.
 enum class StairType
@@ -80,6 +64,7 @@ public:
     static int stairStepCount(float totalHeight, float riseHeight);
 
     /// @brief Convenience: generates data and uploads to a Mesh. Requires GL context.
+    ///        Each stamps the recipe of its own arguments onto the mesh it returns.
     static Mesh createWall(float width, float height, float thickness);
     static Mesh createWallWithOpenings(float width, float height, float thickness,
                                        const std::vector<WallOpening>& openings);
@@ -91,6 +76,17 @@ public:
     static Mesh createSpiralStairs(float totalHeight, float riseHeight,
                                     float innerRadius, float outerRadius,
                                     float totalAngle);
+
+    /// @brief Generates a flat ribbon of the given width along a Catmull-Rom
+    ///        spline through `points`, in the points' own (world) space.
+    static ProceduralMeshData generatePath(const std::vector<glm::vec3>& points,
+                                           float width, int samplesPerSegment);
+    static Mesh createPath(const std::vector<glm::vec3>& points,
+                           float width, int samplesPerSegment);
+
+    /// @brief Rebuilds a mesh from its recipe, through the create* function
+    ///        named by recipe.generator. Requires GL context.
+    static Mesh build(const MeshRecipe& recipe);
 
 private:
     /// @brief Adds a quad (two triangles) to vertex/index buffers.

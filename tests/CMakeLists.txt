@@ -142,6 +142,8 @@ add_executable(vestige_tests
     test_ruler_tool.cpp
     test_density_map.cpp
     test_procedural_mesh.cpp
+    test_procedural_mesh_save.cpp
+    test_mesh_recipe.cpp
     test_facial_animation.cpp
     test_fabric_material.cpp
     test_viseme_map.cpp

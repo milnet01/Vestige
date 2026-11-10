@@ -68,7 +68,10 @@ public:
     /// @brief Current scene file format version.
     /// v2 (W8, 2026-06-04) adds the optional `music` block. v1 files load
     /// with an empty `MusicSceneSettings` (backwards-compatible read).
-    static constexpr int CURRENT_FORMAT_VERSION = 2;
+    /// v3 (3D_E-0967) saves editor-built meshes as a `procedural` recipe; it
+    /// is raised so an older engine refuses the file rather than loading the
+    /// walls empty and deleting their recipes on its next save.
+    static constexpr int CURRENT_FORMAT_VERSION = 3;
 
     /// @brief Engine version string embedded in saved scenes: the project
     ///        version of the build that saved the file (set by CMake).

@@ -42,6 +42,15 @@ bool StairTool::processClick(const glm::vec3& hitPoint, Scene& scene,
         return false;
     }
 
+    // A saved spiral like this would be refused on load and vanish
+    // (3D_E-0967), so place none; back to the panel to fix the radii.
+    if (stairType == StairType::SPIRAL && innerRadius >= outerRadius)
+    {
+        Logger::warning("StairTool: inner radius must be less than outer radius");
+        m_state = State::CONFIGURE;
+        return true;
+    }
+
     // Create the stair entity at the click position
     std::string entityName = (stairType == StairType::STRAIGHT)
                                  ? "Stairs"
@@ -83,6 +92,12 @@ bool StairTool::processClick(const glm::vec3& hitPoint, Scene& scene,
     // Return to configure state for placing more stairs
     m_state = State::CONFIGURE;
     return true;
+}
+
+void StairTool::beginPlacing()
+{
+    m_state = State::PLACING;
+    Logger::info("StairTool: click in viewport to place stairs");
 }
 
 void StairTool::drawConfigPanel()
@@ -128,8 +143,7 @@ void StairTool::drawConfigPanel()
         ImGui::Separator();
         if (ImGui::Button("Place", ImVec2(120, 0)))
         {
-            m_state = State::PLACING;
-            Logger::info("StairTool: click in viewport to place stairs");
+            beginPlacing();
         }
         ImGui::SameLine();
         if (ImGui::Button("Cancel", ImVec2(80, 0)))

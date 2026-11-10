@@ -11,10 +11,13 @@
 #include <glad/gl.h>
 #include <glm/glm.hpp>
 
+#include <memory>
 #include <vector>
 
 namespace Vestige
 {
+
+struct MeshRecipe;
 
 /// @brief A single vertex with position, normal, color, texture coordinate, tangent, and bone data.
 struct Vertex
@@ -80,6 +83,13 @@ public:
     /// Returns a zero-sized AABB if no geometry has been uploaded.
     const AABB& getLocalBounds() const;
 
+    /// @brief Records the ProceduralMeshBuilder recipe this mesh was built
+    ///        from, so a saved scene can rebuild it (3D_E-0967).
+    void setRecipe(std::shared_ptr<const MeshRecipe> recipe);
+
+    /// @brief The recipe this mesh was built from; nullptr when it has none.
+    const MeshRecipe* getRecipe() const;
+
     // --- Morph targets ---
 
     /// @brief Maximum morph targets supported simultaneously by the shader.
@@ -143,6 +153,8 @@ private:
     GLuint m_morphSSBO = 0;
     int m_morphTargetCount = 0;
     int m_morphVertexCount = 0;
+
+    std::shared_ptr<const MeshRecipe> m_recipe;
 };
 
 } // namespace Vestige

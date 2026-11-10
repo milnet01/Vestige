@@ -106,6 +106,7 @@ set(ENGINE_SOURCES
     utils/obj_loader.cpp
     utils/gltf_loader.cpp
     utils/procedural_mesh.cpp
+    utils/mesh_recipe.cpp
     utils/catmull_rom_spline.cpp
     utils/gltf_loader_impl.cpp
     utils/cube_loader.cpp

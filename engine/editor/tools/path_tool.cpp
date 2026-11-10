@@ -13,6 +13,7 @@
 #include "renderer/material.h"
 #include "renderer/mesh.h"
 #include "renderer/debug_draw.h"
+#include "utils/procedural_mesh.h"
 #include "core/logger.h"
 
 #include <imgui.h>
@@ -136,8 +137,13 @@ void PathTool::queueDebugDraw(const glm::vec3& currentHit) const
                 continue;
             }
 
-            tangent = glm::normalize(tangent);
-            glm::vec3 right = glm::normalize(glm::cross(tangent, up));
+            // A vertical tangent has no sideways direction to draw.
+            const glm::vec3 side = glm::cross(glm::normalize(tangent), up);
+            if (glm::length(side) < 1e-4f)
+            {
+                continue;
+            }
+            glm::vec3 right = glm::normalize(side);
 
             glm::vec3 left = pos - right * (pathWidth * 0.5f);
             glm::vec3 rightEdge = pos + right * (pathWidth * 0.5f);
@@ -240,118 +246,20 @@ void PathTool::applyPreset(PathPreset p)
 void PathTool::generatePathMesh(Scene& scene, ResourceManager& resources,
                                 CommandHistory& history)
 {
-    // Sample the spline
-    std::vector<glm::vec3> samples = m_spline.sample(samplesPerSegment);
+    std::vector<glm::vec3> points;
+    points.reserve(m_spline.getPointCount());
+    for (size_t i = 0; i < m_spline.getPointCount(); ++i)
+    {
+        points.push_back(m_spline.getPoint(i));
+    }
 
-    if (samples.size() < 2)
+    auto mesh = std::make_shared<Mesh>(
+        ProceduralMeshBuilder::createPath(points, pathWidth, samplesPerSegment));
+    if (mesh->getIndexCount() == 0)
     {
         Logger::warning("PathTool: not enough sample points to generate mesh");
         return;
     }
-
-    glm::vec3 up(0.0f, 1.0f, 0.0f);
-
-    // Build vertex and index data
-    std::vector<Vertex> vertices;
-    std::vector<uint32_t> indices;
-    size_t sampleCount = samples.size();
-    vertices.reserve(sampleCount * 2);
-
-    // Calculate cumulative distances for UV v-coordinate
-    std::vector<float> cumulativeDistances;
-    cumulativeDistances.reserve(sampleCount);
-    cumulativeDistances.push_back(0.0f);
-
-    for (size_t i = 1; i < sampleCount; ++i)
-    {
-        float dist = glm::distance(samples[i - 1], samples[i]);
-        cumulativeDistances.push_back(cumulativeDistances[i - 1] + dist);
-    }
-
-    float totalLength = cumulativeDistances.back();
-
-    // Generate left and right edge vertices for each sample point
-    float maxT = static_cast<float>(m_spline.getPointCount() - 1);
-
-    for (size_t i = 0; i < sampleCount; ++i)
-    {
-        float t = static_cast<float>(i) / static_cast<float>(samplesPerSegment);
-        t = glm::clamp(t, 0.0f, maxT);
-
-        glm::vec3 tangent = m_spline.evaluateTangent(t);
-        float tangentLen = glm::length(tangent);
-
-        // Fallback tangent from neighboring samples if degenerate
-        if (tangentLen < 0.0001f)
-        {
-            if (i + 1 < sampleCount)
-            {
-                tangent = samples[i + 1] - samples[i];
-            }
-            else if (i > 0)
-            {
-                tangent = samples[i] - samples[i - 1];
-            }
-            else
-            {
-                tangent = glm::vec3(0.0f, 0.0f, 1.0f);
-            }
-        }
-
-        tangent = glm::normalize(tangent);
-        glm::vec3 right = glm::normalize(glm::cross(tangent, up));
-
-        // V coordinate: tile proportionally along path length
-        float vCoord = (totalLength > 0.0001f)
-            ? cumulativeDistances[i] / pathWidth
-            : 0.0f;
-
-        Vertex leftVert;
-        leftVert.position = samples[i] - right * (pathWidth * 0.5f);
-        leftVert.normal = glm::vec3(0.0f, 1.0f, 0.0f);
-        leftVert.color = glm::vec3(1.0f);
-        leftVert.texCoord = glm::vec2(0.0f, vCoord);
-        leftVert.tangent = glm::vec3(0.0f);
-        leftVert.bitangent = glm::vec3(0.0f);
-        leftVert.boneIds = glm::ivec4(0);
-        leftVert.boneWeights = glm::vec4(0.0f);
-        vertices.push_back(leftVert);
-
-        Vertex rightVert;
-        rightVert.position = samples[i] + right * (pathWidth * 0.5f);
-        rightVert.normal = glm::vec3(0.0f, 1.0f, 0.0f);
-        rightVert.color = glm::vec3(1.0f);
-        rightVert.texCoord = glm::vec2(1.0f, vCoord);
-        rightVert.tangent = glm::vec3(0.0f);
-        rightVert.bitangent = glm::vec3(0.0f);
-        rightVert.boneIds = glm::ivec4(0);
-        rightVert.boneWeights = glm::vec4(0.0f);
-        vertices.push_back(rightVert);
-    }
-
-    // Generate triangle indices (quad strip)
-    indices.reserve((sampleCount - 1) * 6);
-    for (size_t i = 0; i < sampleCount - 1; ++i)
-    {
-        uint32_t bl = static_cast<uint32_t>(i * 2);
-        uint32_t br = bl + 1;
-        uint32_t tl = bl + 2;
-        uint32_t tr = bl + 3;
-
-        indices.push_back(bl);
-        indices.push_back(br);
-        indices.push_back(tl);
-
-        indices.push_back(br);
-        indices.push_back(tr);
-        indices.push_back(tl);
-    }
-
-    // Calculate tangents for normal mapping and upload to GPU
-    calculateTangents(vertices, indices);
-
-    auto mesh = std::make_shared<Mesh>();
-    mesh->upload(vertices, indices);
 
     // Create the path entity
     Entity* entity = scene.createEntity("Path");

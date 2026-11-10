@@ -379,3 +379,31 @@ TEST_F(SceneSerializerTest, SceneEnvelopeRoundTripsThroughSerializer)
     EXPECT_EQ(sceneJson["entities"].size(), 1u);
     EXPECT_EQ(sceneJson["entities"][0]["name"], "Cube");
 }
+
+// 3D_E-0967 INV-7: scenes save as format 3 (built meshes save as recipes),
+// and a version-2 scene still loads.
+TEST_F(SceneSerializerTest, SavedSceneIsVersion3)
+{
+    Scene scene("V3");
+    ResourceManager resources;
+    const fs::path path = m_testDir / "v3.scene";
+    ASSERT_TRUE(SceneSerializer::saveScene(scene, path, resources).success);
+    EXPECT_EQ(SceneSerializer::readMetadata(path).formatVersion, 3);
+}
+
+TEST_F(SceneSerializerTest, Version2SceneStillLoads)
+{
+    nlohmann::json j;
+    j["vestige_scene"]["format_version"] = 2;
+    j["vestige_scene"]["name"] = "Old";
+    j["entities"] = nlohmann::json::array();
+    const fs::path path = m_testDir / "v2.scene";
+    {
+        std::ofstream out(path);
+        out << j.dump(4);
+    }
+    Scene scene;
+    ResourceManager resources;
+    const SceneSerializerResult result = SceneSerializer::loadScene(scene, path, resources);
+    EXPECT_TRUE(result.success) << result.errorMessage;
+}

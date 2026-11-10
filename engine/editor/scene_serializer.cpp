@@ -357,6 +357,14 @@ static void migrateV1toV2(json& /*sceneJson*/)
     // No-op: v2 only adds an optional block; absence == empty settings.
 }
 
+/// @brief v2 → v3 migration (3D_E-0967): v2 has no `procedural` mesh
+///        recipes, and its editor-built meshes were never written, so there
+///        is nothing to rewrite. A documented no-op, like migrateV1toV2.
+static void migrateV2toV3(json& /*sceneJson*/)
+{
+    // No-op: v3 only adds an optional field.
+}
+
 /// @brief Migrates scene JSON from an older format version to the current version.
 /// @param sceneJson The parsed scene JSON (modified in place).
 /// @param fromVersion The format_version in the file.
@@ -372,7 +380,10 @@ static bool migrateScene(json& sceneJson, int fromVersion)
     {
         migrateV1toV2(sceneJson);
     }
-    // Future: if (fromVersion < 3) { migrateV2toV3(sceneJson); }
+    if (fromVersion < 3)
+    {
+        migrateV2toV3(sceneJson);
+    }
 
     return true;
 }

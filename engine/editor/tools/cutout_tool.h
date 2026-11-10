@@ -58,6 +58,10 @@ public:
     void drawConfigDialog(Scene& scene, ResourceManager& resources,
                           CommandHistory& history);
 
+    /// @brief Cuts the opening the public fields describe into the selected
+    ///        wall, through the undo stack. The dialog's Apply button calls it.
+    void applyOpening(Scene& scene, CommandHistory& history);
+
     /// @brief Gets the current state.
     State getState() const { return m_state; }
 

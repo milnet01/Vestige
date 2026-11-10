@@ -7,6 +7,7 @@
 #include "core/logger.h"
 
 #include <cmath>
+#include <utility>
 #include <limits>
 
 namespace Vestige
@@ -116,6 +117,7 @@ Mesh::Mesh(Mesh&& other) noexcept
     , m_morphSSBO(other.m_morphSSBO)
     , m_morphTargetCount(other.m_morphTargetCount)
     , m_morphVertexCount(other.m_morphVertexCount)
+    , m_recipe(std::move(other.m_recipe))
 {
     other.m_vao = 0;
     other.m_vbo = 0;
@@ -140,6 +142,7 @@ Mesh& Mesh::operator=(Mesh&& other) noexcept
         m_morphSSBO = other.m_morphSSBO;
         m_morphTargetCount = other.m_morphTargetCount;
         m_morphVertexCount = other.m_morphVertexCount;
+        m_recipe = std::move(other.m_recipe);
         other.m_vao = 0;
         other.m_vbo = 0;
         other.m_ebo = 0;
@@ -150,6 +153,16 @@ Mesh& Mesh::operator=(Mesh&& other) noexcept
         other.m_morphVertexCount = 0;
     }
     return *this;
+}
+
+void Mesh::setRecipe(std::shared_ptr<const MeshRecipe> recipe)
+{
+    m_recipe = std::move(recipe);
+}
+
+const MeshRecipe* Mesh::getRecipe() const
+{
+    return m_recipe.get();
 }
 
 void Mesh::upload(const std::vector<Vertex>& vertices, const std::vector<uint32_t>& indices)

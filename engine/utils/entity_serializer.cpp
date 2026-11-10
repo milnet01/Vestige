@@ -26,7 +26,9 @@
 #include "core/logger.h"
 #include "utils/component_serializer_registry.h"
 #include "utils/material_json.h"
+#include "utils/mesh_recipe.h"
 #include "utils/path_sandbox.h"
+#include "utils/procedural_mesh.h"
 
 #include <nlohmann/json.hpp>
 
@@ -122,10 +124,16 @@ static json serializeMeshRenderer(const MeshRenderer& mr, const ResourceManager&
 
     if (mr.getMesh())
     {
+        // A keyed mesh is saved by its key alone; an editor-built one has no
+        // key, so it is saved as the recipe it was built from (3D_E-0967).
         std::string meshKey = resources.findMeshKey(mr.getMesh());
         if (!meshKey.empty())
         {
             j["mesh"] = meshKey;
+        }
+        else if (const MeshRecipe* recipe = mr.getMesh()->getRecipe())
+        {
+            j["procedural"] = recipe->toJson();
         }
     }
 
@@ -144,6 +152,19 @@ static void deserializeMeshRenderer(const json& j, Entity& entity, ResourceManag
     if (j.contains("mesh"))
     {
         mesh = resources.getMeshByKey(j["mesh"].get<std::string>());
+    }
+    else if (j.contains("procedural"))
+    {
+        if (const auto recipe = MeshRecipe::fromJson(j["procedural"]))
+        {
+            mesh = std::make_shared<Mesh>(ProceduralMeshBuilder::build(*recipe));
+        }
+        else
+        {
+            Logger::warning("Entity '" + entity.getName()
+                            + "': saved mesh recipe is invalid or out of range; "
+                              "loading it without a mesh");
+        }
     }
 
     std::shared_ptr<Material> material;

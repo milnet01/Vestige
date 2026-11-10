@@ -76,6 +76,12 @@ bool RoofTool::processClick(const glm::vec3& hitPoint, Scene& scene,
     return true;
 }
 
+void RoofTool::beginPlacing()
+{
+    m_state = State::PLACING;
+    Logger::info("RoofTool: click in viewport to place roof");
+}
+
 void RoofTool::drawConfigPanel()
 {
     if (m_state != State::CONFIGURE)
@@ -105,8 +111,7 @@ void RoofTool::drawConfigPanel()
         ImGui::Separator();
         if (ImGui::Button("Place", ImVec2(120, 0)))
         {
-            m_state = State::PLACING;
-            Logger::info("RoofTool: click in viewport to place roof");
+            beginPlacing();
         }
         ImGui::SameLine();
         if (ImGui::Button("Cancel", ImVec2(80, 0)))

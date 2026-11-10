@@ -178,8 +178,10 @@ tests these two refusals.
 
 `CutoutTool` reads the wall's `width`, `height` and `thickness` from the
 mesh's `WALL` recipe, and builds the new mesh from the recipe's `openings` plus
-the new one. Where the mesh has no `WALL` recipe it keeps today's behaviour:
-size from the bounds, one opening.
+the new one. `selectWall` accepts only an entity whose mesh has a `WALL`
+recipe, so nothing else can be cut (amended 2026-11-10, folding in the
+3D_E-0874 lane-16 lead `cutout selectWall`; this replaced a bounds-sized
+fallback for meshes without a recipe, which no wall reaches any more).
 
 That build now sits inside `drawConfigDialog`'s ImGui Apply button. It moves
 to a public `CutoutTool::applyOpening(Scene&, CommandHistory&)`, which the
@@ -306,8 +308,6 @@ calls; their cases call `activate`, `beginPlacing`, then `processClick`.
 - The demo fence cloth in `engine/core/engine.cpp`: built in code each run,
   never saved by a user.
 - Meshes loaded from glTF files: saved through their model path, unchanged.
-- `CutoutTool` accepting any mesh as a wall — tracked by 3D_E-0874 (lane-16
-  lead `cutout selectWall`).
 - The prefab `"version"` field: written by `PrefabSystem` and read by
   nothing, so it is left at 1. An older engine placing a new prefab gets the
   built meshes as empty entities, as today — deferred; not yet queued.
