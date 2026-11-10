@@ -493,7 +493,7 @@ Per CODING_STANDARDS §13. Two layers of threading apply to this subsystem: the 
 | `BVH::queryClosest` (single point) | < 0.02 ms | TBD — Phase 11 audit |
 | `SpatialHash::build` (1024-particle cloth) | < 0.05 ms | TBD — Phase 11 audit |
 | `PhysicsWorld::initialize` (one-shot) | < 50 ms | TBD — Phase 11 audit |
-| `ClothBackendFactory::createClothSolverBackend` (no GL touch path) | < 1 ms | TBD — Phase 11 audit |
+| `createClothSolverBackend` (`cloth_backend_factory.h`) (no GL touch path) | < 1 ms | TBD — Phase 11 audit |
 
 Profiler markers / capture points: `PhysicsDebugDraw::draw` emits a `glPushDebugGroup("PhysicsDebugDraw")`. `GpuClothSimulator::simulate` wraps each compute dispatch in `glPushDebugGroup("ClothCompute::<phase>")` so RenderDoc captures show the wind / integrate / constraints / dihedral / LRA / collision / normals chain explicitly. Logger emits a single `Info` line per `PhysicsWorld::initialize` containing thread count and timestep.
 
@@ -567,7 +567,7 @@ Per CODING_STANDARDS §11 — no exceptions on the steady-state path.
 
 `engine/physics` itself produces no user-facing pixels or sound — but it owns the **player character's relationship with geometry**, which surfaces three accessibility concerns downstream:
 
-- **Reduced motion** (`Settings::accessibility::reducedMotion`) — when enabled, gameplay code should clamp camera shake (camera shake originates outside this subsystem; physics produces no extra motion). The character controller's `inputSmoothing` defaults to 0.75 — moderate smoothing — which already keeps motion gentle for partially-sighted players. Aggressive impulse responses (jump-pad style) should be gated by an accessibility check at the call site.
+- **Reduced motion** (`Settings::accessibility.reducedMotion`) — when enabled, gameplay code should clamp camera shake (camera shake originates outside this subsystem; physics produces no extra motion). The character controller's `inputSmoothing` defaults to 0.75 — moderate smoothing — which already keeps motion gentle for partially-sighted players. Aggressive impulse responses (jump-pad style) should be gated by an accessibility check at the call site.
 - **Photosensitive safety** (`PhotosensitiveSafetyWire` in `engine/core/settings.h`) — physics doesn't directly emit flashes, but breakable-constraint break events typically trigger particle / VFX bursts in gameplay code. Those bursts must respect the photosensitive caps; physics is responsible only for emitting the break signal cleanly enough that downstream VFX can throttle.
 - **Input accessibility** — character controller exposes `inputSmoothing` and the FPC handles binding / dead-zone. The physics character controller takes a `desiredVelocity` already filtered by FPC — no rebindable inputs originate here.
 
