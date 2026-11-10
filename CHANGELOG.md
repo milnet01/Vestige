@@ -25,6 +25,14 @@ may change any interface without notice.
 
 ## [Unreleased]
 
+### 2026-11-10 Fixed — every foliage brush stroke can be undone (3D_E-0874)
+
+- **Changing the brush mode in the middle of a stroke no longer loses its undo**
+  The foliage painted before the change could not be undone.
+
+- **Turning the brush off in the middle of a stroke no longer leaves it open**
+  The stroke had no undo entry until the brush was next used.
+
 ### 2026-11-10 Fixed — built walls, rooms, roofs, stairs and paths survive a save (3D_E-0967)
 
 - **Geometry made with the building tools is still there after saving and reopening**

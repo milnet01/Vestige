@@ -7392,6 +7392,9 @@ shipped that have no invocation path at all.
   selectWall fixed with 3D_E-0967 (ed9cea1). Left in lane 16: the CHECK
   rows brush_tool.h:61 (setEnabled mid-stroke) and brush_tool.cpp:150
   (endStroke reads the live mode).
+  2026-11-10: both lane-16 brush CHECK rows were real and are fixed
+  in e8d2840 (stroke keeps its starting mode; disabling the brush ends an
+  open stroke), red tests first. Lane 16 has no open rows left.
   **Layman:** About 290 lower-risk possible bugs and the medium findings are still unchecked.
   Kind: review-fix.
   Source: review-readability 2026-10-31 at 7b2a81d.
