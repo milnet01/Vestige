@@ -57,8 +57,10 @@ public:
     /// @brief Checks if the brush tool is active (user is painting).
     bool isActive() const { return m_enabled; }
 
-    /// @brief Sets whether the brush tool is enabled.
-    void setEnabled(bool enabled) { m_enabled = enabled; }
+    /// @brief Sets whether the brush tool is enabled. Disabling it mid-stroke
+    ///        ends the stroke, so it gets its undo entry now: the editor stops
+    ///        calling processInput once the brush is off.
+    void setEnabled(bool enabled, FoliageManager& manager, CommandHistory& history);
 
     /// @brief Gets the current brush hit point on a surface.
     /// @param outPoint Output hit position.
@@ -119,6 +121,7 @@ private:
 
     bool m_enabled = false;
     bool m_painting = false;
+    Mode m_strokeMode = Mode::FOLIAGE;  ///< The open stroke's mode, fixed at beginStroke.
     glm::vec3 m_lastStampPos{0.0f};
     glm::vec3 m_currentHitPoint{0.0f};
     glm::vec3 m_currentHitNormal{0.0f, 1.0f, 0.0f};

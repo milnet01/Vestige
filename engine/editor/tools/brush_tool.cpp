@@ -30,6 +30,15 @@ static float randomFloat(float minVal, float maxVal)
     return dist(getRng());
 }
 
+void BrushTool::setEnabled(bool enabled, FoliageManager& manager, CommandHistory& history)
+{
+    if (!enabled && m_painting)
+    {
+        endStroke(manager, history);
+    }
+    m_enabled = enabled;
+}
+
 bool BrushTool::processInput(const Ray& mouseRay, bool mouseDown, float deltaTime,
                               FoliageManager& manager, CommandHistory& history)
 {
@@ -140,6 +149,9 @@ Ray BrushTool::createRay(const Camera& camera, float screenX, float screenY,
 void BrushTool::beginStroke()
 {
     m_painting = true;
+    // The panel can change `mode` while a stroke is open; the stroke keeps
+    // the mode it started with, so its undo entry matches what it painted.
+    m_strokeMode = mode;
     m_strokeAdded.clear();
     m_strokeRemoved.clear();
     m_scatterAdded.clear();
@@ -179,7 +191,7 @@ void BrushTool::endStroke(FoliageManager& manager, CommandHistory& history)
     // logically one user action.
     std::vector<std::unique_ptr<EditorCommand>> subCommands;
 
-    if (mode == Mode::ERASER)
+    if (m_strokeMode == Mode::ERASER)
     {
         if (!m_strokeRemoved.empty())
         {
@@ -199,18 +211,18 @@ void BrushTool::endStroke(FoliageManager& manager, CommandHistory& history)
                 convertTreeRefs(m_treesRemoved)));
         }
     }
-    else if (mode == Mode::FOLIAGE && !m_strokeAdded.empty())
+    else if (m_strokeMode == Mode::FOLIAGE && !m_strokeAdded.empty())
     {
         subCommands.push_back(std::make_unique<PaintFoliageCommand>(
             manager, m_strokeAdded, std::vector<FoliageInstanceRef>{}));
     }
-    else if (mode == Mode::SCATTER && !m_scatterAdded.empty())
+    else if (m_strokeMode == Mode::SCATTER && !m_scatterAdded.empty())
     {
         subCommands.push_back(std::make_unique<PaintScatterCommand>(
             manager, convertScatterRefs(m_scatterAdded),
             std::vector<ScatterInstanceRef>{}));
     }
-    else if (mode == Mode::TREE && !m_treesAdded.empty())
+    else if (m_strokeMode == Mode::TREE && !m_treesAdded.empty())
     {
         subCommands.push_back(std::make_unique<PlaceTreeCommand>(
             manager, convertTreeRefs(m_treesAdded),
@@ -228,8 +240,8 @@ void BrushTool::endStroke(FoliageManager& manager, CommandHistory& history)
     }
     else if (subCommands.size() > 1)
     {
-        const char* desc = (mode == Mode::ERASER) ? "Erase brush stroke"
-                                                  : "Brush stroke";
+        const char* desc = (m_strokeMode == Mode::ERASER) ? "Erase brush stroke"
+                                                          : "Brush stroke";
         history.execute(std::make_unique<CompositeCommand>(
             desc, std::move(subCommands)));
     }
@@ -244,7 +256,7 @@ void BrushTool::endStroke(FoliageManager& manager, CommandHistory& history)
 
 void BrushTool::stampAt(const glm::vec3& position, FoliageManager& manager)
 {
-    if (mode == Mode::ERASER)
+    if (m_strokeMode == Mode::ERASER)
     {
         auto removedFoliage = manager.eraseAllFoliage(position, radius);
         m_strokeRemoved.insert(m_strokeRemoved.end(), removedFoliage.begin(), removedFoliage.end());
@@ -255,19 +267,19 @@ void BrushTool::stampAt(const glm::vec3& position, FoliageManager& manager)
         auto removedTrees = manager.eraseTrees(position, radius);
         m_treesRemoved.insert(m_treesRemoved.end(), removedTrees.begin(), removedTrees.end());
     }
-    else if (mode == Mode::FOLIAGE)
+    else if (m_strokeMode == Mode::FOLIAGE)
     {
         auto added = manager.paintFoliage(
             selectedTypeId, position, radius, density, falloff, foliageConfig, densityMap);
         m_strokeAdded.insert(m_strokeAdded.end(), added.begin(), added.end());
     }
-    else if (mode == Mode::SCATTER)
+    else if (m_strokeMode == Mode::SCATTER)
     {
         auto added = manager.paintScatter(
             scatterConfig, selectedTypeId, position, radius, density, falloff, densityMap);
         m_scatterAdded.insert(m_scatterAdded.end(), added.begin(), added.end());
     }
-    else if (mode == Mode::TREE)
+    else if (m_strokeMode == Mode::TREE)
     {
         // Tree placement: single tree per click, with minimum spacing
         TreeInstance tree;
@@ -279,7 +291,7 @@ void BrushTool::stampAt(const glm::vec3& position, FoliageManager& manager)
         auto placed = manager.placeTree(tree, treeConfig.minSpacing);
         m_treesAdded.insert(m_treesAdded.end(), placed.begin(), placed.end());
     }
-    else if (mode == Mode::DENSITY && densityMap)
+    else if (m_strokeMode == Mode::DENSITY && densityMap)
     {
         densityMap->paint(position, radius, densityPaintValue,
                           densityPaintStrength, falloff);

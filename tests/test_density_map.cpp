@@ -338,7 +338,9 @@ TEST(DensityMapTest, DensityStrokeCanBeUndone)
     map.fill(1.0f);
 
     BrushTool brush;
-    brush.setEnabled(true);
+    FoliageManager manager;
+    CommandHistory history;
+    brush.setEnabled(true, manager, history);
     brush.mode = BrushTool::Mode::DENSITY;
     brush.densityMap = &map;
     brush.densityPaintValue = 0.0f;
@@ -348,8 +350,6 @@ TEST(DensityMapTest, DensityStrokeCanBeUndone)
     Ray ray;
     ray.origin = glm::vec3(0.0f, 10.0f, 0.0f);
     ray.direction = glm::vec3(0.0f, -1.0f, 0.0f);
-    FoliageManager manager;
-    CommandHistory history;
     brush.processInput(ray, true, 0.016f, manager, history);
     brush.processInput(ray, false, 0.016f, manager, history);
     ASSERT_LT(map.sample(0.0f, 0.0f), 1.0f) << "the stroke painted nothing";

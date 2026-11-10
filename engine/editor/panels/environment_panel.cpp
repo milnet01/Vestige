@@ -17,7 +17,6 @@ namespace Vestige
 void EnvironmentPanel::draw(BrushTool& brushTool, FoliageManager& manager,
                              CommandHistory& history, Terrain* terrain)
 {
-    (void)history;
 
     if (!m_open) return;
 
@@ -31,7 +30,7 @@ void EnvironmentPanel::draw(BrushTool& brushTool, FoliageManager& manager,
     bool brushEnabled = brushTool.isActive();
     if (ImGui::Checkbox("Enable Brush", &brushEnabled))
     {
-        brushTool.setEnabled(brushEnabled);
+        brushTool.setEnabled(brushEnabled, manager, history);
     }
 
     if (!brushEnabled)
