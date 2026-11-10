@@ -343,4 +343,49 @@ TEST_F(GltfSkinIndexTest, WeightsAccessorIndexOutOfRangeIsIgnored)
     EXPECT_NE(model, nullptr);
 }
 
+// -- An index naming a vertex the primitive does not have would make the GPU read
+// past the vertex buffer. The primitive is rejected before upload. The buffer is
+// three zero VEC3 positions, then UNSIGNED_SHORT indices 0, 1, 7.
+
+static std::string gltfTriangleWithIndices(const std::string& base64)
+{
+    return R"({
+        "asset": {"version": "2.0"},
+        "buffers": [{"byteLength": 44, "uri": "data:application/octet-stream;base64,)"
+        + base64 + R"("}],
+        "bufferViews": [{"buffer": 0, "byteOffset": 0, "byteLength": 36},
+                        {"buffer": 0, "byteOffset": 36, "byteLength": 6}],
+        "accessors": [{"bufferView": 0, "componentType": 5126, "type": "VEC3", "count": 3},
+                      {"bufferView": 1, "componentType": 5123, "type": "SCALAR", "count": 3}],
+        "meshes": [{"primitives": [{"attributes": {"POSITION": 0}, "indices": 1}]}],
+        "nodes": [{"mesh": 0}],
+        "scenes": [{"nodes": [0]}],
+        "scene": 0
+    })";
+}
+
+class GltfIndexRangeTest : public GltfSkinIndexTest {};
+
+TEST_F(GltfIndexRangeTest, IndexPastTheLastVertexRejectsThePrimitive)
+{
+    std::ofstream{m_path} << gltfTriangleWithIndices(
+        "AAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAABAAcAAAA=");
+    ResourceManager rm;
+    auto model = GltfLoader::load(m_path.string(), rm);
+    ASSERT_NE(model, nullptr);
+    EXPECT_TRUE(model->m_primitives.empty());
+}
+
+TEST_F(GltfIndexRangeTest, IndicesInsideTheVerticesLoad)
+{
+    // Same file with indices 0, 1, 2: the control, so the test above fails
+    // only on the bad index.
+    std::ofstream{m_path} << gltfTriangleWithIndices(
+        "AAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAABAAIAAAA=");
+    ResourceManager rm;
+    auto model = GltfLoader::load(m_path.string(), rm);
+    ASSERT_NE(model, nullptr);
+    EXPECT_EQ(model->m_primitives.size(), 1u);
+}
+
 }  // namespace Vestige::GltfBoundsChecks::Test

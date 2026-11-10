@@ -925,6 +925,18 @@ static std::vector<MeshPrimRange> loadMeshes(const tinygltf::Model& gltfModel,
                         }
                     }
                 }
+
+                // An index past the last vertex would make the GPU read beyond
+                // the vertex buffer.
+                const auto badIndex = std::find_if(indices.begin(), indices.end(),
+                    [&](uint32_t index) { return index >= vertices.size(); });
+                if (badIndex != indices.end())
+                {
+                    Logger::warning("glTF: primitive index " + std::to_string(*badIndex)
+                        + " is past its " + std::to_string(vertices.size())
+                        + " vertices, skipping");
+                    continue;
+                }
             }
             else
             {
