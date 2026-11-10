@@ -9869,6 +9869,13 @@ Outdoor landscapes surrounding the Temple complex — hills, valleys, and the Ki
   Progress (2026-09-26): 3D_E-S0561 (FSR 1.0 spatial upscaler) folded in
   here by user decision. User wants the outstanding review fixes cleared
   before this item's spec is written.
+  Lead 2026-11-10 (DOOM Ants, know_how
+  "taau-temporal-upscaler-flicker"): a current-frame blend of 1/12 on
+  still pixels, rising to 0.2 by 2 display px/frame of motion, cut their
+  flicker 36-44% at no frame cost. Narrow a jitter-distance kernel when
+  lowering the peak. Score edge agreement against a full-res reference,
+  not gradient energy. Our TAA (taa_resolve.frag.glsl) already blends
+  0.1 current on still pixels.
   **Layman:** Rendering smaller and upscaling well is what gets the weak graphics card to 60 FPS without looking blurry.
   Kind: perf.
   Source: tech-survey-2026-09-02.
