@@ -18,7 +18,10 @@
 #include <imgui.h>
 
 #include <filesystem>
+
+#ifndef _WIN32
 #include <unistd.h>
+#endif
 
 namespace fs = std::filesystem;
 
