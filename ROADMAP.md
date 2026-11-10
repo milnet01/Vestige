@@ -7395,6 +7395,14 @@ shipped that have no invocation path at all.
   2026-11-10: both lane-16 brush CHECK rows were real and are fixed
   in e8d2840 (stroke keeps its starting mode; disabling the brush ends an
   open stroke), red tests first. Lane 16 has no open rows left.
+  2026-11-10 (second session): five REAL leads fixed, red test first,
+  one commit each: 75afb4d hierarchy Delete while typing in search,
+  c667bd5 glTF index past the last vertex, 10ee723 audio cache evicting a
+  playing buffer, 765cf50 asset browser throw on an unreadable folder,
+  7cc1d0a settings revert on a root-screen change. Lane files now mark
+  these DONE, plus earlier fixes whose rows were unmarked (lanes 02, 04,
+  06, 10, 20). Still open, by lane file: lanes 03-12, 14-15, 18-22, 24-27
+  REAL rows; flushBufferCache still deletes attached buffers.
   **Layman:** About 290 lower-risk possible bugs and the medium findings are still unchecked.
   Kind: review-fix.
   Source: review-readability 2026-10-31 at 7b2a81d.

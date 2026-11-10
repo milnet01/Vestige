@@ -25,6 +25,21 @@ may change any interface without notice.
 
 ## [Unreleased]
 
+### 2026-11-10 Fixed — editor, model, sound and settings bugs (3D_E-0874)
+
+- **Pressing Delete while typing in the hierarchy search box no longer deletes the selected object**
+
+- **A model file with a bad triangle index is refused instead of drawn**
+  The bad index made the graphics card read past the model's data.
+
+- **New sounds keep loading after the sound cache fills while a sound is playing**
+  The cache tried to free the playing sound, failed, and the next sound then failed to load.
+
+- **The asset browser no longer crashes on a folder that vanishes or cannot be read**
+
+- **Leaving the Settings screen by changing screens now undoes unsaved changes**
+  Before, only closing Settings itself undid them.
+
 ### 2026-11-10 Fixed — every foliage brush stroke can be undone (3D_E-0874)
 
 - **Changing the brush mode in the middle of a stroke no longer loses its undo**
