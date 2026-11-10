@@ -7388,6 +7388,10 @@ shipped that have no invocation path at all.
   renderer, 5299e08 pressure plate floor, d8b74d6 stair step count, 98d9463 gradient selection, ab2a09d terrain brush circle,
   c2fc581 terrain stroke keeps its mode (was a CHECK row; real), 4cfd28a density stroke undo. Left: path_tool NaN and both
   cutout rows, done with 3D_E-0967 (the spec moves that code); a new CHECK row: brush_tool endStroke reads the live mode.
+  2026-11-10: lane-16 path_tool NaN, cutout second cut and cutout
+  selectWall fixed with 3D_E-0967 (ed9cea1). Left in lane 16: the CHECK
+  rows brush_tool.h:61 (setEnabled mid-stroke) and brush_tool.cpp:150
+  (endStroke reads the live mode).
   **Layman:** About 290 lower-risk possible bugs and the medium findings are still unchecked.
   Kind: review-fix.
   Source: review-readability 2026-10-31 at 7b2a81d.
@@ -7558,7 +7562,7 @@ shipped that have no invocation path at all.
   Source: claude-config CI tuning request 2026-11-05 (inbox 1458), ci_report 2026-11-06.
   Lanes: ci.
 
-- 📋 [3D_E-0967] **Walls, rooms, roofs, stairs and paths the editor builds vanish when the scene is saved and reopened.**
+- ✅ [3D_E-0967] **Walls, rooms, roofs, stairs and paths the editor builds vanish when the scene is saved and reopened.**
   Found 2026-11-08 while re-checking 0874's cutout lead (lane-16
   cutout_tool.cpp:156, a second cut drops the first hole).
   serializeMeshRenderer saves a mesh only by its ResourceManager key
@@ -7578,6 +7582,12 @@ shipped that have no invocation path at all.
   findings fixed, none deferred). Record:
   docs/reviews/3D_E-0967-procedural-mesh-save-loop-log.md. The last
   loop's fixes were read by no lane; the build is the next reader.
+  Shipped 2026-11-10 in ed9cea1, red tests first (29 of 37 new
+  tests failed before the fix). Every ProceduralMeshBuilder::create*
+  stamps a MeshRecipe; a keyless mesh saves as "procedural"; load
+  rebuilds it through ProceduralMeshBuilder::build. Scenes save as
+  format_version 3. Folded in the lane-16 path_tool NaN and both cutout
+  rows (spec 4.6 and 9 amended: selectWall takes only a built wall).
   **Layman:** Anything made with the building tools comes back as an empty, invisible object after you save and reopen the scene.
   Kind: fix.
   Source: 3D_E-0874 cutout lead re-check 2026-11-08.

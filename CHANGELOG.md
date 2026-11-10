@@ -25,6 +25,23 @@ may change any interface without notice.
 
 ## [Unreleased]
 
+### 2026-11-10 Fixed — built walls, rooms, roofs, stairs and paths survive a save (3D_E-0967)
+
+- **Geometry made with the building tools is still there after saving and reopening**
+  It used to come back as empty, invisible objects. Each built mesh now saves the
+  numbers it was built from, and loading rebuilds it.
+
+- **A wall keeps every door and window cut into it**
+  A second cut used to remove the first.
+
+- **Only walls can be cut**
+  Choosing any other object used to replace it with a plain wall.
+
+- **A path that runs straight up no longer breaks its mesh**
+
+- **Scene files are now format 3**
+  Older versions of the engine refuse them rather than loading the walls empty.
+
 ### 2026-11-09 Fixed — cameras, glowing objects, pressure plates and five editor tools behave as shown (3D_E-0874)
 
 - **A camera entity's field of view is used**
