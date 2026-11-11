@@ -25,6 +25,17 @@ may change any interface without notice.
 
 ## [Unreleased]
 
+### 2026-11-11 Fixed — model, material preset and script editor bugs (3D_E-0874)
+
+- **A model file with no normals no longer draws black or breaks lighting**
+  Faces in an OBJ file that gave no normals now get them worked out from their shape.
+
+- **A material preset name can no longer save or load outside the materials folder**
+  A name such as `../x` was used as a path. Saving is also crash-safe now.
+
+- **The script editor opens the file you pick in its Open dialog**
+  Before, Open refused every file the dialog returned.
+
 ### 2026-11-10 Fixed — editor, model, sound and settings bugs (3D_E-0874)
 
 - **Pressing Delete while typing in the hierarchy search box no longer deletes the selected object**

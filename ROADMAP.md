@@ -7403,6 +7403,14 @@ shipped that have no invocation path at all.
   these DONE, plus earlier fixes whose rows were unmarked (lanes 02, 04,
   06, 10, 20). Still open, by lane file: lanes 03-12, 14-15, 18-22, 24-27
   REAL rows; flushBufferCache still deletes attached buffers.
+  2026-11-11: three more REAL rows fixed, red tests first: OBJ faces
+  without vn get generated normals (e8518c3); material preset names
+  cannot leave materials/, save via AtomicWrite (29f01b8); script editor
+  Open accepts the dialog's absolute path via
+  ScriptGraph::loadFromChosenFile (fcbae33). The lane-19 lead said save
+  should refuse what load refuses; that would have broken Save As. User
+  decision 2026-11-11: a path picked in a dialog is trusted;
+  loadFromFile stays strict for paths read from data.
   **Layman:** About 290 lower-risk possible bugs and the medium findings are still unchecked.
   Kind: review-fix.
   Source: review-readability 2026-10-31 at 7b2a81d.
