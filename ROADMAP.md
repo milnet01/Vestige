@@ -1,6 +1,6 @@
 <!-- ants-roadmap-format: 1 -->
 <!-- Generated from the Ants Terminal roadmap store. Edit it with roadmap_log; hand edits are discarded by the next write. -->
-<!-- ants-roadmap-id-high-water: 3D_E=968 3D_E#S=989 -->
+<!-- ants-roadmap-id-high-water: 3D_E=969 3D_E#S=989 -->
 
 # Vestige Engine Roadmap
 
@@ -7645,6 +7645,23 @@ shipped that have no invocation path at all.
   Kind: enhancement.
   Source: frameledger-2026-11-10.
   Lanes: profiler.
+
+- 📋 [3D_E-0969] **A stopped timing run keeps its frame log's close line: Vestige handles Ctrl-C, SIGTERM and Windows' Ctrl-Break.**
+  Vestige installs no SIGINT, SIGTERM or SIGBREAK handler (searched engine/
+  and app/ 2026-11-11). FrameLedgerLog::close runs only from Engine::shutdown
+  and the log's destructor, so a signal's default action ends the process
+  with no close line. frameledger `alternate` stops a run with SIGINT on
+  Linux and CTRL_BREAK_EVENT on Windows (FLED-0063, spec § 4.15, which
+  tells engines to handle Ctrl-Break as Ctrl-C).
+  Done when: the handler sets a flag the main loop reads, so the loop exits
+  and Engine::shutdown runs; on Windows SIGBREAK (or CTRL_BREAK_EVENT via
+  SetConsoleCtrlHandler) does the same. Test: send SIGINT to a
+  --demo-flythrough run with --frame-log and check that frameledger `check`
+  passes on the file. Pairs with 3D_E-0820 (Windows).
+  **Layman:** When a frame-timing run is stopped early, the engine shuts down properly so the timing file is complete and can still be read.
+  Kind: fix.
+  Source: frameledger-FLED-0063-review-2026-11-11.
+  Lanes: core, profiler.
 
 ## 0.3.0 — An editor a builder can use
 
