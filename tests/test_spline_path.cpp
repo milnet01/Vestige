@@ -343,3 +343,28 @@ TEST(SplinePathTest, EndSegmentsStayOnAStraightLineFarFromOrigin)
         prevX = p.x;
     }
 }
+
+// 3D_E-0874 lane 18: a vertical tangent made cross(tangent, up) zero, and the
+// length guard ran after normalize, which had already turned it into NaN.
+// Both meshes then emitted NaN vertices.
+TEST(SplinePathTest, VerticalSegmentGivesFiniteMeshVertices)
+{
+    SplinePath path;
+    path.addWaypoint(glm::vec3(0.0f, 0.0f, 0.0f));
+    path.addWaypoint(glm::vec3(0.0f, 5.0f, 0.0f));
+
+    // Both take a half-width, so each strip is 1 m wide.
+    for (const PathMeshData& mesh : {path.generatePathMesh(0.5f, 1.0f),
+                                     path.generateStreamMesh(0.5f, 1.0f)})
+    {
+        ASSERT_GE(mesh.positions.size(), 2u);
+        for (size_t i = 0; i < mesh.positions.size(); ++i)
+        {
+            const glm::vec3& p = mesh.positions[i];
+            EXPECT_TRUE(std::isfinite(p.x) && std::isfinite(p.y) && std::isfinite(p.z))
+                << "vertex " << i;
+        }
+        // The two edges of a pair stay a full width apart.
+        EXPECT_NEAR(glm::distance(mesh.positions[0], mesh.positions[1]), 1.0f, 1e-4f);
+    }
+}

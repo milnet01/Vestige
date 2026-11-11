@@ -11,6 +11,17 @@
 namespace Vestige
 {
 
+/// The path's sideways direction at a sample: perpendicular to the tangent,
+/// level with the ground. A vertical (or zero) tangent has no such direction,
+/// so +X stands in. The length is tested before normalising, because
+/// normalising a zero vector gives NaN (3D_E-0874).
+static glm::vec3 pathRight(const glm::vec3& tangent)
+{
+    const glm::vec3 side = glm::cross(tangent, glm::vec3(0.0f, 1.0f, 0.0f));
+    const float length = glm::length(side);
+    return (length < 1e-6f) ? glm::vec3(1.0f, 0.0f, 0.0f) : side / length;
+}
+
 void SplinePath::addWaypoint(const glm::vec3& position)
 {
     m_waypoints.push_back(position);
@@ -185,8 +196,7 @@ PathMeshData SplinePath::generatePathMesh(float halfWidth, float sampleSpacing) 
         glm::vec3 up(0.0f, 1.0f, 0.0f);
 
         // Right vector: perpendicular to tangent on the XZ plane
-        glm::vec3 right = glm::normalize(glm::cross(tangent, up));
-        if (glm::length(right) < 1e-6f) right = glm::vec3(1.0f, 0.0f, 0.0f);
+        glm::vec3 right = pathRight(tangent);
 
         // Left and right edge vertices
         glm::vec3 leftPos = pos + right * halfWidth + glm::vec3(0.0f, 0.01f, 0.0f);
@@ -247,8 +257,7 @@ PathMeshData SplinePath::generateStreamMesh(float halfWidth, float sampleSpacing
         prevPos = pos;
 
         glm::vec3 up(0.0f, 1.0f, 0.0f);
-        glm::vec3 right = glm::normalize(glm::cross(tangent, up));
-        if (glm::length(right) < 1e-6f) right = glm::vec3(1.0f, 0.0f, 0.0f);
+        glm::vec3 right = pathRight(tangent);
 
         // Water sits at a slight offset above the ground
         float waterY = pos.y + 0.005f;
