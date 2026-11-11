@@ -25,7 +25,13 @@ may change any interface without notice.
 
 ## [Unreleased]
 
-### 2026-11-11 Fixed — model, material preset and script editor bugs (3D_E-0874)
+### 2026-11-11 Fixed — model, material preset, path and editor bugs (3D_E-0874)
+
+- **A path or stream with a vertical section no longer breaks its mesh**
+  The section's vertices came out as invalid numbers.
+
+- **Clicking a material slider without moving it no longer adds an Undo step**
+  Before, the next Undo seemed to do nothing.
 
 - **A model file with no normals no longer draws black or breaks lighting**
   Faces in an OBJ file that gave no normals now get them worked out from their shape.

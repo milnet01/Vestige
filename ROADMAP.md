@@ -7411,6 +7411,12 @@ shipped that have no invocation path at all.
   should refuse what load refuses; that would have broken Save As. User
   decision 2026-11-11: a path picked in a dialog is trusted;
   loadFromFile stays strict for paths read from data.
+  2026-11-11 (later): two more fixed, red tests first: vertical spline
+  segment NaN vertices in path and stream meshes (26a0456); Material
+  inspector skips an undo step when the material's saved form is
+  unchanged (21e854f). Re-graded: lane-05 font reload leak is latent (no
+  code reloads an existing Font); lane-18 terrain short read needs a
+  file shrinking mid-load, left for now.
   **Layman:** About 290 lower-risk possible bugs and the medium findings are still unchecked.
   Kind: review-fix.
   Source: review-readability 2026-10-31 at 7b2a81d.
