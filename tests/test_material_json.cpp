@@ -27,6 +27,7 @@
 #include <array>
 #include <cstdint>
 #include <filesystem>
+#include <fstream>
 #include <string>
 
 using namespace Vestige;
@@ -127,6 +128,41 @@ TEST_F(MaterialJsonTest, PresetRoundTripKeepsEveryMaterialField)
     Material loaded;
     ASSERT_TRUE(MaterialLibrary::loadMaterial("distinctive", loaded, resources, assetDir.string()));
     expectDistinctive(loaded);
+    std::filesystem::remove_all(assetDir);
+}
+
+// 3D_E-0874 lane 22: the preset name came straight from an editor text box
+// into the path, so "../x" wrote outside materials/. A name must be one plain
+// file name, on save and on load.
+TEST_F(MaterialJsonTest, PresetNameCannotLeaveTheMaterialsFolder)
+{
+    const std::filesystem::path assetDir = std::filesystem::temp_directory_path()
+        / ("vestige_material_escape_" + Testing::vestigeTestStamp());
+    std::filesystem::create_directories(assetDir);
+    ResourceManager resources;
+    Material material;
+
+    EXPECT_FALSE(MaterialLibrary::saveMaterial("../escaped", material, resources,
+                                               assetDir.string()));
+    EXPECT_FALSE(std::filesystem::exists(assetDir / "escaped.json"));
+    for (const char* bad : {"", ".", "..", "sub/x", "sub\\x"})
+    {
+        EXPECT_FALSE(MaterialLibrary::saveMaterial(bad, material, resources,
+                                                   assetDir.string())) << bad;
+    }
+
+    // A file planted beside materials/ must not load through "../".
+    {
+        std::ofstream planted(assetDir / "planted.json");
+        planted << "{\"name\": \"planted\"}";
+    }
+    EXPECT_FALSE(MaterialLibrary::loadMaterial("../planted", material, resources,
+                                               assetDir.string()));
+
+    // A plain name still saves.
+    EXPECT_TRUE(MaterialLibrary::saveMaterial("plain", material, resources,
+                                              assetDir.string()));
+    EXPECT_TRUE(std::filesystem::exists(assetDir / "materials" / "plain.json"));
     std::filesystem::remove_all(assetDir);
 }
 

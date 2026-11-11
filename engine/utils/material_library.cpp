@@ -6,6 +6,7 @@
 #include "utils/material_library.h"
 #include "renderer/material.h"
 #include "core/logger.h"
+#include "utils/atomic_write.h"
 #include "utils/json_size_cap.h"
 #include "utils/material_json.h"
 
@@ -13,7 +14,6 @@
 
 #include <algorithm>
 #include <filesystem>
-#include <fstream>
 
 using json = nlohmann::json;
 namespace fs = std::filesystem;
@@ -28,6 +28,14 @@ std::string materialsDir(const std::string& assetPath)
     return assetPath + "/materials";
 }
 
+/// A preset name becomes "<name>.json" inside materials/, so it must be one
+/// plain file name: a separator or a dot-only name would reach outside it.
+bool isPlainPresetName(const std::string& name)
+{
+    return !name.empty() && name != "." && name != ".."
+        && name.find_first_of("/\\") == std::string::npos;
+}
+
 } // anonymous namespace
 
 namespace MaterialLibrary
@@ -36,20 +44,24 @@ namespace MaterialLibrary
 bool saveMaterial(const std::string& name, const Material& material,
                   const ResourceManager& resources, const std::string& assetPath)
 {
-    std::string dir = materialsDir(assetPath);
-    fs::create_directories(dir);
+    if (!isPlainPresetName(name))
+    {
+        Logger::error("MaterialLibrary: Preset name '" + name + "' is not a plain file name");
+        return false;
+    }
 
-    std::string filepath = dir + "/" + name + ".json";
+    std::string filepath = materialsDir(assetPath) + "/" + name + ".json";
     json j = MaterialJson::toJson(material, resources);
     j["name"] = material.name;
 
-    std::ofstream file(filepath);
-    if (!file.is_open())
+    // writeFile creates materials/ and never leaves a half-written preset.
+    const AtomicWrite::Status status = AtomicWrite::writeFile(filepath, j.dump(2));
+    if (status != AtomicWrite::Status::Ok)
     {
-        Logger::error("MaterialLibrary: Failed to write " + filepath);
+        Logger::error("MaterialLibrary: Failed to write " + filepath + ": "
+                      + AtomicWrite::describe(status));
         return false;
     }
-    file << j.dump(2);
     Logger::info("MaterialLibrary: Saved preset '" + name + "' to " + filepath);
     return true;
 }
@@ -57,6 +69,12 @@ bool saveMaterial(const std::string& name, const Material& material,
 bool loadMaterial(const std::string& name, Material& target,
                   ResourceManager& resources, const std::string& assetPath)
 {
+    if (!isPlainPresetName(name))
+    {
+        Logger::error("MaterialLibrary: Preset name '" + name + "' is not a plain file name");
+        return false;
+    }
+
     std::string filepath = materialsDir(assetPath) + "/" + name + ".json";
     auto j = JsonSizeCap::loadJsonWithSizeCap(filepath, "MaterialLibrary");
     if (!j)
