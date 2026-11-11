@@ -11,6 +11,7 @@
 #include <glm/glm.hpp>
 
 #include <atomic>
+#include <cmath>
 #include <cstdio>
 #include <filesystem>
 #include <fstream>
@@ -166,6 +167,72 @@ TEST(ObjLoaderTest, HandlesPositionOnlyFaces)
     EXPECT_FLOAT_EQ(vertices[0].position.x, -1.0f);
     EXPECT_FLOAT_EQ(vertices[1].position.x, 1.0f);
     EXPECT_FLOAT_EQ(vertices[2].position.y, 1.0f);
+}
+
+// 3D_E-0874 lane 22: a face with no vn kept a zero normal, so it lit black and
+// calculateTangents normalised the zero vector into NaN tangents.
+TEST(ObjLoaderTest, FacesWithoutNormalsGetFaceNormalAndFiniteTangents)
+{
+    const std::string objData =
+        "v -1.0 0.0 0.0\n"
+        "v  1.0 0.0 0.0\n"
+        "v  0.0 1.0 0.0\n"
+        "f 1 2 3\n";
+
+    TempObjFile file(objData);
+    std::vector<Vertex> vertices;
+    std::vector<uint32_t> indices;
+
+    ASSERT_TRUE(ObjLoader::load(file.path(), vertices, indices));
+    ASSERT_EQ(vertices.size(), 3u);
+
+    for (const Vertex& v : vertices)
+    {
+        // Counter-clockwise in the XY plane: the face points along +Z.
+        EXPECT_NEAR(v.normal.x, 0.0f, 1e-6f);
+        EXPECT_NEAR(v.normal.y, 0.0f, 1e-6f);
+        EXPECT_NEAR(v.normal.z, 1.0f, 1e-6f);
+        for (int c = 0; c < 3; ++c)
+        {
+            EXPECT_TRUE(std::isfinite(v.tangent[c]));
+            EXPECT_TRUE(std::isfinite(v.bitangent[c]));
+        }
+    }
+}
+
+// A file mixing faces with and without vn: the given normals are kept, and only
+// the missing ones are generated.
+TEST(ObjLoaderTest, GivenNormalsAreKeptWhenOtherFacesLackThem)
+{
+    const std::string objData =
+        "v -1.0 0.0 0.0\n"
+        "v  1.0 0.0 0.0\n"
+        "v  0.0 1.0 0.0\n"
+        "v  0.0 0.0 5.0\n"
+        "vn 1.0 0.0 0.0\n"
+        "f 1//1 2//1 3//1\n"
+        "f 1 2 4\n";
+
+    TempObjFile file(objData);
+    std::vector<Vertex> vertices;
+    std::vector<uint32_t> indices;
+
+    ASSERT_TRUE(ObjLoader::load(file.path(), vertices, indices));
+    ASSERT_EQ(indices.size(), 6u);
+
+    // First face: its own vn, untouched.
+    for (size_t i = 0; i < 3; ++i)
+    {
+        EXPECT_FLOAT_EQ(vertices[indices[i]].normal.x, 1.0f);
+    }
+    // Second face (-1,0,0),(1,0,0),(0,0,5): counter-clockwise seen from -Y.
+    for (size_t i = 3; i < 6; ++i)
+    {
+        const glm::vec3 n = vertices[indices[i]].normal;
+        EXPECT_NEAR(n.x, 0.0f, 1e-6f);
+        EXPECT_NEAR(n.y, -1.0f, 1e-6f);
+        EXPECT_NEAR(n.z, 0.0f, 1e-6f);
+    }
 }
 
 TEST(ObjLoaderTest, HandlesMissingTexCoordWithNormal)

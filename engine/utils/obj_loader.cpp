@@ -6,6 +6,7 @@
 #include "utils/obj_loader.h"
 #include "core/logger.h"
 
+#include <array>
 #include <filesystem>
 #include <fstream>
 #include <sstream>
@@ -141,6 +142,41 @@ static VertexKey parseFaceVertex(const std::string& token,
     return key;
 }
 
+/// @brief Gives each vertex flagged in @p missing a normal: the area-weighted
+/// sum of the faces that use it, so a vertex shared by several faces comes out
+/// smooth. A vertex whose faces all have zero area gets +Y, never a zero vector,
+/// which calculateTangents would normalise into NaN.
+static void fillMissingNormals(std::vector<Vertex>& vertices,
+                               const std::vector<uint32_t>& indices,
+                               const std::vector<bool>& missing)
+{
+    for (size_t i = 0; i + 2 < indices.size(); i += 3)
+    {
+        const std::array<uint32_t, 3> tri = {indices[i], indices[i + 1], indices[i + 2]};
+        const glm::vec3 faceNormal = glm::cross(
+            vertices[tri[1]].position - vertices[tri[0]].position,
+            vertices[tri[2]].position - vertices[tri[0]].position);
+        for (uint32_t v : tri)
+        {
+            if (missing[v])
+            {
+                vertices[v].normal += faceNormal;
+            }
+        }
+    }
+
+    for (size_t v = 0; v < vertices.size(); ++v)
+    {
+        if (!missing[v])
+        {
+            continue;
+        }
+        const float length = glm::length(vertices[v].normal);
+        vertices[v].normal = (length > 1e-12f) ? vertices[v].normal / length
+                                               : glm::vec3(0.0f, 1.0f, 0.0f);
+    }
+}
+
 bool ObjLoader::load(const std::string& filePath,
                      std::vector<Vertex>& outVertices,
                      std::vector<uint32_t>& outIndices)
@@ -170,6 +206,9 @@ bool ObjLoader::load(const std::string& filePath,
 
     // Map to deduplicate vertices with identical pos/tex/norm combinations
     std::unordered_map<VertexKey, uint32_t, VertexKeyHash> vertexMap;
+
+    // One flag per output vertex: true where its face token named no usable vn.
+    std::vector<bool> missingNormal;
 
     outVertices.clear();
     outIndices.clear();
@@ -283,7 +322,9 @@ bool ObjLoader::load(const std::string& filePath,
                             vertex.texCoord = texCoords.at(static_cast<size_t>(key.texIndex));
                         }
 
-                        if (key.normIndex >= 0 && key.normIndex < static_cast<int>(normals.size()))
+                        const bool hasNormal = key.normIndex >= 0
+                            && key.normIndex < static_cast<int>(normals.size());
+                        if (hasNormal)
                         {
                             vertex.normal = normals.at(static_cast<size_t>(key.normIndex));
                         }
@@ -291,6 +332,7 @@ bool ObjLoader::load(const std::string& filePath,
                         auto index = static_cast<uint32_t>(outVertices.size());
                         vertexMap[key] = index;
                         outVertices.push_back(vertex);
+                        missingNormal.push_back(!hasNormal);
                         outIndices.push_back(index);
                     }
                 }
@@ -321,6 +363,9 @@ bool ObjLoader::load(const std::string& filePath,
             + filePath + "' loads as a single material. "
             "(MTL parser is not yet implemented; see ROADMAP Phase 10.9 D4.)");
     }
+
+    // A face with no vn would light black and give NaN tangents (3D_E-0874).
+    fillMissingNormals(outVertices, outIndices, missingNormal);
 
     // Compute tangent/bitangent vectors for normal mapping
     calculateTangents(outVertices, outIndices);
