@@ -80,10 +80,17 @@ struct ScriptGraph
     nlohmann::json toJson() const;
     static ScriptGraph fromJson(const nlohmann::json& j);
 
-    /// @brief Load a ScriptGraph from a .vscript file.
+    /// @brief Load a ScriptGraph from a .vscript path read from data (a scene
+    /// or another file). Refuses an absolute path, a leading `~` and any `..`
+    /// part, so a data file cannot point outside the working directory.
     static ScriptGraph loadFromFile(const std::string& filePath);
 
-    /// @brief Save this ScriptGraph to a .vscript file.
+    /// @brief Load a ScriptGraph from a path the user picked in a file dialog.
+    /// The pick is trusted, so any path is accepted (user decision 2026-11-11).
+    static ScriptGraph loadFromChosenFile(const std::string& filePath);
+
+    /// @brief Save this ScriptGraph to a .vscript file. The path is the user's
+    /// own pick (the editor's Save As), so it is not restricted.
     bool saveToFile(const std::string& filePath) const;
 };
 

@@ -341,13 +341,13 @@ void ScriptEditorPanel::newGraph()
 bool ScriptEditorPanel::open(const std::string& path)
 {
     // AUDIT.md §M2 / FIXPLAN H2: match the header contract — preserve the
-    // existing graph if the load fails. ScriptGraph::loadFromFile returns
+    // existing graph if the load fails. ScriptGraph::loadFromChosenFile returns
     // an empty graph on failure (and logs the error), so we treat
     // "path is non-empty AND loaded graph has no nodes AND no connections"
     // as failure. Genuinely empty graphs saved by the user will have the
     // "name" field populated via fromJson; we key on name + nodes to
     // avoid false negatives on freshly-created-but-untouched graphs.
-    auto loaded = ScriptGraph::loadFromFile(path);
+    auto loaded = ScriptGraph::loadFromChosenFile(path);
     const bool loadLikelyFailed =
         !path.empty() &&
         loaded.nodes.empty() &&
