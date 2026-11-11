@@ -29,6 +29,7 @@
 #include "renderer/material.h"
 #include "renderer/texture.h"
 #include "renderer/light_utils.h"
+#include "utils/material_json.h"
 #include "utils/material_library.h"
 
 #include <imgui.h>
@@ -424,7 +425,15 @@ void InspectorPanel::drawMeshRenderer(Entity& entity)
         drawMaterial(mat);
         const bool released = m_materialWatch.end();
 
-        if (released && m_commandHistory && m_currentScene)
+        // A release also comes from a click that moved nothing; recording it
+        // would leave an Undo step that does nothing (3D_E-0874). The saved
+        // form holds every material field (3D_E-0871), so it is compared.
+        // Without a resource manager to read it through, the edit is kept.
+        const bool unchanged = released && m_resourceManager
+            && MaterialJson::toJson(m_materialBefore, *m_resourceManager)
+                   == MaterialJson::toJson(mat, *m_resourceManager);
+
+        if (released && !unchanged && m_commandHistory && m_currentScene)
         {
             const uint32_t editedEntityId = m_materialEditingEntity;
             Material beforeSnapshot = m_materialBefore;

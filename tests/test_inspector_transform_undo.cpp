@@ -4,7 +4,8 @@
 /// @file test_inspector_transform_undo.cpp
 /// @brief 3D_E-0872 — the inspector's Transform section records undo like
 ///        every other section: a click that edits nothing leaves no open
-///        entry behind.
+///        entry behind. 3D_E-0874 lane 14: the Material section likewise
+///        records nothing for a click that edits nothing.
 ///
 /// Drives the real InspectorPanel headlessly. Widgets are found by hovering
 /// a grid and asking ImGui which item is under the mouse, so no stray click
@@ -14,7 +15,10 @@
 #include "editor/command_history.h"
 #include "editor/panels/inspector_panel.h"
 #include "editor/selection.h"
+#include "renderer/material.h"
+#include "resource/resource_manager.h"
 #include "scene/entity.h"
+#include "scene/mesh_renderer.h"
 #include "scene/scene.h"
 
 #include <imgui.h>
@@ -33,6 +37,7 @@ protected:
     CommandHistory m_history;
     InspectorPanel m_panel;
     Entity* m_entity = nullptr;
+    float m_windowHeight = 400.0f;  ///< Taller for a section far down the panel.
 
     void SetUp() override
     {
@@ -57,7 +62,7 @@ protected:
     {
         ImGui::NewFrame();
         ImGui::SetNextWindowPos(ImVec2(0.0f, 0.0f));
-        ImGui::SetNextWindowSize(ImVec2(400.0f, 400.0f));
+        ImGui::SetNextWindowSize(ImVec2(400.0f, m_windowHeight));
         ImGui::Begin("inspector");
         m_panel.draw(&m_scene, m_selection);
         ImGui::End();
@@ -149,6 +154,63 @@ TEST_F(InspectorTransformUndoTest, DragIsOneStepBackToTheStart)
     m_history.undo();
     EXPECT_FLOAT_EQ(m_entity->transform.position.x, 3.0f);
     EXPECT_FALSE(m_history.canUndo()) << "the drag took more than one entry";
+}
+
+// The Material section records an undo step when a widget inside it is
+// released. Clicking a slider without moving it released one too, so it left
+// a step that changed nothing: the next Undo seemed to do nothing.
+TEST_F(InspectorTransformUndoTest, MaterialClickThatEditedNothingRecordsNothing)
+{
+    auto material = std::make_shared<Material>();
+    material->setType(MaterialType::PBR);
+    material->setMetallic(0.25f);
+    m_entity->addComponent<MeshRenderer>(nullptr, material);
+    ResourceManager resources;  // what a material's saved form is read through
+    m_panel.setResourceManager(&resources);
+    m_windowHeight = 1600.0f;
+    ImGui::GetIO().DisplaySize = ImVec2(640.0f, m_windowHeight);
+
+    frame();
+    ImGuiWindow* window = ImGui::FindWindowByName("inspector");
+    const ImGuiID metallicId = ImHashStr("Metallic", 0, ImHashStr("Material", 0, window->ID));
+    std::optional<ImVec2> slider;
+    for (float y = 2.0f; y < m_windowHeight && !slider; y += 3.0f)
+    {
+        ImGui::GetIO().AddMousePosEvent(100.0f, y);
+        frame();
+        if (ImGui::GetHoveredID() == metallicId) slider = ImVec2(100.0f, y);
+    }
+    ASSERT_TRUE(slider.has_value()) << "Metallic slider not found";
+
+    // Press and release on the spot. A slider jumps to the clicked value, so
+    // first set the value to the one under the cursor, as a still click gives.
+    ImGuiIO& io = ImGui::GetIO();
+    io.AddMousePosEvent(slider->x, slider->y);
+    io.AddMouseButtonEvent(0, true);
+    frame();
+    io.AddMouseButtonEvent(0, false);
+    frame();
+    idle(60);
+    m_history.clear();
+    const float before = material->getMetallic();
+
+    io.AddMouseButtonEvent(0, true);
+    frame();
+    io.AddMouseButtonEvent(0, false);
+    frame();
+    idle(60);
+    ASSERT_FLOAT_EQ(material->getMetallic(), before) << "the click moved the value";
+    EXPECT_FALSE(m_history.canUndo()) << "a click that changed nothing was recorded";
+
+    // A real change is still recorded.
+    io.AddMousePosEvent(slider->x + 60.0f, slider->y);
+    io.AddMouseButtonEvent(0, true);
+    frame();
+    io.AddMouseButtonEvent(0, false);
+    frame();
+    idle(60);
+    ASSERT_NE(material->getMetallic(), before);
+    EXPECT_TRUE(m_history.canUndo()) << "a real change was not recorded";
 }
 
 } // namespace Vestige::Test
