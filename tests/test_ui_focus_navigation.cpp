@@ -348,3 +348,22 @@ TEST_F(UISystemFocusTest, ModalPopDropsFocusOnTheModalCanvas)
     EXPECT_EQ(sys.getFocusedElement(), nullptr)
         << "focus still points into the popped modal";
 }
+
+// 3D_E-0874 — shutdown() is a clear site like the others: the modal canvas
+// goes with the root canvas, and nothing keeps pointing into either.
+TEST_F(UISystemFocusTest, ShutdownClearsTheModalCanvasAndDropsFocus_0874)
+{
+    UITheme theme = UITheme::defaultTheme();
+    sys.pushModalScreen(GameScreen::None);
+    auto btn = makeButton("C", theme);
+    UIElement* raw = btn.get();
+    sys.getModalCanvas().addElement(std::move(btn));
+    sys.setFocusedElement(raw);
+    ASSERT_EQ(sys.getFocusedElement(), raw);
+
+    sys.shutdown();
+    EXPECT_EQ(sys.getModalCanvas().getElementCount(), 0u)
+        << "the modal canvas outlived shutdown";
+    EXPECT_EQ(sys.getFocusedElement(), nullptr)
+        << "focus still points at an element after shutdown";
+}

@@ -85,6 +85,8 @@ void UISystem::shutdown()
         m_engine->getEventBus().unsubscribe(m_languageSub);
         m_languageSub = 0;
     }
+    dropInputTargets();  // the canvases they point into go
+    m_modalCanvas.clear();
     m_canvas.clear();
     m_spriteBatch.shutdown();
     m_engine = nullptr;
