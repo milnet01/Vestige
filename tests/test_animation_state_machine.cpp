@@ -318,3 +318,31 @@ TEST_F(StateMachineTest, EmptyStateMachineStartDoesNothing)
     sm.start(m_animator);
     EXPECT_FALSE(sm.isRunning());
 }
+
+// 3D_E-0874: a state whose clipIndex names no clip used to be entered
+// anyway. The animator ignored the bad index and kept the old clip, but had
+// already taken the new state's speed and loop flag.
+TEST_F(StateMachineTest, TransitionToStateWithMissingClipDoesNotFire)
+{
+    AnimationStateMachine sm;
+    sm.addState({"idle", 0, 1.0f, true});
+    sm.addState({"broken", 99, 3.0f, false});
+
+    AnimTransition trans;
+    trans.fromState = 0;
+    trans.toState = 1;
+    trans.crossfadeDuration = 0.2f;
+    trans.conditions.push_back({"speed", AnimCompareOp::GREATER, 0.1f});
+    sm.addTransition(trans);
+
+    sm.start(m_animator);
+    m_animator.update(0.01f);
+
+    sm.setFloat("speed", 1.5f);
+    sm.update(m_animator, 0.016f);
+
+    EXPECT_EQ(sm.getCurrentStateIndex(), 0);
+    EXPECT_EQ(m_animator.getActiveClipIndex(), 0);
+    EXPECT_FLOAT_EQ(m_animator.getSpeed(), 1.0f);
+    EXPECT_TRUE(m_animator.isLooping());
+}

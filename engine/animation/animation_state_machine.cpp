@@ -120,8 +120,12 @@ void AnimationStateMachine::update(SkeletonAnimator& animator, float /*deltaTime
         // Transition fires!
         if (transition.toState < 0 || transition.toState >= getStateCount())
             continue;
+        // A state naming a clip the animator does not have cannot be entered:
+        // the animator would keep the old clip under the new speed and loop.
+        const auto& targetState = m_states[static_cast<size_t>(transition.toState)];
+        if (targetState.clipIndex < 0 || targetState.clipIndex >= animator.getClipCount())
+            continue;
         m_currentState = transition.toState;
-        const auto& targetState = m_states[static_cast<size_t>(m_currentState)];
         animator.setSpeed(targetState.playbackSpeed);
         animator.setLooping(targetState.loop);
         animator.crossfadeToIndex(targetState.clipIndex, transition.crossfadeDuration);
