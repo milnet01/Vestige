@@ -8,6 +8,7 @@
 set(ENGINE_SOURCES
     core/logger.cpp
     core/timer.cpp
+    core/stop_signal.cpp
     core/event_bus.cpp
     core/system_registry.cpp
     core/job_system.cpp

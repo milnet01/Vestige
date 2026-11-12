@@ -30,6 +30,7 @@ add_executable(vestige_tests
     test_fog_benchmark.cpp
     test_event_bus.cpp
     test_timer.cpp
+    test_stop_signal.cpp
     test_logger.cpp
     test_aabb.cpp
     test_entity.cpp

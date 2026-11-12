@@ -401,6 +401,7 @@ private:
     SystemRegistry m_systemRegistry;
 
     bool m_isRunning;
+    bool m_stopSignalSeen = false;  ///< The run loop acts on a stop signal once.
     bool m_isCursorCaptured;
 
     // Reusable per-frame data (avoids heap allocation every frame)

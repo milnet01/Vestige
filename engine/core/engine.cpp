@@ -11,6 +11,7 @@
 #include "update/update_version.h"
 #include "core/engine_paths.h"
 #include "core/logger.h"
+#include "core/stop_signal.h"
 #include "physics/cloth_component.h"
 #include "systems/atmosphere_system.h"
 #include "systems/particle_system.h"
@@ -127,6 +128,10 @@ bool Engine::initialize(const EngineConfig& config)
     Logger::info("Initializing engine...");
 
     m_assetPath = config.assetPath;
+
+    // Ctrl-C, SIGTERM and Ctrl-Break stop the main loop, so shutdown() runs
+    // and a frame log gets its close line (3D_E-0969).
+    installStopSignalHandlers();
 
     // The frame log's header records how busy the machine was before the
     // engine loaded anything, so this comes ahead of the window (3D_E-0968).
@@ -1617,8 +1622,11 @@ void Engine::run()
     while (m_isRunning)
     {
         // Handle window close (X button) — route through FileMenu for unsaved
-        // changes check instead of quitting immediately.
-        if (m_window->shouldClose())
+        // changes check instead of quitting immediately. A stop signal
+        // (Ctrl-C, SIGTERM, Ctrl-Break) asks the same thing, once.
+        const bool stopSignal = !m_stopSignalSeen && stopSignalReceived();
+        m_stopSignalSeen = m_stopSignalSeen || stopSignal;
+        if (m_window->shouldClose() || stopSignal)
         {
             glfwSetWindowShouldClose(m_window->getHandle(), GLFW_FALSE);
             if (m_editor)
