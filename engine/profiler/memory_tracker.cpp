@@ -2,9 +2,17 @@
 // SPDX-License-Identifier: MIT
 
 /// @file memory_tracker.cpp
-/// @brief MemoryTracker implementation — CPU heap counters, this process's
-///        VRAM from DRM fdinfo, and the card's total from AMD sysfs.
+/// @brief MemoryTracker implementation — CPU heap counters and this
+///        process's VRAM: on Linux from DRM fdinfo, with the card's total
+///        from AMD sysfs; on Windows both from DXGI.
 #include "profiler/memory_tracker.h"
+
+#ifdef VESTIGE_PLATFORM_WINDOWS
+#ifndef NOMINMAX
+#define NOMINMAX  // windows.h must not define min and max over std's
+#endif
+#include <dxgi1_4.h>
+#endif
 
 #include <cstdio>
 #include <filesystem>
@@ -208,6 +216,62 @@ void MemoryTracker::readGpuVram()
         }
         fclose(totalFile);
     }
+#elif defined(VESTIGE_PLATFORM_WINDOWS)
+    // Used: this process's own video memory. Windows' video memory manager
+    // keeps the figure per process and per adapter, whichever graphics API
+    // made the allocations, so OpenGL's are counted. Summed over every
+    // adapter: on a laptop the driver, not the engine, picks which one draws.
+    // The adapters are found once; making a factory costs too much to repeat
+    // on every reading. They are held until the process exits.
+    static const std::vector<IDXGIAdapter3*> adapters = []()
+    {
+        std::vector<IDXGIAdapter3*> found;
+        IDXGIFactory1* factory = nullptr;
+        if (FAILED(CreateDXGIFactory1(IID_PPV_ARGS(&factory))))
+        {
+            return found;
+        }
+        IDXGIAdapter1* adapter = nullptr;
+        for (UINT i = 0; factory->EnumAdapters1(i, &adapter) != DXGI_ERROR_NOT_FOUND; ++i)
+        {
+            IDXGIAdapter3* adapter3 = nullptr;
+            if (SUCCEEDED(adapter->QueryInterface(IID_PPV_ARGS(&adapter3))))
+            {
+                found.push_back(adapter3);
+            }
+            adapter->Release();
+        }
+        factory->Release();
+        return found;
+    }();
+
+    uint64_t usedBytes = 0;
+    uint64_t busiestBytes = 0;
+    bool known = false;
+    bool haveTotal = false;
+    for (IDXGIAdapter3* adapter : adapters)
+    {
+        DXGI_QUERY_VIDEO_MEMORY_INFO info{};
+        if (FAILED(adapter->QueryVideoMemoryInfo(0, DXGI_MEMORY_SEGMENT_GROUP_LOCAL, &info)))
+        {
+            continue;
+        }
+        known = true;
+        usedBytes += info.CurrentUsage;
+
+        // Total: the capacity of the adapter this process uses most, the
+        // panel's denominator. The first adapter stands in until one is used.
+        DXGI_ADAPTER_DESC desc{};
+        if ((!haveTotal || info.CurrentUsage > busiestBytes)
+            && SUCCEEDED(adapter->GetDesc(&desc)))
+        {
+            haveTotal = true;
+            busiestBytes = info.CurrentUsage;
+            m_gpuTotalMB = static_cast<size_t>(desc.DedicatedVideoMemory / (1024ULL * 1024ULL));
+        }
+    }
+    m_gpuUsedKnown = known;
+    m_gpuUsedMB = static_cast<size_t>(usedBytes / (1024ULL * 1024ULL));
 #endif
 }
 

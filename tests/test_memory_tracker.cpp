@@ -7,6 +7,10 @@
 
 #include <gtest/gtest.h>
 
+#ifdef _WIN32
+#include "gl_test_fixture.h"
+#endif
+
 #include <string>
 #include <vector>
 
@@ -227,3 +231,22 @@ TEST(DrmFdinfo, NoClientMeansUnknownNotZero)
     EXPECT_FALSE(MemoryTracker::processVramBytes({"pos:\t0\n"}).has_value());
     EXPECT_FALSE(MemoryTracker::processVramBytes({}).has_value());
 }
+
+#ifdef _WIN32
+// 3D_E-0820: on Windows the tracker had no reading at all. With a GL context
+// alive the process holds video memory, so the reading is known and not zero.
+// Runs on a real Windows machine only: under Wine the GL fixture skips.
+class WindowsVramTest : public ::Vestige::Test::GLTestFixture {};
+
+TEST_F(WindowsVramTest, ProcessVideoMemoryIsReadWithAGlContext)
+{
+    MemoryTracker tracker;
+    for (int i = 0; i < 120; ++i) tracker.update();  // the reading is taken every 60th call
+
+    ASSERT_TRUE(tracker.hasGpuUsed()) << "no video memory reading on Windows";
+    EXPECT_GT(tracker.getGpuUsedMB(), 0u);
+    EXPECT_GT(tracker.getGpuTotalMB(), 0u);
+    EXPECT_LE(tracker.getGpuUsedMB(), tracker.getGpuTotalMB() * 2)
+        << "used is far above the card's capacity: wrong unit or wrong adapter";
+}
+#endif

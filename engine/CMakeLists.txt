@@ -500,6 +500,11 @@ target_link_libraries(vestige_engine
         monocypher          # 3D_E-0729 — update signature check
 )
 
+# DXGI gives the profiler this process's video memory on Windows (3D_E-0820).
+if(WIN32)
+    target_link_libraries(vestige_engine PRIVATE dxgi)
+endif()
+
 # libcurl for the self-updater (3D_E-0729). Only engine/update/http_transport.cpp
 # includes it (INV-4). Windows builds it in external/CMakeLists.txt.
 if(NOT WIN32)
