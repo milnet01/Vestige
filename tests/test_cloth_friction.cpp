@@ -22,7 +22,9 @@
 #include "physics/cloth_simulator.h"
 #include "physics/gpu_cloth_simulator.h"
 
+#include <algorithm>
 #include <cmath>
+#include <vector>
 
 using namespace Vestige;
 
@@ -73,7 +75,47 @@ float cpuSlide(float staticMu, float kineticMu)
     return slideDistance(sim, staticMu, kineticMu);
 }
 
+/// How far past its tether the worst particle ends, in metres, when a
+/// plane collider lifts a cloth half a metre above its one pinned corner.
+/// The tether (each particle's rest distance to the pin) is far shorter.
+float tetherOverrun(IClothSolverBackend& sim)
+{
+    const uint32_t n = sim.getParticleCount();
+    const std::vector<glm::vec3> rest(sim.getPositions(), sim.getPositions() + n);
+    sim.setWind(glm::vec3(1.0f, 0.0f, 0.0f), 0.0f);
+    sim.pinParticle(0, rest[0]);
+    sim.rebuildLRA();
+    sim.addPlaneCollider(glm::vec3(0.0f, 1.0f, 0.0f), rest[0].y + 0.5f);
+
+    for (int f = 0; f < 30; ++f) sim.simulate(1.0f / 60.0f);
+
+    const glm::vec3* p = sim.getPositions();
+    float worst = 0.0f;
+    for (uint32_t i = 1; i < n; ++i)
+    {
+        worst = std::max(worst, glm::length(p[i] - p[0]) - glm::length(rest[i] - rest[0]));
+    }
+    return worst;
+}
+
+ClothConfig flatConfig()
+{
+    ClothConfig cfg = slopeConfig();
+    cfg.gravity = glm::vec3(0.0f, -9.81f, 0.0f);
+    return cfg;
+}
+
 }  // namespace
+
+// 3D_E-0875 follow-up: the CPU solved tethers before collisions and the GPU
+// after, so where a collider and a tether disagreed the two backends ended
+// in different places. Both now end the substep on the tether.
+TEST(ClothTetherOrder, CpuTetherHoldsAgainstACollider)
+{
+    ClothSimulator sim;
+    sim.initialize(flatConfig());
+    EXPECT_LT(tetherOverrun(sim), 1e-3f);
+}
 
 TEST(ClothFrictionSlope, CpuFrictionlessClothSlides)
 {
@@ -130,4 +172,17 @@ TEST_F(GpuClothFrictionSlope, StaticHoldsAndKineticMatchesCpu)
 
     // Parity with the CPU backend, the reference implementation.
     EXPECT_NEAR(slowed, cpuSlide(0.3f, 0.3f), 0.05f);
+}
+
+TEST_F(GpuClothFrictionSlope, TetherHoldsAgainstAColliderAsOnTheCpu)
+{
+    GpuClothSimulator sim;
+    sim.setShaderPath(VESTIGE_SHADER_DIR);
+    sim.initialize(flatConfig(), /*seed=*/0);
+    if (!sim.isInitialized() || !sim.hasShaders())
+    {
+        GTEST_SKIP() << "GPU cloth compute pipeline not available";
+    }
+    sim.setWindQuality(ClothWindQuality::SIMPLE);
+    EXPECT_LT(tetherOverrun(sim), 1e-3f);
 }

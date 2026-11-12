@@ -329,7 +329,7 @@ void ClothSimulator::simulate(float deltaTime)
 
         // 3. Solve constraints (Gauss-Seidel XPBD with Rayleigh damping)
         // The dtSub is passed to the solver for XPBD Rayleigh damping (gamma term).
-        // Cl9: the constraint sweep + LRA run `m_solverIterations` times per
+        // Cl9: the constraint sweep runs `m_solverIterations` times per
         // substep (default 1 = pre-Cl9 behaviour). The CPU's sequential
         // Gauss-Seidel already converges in one sweep, so extra iterations are
         // plain re-sweeps for API parity with the GPU accelerator — there is no
@@ -352,9 +352,6 @@ void ClothSimulator::simulate(float deltaTime)
             {
                 solveDihedralConstraint(c, dtSub);
             }
-
-            // 4. Long Range Attachment: prevent cumulative drift from pins
-            solveLRAConstraints();
         }
 
         // 5. Solve pin constraints
@@ -382,6 +379,12 @@ void ClothSimulator::simulate(float deltaTime)
         // particles back inside colliders during step 3. Two passes catches most
         // constraint-vs-collider conflicts without the cost of iterating further.)
         applyCollisions();
+
+        // 5d. Long Range Attachment: prevent cumulative drift from pins. After
+        // the collisions, as on the GPU, so the substep ends on the tether:
+        // where a collider and a tether disagree the tether wins, and a
+        // friction stick cannot cancel the pull back (3D_E-0875).
+        solveLRAConstraints();
 
         // 6. Post-solve rest pose blending: gently guide particles toward their
         // initial straight-hanging positions when wind is calm. Only active for

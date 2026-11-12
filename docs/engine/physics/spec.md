@@ -116,7 +116,7 @@ Key abstractions:
 | `IClothSolverBackend` | interface | Polymorphic surface shared by CPU XPBD and GPU compute backends. `cloth_solver_backend.h:56` |
 | `ClothConfig` | struct | Grid (`width × height`), `spacing`, `particleMass`, `substeps` (≤ `MAX_SUBSTEPS = 64`), stretch / shear / bend compliance, damping, sleep threshold, gravity. `cloth_simulator.h:23` |
 | `ClothSimulator` | class | Pure-CPU XPBD reference. Stretch / shear / bend distance constraints + dihedral bending + Long-Range Attachment (LRA) tethers + sphere / plane / cylinder / box / mesh colliders + spatial-hash self-collision + wind. `cloth_simulator.h:80` |
-| `GpuClothSimulator` | class | GPU compute-shader backend. Greedy graph-coloured constraint SSBO; per-substep dispatch chain (wind → integrate → constraints → dihedral → LRA → collision → normals); lazy GPU→CPU mirror. `gpu_cloth_simulator.h:37` |
+| `GpuClothSimulator` | class | GPU compute-shader backend. Greedy graph-coloured constraint SSBO; per-substep dispatch chain (wind → integrate → constraints → dihedral → collision → LRA → normals); lazy GPU→CPU mirror. `gpu_cloth_simulator.h:37` |
 | `ClothBackendPolicy` / `ClothBackendChoice` | enums | `AUTO` / `FORCE_CPU` / `FORCE_GPU`; `chooseClothBackend()` picks at the `GPU_AUTO_SELECT_THRESHOLD = 1024`-particle line. `cloth_backend_factory.h:37, 45, 34` |
 | `ClothComponent` | `Component` | Owns one `IClothSolverBackend` + a `DynamicMesh` for rendering. Drives the simulation at a fixed 60 Hz with up to 4 sub-steps per frame. `cloth_component.h:28` |
 | `ClothMeshCollider` | class | Triangle-mesh collider for cloth. Owns vertex / index copy + a `BVH`; supports per-frame refit for animated meshes. `cloth_mesh_collider.h:22` |
@@ -380,9 +380,9 @@ class PhysicsDebugDraw {
    2. Predict positions (Verlet): `pos += vel * dtSub + gravity * dtSub²; prevPos ← pos`.
    3. Solve distance constraints in BFS-depth order (stretch → shear → bend). `solveDistanceConstraint(c, αTilde, dtSub)` computes XPBD position correction.
    4. Solve dihedral bending constraints.
-   5. Solve LRA (Long-Range Attachment) tethers — unilateral; only activates if particle drifts past `maxDistance`.
-   6. Solve pins (clamp pinned particles to fixed positions; inverse mass = 0).
-   7. Apply collisions: ground plane, planes, spheres, cylinders, boxes, mesh-BVH (Phase 8F), self-collision via spatial hash if enabled.
+   5. Solve pins (clamp pinned particles to fixed positions; inverse mass = 0).
+   6. Apply collisions: ground plane, planes, spheres, cylinders, boxes, mesh-BVH (Phase 8F), self-collision via spatial hash if enabled.
+   7. Solve LRA (Long-Range Attachment) tethers — unilateral; only activates if particle drifts past `maxDistance`. After the collisions, as on the GPU, so a tether wins over a collider.
    8. Rest-pose blend (cloth with LRA tethers only): move free particles `0.015 × (1 - gust)` of the way to the rest pose.
    9. Update velocities: `vel = (pos - prevPos) / dtSub * (1 - damping)`, where damping includes adaptive damping when enabled.
 3. `recomputeNormals()` for the renderer.
