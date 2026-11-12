@@ -25,6 +25,11 @@ may change any interface without notice.
 
 ## [Unreleased]
 
+### 2026-11-12 Added — speed tests on Windows say when another program was busy (3D_E-0971)
+
+- **On Windows `--frame-log` now records how busy the processor and the graphics card were**
+  It writes the figures at the start and end of the run, plus the highest share other programs used during it, as Linux already did. The graphics card's clock speed is left out on Windows, which has no general way to read it. Checked on a real Windows PC with two runs overlapping: each one's log showed the other.
+
 ### 2026-11-12 Fixed — the graphics-memory figure works on Windows (3D_E-0820)
 
 - **The performance panel and the frame log show the engine's own graphics memory on Windows**

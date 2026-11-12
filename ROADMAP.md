@@ -7755,7 +7755,7 @@ shipped that have no invocation path at all.
   Source: 3D_E-0820 shipped 2026-11-12.
   Lanes: profiler, tools.
 
-- 🚧 [3D_E-0971] **Fill the frame log's load and GPU-busy header fields on Windows.**
+- ✅ [3D_E-0971] **Fill the frame log's load and GPU-busy header fields on Windows.**
   MachineLoadSampler (engine/profiler/machine_load.cpp, 3D_E-0968) is
   Linux-only: a Windows frame log's header has no load, gpu_busy_pct or
   gpu_clock_mhz (seen on wintest 2026-11-12). Method agreed with
@@ -7766,6 +7766,14 @@ shipped that have no invocation path at all.
   out. Check on wintest against Task Manager's figures. CPU / GPU
   placement: CPU-side counter reads on the sampler's own thread;
   nothing on the GPU.
+  2026-11-12 shipped in 8aa3d66. CPU from GetSystemTimes less
+  GetProcessTimes; GPU from the PDH "GPU Engine" counter, busiest engine
+  summed over processes, own pid left out for the peak. Start and end
+  are half-second windows. On wintest two flythroughs 14 s apart each
+  showed the other: first gpu_busy_pct start 0.25, peak 23.3, end 100;
+  second start 99.6. `frameledger check` accepts both. Not covered:
+  gpu_clock_mhz on Windows; a machine whose counter names are not
+  "pid_<n>_..." (rows are skipped, so the field is left out).
   **Layman:** On Windows a speed test cannot yet say when another program was busy, so a slow reading caused by that is trusted when it should not be.
   Kind: enhancement.
   Source: 3D_E-0968 Windows half 2026-11-12.
