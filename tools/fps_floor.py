@@ -5,8 +5,8 @@
 
 CLAUDE.md's 60 FPS rule: a Release build running
     vestige --demo-flythrough --no-vsync --profile-log=run.csv
-must read at least 60 FPS in every one-second `frame,total` sample after
-warm-up. An average would hide hitches. tools/perf_gate.py is a different
+must read at least 60 FPS in every one-second `frame,total` sample that
+lies wholly after warm-up. An average would hide hitches. tools/perf_gate.py is a different
 check: it compares against a committed baseline, not against this floor.
 
 Exit 0 when every sample meets the floor, 1 when one does not, 2 when the
@@ -26,16 +26,21 @@ def main() -> int:
     p.add_argument("csv", type=Path, help="profiler CSV from --profile-log")
     p.add_argument("--min-fps", type=float, default=60.0)
     p.add_argument("--warmup-s", type=float, default=2.0,
-                   help="ignore samples taken before this many seconds")
+                   help="ignore samples that cover any time before this many seconds")
     args = p.parse_args()
 
+    # A sample covers the time since the one before it, or since the start
+    # for the first. It counts only when all of that is after warm-up: a first
+    # sample at 2.3 s is the scene loading, not a frame rate.
     samples = []
+    covered_from = 0.0
     with args.csv.open(newline="") as f:
         for row in csv.DictReader(f):
             if row["category"] == "frame" and row["name"] == "total":
                 t = float(row["time_s"])
-                if t >= args.warmup_s:
+                if covered_from >= args.warmup_s:
                     samples.append((t, float(row["fps"])))
+                covered_from = t
 
     if not samples:
         print(f"no frame samples after {args.warmup_s} s in {args.csv}")

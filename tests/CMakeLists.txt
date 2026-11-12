@@ -658,7 +658,13 @@ if(Python3_FOUND)
 
     # tools/fps_floor.py (3D_E-0792): a steady run whose only slow frame is in
     # the warm-up passes; one hitch after warm-up fails; a file with nothing
-    # after warm-up says so (exit 2).
+    # after warm-up says so (exit 2). A first sample that ends after warm-up
+    # but began with the scene loading is warm-up too (3D_E-0704).
+    add_test(
+        NAME FpsFloorIgnoresAFirstSampleThatHoldsTheLoad
+        COMMAND Python3::Interpreter ${CMAKE_SOURCE_DIR}/tools/fps_floor.py
+                ${CMAKE_CURRENT_SOURCE_DIR}/fixtures/fps_floor/slow_start.csv
+    )
     add_test(
         NAME FpsFloorPassesSteadyRunAfterWarmUp
         COMMAND Python3::Interpreter ${CMAKE_SOURCE_DIR}/tools/fps_floor.py

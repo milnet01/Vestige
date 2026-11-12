@@ -1,0 +1,6 @@
+time_s,category,name,depth,ms,fps
+2.27,cpu,total,0,1148.886,
+2.27,frame,total,0,2270.000,0.4
+3.28,frame,total,0,11.200,89.2
+4.29,frame,total,0,10.950,91.3
+5.29,frame,total,0,11.020,90.7
