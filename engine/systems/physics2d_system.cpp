@@ -23,6 +23,7 @@
 #include <Jolt/Physics/Collision/Shape/CylinderShape.h>
 #include <Jolt/Physics/Collision/Shape/ConvexHullShape.h>
 #include <Jolt/Physics/Collision/Shape/MeshShape.h>
+#include <Jolt/Physics/Collision/Shape/RotatedTranslatedShape.h>
 #include <Jolt/Physics/Collision/Shape/StaticCompoundShape.h>
 
 #include <algorithm>
@@ -65,9 +66,15 @@ JPH::ShapeRefC makeShape(const Collider2DComponent& collider)
             // Z faces instead of a rounded sphere surface).
             JPH::CylinderShapeSettings settings(halfZ,
                                                 std::max(0.01f, collider.radius));
+            auto cylinder = settings.Create();
+            if (cylinder.HasError()) { return {}; }
             // Rotate the cylinder so its axis lies along Z (default Jolt
             // cylinder is along Y).
-            auto result = settings.Create();
+            JPH::RotatedTranslatedShapeSettings upright(
+                JPH::Vec3::sZero(),
+                JPH::Quat::sRotation(JPH::Vec3::sAxisX(), 0.5f * JPH::JPH_PI),
+                cylinder.Get());
+            auto result = upright.Create();
             if (result.HasError()) { return {}; }
             return result.Get();
         }
@@ -259,6 +266,14 @@ JPH::BodyID Physics2DSystem::ensureBody(Entity& entity)
         return {};
     }
 
+    if (cc->shape == ColliderShape2D::EdgeChain && rb->type == BodyType2D::Dynamic)
+    {
+        // A triangle mesh has no volume, so Jolt cannot give it a mass.
+        Logger::warning("[Physics2DSystem] Edge chain collider on dynamic entity '" +
+                        entity.getName() + "': body skipped. Use a static or kinematic body.");
+        return {};
+    }
+
     JPH::ShapeRefC shape = makeShape(*cc);
     if (shape == nullptr)
     {
@@ -396,9 +411,12 @@ void Physics2DSystem::setTransform(Entity& entity, const glm::vec2& position,
         return;
     }
     auto rot = JPH::Quat::sRotation(JPH::Vec3::sAxisZ(), rotationRadians);
-    m_physicsWorld->getBodyInterface().SetPositionAndRotation(
+    // The body stays in the plane ensureBody put it in.
+    auto& bodyInterface = m_physicsWorld->getBodyInterface();
+    const float planeZ = bodyInterface.GetPosition(rb->bodyId).GetZ();
+    bodyInterface.SetPositionAndRotation(
         rb->bodyId,
-        JPH::Vec3(position.x, position.y, 0.0f),
+        JPH::Vec3(position.x, position.y, planeZ),
         rot,
         JPH::EActivation::Activate);
 }

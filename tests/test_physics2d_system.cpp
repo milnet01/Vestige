@@ -64,6 +64,7 @@ std::unique_ptr<Entity> makeDynamic(const glm::vec2& pos,
     cc->shape = shape;
     cc->halfExtents = glm::vec2(0.5f);
     cc->radius = 0.5f;
+    e->update(0.0f);  // world position is a cache; ensureBody reads it
     return e;
 }
 
@@ -76,6 +77,7 @@ std::unique_ptr<Entity> makeStaticFloor(const glm::vec2& pos, const glm::vec2& h
     auto* cc = e->addComponent<Collider2DComponent>();
     cc->shape = ColliderShape2D::Box;
     cc->halfExtents = half;
+    e->update(0.0f);  // world position is a cache; ensureBody reads it
     return e;
 }
 
@@ -332,4 +334,60 @@ TEST(Physics2DSystem, SceneEventsCreateAndRemoveBodies_INV6)
         Scene::Replacement replacement(scene);
     }
     EXPECT_EQ(fx.system.liveBodyCount(), 0u);
+}
+
+// 3D_E-0874: the circle collider was a cylinder left standing along Y, so in
+// the XY plane it was a rectangle one zThickness tall, not a disc.
+TEST(Physics2DSystem, CircleColliderIsRoundInTheXYPlane)
+{
+    PhysicsFixture fx;
+    auto e = makeDynamic({0.0f, 0.0f}, ColliderShape2D::Circle);
+    const auto id = fx.system.ensureBody(*e);
+    ASSERT_FALSE(id.IsInvalid());
+
+    const JPH::AABox bounds =
+        fx.world.getBodyInterface().GetTransformedShape(id).GetWorldSpaceBounds();
+    const JPH::Vec3 half = bounds.GetExtent();
+    EXPECT_NEAR(half.GetX(), 0.5f, 0.01f);
+    EXPECT_NEAR(half.GetY(), 0.5f, 0.01f);
+    EXPECT_LT(half.GetZ(), 0.1f) << "the disc's thickness lies along Z";
+}
+
+// 3D_E-0874: setTransform moved the body to z = 0, out of the plane
+// ensureBody had put it in (the entity's z plus the collider's zOffset).
+TEST(Physics2DSystem, SetTransformKeepsTheBodyInItsPlane)
+{
+    PhysicsFixture fx;
+    auto e = makeDynamic({0.0f, 0.0f});
+    e->transform.position.z = 2.0f;
+    e->update(0.0f);
+    e->getComponent<Collider2DComponent>()->zOffset = 0.5f;
+    const auto id = fx.system.ensureBody(*e);
+    ASSERT_FALSE(id.IsInvalid());
+    ASSERT_NEAR(fx.world.getBodyPosition(id).z, 2.5f, 1e-4f);
+
+    fx.system.setTransform(*e, {3.0f, 4.0f}, 0.0f);
+
+    const glm::vec3 pos = fx.world.getBodyPosition(id);
+    EXPECT_NEAR(pos.x, 3.0f, 1e-4f);
+    EXPECT_NEAR(pos.y, 4.0f, 1e-4f);
+    EXPECT_NEAR(pos.z, 2.5f, 1e-4f);
+}
+
+// 3D_E-0874: an edge chain is a triangle mesh, which Jolt only supports on
+// a body that is not dynamic: it cannot work out a mass. A dynamic one is
+// refused, not handed to Jolt.
+TEST(Physics2DSystem, EdgeChainOnADynamicBodyIsRefused)
+{
+    PhysicsFixture fx;
+    auto e = std::make_unique<Entity>("EdgeChain");
+    auto* rb = e->addComponent<RigidBody2DComponent>();
+    rb->type = BodyType2D::Dynamic;
+    auto* cc = e->addComponent<Collider2DComponent>();
+    cc->shape = ColliderShape2D::EdgeChain;
+    cc->vertices = {{-5, 0}, {0, 1}, {5, 0}};
+
+    EXPECT_TRUE(fx.system.ensureBody(*e).IsInvalid());
+    EXPECT_EQ(fx.system.liveBodyCount(), 0u);
+    EXPECT_TRUE(rb->bodyId.IsInvalid());
 }
