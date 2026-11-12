@@ -629,6 +629,11 @@ static std::vector<MeshPrimRange> loadMeshes(const tinygltf::Model& gltfModel,
                         {
                             elemSize = acc.type == TINYGLTF_TYPE_VEC4 ? 4 : 3;
                         }
+                        else if (acc.componentType == TINYGLTF_COMPONENT_TYPE_UNSIGNED_SHORT)
+                        {
+                            elemSize = sizeof(uint16_t)
+                                     * (acc.type == TINYGLTF_TYPE_VEC4 ? 4 : 3);
+                        }
                         else
                         {
                             elemSize = sizeof(float) * (acc.type == TINYGLTF_TYPE_VEC4 ? 4 : 3);
@@ -662,6 +667,20 @@ static std::vector<MeshPrimRange> loadMeshes(const tinygltf::Model& gltfModel,
                                 const unsigned char* c = base + stride * i;
                                 vertices[i].color = glm::vec3(
                                     c[0] / 255.0f, c[1] / 255.0f, c[2] / 255.0f);
+                            }
+                        }
+                        else if (accessor.componentType == TINYGLTF_COMPONENT_TYPE_UNSIGNED_SHORT)
+                        {
+                            size_t stride = bufferView.byteStride > 0
+                                ? bufferView.byteStride : elemSize;
+
+                            for (size_t i = 0; i < std::min(accessor.count, vertices.size()); i++)
+                            {
+                                // memcpy: the buffer need not be 2-byte aligned.
+                                uint16_t c[3];
+                                std::memcpy(c, base + stride * i, sizeof(c));
+                                vertices[i].color = glm::vec3(
+                                    c[0] / 65535.0f, c[1] / 65535.0f, c[2] / 65535.0f);
                             }
                         }
                     }

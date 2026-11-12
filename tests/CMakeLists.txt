@@ -282,6 +282,7 @@ add_executable(vestige_tests
     test_lip_sync_sandbox.cpp
     test_gltf_bounds_checks.cpp
     test_gltf_texcoord_origin.cpp
+    test_gltf_vertex_color.cpp
     test_gltf_fs_sandbox.cpp
     test_obj_mtl_warning.cpp
     test_cube_loader_hardening.cpp
