@@ -175,9 +175,8 @@ bool LipSyncPlayer::loadTrackFromString(const std::string& json)
     {
         auto doc = nlohmann::json::parse(json);
 
-        m_track.cues.clear();
-        m_track.duration = 0.0f;
-        m_track.soundFile.clear();
+        // Build into a local track: a failure part-way keeps the loaded one.
+        LipSyncTrack track;
 
         // Read metadata
         if (doc.contains("metadata"))
@@ -185,11 +184,11 @@ bool LipSyncPlayer::loadTrackFromString(const std::string& json)
             const auto& meta = doc["metadata"];
             if (meta.contains("soundFile"))
             {
-                m_track.soundFile = meta["soundFile"].get<std::string>();
+                track.soundFile = meta["soundFile"].get<std::string>();
             }
             if (meta.contains("duration"))
             {
-                m_track.duration = meta["duration"].get<float>();
+                track.duration = meta["duration"].get<float>();
             }
         }
 
@@ -216,22 +215,23 @@ bool LipSyncPlayer::loadTrackFromString(const std::string& json)
                 lsc.viseme = Viseme::X;
             }
 
-            m_track.cues.push_back(lsc);
+            track.cues.push_back(lsc);
 
             // Track duration from last cue if not in metadata
-            if (lsc.end > m_track.duration)
+            if (lsc.end > track.duration)
             {
-                m_track.duration = lsc.end;
+                track.duration = lsc.end;
             }
         }
 
         // Sort by start time (should already be sorted, but be safe)
-        std::sort(m_track.cues.begin(), m_track.cues.end(),
+        std::sort(track.cues.begin(), track.cues.end(),
                   [](const LipSyncCue& a, const LipSyncCue& b)
                   {
                       return a.start < b.start;
                   });
 
+        m_track = std::move(track);
         m_hasTrack = true;
         m_time = 0.0f;
         m_state = LipSyncState::STOPPED;

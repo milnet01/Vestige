@@ -163,6 +163,26 @@ TEST_F(LipSyncTrackTest, TSVCueValues)
     EXPECT_EQ(track->cues[1].viseme, Viseme::D);
 }
 
+// A reload that fails leaves the track that was loaded untouched.
+TEST_F(LipSyncTrackTest, FailedReloadKeepsTheLoadedTrack)
+{
+    ASSERT_TRUE(player.loadTrackFromString(SAMPLE_JSON));
+
+    // Parses, but has no mouthCues.
+    EXPECT_FALSE(player.loadTrackFromString(R"({"metadata": {"duration": 9.0}})"));
+    // Fails part-way through the cues.
+    EXPECT_FALSE(player.loadTrackFromString(R"({"mouthCues": [
+        {"start": 0.0, "end": 1.0, "value": "A"},
+        {"start": "bad"}
+    ]})"));
+
+    const auto* track = player.getTrack();
+    ASSERT_NE(track, nullptr);
+    EXPECT_EQ(track->cues.size(), 8u);
+    EXPECT_FLOAT_EQ(track->duration, 1.5f);
+    EXPECT_EQ(track->soundFile, "test.wav");
+}
+
 TEST_F(LipSyncTrackTest, InvalidJSONFails)
 {
     EXPECT_FALSE(player.loadTrackFromString("not json"));
