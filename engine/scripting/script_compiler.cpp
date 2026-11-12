@@ -138,10 +138,15 @@ void passResolveNodes(const ScriptGraph& graph,
             // also accept `category == "Events"` so stubs with an empty
             // eventTypeName (OnTriggerEnter, OnCollisionEnter pending
             // EventBus wiring) still count as entry points — the gameplay
-            // templates depend on that.
+            // templates depend on that. PublishEvent shares the category
+            // but is an action: its execution input rules it out.
             const bool isEvent = !node.descriptor->eventTypeName.empty();
+            const auto& inputDefs = node.descriptor->inputDefs;
+            const bool hasExecutionInput = std::any_of(
+                inputDefs.begin(), inputDefs.end(),
+                [](const auto& pin) { return pin.kind == PinKind::EXECUTION; });
             const bool isEventsCategory =
-                node.descriptor->category == "Events";
+                node.descriptor->category == "Events" && !hasExecutionInput;
             const bool isExplicitEntry =
                 nodeDef.typeName == "OnStart" ||
                 nodeDef.typeName == "OnUpdate";

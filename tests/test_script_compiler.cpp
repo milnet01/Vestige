@@ -487,6 +487,26 @@ TEST(ScriptCompiler, UnreachableImpureNodeWarns)
     EXPECT_TRUE(hasWarningContaining(result.diagnostics, "is unreachable"));
 }
 
+// 3D_E-0874 — PublishEvent sits in the "Events" palette category but has an
+// execution input: it is an action, not a graph root. Left unwired it must
+// warn like any other island, and must not be listed as an entry point.
+TEST(ScriptCompiler, UnwiredPublishEventIsNotAnEntryPoint_0874)
+{
+    const NodeTypeRegistry registry = makeFullRegistry();
+
+    ScriptGraph graph;
+    graph.addNode("OnStart");
+    graph.addNode("PublishEvent");  // island
+
+    const CompilationResult result =
+        ScriptGraphCompiler::compile(graph, registry);
+    EXPECT_TRUE(result.success);
+    EXPECT_EQ(result.compiled.entryPointIndices.size(), 1u)
+        << "PublishEvent was counted as an entry point";
+    EXPECT_TRUE(hasWarningContaining(result.diagnostics, "is unreachable"))
+        << "an unwired PublishEvent raised no warning";
+}
+
 // ===========================================================================
 // Type compatibility rules
 // ===========================================================================
