@@ -120,11 +120,8 @@ std::vector<SubtitleLineLayout> computeSubtitleLayout(
     const std::size_t count = active.size();
     for (std::size_t i = 0; i < count; ++i)
     {
-        // The bottom-most row is activeSubtitles[count-1]; it sits
-        // `bottomMarginFrac × screenHeight` above the bottom edge.
-        // Each earlier row stacks one `lineHeightPx + lineSpacingPx`
-        // higher.
-        const std::size_t rowFromBottom = (count - 1) - i;
+        // The bottom-most row is activeSubtitles[count-1]; the vertical
+        // stacking is done after this loop, once every plate has a height.
         const Subtitle& sub = active[i].subtitle;
         // P6: the queue owns the narrator-style preference; forward
         // it so styleFor's Narrator branch picks italic vs colour.
@@ -170,24 +167,25 @@ std::vector<SubtitleLineLayout> computeSubtitleLayout(
         line.platePos.x = 0.5f * (static_cast<float>(params.screenWidth)
                                   - line.plateSize.x);
 
-        // Y: distance from top (renderText2D uses top-left origin).
-        // bottomY = screenHeight × (1 - bottomMarginFrac) = the bottom
-        // edge of the bottom-most plate. Taller plates (multi-line
-        // wraps) grow upward from that anchor — the bottom edge stays
-        // pinned, only the top rises.
-        const float bottomY =
-            static_cast<float>(params.screenHeight) *
-            (1.0f - params.bottomMarginFrac);
-        line.platePos.y = bottomY
-            - line.plateSize.y
-            - static_cast<float>(rowFromBottom) *
-              (line.plateSize.y + params.lineSpacingPx);
-
         // Text baseline: inside the plate, offset by padding.
         line.textBaseline.x = line.platePos.x + params.platePaddingX;
-        line.textBaseline.y = line.platePos.y + params.platePaddingY;
 
         out.push_back(line);
+    }
+
+    // Y: distance from top (renderText2D uses top-left origin).
+    // bottomY = screenHeight × (1 - bottomMarginFrac) = the bottom edge of
+    // the newest plate. Each older plate sits one lineSpacingPx above the
+    // plate below it, whatever that plate's height: taller plates
+    // (multi-line wraps) push the ones above them up.
+    float plateBottomY =
+        static_cast<float>(params.screenHeight) *
+        (1.0f - params.bottomMarginFrac);
+    for (auto it = out.rbegin(); it != out.rend(); ++it)
+    {
+        it->platePos.y = plateBottomY - it->plateSize.y;
+        it->textBaseline.y = it->platePos.y + params.platePaddingY;
+        plateBottomY = it->platePos.y - params.lineSpacingPx;
     }
 
     return out;

@@ -390,3 +390,28 @@ TEST(SubtitleRendererLayout, TwoLinePlateBottomEdgeStillRespectsMargin_P1)
                 (1.0f - params.bottomMarginFrac),
                 1e-2f);
 }
+
+// 3D_E-0874: each plate was lifted by multiples of its OWN height, so a
+// two-line newest caption reached up into the one-line caption above it.
+TEST(SubtitleRendererLayout, TallNewestCaptionDoesNotOverlapTheOneAbove)
+{
+    SubtitleQueue queue;
+    queue.enqueue(makeLine("short", 3.0f, SubtitleCategory::Narrator));
+    queue.enqueue(makeLine(
+        "Moses climbed Sinai under thunder clouds now",
+        3.0f, SubtitleCategory::Narrator));
+
+    SubtitleLayoutParams params;
+    const auto lines = computeSubtitleLayout(queue, params, fixedWidth);
+    ASSERT_EQ(lines.size(), 2u);
+    ASSERT_EQ(lines[0].wrappedLines.size(), 1u);
+    ASSERT_EQ(lines[1].wrappedLines.size(), 2u);
+
+    const float olderBottom = lines[0].platePos.y + lines[0].plateSize.y;
+    const float newerTop    = lines[1].platePos.y;
+    EXPECT_NEAR(newerTop - olderBottom, params.lineSpacingPx, 1e-3f);
+
+    // The text moves with its plate.
+    EXPECT_NEAR(lines[0].textBaseline.y,
+                lines[0].platePos.y + params.platePaddingY, 1e-3f);
+}
