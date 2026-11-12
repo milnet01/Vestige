@@ -49,13 +49,15 @@ float DensityMap::sample(float worldX, float worldZ) const
         return 1.0f;
     }
 
-    // Bilinear interpolation
+    // Bilinear interpolation between texel centres. Texel x is centred on
+    // texel coordinate x + 0.5 (paint() uses the same convention); the outer
+    // half texel on each edge reads the edge texel.
+    tx = std::max(tx - 0.5f, 0.0f);
+    tz = std::max(tz - 0.5f, 0.0f);
     int x0 = static_cast<int>(std::floor(tx));
     int z0 = static_cast<int>(std::floor(tz));
     int x1 = std::min(x0 + 1, m_width - 1);
     int z1 = std::min(z0 + 1, m_height - 1);
-    x0 = std::max(0, x0);
-    z0 = std::max(0, z0);
 
     float fx = tx - static_cast<float>(x0);
     float fz = tz - static_cast<float>(z0);

@@ -359,3 +359,20 @@ TEST(DensityMapTest, DensityStrokeCanBeUndone)
     EXPECT_FLOAT_EQ(map.sample(0.0f, 0.0f), 1.0f);
 }
 
+
+// paint() treats texel x as centred on world (x + 0.5) / texelsPerMeter, so
+// sample() must too: a one-texel hole reads 0 at its centre and the same on
+// either side of it.
+TEST(DensityMapTest, SampleAgreesWithPaintOnTexelCentres)
+{
+    DensityMap map;
+    map.initialize(0.0f, 0.0f, 10.0f, 10.0f, 1.0f);
+
+    map.paint(glm::vec3(5.5f, 0.0f, 5.5f), 0.4f, 0.0f, 1.0f, 0.0f);
+
+    EXPECT_NEAR(map.sample(5.5f, 5.5f), 0.0f, 1e-5f);
+    EXPECT_NEAR(map.sample(5.0f, 5.5f), 0.5f, 1e-5f);
+    EXPECT_NEAR(map.sample(6.0f, 5.5f), 0.5f, 1e-5f);
+    EXPECT_NEAR(map.sample(5.5f, 5.0f), 0.5f, 1e-5f);
+    EXPECT_NEAR(map.sample(5.5f, 6.0f), 0.5f, 1e-5f);
+}
