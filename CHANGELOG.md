@@ -25,6 +25,11 @@ may change any interface without notice.
 
 ## [Unreleased]
 
+### 2026-11-12 Changed — the 60 FPS rule is measured at 1920x1080, and the meadow passes it (3D_E-0704)
+
+- **The measuring recipe in `CLAUDE.md` names `--window-size=1920x1080`**
+  Two meadow flythroughs at that size on 2026-11-12 passed `tools/fps_floor.py`: the slowest second read 80.6 FPS in one and 66.9 FPS in the other. The 52 to 56 FPS reported on 2026-09-26 did not reproduce.
+
 ### 2026-11-12 Added — choose the window size for one run (3D_E-0704)
 
 - **`--window-size=1920x1080` opens the window at that size for this run**

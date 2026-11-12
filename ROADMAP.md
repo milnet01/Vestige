@@ -10184,7 +10184,7 @@ Outdoor landscapes surrounding the Temple complex — hills, valleys, and the Ki
   Source: peer-input-2026-09-26 (DOOM_Ants build-ahead).
   Lanes: renderer, core, perf.
 
-- 📋 [3D_E-0704] **The meadow drops to 52-56 FPS at 1920x1080 while the pond is in view.**
+- ✅ [3D_E-0704] **The meadow drops to 52-56 FPS at 1920x1080 while the pond is in view.**
   Measured 2026-09-26 on the dev RX 6600, Release build, default quality,
   --demo-flythrough on a headless cage display with nothing recording
   (--profile-log frame,total fps): 52-56 fps for the first ~6 s of the
@@ -10234,6 +10234,20 @@ Outdoor landscapes surrounding the Temple complex — hills, valleys, and the Ki
   window size" is 1280x720 headless but the saved settings' size on the
   desktop (1920x1080 on the dev machine); which one the 60 FPS rule
   means is the user's call.
+  2026-11-12 evening, closed: the meadow holds 60 FPS at 1920x1080.
+  Two runs with the recipe above (Release build of 7e0ead0's tree,
+  headless cage, --no-vsync, frame log says [1920,1080]), each started
+  after ten quiet seconds on the card: tools/fps_floor.py passes both,
+  worst one-second sample 80.6 FPS and 66.9 FPS, none under 60. Other
+  programs' GPU peak during the runs was 5.1 and 5.3 percent, their CPU
+  peak 0.05 and 0.14. gpu_busy_pct.start was 17 and 83, so the card was
+  not idle when each run began: the desktop compositor (kwin_wayland)
+  was drawing. Measured the same evening with per-process GPU time, it
+  was the only other user of the card. Another program on the card can
+  only lower a reading, so both figures are lower bounds and the floor
+  holds; no lever is needed. The 52-56 FPS of 2026-09-26 did not
+  reproduce. The user decided 2026-11-12 that the 60 FPS rule is
+  measured at 1920x1080; CLAUDE.md's Performance section now says so.
   **Layman:** At full-HD resolution the meadow runs slightly slower than the required 60 frames a second whenever the pond is on screen.
   Kind: perf.
   Source: in-session-2026-09-26 (video stutter investigation).
