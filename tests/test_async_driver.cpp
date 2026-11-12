@@ -43,6 +43,13 @@ std::filesystem::path writeTempScript(const std::string& label,
     return path;
 }
 
+// How long a wait may last before the test calls the child stuck. A guard
+// against a hang, not a speed claim: every wait returns as soon as its
+// condition holds. Five seconds was too short for starting Python while the
+// push gate's other test shards and builds load the machine (2026-11-12).
+// Well under the 60 s the cancel tests' children sleep for.
+constexpr std::chrono::seconds kHangGuard{30};
+
 // Poll the job with a short sleep until Done, bounded by a timeout
 // so a stuck child doesn't hang the suite. Returns the final state.
 AsyncDriverJob::State pollUntilDone(AsyncDriverJob& job,
@@ -100,7 +107,7 @@ TEST(AsyncDriverJob, FinishesWithCapturedStdout)
     AsyncDriverJob job;
     ASSERT_TRUE(job.start(script.string(), {}, {}));
 
-    const auto state = pollUntilDone(job, std::chrono::seconds(5));
+    const auto state = pollUntilDone(job, kHangGuard);
     ASSERT_EQ(state, AsyncDriverJob::State::Done);
 
     const auto result = job.takeResult();
@@ -121,7 +128,7 @@ TEST(AsyncDriverJob, NonZeroExitCodePropagates)
     AsyncDriverJob job;
     ASSERT_TRUE(job.start(script.string(), {}, {}));
 
-    const auto state = pollUntilDone(job, std::chrono::seconds(5));
+    const auto state = pollUntilDone(job, kHangGuard);
     ASSERT_EQ(state, AsyncDriverJob::State::Done);
 
     const auto result = job.takeResult();
@@ -145,7 +152,7 @@ TEST(AsyncDriverJob, DoubleStartRejectedWhileRunning)
     EXPECT_FALSE(job.start(script.string(), {}, {}));
     EXPECT_TRUE(job.isRunning());
 
-    const auto state = pollUntilDone(job, std::chrono::seconds(5));
+    const auto state = pollUntilDone(job, kHangGuard);
     ASSERT_EQ(state, AsyncDriverJob::State::Done);
     (void)job.takeResult();
 }
@@ -177,14 +184,14 @@ TEST(AsyncDriverJob, ResetsToIdleAfterTakeResult)
 
     AsyncDriverJob job;
     ASSERT_TRUE(job.start(script.string(), {}, {}));
-    ASSERT_EQ(pollUntilDone(job, std::chrono::seconds(5)),
+    ASSERT_EQ(pollUntilDone(job, kHangGuard),
               AsyncDriverJob::State::Done);
     const auto first = job.takeResult();
     EXPECT_EQ(first.exit_code, 0);
 
     // Second run reuses the same AsyncDriverJob instance.
     ASSERT_TRUE(job.start(script.string(), {}, {}));
-    ASSERT_EQ(pollUntilDone(job, std::chrono::seconds(5)),
+    ASSERT_EQ(pollUntilDone(job, kHangGuard),
               AsyncDriverJob::State::Done);
     const auto second = job.takeResult();
     EXPECT_EQ(second.exit_code, 0);
@@ -205,7 +212,7 @@ TEST(AsyncDriverJob, StdinPayloadDeliveredToChild)
     const std::string payload = "piped-via-stdin";
     ASSERT_TRUE(job.start(script.string(), {}, payload));
 
-    ASSERT_EQ(pollUntilDone(job, std::chrono::seconds(5)),
+    ASSERT_EQ(pollUntilDone(job, kHangGuard),
               AsyncDriverJob::State::Done);
     const auto result = job.takeResult();
     EXPECT_EQ(result.exit_code, 0);
@@ -233,7 +240,7 @@ TEST(AsyncDriverJob, ElapsedSecondsZeroWhenIdleNonZeroWhenRunning)
     std::this_thread::sleep_for(std::chrono::milliseconds(5));
     EXPECT_GT(job.elapsedSeconds(), 0.0f);
 
-    ASSERT_EQ(pollUntilDone(job, std::chrono::seconds(5)),
+    ASSERT_EQ(pollUntilDone(job, kHangGuard),
               AsyncDriverJob::State::Done);
     (void)job.takeResult();
 }
@@ -261,13 +268,13 @@ TEST(AsyncDriverJob, DrainStdoutChunkReturnsIncrementalOutput)
     AsyncDriverJob job;
     ASSERT_TRUE(job.start(script.string(), {}, {}));
 
-    // Poll for ~2 s collecting chunks. We expect at least two
+    // Poll until the child exits, collecting chunks. We expect at least two
     // distinct drain calls to return non-empty data — proving the
     // stream is actually incremental and not just buffered-until-exit.
     std::string combined;
     int nonEmptyDrains = 0;
     using clock = std::chrono::steady_clock;
-    const auto deadline = clock::now() + std::chrono::milliseconds(2500);
+    const auto deadline = clock::now() + kHangGuard;
     while (clock::now() < deadline)
     {
         std::string chunk = job.drainStdoutChunk();
@@ -313,19 +320,19 @@ TEST(AsyncDriverJob, CancelSIGTERMsTheChildProcess)
 
     // Wait for the child to actually be up (it prints 'ready' before
     // sleeping) rather than assuming a fixed spawn delay.
-    ASSERT_TRUE(pollUntilStdoutContains(job, "ready", std::chrono::seconds(2)));
+    ASSERT_TRUE(pollUntilStdoutContains(job, "ready", kHangGuard));
     ASSERT_TRUE(job.isRunning());
 
     const auto t0 = std::chrono::steady_clock::now();
     EXPECT_TRUE(job.cancel());
 
-    const auto state = pollUntilDone(job, std::chrono::seconds(3));
+    const auto state = pollUntilDone(job, kHangGuard);
     ASSERT_EQ(state, AsyncDriverJob::State::Done);
 
     const auto t1 = std::chrono::steady_clock::now();
     const auto elapsed = std::chrono::duration_cast<
         std::chrono::milliseconds>(t1 - t0).count();
-    EXPECT_LT(elapsed, 2000)
+    EXPECT_LT(elapsed, std::chrono::milliseconds(kHangGuard).count())
         << "cancel() should terminate the child well under the 60s sleep";
 
     const auto result = job.takeResult();
@@ -371,7 +378,7 @@ TEST(AsyncDriverJob, PollEscalatesToSIGKILLAfterGrace)
     // a no-op, so this exercises the SIGKILL escalation rather than
     // racing the handler install (which a fixed sleep could lose on a
     // slow box).
-    ASSERT_TRUE(pollUntilStdoutContains(job, "ready", std::chrono::seconds(2)));
+    ASSERT_TRUE(pollUntilStdoutContains(job, "ready", kHangGuard));
     ASSERT_TRUE(job.cancel());
 
     // Wait > graceSeconds for the escalator to fire, plus slack for the
