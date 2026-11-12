@@ -500,9 +500,10 @@ target_link_libraries(vestige_engine
         monocypher          # 3D_E-0729 — update signature check
 )
 
-# DXGI gives the profiler this process's video memory on Windows (3D_E-0820).
+# DXGI gives the profiler this process's video memory on Windows (3D_E-0820);
+# PDH gives it the "GPU Engine" counters for the frame log's load (3D_E-0971).
 if(WIN32)
-    target_link_libraries(vestige_engine PRIVATE dxgi)
+    target_link_libraries(vestige_engine PRIVATE dxgi pdh)
 endif()
 
 # libcurl for the self-updater (3D_E-0729). Only engine/update/http_transport.cpp

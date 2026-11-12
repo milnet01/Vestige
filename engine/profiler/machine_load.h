@@ -7,9 +7,11 @@
 ///
 /// A timing taken while another program used the CPU or the GPU is not a fair
 /// reading. frameledger's run-file format (FLED-0001 § 4.2) has header fields
-/// for that: `load`, `gpu_busy_pct` and `gpu_clock_mhz`. This reads them from
-/// the kernel's text files. Linux only so far; elsewhere every value stays
-/// unknown and the header leaves the fields out.
+/// for that: `load`, `gpu_busy_pct` and `gpu_clock_mhz`. On Linux this reads
+/// them from the kernel's text files. On Windows it reads the CPU's times and
+/// the "GPU Engine" performance counter (3D_E-0971); the clock has no general
+/// source there. Elsewhere, and for whatever cannot be read, the value stays
+/// unknown and the header leaves the field out.
 ///
 /// CPU / GPU placement: CPU file reads on a sampler thread; nothing on the GPU.
 #pragma once
@@ -18,6 +20,7 @@
 #include <mutex>
 #include <string>
 #include <thread>
+#include <vector>
 
 namespace Vestige
 {
@@ -26,7 +29,8 @@ namespace Vestige
 struct MachineLoad
 {
     /// CPU load as a share of the machine: 0 idle, 1 every logical CPU busy.
-    /// Start and end are the one-minute load average, so they may exceed 1.
+    /// On Linux start and end are the one-minute load average, so they may
+    /// exceed 1. On Windows they are the busy share over half a second.
     double loadStart = -1.0;
     double loadEnd = -1.0;
     /// Highest CPU share OTHER programs used in any one-second sample, 0 to 1.
@@ -85,6 +89,27 @@ double otherCpuShare(const CpuTicks& before, const CpuTicks& after,
 double otherGpuBusyPercent(double wholeBusyPercent, unsigned long long ownEngineNs,
                            unsigned long long windowNs);
 
+/// @brief One row of Windows' "GPU Engine" performance counter: how busy one
+///        process kept one engine of one graphics card.
+struct GpuEngineUse
+{
+    unsigned long pid = 0;
+    std::string engine;    ///< The card and engine, e.g. `luid_0x0_0x8CEE_phys_0_eng_0_engtype_3D`.
+    double percent = 0.0;  ///< Utilization Percentage.
+};
+
+/// @brief Splits a "GPU Engine" instance name,
+///        `pid_<n>_luid_..._phys_<n>_eng_<n>_engtype_<name>`, into its process
+///        id and the rest. False for a name of any other shape.
+bool parseGpuEngineInstance(const std::string& instance, unsigned long& pid,
+                            std::string& engine);
+
+/// @brief The busiest engine's percent, summing each engine over processes:
+///        the figure Task Manager shows for a card. Rows of @p skipPid are
+///        left out (0 skips none), which gives what OTHER programs used.
+///        Clamped to 0..100; negative when there is no row at all.
+double busiestGpuEnginePercent(const std::vector<GpuEngineUse>& rows, unsigned long skipPid);
+
 /// @brief Takes the readings around one run.
 ///
 /// `start()` before the engine loads anything, `beginRun()` when frames start,
@@ -99,8 +124,9 @@ public:
     MachineLoadSampler(const MachineLoadSampler&) = delete;
     MachineLoadSampler& operator=(const MachineLoadSampler&) = delete;
 
-    /// @brief Reads the start values. Blocks for about half a second: one GPU
-    ///        busy reading jumps, so this keeps the highest of a few.
+    /// @brief Reads the start values. Blocks for about half a second: on
+    ///        Linux one GPU busy reading jumps, so this keeps the highest of a
+    ///        few; on Windows the figures are rates over that window.
     void start();
 
     /// @brief Starts the thread that samples the peaks.
@@ -108,6 +134,7 @@ public:
 
     /// @brief Stops the thread, reads the end values and returns everything.
     ///        Safe to call twice; the second call returns the same figures.
+    ///        On Windows the end values take half a second to measure.
     MachineLoad finish();
 
     bool isSampling() const { return m_thread.joinable(); }

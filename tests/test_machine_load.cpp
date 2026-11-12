@@ -8,6 +8,9 @@
 
 #include <gtest/gtest.h>
 
+#include <string>
+#include <vector>
+
 using namespace Vestige;
 
 TEST(MachineLoadParse, LoadAverageIsDividedByTheCpuCount)
@@ -104,6 +107,38 @@ TEST(MachineLoadShare, OtherGpuBusyLeavesOutOurOwnEngineTime)
     EXPECT_LT(otherGpuBusyPercent(-1.0, 1, 1000000000ull), 0.0);
 }
 
+// 3D_E-0971: Windows reports GPU use per process and per engine.
+TEST(MachineLoadWindows, GpuEngineInstanceNameGivesThePidAndTheEngine)
+{
+    unsigned long pid = 0;
+    std::string engine;
+    ASSERT_TRUE(parseGpuEngineInstance(
+        "pid_9948_luid_0x00000000_0x00008CEE_phys_0_eng_0_engtype_3D", pid, engine));
+    EXPECT_EQ(pid, 9948ul);
+    EXPECT_EQ(engine, "luid_0x00000000_0x00008CEE_phys_0_eng_0_engtype_3D");
+
+    EXPECT_FALSE(parseGpuEngineInstance("_Total", pid, engine));
+    EXPECT_FALSE(parseGpuEngineInstance("pid_", pid, engine));
+    EXPECT_FALSE(parseGpuEngineInstance("pid_12", pid, engine));
+    EXPECT_FALSE(parseGpuEngineInstance("pid_x_luid_0", pid, engine));
+}
+
+TEST(MachineLoadWindows, BusiestEngineSumsOverProcessesAndCanLeaveOneOut)
+{
+    const std::vector<GpuEngineUse> rows = {
+        {100, "luid_a_eng_0_engtype_3D", 40.0},           // us
+        {200, "luid_a_eng_0_engtype_3D", 25.0},           // a browser, same engine
+        {200, "luid_a_eng_3_engtype_VideoDecode", 30.0},  // its video, another engine
+        {300, "luid_b_eng_0_engtype_3D", 10.0},           // another card
+    };
+    EXPECT_DOUBLE_EQ(busiestGpuEnginePercent(rows, 0), 65.0);    // 40 + 25 on one engine
+    EXPECT_DOUBLE_EQ(busiestGpuEnginePercent(rows, 100), 30.0);  // without us: the decoder
+    EXPECT_DOUBLE_EQ(busiestGpuEnginePercent({{100, "e", 70.0}, {200, "e", 60.0}}, 0), 100.0);
+    EXPECT_DOUBLE_EQ(busiestGpuEnginePercent({{100, "e", 70.0}}, 100), 0.0)
+        << "rows exist but all are ours: others used nothing";
+    EXPECT_LT(busiestGpuEnginePercent({}, 0), 0.0) << "no row means unknown, not idle";
+}
+
 // The sampler against the real machine. What it reads depends on the machine,
 // so this checks only that the figures it gives are in range and that the
 // thread stops.
@@ -123,7 +158,7 @@ TEST(MachineLoadSampler, GivesInRangeFiguresAndStops)
     {
         EXPECT_TRUE(percent < 0.0 || percent <= 100.0);
     }
-#ifdef __linux__
+#if defined(__linux__) || defined(_WIN32)
     EXPECT_GE(load.loadStart, 0.0);
     EXPECT_GE(load.loadEnd, 0.0);
 #endif

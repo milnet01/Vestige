@@ -5,6 +5,15 @@
 /// @brief MachineLoadSampler and the parsers behind it.
 #include "profiler/machine_load.h"
 
+#ifdef _WIN32
+#ifndef NOMINMAX
+#define NOMINMAX  // windows.h must not define min and max over std's
+#endif
+#include <windows.h>
+#include <pdh.h>
+#include <pdhmsg.h>
+#endif
+
 #include <algorithm>
 #include <chrono>
 #include <cstdlib>
@@ -109,6 +118,140 @@ bool readOwnGpuEngineNs(unsigned long long& totalNs)
         totalNs += client.second;
     }
     return !byClient.empty();
+}
+#elif defined(_WIN32)
+/// The peaks are the highest of samples this long (FLED-0001 § 4.2: "about
+/// one second"). Windows' counters are rates between two collections, so one
+/// sample is one collection a second.
+constexpr auto SAMPLE_GAP = std::chrono::seconds(1);
+/// `start()` and `finish()` measure over a window this long.
+constexpr auto EDGE_WINDOW = std::chrono::milliseconds(500);
+
+unsigned long long fileTimeTicks(const FILETIME& time)
+{
+    return (static_cast<unsigned long long>(time.dwHighDateTime) << 32) | time.dwLowDateTime;
+}
+
+/// Machine-wide and own CPU time, both in 100 ns ticks. Windows counts idle
+/// time inside kernel time.
+bool readCpuTimes(CpuTicks& machine, unsigned long long& own)
+{
+    FILETIME idle, kernel, user;
+    FILETIME created, exited, ownKernel, ownUser;
+    if (!GetSystemTimes(&idle, &kernel, &user)
+        || !GetProcessTimes(GetCurrentProcess(), &created, &exited, &ownKernel, &ownUser))
+    {
+        return false;
+    }
+    machine.total = fileTimeTicks(kernel) + fileTimeTicks(user);
+    machine.busy = machine.total - fileTimeTicks(idle);
+    own = fileTimeTicks(ownKernel) + fileTimeTicks(ownUser);
+    return true;
+}
+
+/// The share of the machine's CPU time that was busy between two readings,
+/// this process included: what stands in for the load average on Windows.
+double busyCpuShare(const CpuTicks& before, const CpuTicks& after)
+{
+    return otherCpuShare(before, after, 0, 0);
+}
+
+/// Windows' "GPU Engine" counter: every process's use of every engine.
+class GpuEngineCounter
+{
+public:
+    GpuEngineCounter()
+    {
+        if (PdhOpenQueryW(nullptr, 0, &m_query) != ERROR_SUCCESS)
+        {
+            m_query = nullptr;
+            return;
+        }
+        if (PdhAddEnglishCounterW(m_query, L"\\GPU Engine(*)\\Utilization Percentage", 0,
+                                  &m_counter) != ERROR_SUCCESS)
+        {
+            PdhCloseQuery(m_query);
+            m_query = nullptr;
+            return;
+        }
+        PdhCollectQueryData(m_query);  // a rate needs a first collection to count from
+    }
+
+    ~GpuEngineCounter()
+    {
+        if (m_query != nullptr)
+        {
+            PdhCloseQuery(m_query);
+        }
+    }
+
+    GpuEngineCounter(const GpuEngineCounter&) = delete;
+    GpuEngineCounter& operator=(const GpuEngineCounter&) = delete;
+
+    /// Every row since the last collection. False when the counter cannot be
+    /// read (before Windows 10 1709, or no graphics driver reporting).
+    bool collect(std::vector<GpuEngineUse>& rows)
+    {
+        rows.clear();
+        if (m_query == nullptr || PdhCollectQueryData(m_query) != ERROR_SUCCESS)
+        {
+            return false;
+        }
+        DWORD bytes = 0;
+        DWORD count = 0;
+        if (PdhGetFormattedCounterArrayW(m_counter, PDH_FMT_DOUBLE, &bytes, &count, nullptr)
+            != static_cast<PDH_STATUS>(PDH_MORE_DATA))
+        {
+            return false;
+        }
+        // The size is in bytes; 8-byte storage keeps the items aligned.
+        std::vector<unsigned long long> storage(bytes / sizeof(unsigned long long) + 1);
+        auto* items = reinterpret_cast<PDH_FMT_COUNTERVALUE_ITEM_W*>(storage.data());
+        if (PdhGetFormattedCounterArrayW(m_counter, PDH_FMT_DOUBLE, &bytes, &count, items)
+            != ERROR_SUCCESS)
+        {
+            return false;
+        }
+        for (DWORD i = 0; i < count; ++i)
+        {
+            std::string name;  // instance names are ASCII
+            for (const wchar_t* c = items[i].szName; *c != L'\0'; ++c)
+            {
+                name.push_back(static_cast<char>(*c));
+            }
+            GpuEngineUse row;
+            if (parseGpuEngineInstance(name, row.pid, row.engine))
+            {
+                row.percent = items[i].FmtValue.doubleValue;
+                rows.push_back(std::move(row));
+            }
+        }
+        return true;
+    }
+
+private:
+    PDH_HQUERY m_query = nullptr;
+    PDH_HCOUNTER m_counter = nullptr;
+};
+
+/// CPU share and whole-GPU busy percent over EDGE_WINDOW, this process
+/// included. Blocks for that long.
+void readEdge(double& cpuShare, double& gpuBusy)
+{
+    GpuEngineCounter gpu;
+    CpuTicks before, after;
+    unsigned long long own = 0;
+    const bool haveCpu = readCpuTimes(before, own);
+    std::this_thread::sleep_for(EDGE_WINDOW);
+    if (haveCpu && readCpuTimes(after, own))
+    {
+        cpuShare = busyCpuShare(before, after);
+    }
+    std::vector<GpuEngineUse> rows;
+    if (gpu.collect(rows))
+    {
+        gpuBusy = busiestGpuEnginePercent(rows, 0);
+    }
 }
 #endif
 
@@ -287,6 +430,49 @@ double otherGpuBusyPercent(double wholeBusyPercent, unsigned long long ownEngine
     return std::clamp(wholeBusyPercent - ownPercent, 0.0, 100.0);
 }
 
+bool parseGpuEngineInstance(const std::string& instance, unsigned long& pid,
+                            std::string& engine)
+{
+    static const std::string PID_KEY = "pid_";
+    if (instance.compare(0, PID_KEY.size(), PID_KEY) != 0)
+    {
+        return false;
+    }
+    std::size_t pos = PID_KEY.size();
+    unsigned long long value = 0;
+    // The engine's name follows the id after one underscore, and is not empty.
+    if (!readUnsigned(instance, pos, value) || pos + 1 >= instance.size()
+        || instance[pos] != '_')
+    {
+        return false;
+    }
+    pid = static_cast<unsigned long>(value);
+    engine = instance.substr(pos + 1);
+    return true;
+}
+
+double busiestGpuEnginePercent(const std::vector<GpuEngineUse>& rows, unsigned long skipPid)
+{
+    if (rows.empty())
+    {
+        return -1.0;
+    }
+    std::map<std::string, double> perEngine;
+    for (const GpuEngineUse& row : rows)
+    {
+        if (skipPid == 0 || row.pid != skipPid)
+        {
+            perEngine[row.engine] += row.percent;
+        }
+    }
+    double busiest = 0.0;
+    for (const auto& [engine, percent] : perEngine)
+    {
+        busiest = std::max(busiest, percent);
+    }
+    return std::clamp(busiest, 0.0, 100.0);
+}
+
 MachineLoadSampler::~MachineLoadSampler()
 {
     finish();
@@ -313,12 +499,14 @@ void MachineLoadSampler::start()
             std::max(m_load.gpuBusyStart,
                      parseGpuBusyPercent(readTextFile(m_gpuDevicePath + "/gpu_busy_percent")));
     }
+#elif defined(_WIN32)
+    readEdge(m_load.loadStart, m_load.gpuBusyStart);
 #endif
 }
 
 void MachineLoadSampler::beginRun()
 {
-#ifdef __linux__
+#if defined(__linux__) || defined(_WIN32)
     if (m_thread.joinable() || m_finished)
     {
         return;
@@ -354,6 +542,8 @@ MachineLoad MachineLoadSampler::finish()
         m_load.gpuClockEndMhz =
             parseGpuClockMhz(readTextFile(m_gpuDevicePath + "/pp_dpm_sclk"));
     }
+#elif defined(_WIN32)
+    readEdge(m_load.loadEnd, m_load.gpuBusyEnd);
 #endif
     return m_load;
 }
@@ -423,6 +613,37 @@ void MachineLoadSampler::samplePeaks()
             busySum = 0.0;
             busyReadings = 0;
             readingsThisSample = 0;
+        }
+
+        lock.lock();
+    }
+#elif defined(_WIN32)
+    GpuEngineCounter gpu;
+    CpuTicks cpuBefore;
+    unsigned long long ownBefore = 0;
+    bool haveCpu = readCpuTimes(cpuBefore, ownBefore);
+    const unsigned long ownPid = GetCurrentProcessId();
+
+    std::unique_lock<std::mutex> lock(m_mutex);
+    while (!m_wake.wait_for(lock, SAMPLE_GAP, [this]() { return m_stop; }))
+    {
+        lock.unlock();
+
+        CpuTicks cpuNow;
+        unsigned long long ownNow = 0;
+        if (haveCpu && readCpuTimes(cpuNow, ownNow))
+        {
+            m_load.loadPeak = std::max(
+                m_load.loadPeak, otherCpuShare(cpuBefore, cpuNow, ownBefore, ownNow));
+            cpuBefore = cpuNow;
+            ownBefore = ownNow;
+        }
+
+        std::vector<GpuEngineUse> rows;
+        if (gpu.collect(rows))
+        {
+            m_load.gpuBusyPeak =
+                std::max(m_load.gpuBusyPeak, busiestGpuEnginePercent(rows, ownPid));
         }
 
         lock.lock();
