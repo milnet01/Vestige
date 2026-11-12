@@ -7436,6 +7436,13 @@ shipped that have no invocation path at all.
   than one sample per segment; 4ac125d a failed LUT load keeps the
   loaded table. environment_forces reset/flutter row reclassified latent
   (not observable).
+  2026-11-12 (third batch): 0622e86 fixes three physics2d rows: Circle
+  collider rotated to lie along Z, setTransform keeps the body's z,
+  EdgeChain on a Dynamic body skipped with a warning. Its test helpers
+  now refresh the entity's cached world position. New row filed in
+  lane-20: ensureBody reads that cache, so a body made before the first
+  update may sit at the origin, and nothing writes a 2D body's position
+  back to its entity (not checked in a running scene).
   **Layman:** About 290 lower-risk possible bugs and the medium findings are still unchecked.
   Kind: review-fix.
   Source: review-readability 2026-10-31 at 7b2a81d.
@@ -7637,7 +7644,7 @@ shipped that have no invocation path at all.
   Source: 3D_E-0874 cutout lead re-check 2026-11-08.
   Lanes: editor, scene, resource.
 
-- 📋 [3D_E-0968] **Fill the frame log's load and GPU-busy header fields so a run on a busy machine is flagged.**
+- ✅ [3D_E-0968] **Fill the frame log's load and GPU-busy header fields so a run on a busy machine is flagged.**
   frameledger's format spec § 4.2 has optional header fields load,
   gpu_busy_pct and gpu_clock_mhz; report, floor and compare warn at
   load.start > 0.5 or gpu_busy_pct.start > 20 (frameledger, 2026-11-10;
@@ -7660,6 +7667,13 @@ shipped that have no invocation path at all.
   within ms). Its A/B runner is frameledger `alternate` (FLED-0029):
   `--old '<old>/bin/vestige --demo-flythrough --no-vsync
   --frame-log={run}' --new ... --out DIR --warmup 1`.
+  2026-11-12: shipped in 6012f70 (Linux). MachineLoadSampler in
+  engine/profiler/machine_load reads start, end and peak; FrameLedgerLog
+  pads the header and rewrites line 1 at close (frameledger FLED-0068
+  promises padded headers are read). A headless flythrough wrote all
+  three fields and `frameledger check` accepted the file. Left for
+  3D_E-0820: the Windows readings. Not covered: more than one GPU; the
+  headless compositor's GPU time counts as another program's.
   **Layman:** Speed tests will say when another program was using the graphics card, so a slow reading caused by that is not trusted.
   Kind: enhancement.
   Source: frameledger-2026-11-10.

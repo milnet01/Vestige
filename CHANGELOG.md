@@ -25,6 +25,11 @@ may change any interface without notice.
 
 ## [Unreleased]
 
+### 2026-11-12 Added — the frame log says how busy the machine was (3D_E-0968)
+
+- **A timing run records whether another program was using the CPU or the graphics card**
+  `--frame-log` now writes the machine's load, the graphics card's busy share and its clock speed, at the start and end of the run, plus the highest share other programs used during it. The frameledger tool uses these to flag a run that cannot be trusted. Linux only for now.
+
 ### 2026-11-12 Fixed — wind, foliage, animation, script and loader bugs (3D_E-0874)
 
 - **Turning gusts off gives steady, straight wind again**
@@ -72,6 +77,14 @@ may change any interface without notice.
   It returns the control points.
 
 - **A lookup table that fails to load keeps the table already loaded**
+
+- **A 2D circle collider is round**
+  Before, it was a thin rectangle.
+
+- **Teleporting a 2D body keeps it in its plane**
+
+- **An edge-chain collider on a moving 2D body is skipped with a warning**
+  Before, it was handed to the physics library, which cannot use it.
 
 ### 2026-11-11 Fixed — model, material preset, path and editor bugs (3D_E-0874)
 
