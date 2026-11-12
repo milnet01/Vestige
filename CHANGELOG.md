@@ -25,6 +25,11 @@ may change any interface without notice.
 
 ## [Unreleased]
 
+### 2026-11-12 Added — choose the window size for one run (3D_E-0704)
+
+- **`--window-size=1920x1080` opens the window at that size for this run**
+  The saved display settings are left alone. It exists so a speed test can run at a known size, including on the hidden display used for measurements, which until now was always 1280x720.
+
 ### 2026-11-12 Fixed — the 60 FPS check no longer fails a good run because the scene loaded slowly (3D_E-0704)
 
 - **`tools/fps_floor.py` counts a sample only when all the time it covers is after warm-up**

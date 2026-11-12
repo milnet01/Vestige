@@ -10221,6 +10221,19 @@ Outdoor landscapes surrounding the Temple complex — hills, valleys, and the Ki
   counted a first sample holding the scene load (0.4 FPS at 2.27 s) and
   failed a good run; a sample now counts only when all the time it
   covers is after warm-up.
+  2026-11-12 later: 7e0ead0 adds --window-size=WxH (creation size,
+  kept over saved settings for the run). The headless recipe for
+  1080p: inside cage, `wlr-randr --output HEADLESS-1 --custom-mode
+  1920x1080`, then vestige --demo-flythrough --no-vsync
+  --window-size=1920x1080; the frame log then says [1920,1080]. Two
+  such runs were taken and are NOT readings: another session began
+  using the GPU (the logs' own gpu_busy_pct: others' peak 42 in one,
+  99 at the start of the other), and FPS swung between 20 and 88. Still
+  owed: the same run with gpu_busy_pct.start near 0 and peak under
+  about 5, as the 1280x720 runs had. Also open: CLAUDE.md's "default
+  window size" is 1280x720 headless but the saved settings' size on the
+  desktop (1920x1080 on the dev machine); which one the 60 FPS rule
+  means is the user's call.
   **Layman:** At full-HD resolution the meadow runs slightly slower than the required 60 frames a second whenever the pond is on screen.
   Kind: perf.
   Source: in-session-2026-09-26 (video stutter investigation).
