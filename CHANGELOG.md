@@ -54,6 +54,25 @@ may change any interface without notice.
 
 - **A high silence threshold no longer holds a lip-synced jaw open on silence**
 
+- **A tween event placed at the very start now fires**
+  Before, it was skipped on the first pass and only fired when a looping tween came round again.
+
+- **A tween callback can cancel tweens safely**
+  Before, cancelling from inside a callback corrupted the list being updated.
+
+- **An animation state that names a missing clip is no longer entered**
+  Before, the old clip kept playing at the new state's speed.
+
+- **Replacing the sprite clip that is playing shows the new clip's frame**
+  An empty replacement now stops playback.
+
+- **A two-line newest subtitle no longer overlaps the caption above it**
+
+- **Sampling a spline with zero samples per segment no longer crashes**
+  It returns the control points.
+
+- **A lookup table that fails to load keeps the table already loaded**
+
 ### 2026-11-11 Fixed — model, material preset, path and editor bugs (3D_E-0874)
 
 - **A path or stream with a vertical section no longer breaks its mesh**

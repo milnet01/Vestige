@@ -7427,6 +7427,15 @@ shipped that have no invocation path at all.
   threshold of 0.3 or more (f67e9e5); density map sample/paint texel
   centres (9d76030). New row found: cancelTarget/cancelAll from a tween
   callback still erase from the list being walked.
+  2026-11-12 (second batch): seven more rows fixed, red test first.
+  0e658c1 state machine skips a transition to a state naming a missing
+  clip; 9facc0a tween event at time 0 fires on the first pass, and
+  cancelTarget/cancelAll are safe from a tween callback; 7a986d7
+  replacing the playing sprite clip shows the new clip; 7f96f7d subtitle
+  plates stack on the plate below; 4e84e7d spline sample() with fewer
+  than one sample per segment; 4ac125d a failed LUT load keeps the
+  loaded table. environment_forces reset/flutter row reclassified latent
+  (not observable).
   **Layman:** About 290 lower-risk possible bugs and the medium findings are still unchecked.
   Kind: review-fix.
   Source: review-readability 2026-10-31 at 7b2a81d.
