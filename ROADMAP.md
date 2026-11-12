@@ -7443,6 +7443,20 @@ shipped that have no invocation path at all.
   lane-20: ensureBody reads that cache, so a body made before the first
   update may sit at the origin, and nothing writes a 2D body's position
   back to its entity (not checked in a running scene).
+  2026-11-12 (third batch) five more fixed, red test first, pushed at
+  e00e1a8 with the full gate passing: 2882c76 an unwired PublishEvent
+  is no longer an entry point (lane-19); f055d37 UISystem::shutdown
+  clears the modal canvas and drops input targets (lane-20); c56f799
+  glTF COLOR_0 as unsigned short loads (lane-22); 30bbb63 Physics2D
+  ensureBody works out the world matrix itself (bodies were made at the
+  origin before a scene's first update) and syncTransforms writes each
+  moving body's pose back to its entity (lane-20, confirmed by test);
+  687e106 the plane mesh key carries the size in full (lane-22).
+  Read and left open: audio_system m_busActivePrev with no scene (a
+  test needs an Engine harness that does not exist); settings row step
+  at 1.5x/2x (the page's positions do not scale at all: a layout
+  decision, not a one-line fix). The open rows are listed by the
+  grep in the session note.
   **Layman:** About 290 lower-risk possible bugs and the medium findings are still unchecked.
   Kind: review-fix.
   Source: review-readability 2026-10-31 at 7b2a81d.
