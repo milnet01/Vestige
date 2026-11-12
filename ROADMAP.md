@@ -7679,7 +7679,7 @@ shipped that have no invocation path at all.
   Source: frameledger-2026-11-10.
   Lanes: profiler.
 
-- 📋 [3D_E-0969] **A stopped timing run keeps its frame log's close line: Vestige handles Ctrl-C, SIGTERM and Windows' Ctrl-Break.**
+- ✅ [3D_E-0969] **A stopped timing run keeps its frame log's close line: Vestige handles Ctrl-C, SIGTERM and Windows' Ctrl-Break.**
   Vestige installs no SIGINT, SIGTERM or SIGBREAK handler (searched engine/
   and app/ 2026-11-11). FrameLedgerLog::close runs only from Engine::shutdown
   and the log's destructor, so a signal's default action ends the process
@@ -7691,6 +7691,12 @@ shipped that have no invocation path at all.
   SetConsoleCtrlHandler) does the same. Test: send SIGINT to a
   --demo-flythrough run with --frame-log and check that frameledger `check`
   passes on the file. Pairs with 3D_E-0820 (Windows).
+  2026-11-12: shipped in 52cce11. engine/core/stop_signal sets a flag on
+  SIGINT, SIGTERM and SIGBREAK; the run loop reads it once beside the
+  window-close check. SIGINT and SIGTERM sent to a headless
+  --demo-flythrough --frame-log run each left a file with its close line
+  that `frameledger check` accepts. Left for 3D_E-0820: a real
+  Ctrl-Break from a parent process on the Windows box.
   **Layman:** When a frame-timing run is stopped early, the engine shuts down properly so the timing file is complete and can still be read.
   Kind: fix.
   Source: frameledger-FLED-0063-review-2026-11-11.

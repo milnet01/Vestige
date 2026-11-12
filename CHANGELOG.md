@@ -25,6 +25,11 @@ may change any interface without notice.
 
 ## [Unreleased]
 
+### 2026-11-12 Fixed — stopping the engine from the terminal shuts it down properly (3D_E-0969)
+
+- **Ctrl-C, a terminate signal and Windows' Ctrl-Break now close the engine the normal way**
+  Before, they ended it on the spot, and a frame log from that run was left incomplete. Pressing Ctrl-C a second time still ends a stuck engine at once.
+
 ### 2026-11-12 Added — the frame log says how busy the machine was (3D_E-0968)
 
 - **A timing run records whether another program was using the CPU or the graphics card**
