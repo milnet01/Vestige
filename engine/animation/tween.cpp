@@ -168,6 +168,7 @@ void Tween::update(float deltaTime)
     float oldProgress = m_progress;
     float newProgress = 0.0f;
     bool loopWrapped = false;
+    bool ranToEnd = false;  // not m_finished: an event callback may stop() this tween
     float pingPongFirstHalf = 0.0f;
     float pingPongLastHalf = 0.0f;
 
@@ -179,6 +180,7 @@ void Tween::update(float deltaTime)
         if (newProgress >= 1.0f)
         {
             m_finished = true;
+            ranToEnd = true;
         }
         break;
     }
@@ -214,6 +216,8 @@ void Tween::update(float deltaTime)
     }
     }
 
+    // The first active update also crosses the progress it starts from.
+    const bool firstUpdate = !m_started;
     m_started = true;
     m_progress = newProgress;
 
@@ -234,15 +238,16 @@ void Tween::update(float deltaTime)
     // Fire events
     if (m_playback == TweenPlayback::PING_PONG)
     {
-        firePingPongLegs(oldProgress, newProgress, pingPongFirstHalf, pingPongLastHalf);
+        firePingPongLegs(oldProgress, newProgress, pingPongFirstHalf, pingPongLastHalf,
+                         firstUpdate);
     }
     else
     {
-        fireEvents(oldProgress, newProgress, loopWrapped);
+        fireEvents(oldProgress, newProgress, loopWrapped, firstUpdate);
     }
 
     // Fire onComplete for ONCE mode
-    if (m_finished && m_onComplete)
+    if (ranToEnd && m_onComplete)
     {
         m_onComplete();
     }
@@ -296,11 +301,12 @@ void Tween::applyValue(float easedProgress)
 // Fire events that were crossed between oldProgress and newProgress
 // ---------------------------------------------------------------------------
 
-void Tween::fireEvents(float oldProgress, float newProgress, bool loopWrapped)
+void Tween::fireEvents(float oldProgress, float newProgress, bool loopWrapped,
+                       bool includeStart)
 {
     if (!loopWrapped)
     {
-        fireLeg(oldProgress, newProgress);
+        fireLeg(oldProgress, newProgress, includeStart);
         return;
     }
 
@@ -316,7 +322,7 @@ void Tween::fireEvents(float oldProgress, float newProgress, bool loopWrapped)
     }
 }
 
-void Tween::fireLeg(float from, float to)
+void Tween::fireLeg(float from, float to, bool includeStart)
 {
     for (auto& evt : m_events)
     {
@@ -331,6 +337,10 @@ void Tween::fireLeg(float from, float to)
             // Backward: fire if event time is in [to, from)
             crossed = (evt.normalizedTime >= to && evt.normalizedTime < from);
         }
+        if (includeStart && evt.normalizedTime == from)
+        {
+            crossed = true;
+        }
 
         if (crossed && evt.callback)
         {
@@ -340,18 +350,18 @@ void Tween::fireLeg(float from, float to)
 }
 
 void Tween::firePingPongLegs(float oldProgress, float newProgress,
-                             float firstHalf, float lastHalf)
+                             float firstHalf, float lastHalf, bool includeStart)
 {
     if (lastHalf <= firstHalf)
     {
-        fireLeg(oldProgress, newProgress);
+        fireLeg(oldProgress, newProgress, includeStart);
         return;
     }
 
     // The leg from oldProgress to the end of its half, then onLoop at each
     // turnaround, every whole half in between, and the start of the last
     // half up to newProgress.
-    fireLeg(oldProgress, isForwardHalf(firstHalf) ? 1.0f : 0.0f);
+    fireLeg(oldProgress, isForwardHalf(firstHalf) ? 1.0f : 0.0f, includeStart);
     for (float half = firstHalf + 1.0f; half <= lastHalf; half += 1.0f)
     {
         if (m_onLoop)
@@ -385,14 +395,44 @@ Tween& TweenManager::add(Tween tween)
 
 void TweenManager::cancelTarget(void* target)
 {
+    auto hasTarget = [target](const Tween& t) { return t.getTarget() == target; };
+    m_addedDuringUpdate.erase(
+        std::remove_if(m_addedDuringUpdate.begin(), m_addedDuringUpdate.end(), hasTarget),
+        m_addedDuringUpdate.end());
+
+    if (m_updating)
+    {
+        // Called from a tween's callback: update() is walking m_tweens, so
+        // stop the tweens here and let update() remove them when it is done.
+        for (auto& t : m_tweens)
+        {
+            if (hasTarget(t))
+            {
+                t.stop();
+            }
+        }
+        return;
+    }
+
     m_tweens.erase(
-        std::remove_if(m_tweens.begin(), m_tweens.end(),
-            [target](const Tween& t) { return t.getTarget() == target; }),
+        std::remove_if(m_tweens.begin(), m_tweens.end(), hasTarget),
         m_tweens.end());
 }
 
 void TweenManager::cancelAll()
 {
+    m_addedDuringUpdate.clear();
+
+    if (m_updating)
+    {
+        // As cancelTarget: update() is walking m_tweens.
+        for (auto& t : m_tweens)
+        {
+            t.stop();
+        }
+        return;
+    }
+
     m_tweens.clear();
 }
 

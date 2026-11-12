@@ -479,3 +479,110 @@ TEST(TweenManagerTest, OnCompleteMayAddTweens)
     EXPECT_NEAR(extras[0], 5.0f, 0.01f);
     EXPECT_NEAR(extras[63], 5.0f, 0.01f);
 }
+
+// 3D_E-0874: an event placed at the very start was skipped on the first pass,
+// because the crossed span excluded the progress the tween started from.
+TEST(TweenTest, EventAtZeroFiresOnceOnTheFirstUpdate)
+{
+    float value = 0.0f;
+    int fired = 0;
+
+    auto tween = Tween::floatTween(&value, 0.0f, 10.0f, 1.0f);
+    tween.addEvent(0.0f, [&fired]() { ++fired; });
+
+    tween.update(0.1f);
+    EXPECT_EQ(fired, 1);
+
+    tween.update(0.1f);
+    EXPECT_EQ(fired, 1);
+}
+
+TEST(TweenTest, EventAtZeroFiresOncePerLoopCycle)
+{
+    float value = 0.0f;
+    int fired = 0;
+
+    auto tween = Tween::floatTween(&value, 0.0f, 10.0f, 1.0f);
+    tween.setPlayback(TweenPlayback::LOOP);
+    tween.addEvent(0.0f, [&fired]() { ++fired; });
+
+    tween.update(0.4f);
+    EXPECT_EQ(fired, 1);
+    tween.update(0.4f);
+    EXPECT_EQ(fired, 1);
+    tween.update(0.4f);  // wraps into the second cycle
+    EXPECT_EQ(fired, 2);
+}
+
+// 3D_E-0874: cancelling from a tween's callback erased tweens from the list
+// update() was walking. Cancelled tweens must not tick again, and the tweens
+// that were not cancelled must tick exactly once.
+TEST(TweenManagerTest, CallbackMayCancelAnotherTarget)
+{
+    TweenManager mgr;
+    float first = 0.0f;
+    float cancelled = 0.0f;
+    float kept = 0.0f;
+    bool cancelledCompleted = false;
+
+    mgr.add(Tween::floatTween(&first, 0.0f, 1.0f, 0.1f))
+        .onComplete([&]() { mgr.cancelTarget(&cancelled); });
+    mgr.add(Tween::floatTween(&kept, 0.0f, 10.0f, 1.0f));
+    mgr.add(Tween::floatTween(&cancelled, 0.0f, 10.0f, 1.0f))
+        .onComplete([&]() { cancelledCompleted = true; });
+
+    mgr.update(0.2f);
+
+    EXPECT_FLOAT_EQ(cancelled, 0.0f);
+    EXPECT_NEAR(kept, 2.0f, 0.01f);
+    EXPECT_EQ(mgr.activeTweenCount(), 1u);
+
+    mgr.update(0.2f);
+    EXPECT_FLOAT_EQ(cancelled, 0.0f);
+    EXPECT_NEAR(kept, 4.0f, 0.01f);
+    EXPECT_FALSE(cancelledCompleted);
+}
+
+TEST(TweenManagerTest, CallbackMayCancelAll)
+{
+    TweenManager mgr;
+    float first = 0.0f;
+    float other = 0.0f;
+    float added = 0.0f;
+
+    mgr.add(Tween::floatTween(&first, 0.0f, 1.0f, 0.1f))
+        .onComplete([&]()
+        {
+            mgr.add(Tween::floatTween(&added, 0.0f, 10.0f, 1.0f));
+            mgr.cancelAll();
+        });
+    mgr.add(Tween::floatTween(&other, 0.0f, 10.0f, 1.0f));
+
+    mgr.update(0.2f);
+    EXPECT_FLOAT_EQ(other, 0.0f);
+    EXPECT_EQ(mgr.activeTweenCount(), 0u);
+
+    mgr.update(0.2f);
+    EXPECT_FLOAT_EQ(other, 0.0f);
+    EXPECT_FLOAT_EQ(added, 0.0f);
+}
+
+// An event callback that cancels its own tween must not then be told the
+// tween completed.
+TEST(TweenManagerTest, TweenCancelledFromItsOwnEventDoesNotComplete)
+{
+    TweenManager mgr;
+    float value = 0.0f;
+    bool completed = false;
+
+    auto& tween = mgr.add(Tween::floatTween(&value, 0.0f, 10.0f, 1.0f));
+    tween.addEvent(0.5f, [&]() { mgr.cancelTarget(&value); });
+    tween.onComplete([&]() { completed = true; });
+
+    mgr.update(0.6f);
+    EXPECT_FALSE(completed);
+    EXPECT_EQ(mgr.activeTweenCount(), 0u);
+
+    mgr.update(1.0f);
+    EXPECT_FALSE(completed);
+}

@@ -126,14 +126,16 @@ private:
     Tween() = default;
 
     void applyValue(float easedProgress);
-    void fireEvents(float oldProgress, float newProgress, bool loopWrapped);
+    void fireEvents(float oldProgress, float newProgress, bool loopWrapped,
+                    bool includeStart);
     /// Fires events crossed moving from `from` to `to` in one direction:
-    /// (from, to] forward, [to, from) backward.
-    void fireLeg(float from, float to);
+    /// (from, to] forward, [to, from) backward. `includeStart` also fires an
+    /// event sitting exactly on `from`: the tween's first active update.
+    void fireLeg(float from, float to, bool includeStart = false);
     /// Fires each leg of a ping-pong update that ran from half-cycle
     /// `firstHalf` to `lastHalf`, calling onLoop at each turnaround.
     void firePingPongLegs(float oldProgress, float newProgress,
-                          float firstHalf, float lastHalf);
+                          float firstHalf, float lastHalf, bool includeStart);
     static bool isForwardHalf(float halfIndex);
 
     TargetType m_targetType = TargetType::FLOAT;
@@ -170,8 +172,8 @@ public:
     /// @brief Adds a tween. The manager takes ownership and ticks it.
     ///
     /// Safe to call from a tween's callback; such a tween first ticks on the
-    /// next update. Do not cancel from a callback: that removes tweens that
-    /// update() is still walking.
+    /// next update. Cancelling from a callback is safe too: cancelled tweens
+    /// stop at once, without their onComplete, and leave when update() ends.
     /// @return Reference to the stored tween for further configuration; valid
     ///         until the next add() or update().
     Tween& add(Tween tween);
