@@ -388,3 +388,23 @@ TEST(CatmullRomSplineTest, ExcessiveTClampedToEnd)
     glm::vec3 result = spline.evaluate(100.0f);
     EXPECT_NEAR(result.x, 10.0f, 0.01f);
 }
+
+// 3D_E-0874: sample(0) divided by zero and returned one NaN point; a negative
+// count asked the vector for an impossible size.
+TEST(CatmullRomSplineTest, SampleWithNoSamplesPerSegmentStillReturnsThePoints)
+{
+    CatmullRomSpline spline;
+    spline.addPoint(glm::vec3(0.0f, 0.0f, 0.0f));
+    spline.addPoint(glm::vec3(1.0f, 0.0f, 0.0f));
+    spline.addPoint(glm::vec3(2.0f, 1.0f, 0.0f));
+
+    for (int samplesPerSegment : {0, -3})
+    {
+        const auto samples = spline.sample(samplesPerSegment);
+        ASSERT_EQ(samples.size(), 3u) << "samplesPerSegment " << samplesPerSegment;
+        EXPECT_NEAR(samples[0].x, 0.0f, 1e-4f);
+        EXPECT_NEAR(samples[1].x, 1.0f, 1e-4f);
+        EXPECT_NEAR(samples[2].x, 2.0f, 1e-4f);
+        EXPECT_NEAR(samples[2].y, 1.0f, 1e-4f);
+    }
+}

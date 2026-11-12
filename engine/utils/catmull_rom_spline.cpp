@@ -5,6 +5,7 @@
 /// @brief Catmull-Rom spline evaluation implementation.
 #include "utils/catmull_rom_spline.h"
 
+#include <algorithm>
 #include <cmath>
 
 namespace Vestige
@@ -145,6 +146,9 @@ std::vector<glm::vec3> CatmullRomSpline::sample(int samplesPerSegment) const
         }
         return result;
     }
+
+    // Fewer than one sample per segment still returns the control points.
+    samplesPerSegment = std::max(samplesPerSegment, 1);
 
     int segmentCount = static_cast<int>(m_points.size()) - 1;
     int totalSamples = segmentCount * samplesPerSegment + 1; // +1 for the final point
