@@ -25,6 +25,35 @@ may change any interface without notice.
 
 ## [Unreleased]
 
+### 2026-11-12 Fixed — wind, foliage, animation, script and loader bugs (3D_E-0874)
+
+- **Turning gusts off gives steady, straight wind again**
+  Before, the wind kept whatever sideways skew the last gust had left.
+
+- **The erase brush now clears plants, rocks and trees on slopes**
+  Before, anything higher or lower than the brush centre could survive.
+
+- **Undoing a rock or tree stroke removes only what that stroke placed**
+  Before, a neighbour within a centimetre went with it.
+
+- **Painted density masks line up with where the brush painted**
+  Before, they read half a cell off towards the map's origin.
+
+- **A script Timeline or Move To with an invalid duration finishes at once**
+  Before, the script waited forever.
+
+- **A wrong-typed value in a captions file or acoustics index no longer stops loading**
+  That entry is skipped and the rest load.
+
+- **A stepped morph animation ends on its last pose**
+  Before, it stopped on the pose before it.
+
+- **A tween that starts more tweens when it completes no longer corrupts memory**
+
+- **A lip-sync track that fails to reload keeps the track already loaded**
+
+- **A high silence threshold no longer holds a lip-synced jaw open on silence**
+
 ### 2026-11-11 Fixed — model, material preset, path and editor bugs (3D_E-0874)
 
 - **A path or stream with a vertical section no longer breaks its mesh**

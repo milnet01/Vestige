@@ -7417,6 +7417,16 @@ shipped that have no invocation path at all.
   unchanged (21e854f). Re-graded: lane-05 font reload leak is latent (no
   code reloads an existing Font); lane-18 terrain short read needs a
   file shrinking mid-load, left for now.
+  2026-11-12: ten more fixed, red tests first: gusts-off wind skew
+  (009b3b5); erase brush XZ distance on slopes and exact-match undo
+  removal for scatter and trees (8284387); Timeline/MoveTo non-finite
+  duration (a21451c); caption map wrong-typed field (0c0c000);
+  acoustics index wrong-typed field (98fe46e); STEP morph weights last
+  key (93121d2); TweenManager add from a callback (e205a42); lip-sync
+  failed reload keeps the track (16a6e1c); jaw weight at a silence
+  threshold of 0.3 or more (f67e9e5); density map sample/paint texel
+  centres (9d76030). New row found: cancelTarget/cancelAll from a tween
+  callback still erase from the list being walked.
   **Layman:** About 290 lower-risk possible bugs and the medium findings are still unchecked.
   Kind: review-fix.
   Source: review-readability 2026-10-31 at 7b2a81d.
