@@ -37,21 +37,27 @@ void SpriteAnimation::addClip(SpriteAnimationClip clip)
         m_clipOrder.push_back(key);
     }
 
-    // Replacing the playing clip with a shorter one would leave m_frameIndex
-    // past the end, and the next tick() would read out of bounds.
-    if (key == m_currentClipName
-        && m_frameIndex >= static_cast<int>(stored.frames.size()))
+    // Replacing the current clip: keep the frame index where it still fits
+    // and show the new clip's frame there. A shorter clip would leave
+    // m_frameIndex past the end (tick() would read out of bounds), so it
+    // restarts; a clip with no frames has nothing to play.
+    if (key == m_currentClipName && m_frameIndex >= 0)
     {
-        m_frameElapsedMs = 0.0f;
         if (stored.frames.empty())
         {
+            m_playing = false;
+            m_frameElapsedMs = 0.0f;
             m_frameIndex = -1;
             m_currentFrameName.clear();
         }
         else
         {
-            m_frameIndex = 0;
-            m_currentFrameName = stored.frames.front().name;
+            if (m_frameIndex >= static_cast<int>(stored.frames.size()))
+            {
+                m_frameElapsedMs = 0.0f;
+                m_frameIndex = 0;
+            }
+            m_currentFrameName = stored.frames[static_cast<std::size_t>(m_frameIndex)].name;
         }
     }
 }

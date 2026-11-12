@@ -244,3 +244,40 @@ TEST(SpriteAnimation, LoopingClipWithZeroDurationsDoesNotHang)
 
     EXPECT_TRUE(anim.isPlaying());
 }
+
+// 3D_E-0874: replacing the clip that is playing kept the old clip's frame
+// name whenever the frame index was still in range.
+TEST(SpriteAnimation, ReplacingThePlayingClipShowsTheNewFrame)
+{
+    SpriteAnimation anim;
+    anim.addClip(makeThreeFrameClip());
+    anim.play("idle");
+    anim.tick(0.06f);
+    ASSERT_EQ(anim.currentFrameName(), "f1");
+
+    SpriteAnimationClip replacement;
+    replacement.name = "idle";
+    replacement.frames = {{"g0", 50.0f}, {"g1", 50.0f}, {"g2", 50.0f}};
+    anim.addClip(replacement);
+
+    EXPECT_EQ(anim.currentFrameIndex(), 1);
+    EXPECT_EQ(anim.currentFrameName(), "g1");
+}
+
+// 3D_E-0874: replacing the playing clip with one that has no frames left
+// the animation reporting that it was still playing.
+TEST(SpriteAnimation, ReplacingThePlayingClipWithAnEmptyOneStopsPlayback)
+{
+    SpriteAnimation anim;
+    anim.addClip(makeThreeFrameClip());
+    anim.play("idle");
+    ASSERT_TRUE(anim.isPlaying());
+
+    SpriteAnimationClip replacement;
+    replacement.name = "idle";
+    anim.addClip(replacement);
+
+    EXPECT_FALSE(anim.isPlaying());
+    EXPECT_EQ(anim.currentFrameIndex(), -1);
+    EXPECT_TRUE(anim.currentFrameName().empty());
+}
