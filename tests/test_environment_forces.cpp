@@ -510,3 +510,30 @@ TEST(EnvironmentForces, WindVelocityNeverNaN)
         ASSERT_FALSE(std::isinf(vel.z)) << "Inf at frame " << i;
     }
 }
+
+// Turning gusts off means steady wind along the base direction. The gust
+// state machine also skews the direction; that skew must ease out once gusts
+// are off, not stay frozen at whatever it last was.
+TEST(EnvironmentForces, GustsOffEasesDirectionSkewAway)
+{
+    EnvironmentForces env;
+    env.setWindDirection(glm::vec3(1.0f, 0.0f, 0.0f));
+    env.setWindStrength(5.0f);
+
+    for (int i = 0; i < 200; ++i)
+    {
+        env.update(0.1f);
+    }
+    ASSERT_GT(glm::length(env.getWindDirectionOffset()), 0.0f);
+
+    env.setGustsEnabled(false);
+    for (int i = 0; i < 100; ++i)
+    {
+        env.update(0.1f);
+    }
+
+    EXPECT_LT(glm::length(env.getWindDirectionOffset()), 1e-4f);
+    glm::vec3 velocity = env.getWindVelocity(glm::vec3(0.0f));
+    EXPECT_NEAR(velocity.y, 0.0f, 1e-3f);
+    EXPECT_NEAR(velocity.z, 0.0f, 1e-3f);
+}

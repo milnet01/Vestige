@@ -86,6 +86,9 @@ void EnvironmentForces::updateGustState(float dt)
     if (!m_gustsEnabled)
     {
         m_gustCurrent = 1.0f;  // No gusts = constant full strength
+        // ...along the base direction: ease out any skew a gust left behind.
+        m_windDirTarget = glm::vec3(0.0f);
+        easeWindDirOffset(dt);
         return;
     }
 
@@ -158,7 +161,11 @@ void EnvironmentForces::updateGustState(float dt)
         m_dirTimer = m_rng.nextRange(1.0f, 5.0f);
     }
 
-    // Smoothly interpolate direction offset
+    easeWindDirOffset(dt);
+}
+
+void EnvironmentForces::easeWindDirOffset(float dt)
+{
     glm::vec3 dirDiff = m_windDirTarget - m_windDirOffset;
     float dirLen = glm::length(dirDiff);
     float dirStep = 0.8f * dt;
