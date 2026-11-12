@@ -21,6 +21,9 @@ struct WindowConfig
     int width = 1280;
     int height = 720;
     bool isVsyncEnabled = true;
+    /// The size came from `--window-size`: it holds for this run over the
+    /// saved display settings, which are left as they were.
+    bool isSizeFromCommandLine = false;
 };
 
 /// @brief Manages the GLFW window and OpenGL context.

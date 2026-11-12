@@ -739,6 +739,14 @@ bool Engine::initialize(const EngineConfig& config)
             m_window->setVsync(false);
         }
 
+        // --window-size is per-run in the same way: the live-apply above put
+        // the saved window size back. A windowed mode of the asked-for size.
+        if (config.window.isSizeFromCommandLine)
+        {
+            m_window->setVideoMode(config.window.width, config.window.height,
+                                   /*fullscreen=*/false, m_window->isVsyncEnabled());
+        }
+
         // Self-update UI (3D_E-0729). A developer build parses as 0.0.0 only if
         // its stamp is malformed; detectInstall() then decides what it may do.
         if (m_editor)

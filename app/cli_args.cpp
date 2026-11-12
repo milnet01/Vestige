@@ -53,6 +53,46 @@ bool hasPrefix(const char* arg, std::string_view prefix)
 constexpr std::string_view kIsolateFeaturePrefix = "--isolate-feature=";
 constexpr std::string_view kProfileLogPrefix     = "--profile-log=";
 constexpr std::string_view kFrameLogPrefix       = "--frame-log=";
+constexpr std::string_view kWindowSizePrefix     = "--window-size=";
+/// Larger than any display the engine targets; refuses a slip of the hand.
+constexpr int kMaxWindowDimension = 16384;
+
+/// Reads "1920x1080": two whole numbers from 1 to kMaxWindowDimension with
+/// one 'x' between and nothing else.
+bool parseWindowSize(const char* text, int& width, int& height)
+{
+    int values[2] = {0, 0};
+    int which = 0;
+    int digits = 0;
+    for (const char* c = text; *c != '\0'; ++c)
+    {
+        if (*c >= '0' && *c <= '9')
+        {
+            values[which] = values[which] * 10 + (*c - '0');
+            ++digits;
+            if (values[which] > kMaxWindowDimension)
+            {
+                return false;
+            }
+        }
+        else if (*c == 'x' && which == 0 && digits > 0)
+        {
+            which = 1;
+            digits = 0;
+        }
+        else
+        {
+            return false;
+        }
+    }
+    if (which != 1 || digits == 0 || values[0] < 1 || values[1] < 1)
+    {
+        return false;
+    }
+    width = values[0];
+    height = values[1];
+    return true;
+}
 
 bool isIsolateFeatureName(const std::string& name)
 {
@@ -125,6 +165,10 @@ void printUsage(const char* argv0)
         << "                          analysis of the benchmark scene.\n"
         << "  --frame-log=PATH        Write every frame's timings to PATH, in\n"
         << "                          frameledger's run file format.\n"
+        << "  --window-size=WxH       Open the window at this size for this run,\n"
+        << "                          such as 1920x1080, whatever the saved\n"
+        << "                          display settings say. For benchmarking at\n"
+        << "                          a known size.\n"
         << "  --no-vsync              Disable vertical sync so the frame rate runs\n"
         << "                          uncapped. For benchmarking: with vsync on,\n"
         << "                          FPS reports the display's refresh rate, not\n"
@@ -298,6 +342,17 @@ bool parseArgs(int argc, char* argv[], EngineConfig& config, int& exitCode)
                 exitCode = 2;
                 return false;
             }
+        }
+        else if (hasPrefix(arg, kWindowSizePrefix))
+        {
+            if (!parseWindowSize(arg + kWindowSizePrefix.size(), config.window.width,
+                                 config.window.height))
+            {
+                std::cerr << "--window-size= needs WIDTHxHEIGHT, such as 1920x1080\n";
+                exitCode = 2;
+                return false;
+            }
+            config.window.isSizeFromCommandLine = true;
         }
         else if (std::strcmp(arg, "--no-vsync") == 0)
         {

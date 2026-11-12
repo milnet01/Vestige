@@ -241,6 +241,32 @@ TEST(CliArgs, NoVsyncFlagDisablesVsync)
     EXPECT_FALSE(r.config.window.isVsyncEnabled);
 }
 
+// 3D_E-0704: a run could not ask for a window size, so a headless timing
+// run was always 1280x720 whatever the saved settings said.
+TEST(CliArgs, WindowSizeFlagSetsTheWindowSize)
+{
+    auto r = run({"--window-size=1920x1080"});
+    ASSERT_TRUE(r.ok);
+    EXPECT_EQ(r.config.window.width, 1920);
+    EXPECT_EQ(r.config.window.height, 1080);
+    EXPECT_TRUE(r.config.window.isSizeFromCommandLine);
+
+    EXPECT_FALSE(run({}).config.window.isSizeFromCommandLine);
+}
+
+TEST(CliArgs, WindowSizeFlagRefusesAMalformedOrAbsurdSize)
+{
+    for (const char* bad : {"--window-size=", "--window-size=1920", "--window-size=1920x",
+                            "--window-size=x1080", "--window-size=0x1080",
+                            "--window-size=1920x1080x2", "--window-size=-1920x1080",
+                            "--window-size=1920 x 1080", "--window-size=99999x1080"})
+    {
+        auto r = run({bad});
+        EXPECT_FALSE(r.ok) << bad;
+        EXPECT_EQ(r.exitCode, 2) << bad;
+    }
+}
+
 TEST(CliArgs, UnknownFlagFailsWithExit2)
 {
     auto r = run({"--nope"});
