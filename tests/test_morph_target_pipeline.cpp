@@ -141,6 +141,38 @@ TEST(MorphTargetPipeline, WeightsChannelStepInterpolation)
     EXPECT_NEAR(weights[0], 0.0f, 0.01f);
 }
 
+// At or after the last key a STEP channel holds the LAST key's value, as the
+// vec3 sampler does; it used to hold the one before it.
+TEST(MorphTargetPipeline, WeightsChannelStepHoldsLastKeyAtTheEnd)
+{
+    SkeletonAnimator animator;
+    auto skeleton = makeMinimalSkeleton();
+    animator.setSkeleton(skeleton);
+
+    auto clip = std::make_shared<AnimationClip>();
+    clip->m_name = "step_morph_end";
+
+    AnimationChannel weightsChannel;
+    weightsChannel.jointIndex = -1;
+    weightsChannel.targetPath = AnimTargetPath::WEIGHTS;
+    weightsChannel.interpolation = AnimInterpolation::STEP;
+    weightsChannel.timestamps = {0.0f, 0.5f, 1.0f};
+    weightsChannel.values = {0.0f, 1.0f, 0.25f};
+
+    clip->m_channels.push_back(weightsChannel);
+    clip->computeDuration();
+
+    animator.addClip(clip);
+    animator.setLooping(false);
+    animator.play("step_morph_end");
+
+    animator.update(1.0f);
+
+    const auto& weights = animator.getMorphWeights();
+    ASSERT_GE(weights.size(), 1u);
+    EXPECT_NEAR(weights[0], 0.25f, 0.01f);
+}
+
 // --- SceneRenderData morph weight propagation ---
 
 TEST(MorphTargetPipeline, RenderDataCarriesMorphWeights)

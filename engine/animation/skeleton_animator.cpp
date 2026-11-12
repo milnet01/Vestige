@@ -123,6 +123,10 @@ int SkeletonAnimator::advanceAndSample(
                 }
                 k = t;
             }
+            if (time >= channel.timestamps[keyCount - 1])
+            {
+                k = keyCount - 1;  // At or past the end: hold the last key.
+            }
             size_t k1 = std::min(k + 1, keyCount - 1);
 
             if (channel.interpolation == AnimInterpolation::STEP || k == k1)
