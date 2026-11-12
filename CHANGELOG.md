@@ -25,6 +25,11 @@ may change any interface without notice.
 
 ## [Unreleased]
 
+### 2026-11-12 Fixed — cloth stays on its tethers on both solvers (3D_E-0875)
+
+- **A curtain pushed by an object no longer stretches past its tether on the CPU cloth solver**
+  Before, the CPU solver applied tethers before collisions and the GPU solver after, so the two could end in different places. Both now finish each step on the tether. The Tabernacle entrance curtains and veil were checked in pictures and hang as before.
+
 ### 2026-11-12 Fixed — 2D physics, script warnings, menus, model colours and ground planes (3D_E-0874)
 
 - **2D objects start where you placed them, and move when physics moves them**

@@ -7462,7 +7462,7 @@ shipped that have no invocation path at all.
   Source: review-readability 2026-10-31 at 7b2a81d.
   Lanes: engine.
 
-- 🚧 [3D_E-0875] **Cloth friction has no effect: the end-of-substep velocity recovery overwrites it.**
+- ✅ [3D_E-0875] **Cloth friction has no effect: the end-of-substep velocity recovery overwrites it.**
   Both backends edit velocity in the collision pass (applyFriction),
   then recover velocity from positions, v = (pos - prevPos) / dt
   (ClothSimulator::simulate step 7, cloth_velocity.comp.glsl), which
@@ -7500,6 +7500,17 @@ shipped that have no invocation path at all.
   909 lists two more GPU/CPU gaps (no speed cap, one collision pass). Do
   alongside the owed Release visual check: decide the order (recommend the
   GPU's: collisions, then tethers, on both), add a parity test.
+  2026-11-12 shipped. Tether order: bed3a8d moves the CPU's LRA solve
+  to after the last collision pass, the GPU's order. Red test
+  ClothTetherOrder.CpuTetherHoldsAgainstACollider (0.40 m past the
+  tether before, under 1 mm after); the GPU twin passed before and
+  after on the RX 6600. Visual check done on a Release build of bed3a8d:
+  --biblical-demo --stills at the entrance and the veil, headless on the
+  real GPU. Both entrance curtains and the veil hang flat and straight
+  with level hems, nothing bunched, stretched or caught on a pillar. The
+  stills show the cloth at rest, not under gusts. The two other GPU/CPU
+  gaps (no GPU speed cap, one GPU collision pass) stay with lane-07
+  under 3D_E-0874.
   **Layman:** Cloth slides over surfaces the same whatever friction is set to.
   Kind: fix.
   Source: 3D_E-0873 doc fix 2026-11-03 (review-readability 2026-10-31).
