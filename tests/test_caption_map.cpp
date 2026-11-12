@@ -117,6 +117,24 @@ TEST(CaptionMap, MalformedJsonLeavesMapEmpty)
     EXPECT_TRUE(map.empty());
 }
 
+// A hand-edited captions.json with a wrong-typed field loses that entry, not
+// the whole map, and never throws out of the loader.
+TEST(CaptionMap, WrongTypedFieldSkipsThatEntryOnly)
+{
+    CaptionMap map;
+    bool loaded = false;
+    EXPECT_NO_THROW(loaded = map.loadFromString(R"({
+        "a.wav": { "text": 42 },
+        "b.wav": { "text": "Hi", "duration": "long" },
+        "c.wav": { "text": "Kept" }
+    })"));
+    EXPECT_TRUE(loaded);
+    EXPECT_EQ(map.lookup("a.wav"), nullptr);
+    EXPECT_EQ(map.lookup("b.wav"), nullptr);
+    ASSERT_NE(map.lookup("c.wav"), nullptr);
+    EXPECT_EQ(map.lookup("c.wav")->text, "Kept");
+}
+
 TEST(CaptionMap, NonObjectRootLeavesMapEmpty)
 {
     CaptionMap map;

@@ -47,15 +47,26 @@ bool populateFromJson(const nlohmann::json& j,
         }
 
         Subtitle sub;
-        sub.text     = entry.value("text",    std::string{});
-        sub.speaker  = entry.value("speaker", std::string{});
-        sub.category = parseSubtitleCategory(
-            entry.value("category", std::string{"Dialogue"}));
-        const float dur = entry.value("duration",
-                                       DEFAULT_CAPTION_DURATION_SECONDS);
-        sub.durationSeconds = (dur > 0.0f)
-            ? dur
-            : DEFAULT_CAPTION_DURATION_SECONDS;
+        try
+        {
+            sub.text     = entry.value("text",    std::string{});
+            sub.speaker  = entry.value("speaker", std::string{});
+            sub.category = parseSubtitleCategory(
+                entry.value("category", std::string{"Dialogue"}));
+            const float dur = entry.value("duration",
+                                           DEFAULT_CAPTION_DURATION_SECONDS);
+            sub.durationSeconds = (dur > 0.0f)
+                ? dur
+                : DEFAULT_CAPTION_DURATION_SECONDS;
+        }
+        catch (const nlohmann::json::exception& e)
+        {
+            // value() throws when a key is present with the wrong type.
+            Logger::warning("[CaptionMap] Entry for '" + clipPath +
+                            "' has a wrong-typed field (" + e.what() +
+                            "); skipped.");
+            continue;
+        }
 
         // Skip entries with empty text — a caption with nothing to
         // display is authoring noise, not a feature.
