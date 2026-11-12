@@ -108,12 +108,19 @@ std::vector<LoadedAcousticProbe> loadAcousticsIndex(const std::string& sceneSour
         }
 
         LoadedAcousticProbe probe;
-        probe.position        = glm::vec3(p["position"][0].get<float>(),
-                                          p["position"][1].get<float>(),
-                                          p["position"][2].get<float>());
-        probe.influenceRadius = p.value("influenceRadius", 10.0f);
-        probe.irPath          = (sidecarDir / irFile).string();
-        probe.id              = p.value("id", 0u);
+        try
+        {
+            probe.position        = glm::vec3(p["position"][0].get<float>(),
+                                              p["position"][1].get<float>(),
+                                              p["position"][2].get<float>());
+            probe.influenceRadius = p.value("influenceRadius", 10.0f);
+            probe.id              = p.value("id", 0u);
+        }
+        catch (const nlohmann::json::exception&)
+        {
+            continue;  // Wrong-typed field — malformed like the cases above.
+        }
+        probe.irPath = (sidecarDir / irFile).string();
         probes.push_back(std::move(probe));
     }
 

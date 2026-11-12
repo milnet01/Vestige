@@ -125,6 +125,29 @@ TEST(AcousticsIndexLoad, RejectsIrEntriesWithPathSeparators)
     fs::remove_all(dir);
 }
 
+// A wrong-typed field is one malformed entry: skipped like the others, with
+// the rest kept, and no exception out of the loader.
+TEST(AcousticsIndexLoad, WrongTypedFieldsSkipThatEntryOnly)
+{
+    const fs::path dir   = uniqueDir("wrongtype");
+    const fs::path scene = dir / "level.json";
+
+    nlohmann::json idx;
+    idx["probes"] = nlohmann::json::array({
+        { { "id", 1 }, { "position", { "x", 0.0, 0.0 } }, { "ir", "probe_1.wav" } },
+        { { "id", 2 }, { "position", { 0.0, 0.0, 0.0 } }, { "ir", "probe_2.wav" },
+          { "influenceRadius", "big" } },
+        { { "id", "three" }, { "position", { 0.0, 0.0, 0.0 } }, { "ir", "probe_3.wav" } },
+        { { "id", 4 }, { "position", { 0.0, 0.0, 0.0 } }, { "ir", "probe_4.wav" } },
+    });
+
+    std::vector<LoadedAcousticProbe> probes;
+    EXPECT_NO_THROW(probes = loadAcousticsIndex(writeIndexBeside(scene, idx)));
+    ASSERT_EQ(probes.size(), 1u);
+    EXPECT_EQ(probes[0].id, 4u);
+    fs::remove_all(dir);
+}
+
 TEST(AcousticsSidecarDir, DerivesFromSceneStemAndEmptyForInMemory)
 {
     // The read path (loadAcousticsIndex) and the write path (bakeAcoustics) must
