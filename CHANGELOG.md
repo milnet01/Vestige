@@ -25,6 +25,11 @@ may change any interface without notice.
 
 ## [Unreleased]
 
+### 2026-11-12 Fixed — the graphics-memory figure works on Windows (3D_E-0820)
+
+- **The performance panel and the frame log show the engine's own graphics memory on Windows**
+  Before, Windows had no reading and the panel said "unavailable". Checked on a real Windows PC: the engine read 815 MB where Windows' own counter for the program read 816 MB.
+
 ### 2026-11-12 Fixed — cloth stays on its tethers on both solvers (3D_E-0875)
 
 - **A curtain pushed by an object no longer stretches past its tether on the CPU cloth solver**

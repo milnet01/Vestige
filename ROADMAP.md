@@ -1,6 +1,6 @@
 <!-- ants-roadmap-format: 1 -->
 <!-- Generated from the Ants Terminal roadmap store. Edit it with roadmap_log; hand edits are discarded by the next write. -->
-<!-- ants-roadmap-id-high-water: 3D_E=969 3D_E#S=989 -->
+<!-- ants-roadmap-id-high-water: 3D_E=970 3D_E#S=989 -->
 
 # Vestige Engine Roadmap
 
@@ -6712,7 +6712,7 @@ shipped that have no invocation path at all.
   Source: 3D_E-0810 stills 2026-10-31.
   Lanes: renderer, assets.
 
-- 🚧 [3D_E-0820] **The profiler's gpu_mb is the whole graphics card's memory, not Vestige's, and reads nothing on Windows.**
+- ✅ [3D_E-0820] **The profiler's gpu_mb is the whole graphics card's memory, not Vestige's, and reads nothing on Windows.**
   memory_tracker.cpp reads amdgpu's mem_info_vram_used, which is card-wide,
   and has no branch outside Linux. Measured in one flythrough: 6768 MB at
   frame 200, about 6100 MB by frame 800, 4787 MB just after exit. Measure the
@@ -6732,6 +6732,13 @@ shipped that have no invocation path at all.
   reading. Plan: IDXGIAdapter3::QueryVideoMemoryInfo CurrentUsage on the
   GL adapter (per process under WDDM), checked on the wintest box. Then
   pin frameledger v0.2.0 so compare judges mem and perf_gate.py retires.
+  2026-11-12 Windows half done, shipped: e3c866a reads
+  IDXGIAdapter3::QueryVideoMemoryInfo (local segment, CurrentUsage),
+  summed over the adapters, which are found once. Red then green on
+  wintest (GTX 1050): WindowsVramTest.ProcessVideoMemoryIsReadWithAGlContext.
+  Cross-check there: a flythrough wrote gpu_mb 915, 879, 850 then 815 MB;
+  Windows' GPU Process Memory counter for that process read 816 MB
+  dedicated at 15 s. Retiring tools/perf_gate.py is its own item now.
   **Layman:** The memory figure counts other programs too, so a browser tab can look like the engine using more memory.
   Kind: fix.
   Source: 3D_E-0786 first run file 2026-10-31.
@@ -7726,6 +7733,21 @@ shipped that have no invocation path at all.
   Kind: fix.
   Source: frameledger-FLED-0063-review-2026-11-11.
   Lanes: core, profiler.
+
+- 📋 [3D_E-0970] **Retire tools/perf_gate.py's live gate for frameledger compare against a saved baseline.**
+  gpu_mb now measures this process alone on Linux and Windows
+  (3D_E-0820), so frameledger compare can judge memory. What remains:
+  a frameledger release holding `--baseline FILE` (FLED-0035, built
+  2026-11-12, not yet released); capture three or more fresh runs on
+  the dev machine and list them in a baseline file (frameledger has no
+  converter from perf_gate's baseline JSON, agreed 2026-11-12); swap
+  the ctest perf_gate entries and tests/fixtures/perf_gate for the
+  compare call; delete tools/perf_gate.py and its design doc pointer.
+  The captures need a quiet machine.
+  **Layman:** Two tools check for slowdowns; keep the newer one.
+  Kind: chore.
+  Source: 3D_E-0820 shipped 2026-11-12.
+  Lanes: profiler, tools.
 
 ## 0.3.0 — An editor a builder can use
 
