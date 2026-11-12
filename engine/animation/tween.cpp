@@ -376,8 +376,11 @@ bool Tween::isForwardHalf(float halfIndex)
 
 Tween& TweenManager::add(Tween tween)
 {
-    m_tweens.push_back(std::move(tween));
-    return m_tweens.back();
+    // A callback run by update() may add tweens. Growing m_tweens there would
+    // move the tween that is mid-update, so those wait in m_addedDuringUpdate.
+    auto& list = m_updating ? m_addedDuringUpdate : m_tweens;
+    list.push_back(std::move(tween));
+    return list.back();
 }
 
 void TweenManager::cancelTarget(void* target)
@@ -396,9 +399,12 @@ void TweenManager::cancelAll()
 size_t TweenManager::activeTweenCount() const
 {
     size_t count = 0;
-    for (const auto& t : m_tweens)
+    for (const auto* list : {&m_tweens, &m_addedDuringUpdate})
     {
-        if (!t.isFinished()) ++count;
+        for (const auto& t : *list)
+        {
+            if (!t.isFinished()) ++count;
+        }
     }
     return count;
 }
@@ -406,10 +412,19 @@ size_t TweenManager::activeTweenCount() const
 void TweenManager::update(float deltaTime)
 {
     // Tick all tweens
+    m_updating = true;
     for (auto& t : m_tweens)
     {
         t.update(deltaTime);
     }
+    m_updating = false;
+
+    // Tweens added by callbacks join now and first tick on the next update.
+    for (auto& t : m_addedDuringUpdate)
+    {
+        m_tweens.push_back(std::move(t));
+    }
+    m_addedDuringUpdate.clear();
 
     // Remove finished tweens (swap-and-pop)
     m_tweens.erase(

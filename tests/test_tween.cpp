@@ -449,3 +449,33 @@ TEST(TweenManagerTest, LoopingTweensNotRemoved)
     mgr.update(2.5f);  // Past multiple cycles
     EXPECT_EQ(mgr.activeTweenCount(), 1u);  // Still alive
 }
+
+// A completion callback may start more tweens on the same manager. Those must
+// not move the tweens the manager is in the middle of ticking.
+TEST(TweenManagerTest, OnCompleteMayAddTweens)
+{
+    TweenManager mgr;
+    float first = 0.0f;
+    float second = 0.0f;
+    float extras[64] = {};
+
+    mgr.add(Tween::floatTween(&first, 0.0f, 1.0f, 0.1f))
+        .onComplete([&]()
+        {
+            for (float& extra : extras)
+            {
+                mgr.add(Tween::floatTween(&extra, 0.0f, 10.0f, 1.0f));
+            }
+        });
+    mgr.add(Tween::floatTween(&second, 0.0f, 10.0f, 1.0f));
+
+    mgr.update(0.2f);
+
+    EXPECT_NEAR(second, 2.0f, 0.01f);
+    EXPECT_EQ(mgr.activeTweenCount(), 65u);
+
+    // Tweens added during an update start ticking on the next one.
+    mgr.update(0.5f);
+    EXPECT_NEAR(extras[0], 5.0f, 0.01f);
+    EXPECT_NEAR(extras[63], 5.0f, 0.01f);
+}

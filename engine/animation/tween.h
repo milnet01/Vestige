@@ -168,7 +168,12 @@ class TweenManager : public Component
 {
 public:
     /// @brief Adds a tween. The manager takes ownership and ticks it.
-    /// @return Reference to the stored tween for further configuration.
+    ///
+    /// Safe to call from a tween's callback; such a tween first ticks on the
+    /// next update. Do not cancel from a callback: that removes tweens that
+    /// update() is still walking.
+    /// @return Reference to the stored tween for further configuration; valid
+    ///         until the next add() or update().
     Tween& add(Tween tween);
 
     /// @brief Cancels all tweens targeting a specific pointer.
@@ -186,6 +191,8 @@ public:
 
 private:
     std::vector<Tween> m_tweens;
+    std::vector<Tween> m_addedDuringUpdate;  ///< Held until update() finishes.
+    bool m_updating = false;
 };
 
 } // namespace Vestige
