@@ -94,6 +94,7 @@ add_executable(vestige_tests
     test_visual_test_runner.cpp
     test_performance_profiler.cpp
     test_frame_ledger_log.cpp
+    test_machine_load.cpp
     test_obj_loader.cpp
     test_skeleton.cpp
     test_animation_sampler.cpp

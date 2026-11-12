@@ -11,6 +11,7 @@
 
 #include <nlohmann/json.hpp>
 
+#include <cmath>
 #include <cstring>
 
 namespace Vestige
@@ -22,6 +23,27 @@ namespace
 /// Room for several seconds of frames. A frame is far below the half this
 /// keeps free, so writing the file when half full never drops a row.
 constexpr std::size_t BUFFER_BYTES = 1024 * 1024;
+
+/// What frameledger.h's fled_open writes before the header's JSON.
+constexpr char HEADER_PREFIX[] = "# frameledger ";
+
+/// Adds `{"start": s, "end": e}` and, if known, `"peak"`. The format wants a
+/// start and an end together, so one without the other adds nothing. Three
+/// decimals keep the line short; the figures are not that exact anyway.
+void addStartEnd(nlohmann::json& header, const char* field, double start, double end,
+                 double peak)
+{
+    if (start < 0.0 || end < 0.0)
+    {
+        return;
+    }
+    auto rounded = [](double value) { return std::round(value * 1000.0) / 1000.0; };
+    header[field] = {{"start", rounded(start)}, {"end", rounded(end)}};
+    if (peak >= 0.0)
+    {
+        header[field]["peak"] = rounded(peak);
+    }
+}
 
 } // namespace
 
@@ -49,6 +71,10 @@ std::string frameLedgerHeaderJson(const FrameLedgerRunInfo& info)
         {"started_utc", info.startedUtc},
         {"os", info.os},
     };
+    const MachineLoad& load = info.load;
+    addStartEnd(header, "load", load.loadStart, load.loadEnd, load.loadPeak);
+    addStartEnd(header, "gpu_busy_pct", load.gpuBusyStart, load.gpuBusyEnd, load.gpuBusyPeak);
+    addStartEnd(header, "gpu_clock_mhz", load.gpuClockStartMhz, load.gpuClockEndMhz, -1.0);
     // A driver string is outside our control: replace bad UTF-8, never throw.
     return header.dump(-1, ' ', false, nlohmann::json::error_handler_t::replace);
 }
@@ -65,12 +91,14 @@ FrameLedgerLog::~FrameLedgerLog()
 }
 
 bool FrameLedgerLog::open(const std::string& path, const std::string& runId,
-                          const std::string& headerJson)
+                          const std::string& headerJson, std::size_t headerReserve)
 {
     close();
     m_buffer.resize(BUFFER_BYTES);
+    const std::string padded = headerJson + std::string(headerReserve, ' ');
+    m_headerRoom = padded.size();
     if (fled_open(&m_writer, m_buffer.data(), m_buffer.size(), runId.c_str(),
-                  headerJson.c_str(), nullptr) != FLED_OK)
+                  padded.c_str(), nullptr) != FLED_OK)
     {
         Logger::warning("Frame log: the run header was refused");
         return false;
@@ -87,7 +115,7 @@ bool FrameLedgerLog::open(const std::string& path, const std::string& runId,
     return m_file != nullptr;
 }
 
-void FrameLedgerLog::close()
+void FrameLedgerLog::close(const std::string& finalHeaderJson)
 {
     if (!m_file)
     {
@@ -95,10 +123,33 @@ void FrameLedgerLog::close()
     }
     fled_close(&m_writer, m_frame);
     writePending();
+    if (m_file && !finalHeaderJson.empty())
+    {
+        rewriteHeader(finalHeaderJson);
+    }
     if (m_file)
     {
         std::fclose(m_file);
         m_file = nullptr;
+    }
+}
+
+void FrameLedgerLog::rewriteHeader(const std::string& headerJson)
+{
+    // Same length as the line open() wrote, so nothing after it moves.
+    if (headerJson.size() > m_headerRoom
+        || headerJson.find_first_of("\r\n") != std::string::npos)
+    {
+        Logger::warning("Frame log: the finished header does not fit; the load fields are "
+                        "left out");
+        return;
+    }
+    const std::string line = headerJson + std::string(m_headerRoom - headerJson.size(), ' ');
+    if (std::fseek(m_file, static_cast<long>(sizeof(HEADER_PREFIX) - 1), SEEK_SET) != 0
+        || std::fwrite(line.data(), 1, line.size(), m_file) != line.size()
+        || std::fflush(m_file) != 0)
+    {
+        Logger::warning("Frame log: rewriting the header failed");
     }
 }
 

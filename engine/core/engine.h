@@ -259,6 +259,8 @@ private:
     FrameLedgerLog m_frameLedgerLog;     ///< Off unless --frame-log opened it.
     std::string m_frameLogPath;          ///< Opened by run(), once settings are applied.
     std::string m_frameLogScene;         ///< The scene name the run file records.
+    FrameLedgerRunInfo m_frameLogInfo;   ///< Kept so shutdown can finish the header.
+    MachineLoadSampler m_machineLoad;    ///< Idle unless --frame-log is given.
     double m_profileElapsedSec = 0.0;    ///< Cumulative time_s passed to sample().
     PhysicsWorld m_physicsWorld;
     PhysicsDebugDraw m_physicsDebugDraw;

@@ -128,6 +128,13 @@ bool Engine::initialize(const EngineConfig& config)
 
     m_assetPath = config.assetPath;
 
+    // The frame log's header records how busy the machine was before the
+    // engine loaded anything, so this comes ahead of the window (3D_E-0968).
+    if (!config.frameLogPath.empty())
+    {
+        m_machineLoad.start();
+    }
+
     // Create window (also initializes GLFW and OpenGL context)
     m_window = std::make_unique<Window>(config.window, m_eventBus);
 
@@ -1530,9 +1537,14 @@ void Engine::openFrameLog()
     info.os = "linux";
 #endif
 
-    if (m_frameLedgerLog.open(m_frameLogPath, info.runId, frameLedgerHeaderJson(info)))
+    // The load fields need the end of the run, so open() keeps room for them
+    // and shutdown() writes the finished header.
+    m_frameLogInfo = info;
+    if (m_frameLedgerLog.open(m_frameLogPath, info.runId, frameLedgerHeaderJson(info),
+                              FRAME_LEDGER_HEADER_RESERVE))
     {
         Logger::info("Frame log opened: " + m_frameLogPath);
+        m_machineLoad.beginRun();
     }
     else
     {
@@ -2647,6 +2659,13 @@ void Engine::run()
         }
     }
 
+    // Before anything is torn down: the GPU drops to its idle clock within
+    // moments of the last frame.
+    if (m_frameLedgerLog.isOpen())
+    {
+        m_frameLogInfo.load = m_machineLoad.finish();
+    }
+
     Logger::info("Main loop ended");
 }
 
@@ -2698,7 +2717,9 @@ void Engine::shutdown()
 
     // Shut down remaining engine-owned subsystems
     m_profileLog.close();  // flushes the final partial interval, if any
-    m_frameLedgerLog.close();
+    m_frameLedgerLog.close(m_frameLogInfo.runId.empty()
+                               ? std::string()
+                               : frameLedgerHeaderJson(m_frameLogInfo));
     m_profiler.shutdown();
     m_physicsWorld.shutdown();
     m_debugDraw.cleanup();

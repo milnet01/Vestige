@@ -269,6 +269,7 @@ set(ENGINE_SOURCES
     profiler/performance_profiler.cpp
     profiler/profile_log.cpp
     profiler/frame_ledger_log.cpp
+    profiler/machine_load.cpp
     editor/panels/performance_panel.cpp
     editor/panels/validation_panel.cpp
     editor/panels/script_editor_panel.cpp

@@ -201,6 +201,104 @@ TEST(FrameLedgerHeader, IsOneLineOfJsonWithEveryRequiredField)
     EXPECT_EQ(header["resolution"][1], 720);
 }
 
+// 3D_E-0968: the load fields need both ends of the run. Until then the header
+// leaves them out, which the format reads as unknown.
+TEST(FrameLedgerHeader, LoadFieldsAppearOnlyOnceStartAndEndAreKnown)
+{
+    FrameLedgerRunInfo info;
+    info.runId = "r";
+    info.load.loadStart = 0.25;
+    info.load.gpuBusyStart = 3.0;
+    info.load.gpuClockStartMhz = 500.0;
+    nlohmann::json header = nlohmann::json::parse(frameLedgerHeaderJson(info));
+    EXPECT_FALSE(header.contains("load"));
+    EXPECT_FALSE(header.contains("gpu_busy_pct"));
+    EXPECT_FALSE(header.contains("gpu_clock_mhz"));
+
+    info.load.loadEnd = 0.31234;
+    info.load.gpuBusyEnd = 97.0;
+    info.load.gpuClockEndMhz = 2665.0;
+    header = nlohmann::json::parse(frameLedgerHeaderJson(info));
+    EXPECT_EQ(header["load"], (nlohmann::json{{"start", 0.25}, {"end", 0.312}}));
+    EXPECT_EQ(header["gpu_busy_pct"], (nlohmann::json{{"start", 3.0}, {"end", 97.0}}));
+    EXPECT_EQ(header["gpu_clock_mhz"], (nlohmann::json{{"start", 500.0}, {"end", 2665.0}}));
+
+    info.load.loadPeak = 0.0;
+    info.load.gpuBusyPeak = 21.5;
+    header = nlohmann::json::parse(frameLedgerHeaderJson(info));
+    EXPECT_EQ(header["load"]["peak"], 0.0);
+    EXPECT_EQ(header["gpu_busy_pct"]["peak"], 21.5);
+    EXPECT_FALSE(header["gpu_clock_mhz"].contains("peak"));
+}
+
+// The fullest header the engine can write must fit the room open() keeps.
+TEST(FrameLedgerHeader, LoadFieldsFitTheReservedRoom)
+{
+    FrameLedgerRunInfo info;
+    info.runId = "r";
+    const std::size_t without = frameLedgerHeaderJson(info).size();
+    info.load.loadStart = 123.456;
+    info.load.loadEnd = 123.456;
+    info.load.loadPeak = 0.123;
+    info.load.gpuBusyStart = 100.0;
+    info.load.gpuBusyEnd = 100.0;
+    info.load.gpuBusyPeak = 99.999;
+    info.load.gpuClockStartMhz = 12345.0;
+    info.load.gpuClockEndMhz = 12345.0;
+    EXPECT_LE(frameLedgerHeaderJson(info).size() - without, FRAME_LEDGER_HEADER_RESERVE);
+}
+
+// 3D_E-0968: close() writes the finished header over the padded one, and
+// every byte after line 1 stays where it was.
+TEST(FrameLedgerLogOpen, CloseReplacesThePaddedHeaderInPlace)
+{
+    const std::string path = (std::filesystem::temp_directory_path()
+                              / ("vestige_frame_ledger_pad_" + Testing::vestigeTestStamp()
+                                 + ".csv"))
+                                 .string();
+    auto readAll = [&path]() {
+        std::ifstream in(path, std::ios::binary);
+        std::stringstream text;
+        text << in.rdbuf();
+        return text.str();
+    };
+
+    FrameLedgerFrame frame;
+    frame.times.cpuSpanMs = 4.0;
+
+    FrameLedgerLog plain;
+    ASSERT_TRUE(plain.open(path, "run", "{\"schema\":1}", 40));
+    plain.writeFrame(frame);
+    plain.close();
+    const std::string before = readAll();
+    const std::size_t lineEnd = before.find('\n');
+    ASSERT_NE(lineEnd, std::string::npos);
+    EXPECT_EQ(before.substr(0, lineEnd), "# frameledger {\"schema\":1}" + std::string(40, ' '));
+
+    FrameLedgerLog finished;
+    ASSERT_TRUE(finished.open(path, "run", "{\"schema\":1}", 40));
+    finished.writeFrame(frame);
+    finished.close("{\"schema\":1,\"load\":{\"start\":0.1,\"end\":0.2}}");
+    const std::string after = readAll();
+
+    const std::string json = "{\"schema\":1,\"load\":{\"start\":0.1,\"end\":0.2}}";
+    ASSERT_EQ(after.size(), before.size());
+    EXPECT_EQ(after.substr(0, lineEnd),
+              "# frameledger " + json + std::string(before.substr(0, lineEnd).size() - 14 - json.size(), ' '));
+    EXPECT_EQ(after.substr(lineEnd), before.substr(lineEnd));
+
+    // A header too long for the room is dropped; the file stays as open() left it.
+    FrameLedgerLog tooLong;
+    ASSERT_TRUE(tooLong.open(path, "run", "{\"schema\":1}", 4));
+    tooLong.writeFrame(frame);
+    tooLong.close("{\"schema\":1,\"load\":{\"start\":0.1,\"end\":0.2}}");
+    const std::string kept = readAll();
+    EXPECT_EQ(kept.substr(0, kept.find('\n')), "# frameledger {\"schema\":1}    ");
+    EXPECT_NE(kept.find("# frameledger-close"), std::string::npos);
+
+    std::filesystem::remove(path);
+}
+
 TEST(FrameLedgerHeader, DeviceNameDropsTheDriverDetails)
 {
     EXPECT_EQ(frameLedgerDeviceName("AMD Radeon RX 6600 (radeonsi, navi23, LLVM 21)"),

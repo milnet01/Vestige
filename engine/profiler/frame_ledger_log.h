@@ -10,6 +10,8 @@
 /// repository. Off unless a path is opened (CLI: --frame-log=PATH).
 #pragma once
 
+#include "profiler/machine_load.h"
+
 #include <frameledger.h>
 
 #include <cstddef>
@@ -44,11 +46,18 @@ struct FrameLedgerRunInfo
     std::string scene;
     std::string startedUtc;
     std::string os;
+    MachineLoad load;  ///< Known in full only after the last frame.
 };
 
 /// @brief Builds the header's one-line JSON object. `inputs` is empty: the run
 ///        does not hash its assets yet, and `frameledger check` warns on that.
+///        `load`, `gpu_busy_pct` and `gpu_clock_mhz` each appear only once both
+///        their start and their end are known.
 std::string frameLedgerHeaderJson(const FrameLedgerRunInfo& info);
+
+/// @brief Room `FrameLedgerLog::open` keeps after the header for the three
+///        load fields, which `close` writes once the run has ended.
+constexpr std::size_t FRAME_LEDGER_HEADER_RESERVE = 256;
 
 /// @brief `GL_RENDERER` without its parenthesised driver details, so a driver
 ///        update does not read as a different GPU when two runs are compared.
@@ -90,12 +99,18 @@ public:
 
     /// @brief Opens @p path and writes the header. Returns false, logging stays
     ///        off, if the file cannot be opened or the header is refused.
+    ///        @p headerReserve spaces follow the header's closing brace, which
+    ///        the format ignores (FLED-0001 § 4.1), so `close` can write a
+    ///        longer header over the line.
     bool open(const std::string& path, const std::string& runId,
-              const std::string& headerJson);
+              const std::string& headerJson, std::size_t headerReserve = 0);
 
     /// @brief Writes the close line and closes the file. A file without that
     ///        line reads as an unfinished run, which is what a crash leaves.
-    void close();
+    ///        A non-empty @p finalHeaderJson replaces the header written by
+    ///        `open`: the load figures are only known now. One that does not
+    ///        fit the room `open` kept is dropped with a warning.
+    void close(const std::string& finalHeaderJson = {});
 
     bool isOpen() const { return m_file != nullptr; }
 
@@ -125,12 +140,14 @@ private:
     void writeRow(long long frame, const char* category, const char* name, int depth,
                   double value);
     void writePending();
+    void rewriteHeader(const std::string& headerJson);
 
     std::FILE* m_file = nullptr;
     std::vector<char> m_buffer;
     std::vector<Row> m_rows;  ///< Reused each frame, so a frame does not allocate.
     fled_writer m_writer{};
     long long m_frame = 0;
+    std::size_t m_headerRoom = 0;  ///< Bytes of header JSON plus its padding.
     double m_lastFrameStartSec = 0.0;
     bool m_warnedBadRow = false;
 };
