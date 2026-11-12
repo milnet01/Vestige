@@ -10206,6 +10206,21 @@ Outdoor landscapes surrounding the Temple complex — hills, valleys, and the Ki
   mistake 3D_E-0028's correction records. Re-measure on an idle GPU
   (check that no other engine is running and the card reads idle) before
   acting on this item; it may not reproduce.
+  2026-11-12 re-measured on a quiet machine (the frame log's own
+  load fields: other programs' CPU peak 0.03, other GPU peak about 5
+  percent, GPU idle at the start). Release build of 1d31bf0, headless
+  cage, --demo-flythrough --no-vsync, twice: 85 to 100 FPS in every
+  sample after warm-up, worst 85.0 and 87.6. tools/fps_floor.py passes
+  both. But both ran at 1280x720, the app's default window (app/main.cpp),
+  not the 1920x1080 this item is about: the frame log's header says
+  1280x720 even with the headless output set to 1920x1080 by wlr-randr
+  and with the user's settings.json at 1920x1080. So the default-size
+  floor holds, and the 1080p figure is still unmeasured. Next: find how
+  to get a 1920x1080 window headlessly (no size flag exists), then
+  re-measure before choosing a lever. Side fix fb335ec: fps_floor.py
+  counted a first sample holding the scene load (0.4 FPS at 2.27 s) and
+  failed a good run; a sample now counts only when all the time it
+  covers is after warm-up.
   **Layman:** At full-HD resolution the meadow runs slightly slower than the required 60 frames a second whenever the pond is on screen.
   Kind: perf.
   Source: in-session-2026-09-26 (video stutter investigation).

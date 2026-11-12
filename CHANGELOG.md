@@ -25,6 +25,11 @@ may change any interface without notice.
 
 ## [Unreleased]
 
+### 2026-11-12 Fixed — the 60 FPS check no longer fails a good run because the scene loaded slowly (3D_E-0704)
+
+- **`tools/fps_floor.py` counts a sample only when all the time it covers is after warm-up**
+  Before, a first sample that held the scene loading (one frame in 2.3 seconds) could land just past the warm-up and fail a run that held 88 FPS throughout.
+
 ### 2026-11-12 Added — speed tests on Windows say when another program was busy (3D_E-0971)
 
 - **On Windows `--frame-log` now records how busy the processor and the graphics card were**
