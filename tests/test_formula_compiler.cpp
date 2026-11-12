@@ -793,6 +793,46 @@ TEST_F(LutFileTest, WriteAndRead2D)
 // LUT Loader — In-memory loading
 // ===========================================================================
 
+// 3D_E-0874: a load that failed part-way dropped the axes but kept the old
+// samples, so the loader said it was loaded while having no axes. A failed
+// load now leaves the table that was loaded before it untouched.
+TEST_F(LutFileTest, FailedLoadKeepsTheTableAlreadyLoaded)
+{
+    auto formula = PhysicsTemplates::createExponentialFog();
+    LutAxisDef axis{"distance", 0.0f, 100.0f, 128};
+    auto result = LutGenerator::generate(formula, {axis});
+    ASSERT_TRUE(result.success);
+    ASSERT_TRUE(LutGenerator::writeToFile(result, tmpPath));
+
+    std::string bytes;
+    {
+        std::ifstream in(tmpPath, std::ios::binary);
+        std::ostringstream buffer;
+        buffer << in.rdbuf();
+        bytes = buffer.str();
+    }
+    const std::size_t headerBytes = 32;
+    const std::size_t axisBytes = 16;
+    ASSERT_GT(bytes.size(), headerBytes + axisBytes + 8);
+
+    LutLoader loader;
+    ASSERT_TRUE(loader.loadFromFile(tmpPath));
+
+    // Cut inside the axis table, then inside the samples.
+    for (std::size_t keep : {headerBytes + axisBytes / 2, headerBytes + axisBytes + 8})
+    {
+        {
+            std::ofstream out(tmpPath, std::ios::binary | std::ios::trunc);
+            out.write(bytes.data(), static_cast<std::streamsize>(keep));
+        }
+        EXPECT_FALSE(loader.loadFromFile(tmpPath)) << "kept " << keep << " bytes";
+        EXPECT_TRUE(loader.isLoaded()) << "kept " << keep << " bytes";
+        ASSERT_EQ(loader.dimensions(), 1) << "kept " << keep << " bytes";
+        EXPECT_NEAR(loader.sample1D(0.0f), 1.0f, 0.01f);
+        EXPECT_NEAR(loader.sample1D(100.0f), std::exp(-1.0f), 0.02f);
+    }
+}
+
 TEST(LutLoader, LoadFromResult)
 {
     auto formula = PhysicsTemplates::createExponentialFog();

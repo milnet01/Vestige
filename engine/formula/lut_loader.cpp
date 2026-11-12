@@ -10,6 +10,7 @@
 #include <cstring>
 #include <fstream>
 #include <limits>
+#include <utility>
 
 namespace Vestige
 {
@@ -65,9 +66,9 @@ bool LutLoader::loadFromFile(const std::string& path)
         return false;
     }
 
-    // Read axis definitions
-    m_axes.clear();
-    m_axes.resize(header.dimensions);
+    // Read into locals and commit only on success: a failed load leaves the
+    // table that was loaded before it untouched.
+    std::vector<LutAxis> axes(header.dimensions);
 
     for (uint32_t i = 0; i < header.dimensions; ++i)
     {
@@ -84,24 +85,22 @@ bool LutLoader::loadFromFile(const std::string& path)
         {
             Logger::warning("LutLoader: failed to read axis " + std::to_string(i)
                             + " from: " + path);
-            m_axes.clear();
             return false;
         }
 
-        m_axes[i].nameHash = axisEntry.nameHash;
-        m_axes[i].minValue = axisEntry.minValue;
-        m_axes[i].maxValue = axisEntry.maxValue;
-        m_axes[i].size = header.axisSizes[i];
+        axes[i].nameHash = axisEntry.nameHash;
+        axes[i].minValue = axisEntry.minValue;
+        axes[i].maxValue = axisEntry.maxValue;
+        axes[i].size = header.axisSizes[i];
     }
 
     // Read data
     size_t totalSamples = 1;
-    for (const auto& axis : m_axes)
+    for (const auto& axis : axes)
     {
         if (axis.size == 0 || totalSamples > SIZE_MAX / axis.size)
         {
             Logger::error("LutLoader: integer overflow in totalSamples for: " + path);
-            m_axes.clear();
             return false;
         }
         totalSamples *= axis.size;
@@ -117,7 +116,6 @@ bool LutLoader::loadFromFile(const std::string& path)
         Logger::error("LutLoader: totalSamples " + std::to_string(totalSamples)
                       + " exceeds " + std::to_string(MAX_LUT_SAMPLES)
                       + " cap for: " + path);
-        m_axes.clear();
         return false;
     }
 
@@ -127,22 +125,21 @@ bool LutLoader::loadFromFile(const std::string& path)
     if (totalSamples > maxStreamSamples)
     {
         Logger::error("LutLoader: data size exceeds streamsize limit for: " + path);
-        m_axes.clear();
         return false;
     }
 
-    m_data.resize(totalSamples);
-    file.read(reinterpret_cast<char*>(m_data.data()),
+    std::vector<float> data(totalSamples);
+    file.read(reinterpret_cast<char*>(data.data()),
               static_cast<std::streamsize>(totalSamples * sizeof(float)));
 
     if (!file.good())
     {
         Logger::warning("LutLoader: failed to read data from: " + path);
-        m_data.clear();
-        m_axes.clear();
         return false;
     }
 
+    m_axes = std::move(axes);
+    m_data = std::move(data);
     return true;
 }
 
