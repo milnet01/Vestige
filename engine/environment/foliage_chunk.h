@@ -34,7 +34,18 @@ public:
     /// @brief Adds a foliage instance of the given type.
     void addFoliage(uint32_t typeId, const FoliageInstance& instance);
 
-    /// @brief Removes all foliage of the given type within a radius of center.
+    /// @brief True when a position is inside a brush circle on the ground.
+    ///
+    /// Distance is measured in XZ only: a brush is a circle seen from above,
+    /// so an instance further up a slope than the brush centre is still in it.
+    static bool inBrush(const glm::vec3& position, const glm::vec3& center, float radius)
+    {
+        const float dx = position.x - center.x;
+        const float dz = position.z - center.z;
+        return dx * dx + dz * dz <= radius * radius;
+    }
+
+    /// @brief Removes all foliage of the given type inside a brush (see inBrush).
     /// @return Number of instances removed.
     int removeFoliageInRadius(uint32_t typeId, const glm::vec3& center, float radius);
 
@@ -53,9 +64,13 @@ public:
     /// @brief Adds a scatter instance.
     void addScatter(const ScatterInstance& instance);
 
-    /// @brief Removes all scatter objects within a radius.
+    /// @brief Removes all scatter objects inside a brush (see inBrush).
     /// @return Number of instances removed.
     int removeScatterInRadius(const glm::vec3& center, float radius);
+
+    /// @brief Removes one scatter object at exactly this position (undo/redo).
+    /// @return True if one was removed.
+    bool removeOneScatterAt(const glm::vec3& position);
 
     /// @brief Gets all scatter instances.
     const std::vector<ScatterInstance>& getScatter() const;
@@ -65,9 +80,13 @@ public:
     /// @brief Adds a tree instance.
     void addTree(const TreeInstance& instance);
 
-    /// @brief Removes all trees within a radius.
+    /// @brief Removes all trees inside a brush (see inBrush).
     /// @return Number of instances removed.
     int removeTreesInRadius(const glm::vec3& center, float radius);
+
+    /// @brief Removes one tree at exactly this position (undo/redo).
+    /// @return True if one was removed.
+    bool removeOneTreeAt(const glm::vec3& position);
 
     /// @brief Gets all tree instances.
     const std::vector<TreeInstance>& getTrees() const;

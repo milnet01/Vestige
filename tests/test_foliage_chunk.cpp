@@ -414,3 +414,80 @@ TEST(FoliageManagerTest, ClearDropsTheDensityMap)
 
     EXPECT_FALSE(manager.getDensityMap().isInitialized());
 }
+
+// The erase brush is a circle on the ground (XZ). An instance painted higher
+// up a slope than the brush centre is still inside the brush.
+TEST(FoliageManagerTest, EraseBrushIgnoresHeightDifference)
+{
+    const glm::vec3 uphill(4.0f, 6.0f, 0.0f);
+    const glm::vec3 brush(3.0f, 3.0f, 0.0f);
+
+    FoliageTypeConfig config;
+
+    {
+        FoliageManager manager;
+        manager.paintFoliage(0, uphill, 0.5f, 20.0f, 0.0f, config);
+        const size_t painted = static_cast<size_t>(manager.getTotalFoliageCount());
+        ASSERT_GT(painted, 0u);
+        EXPECT_EQ(manager.eraseFoliage(0, brush, 2.0f).size(), painted);
+        EXPECT_EQ(manager.getTotalFoliageCount(), 0);
+    }
+    {
+        FoliageManager manager;
+        manager.paintFoliage(0, uphill, 0.5f, 20.0f, 0.0f, config);
+        const size_t painted = static_cast<size_t>(manager.getTotalFoliageCount());
+        EXPECT_EQ(manager.eraseAllFoliage(brush, 2.0f).size(), painted);
+        EXPECT_EQ(manager.getTotalFoliageCount(), 0);
+    }
+    {
+        FoliageManager manager;
+        ScatterTypeConfig scatterConfig;
+        const size_t painted =
+            manager.paintScatter(scatterConfig, 0, uphill, 0.5f, 20.0f, 0.0f).size();
+        ASSERT_GT(painted, 0u);
+        EXPECT_EQ(manager.eraseScatter(brush, 2.0f).size(), painted);
+        EXPECT_TRUE(manager.getChunk(0, 0)->getScatter().empty());
+    }
+    {
+        FoliageManager manager;
+        TreeInstance tree;
+        tree.position = uphill;
+        ASSERT_EQ(manager.placeTree(tree, 1.0f).size(), 1u);
+        EXPECT_EQ(manager.eraseTrees(brush, 2.0f).size(), 1u);
+        EXPECT_TRUE(manager.getChunk(0, 0)->getTrees().empty());
+    }
+}
+
+// Undo of a scatter or tree stroke removes exactly the instances that stroke
+// added. A neighbour a few millimetres away belongs to another stroke.
+TEST(FoliageManagerTest, RemoveAtLeavesACloseNeighbour)
+{
+    FoliageManager manager;
+    const uint64_t key = FoliageManager::packChunkKey(0, 0);
+
+    ScatterInstance mine;
+    mine.position = glm::vec3(2.0f, 0.0f, 2.0f);
+    ScatterInstance neighbour;
+    neighbour.position = glm::vec3(2.005f, 0.0f, 2.0f);
+    manager.addScatterDirect(0, 0, mine);
+    manager.addScatterDirect(0, 0, neighbour);
+
+    manager.removeScatterAt(key, mine.position);
+
+    const auto& scatter = manager.getChunk(0, 0)->getScatter();
+    ASSERT_EQ(scatter.size(), 1u);
+    EXPECT_EQ(scatter[0].position, neighbour.position);
+
+    TreeInstance myTree;
+    myTree.position = glm::vec3(5.0f, 0.0f, 5.0f);
+    TreeInstance nearTree;
+    nearTree.position = glm::vec3(5.005f, 0.0f, 5.0f);
+    manager.addTreeDirect(0, 0, myTree);
+    manager.addTreeDirect(0, 0, nearTree);
+
+    manager.removeTreeAt(key, myTree.position);
+
+    const auto& trees = manager.getChunk(0, 0)->getTrees();
+    ASSERT_EQ(trees.size(), 1u);
+    EXPECT_EQ(trees[0].position, nearTree.position);
+}

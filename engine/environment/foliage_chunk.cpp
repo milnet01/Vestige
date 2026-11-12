@@ -11,6 +11,30 @@
 namespace Vestige
 {
 
+namespace
+{
+
+/// Removes the first instance stored at exactly `position`. Undo and redo pass
+/// back the position they were given, so an exact match is the right test: a
+/// tolerance would also take a neighbour that happens to sit within it.
+template <typename Instance>
+bool removeOneAt(std::vector<Instance>& instances, const glm::vec3& position)
+{
+    auto found = std::find_if(instances.begin(), instances.end(),
+        [&](const Instance& inst)
+        {
+            return inst.position == position;
+        });
+    if (found == instances.end())
+    {
+        return false;
+    }
+    instances.erase(found);
+    return true;
+}
+
+} // namespace
+
 const std::vector<FoliageInstance> FoliageChunk::EMPTY_FOLIAGE;
 
 FoliageChunk::FoliageChunk(int gridX, int gridZ)
@@ -34,7 +58,6 @@ int FoliageChunk::removeFoliageInRadius(uint32_t typeId, const glm::vec3& center
         return 0;
     }
 
-    float radiusSq = radius * radius;
     auto& instances = it->second;
     int removed = 0;
 
@@ -42,8 +65,7 @@ int FoliageChunk::removeFoliageInRadius(uint32_t typeId, const glm::vec3& center
     auto newEnd = std::remove_if(instances.begin(), instances.end(),
         [&](const FoliageInstance& inst)
         {
-            glm::vec3 diff = inst.position - center;
-            if (glm::dot(diff, diff) <= radiusSq)
+            if (inBrush(inst.position, center, radius))
             {
                 ++removed;
                 return true;
@@ -105,14 +127,12 @@ void FoliageChunk::addScatter(const ScatterInstance& instance)
 
 int FoliageChunk::removeScatterInRadius(const glm::vec3& center, float radius)
 {
-    float radiusSq = radius * radius;
     int removed = 0;
 
     auto newEnd = std::remove_if(m_scatter.begin(), m_scatter.end(),
         [&](const ScatterInstance& inst)
         {
-            glm::vec3 diff = inst.position - center;
-            if (glm::dot(diff, diff) <= radiusSq)
+            if (inBrush(inst.position, center, radius))
             {
                 ++removed;
                 return true;
@@ -122,6 +142,11 @@ int FoliageChunk::removeScatterInRadius(const glm::vec3& center, float radius)
 
     m_scatter.erase(newEnd, m_scatter.end());
     return removed;
+}
+
+bool FoliageChunk::removeOneScatterAt(const glm::vec3& position)
+{
+    return removeOneAt(m_scatter, position);
 }
 
 const std::vector<ScatterInstance>& FoliageChunk::getScatter() const
@@ -138,14 +163,12 @@ void FoliageChunk::addTree(const TreeInstance& instance)
 
 int FoliageChunk::removeTreesInRadius(const glm::vec3& center, float radius)
 {
-    float radiusSq = radius * radius;
     int removed = 0;
 
     auto newEnd = std::remove_if(m_trees.begin(), m_trees.end(),
         [&](const TreeInstance& inst)
         {
-            glm::vec3 diff = inst.position - center;
-            if (glm::dot(diff, diff) <= radiusSq)
+            if (inBrush(inst.position, center, radius))
             {
                 ++removed;
                 return true;
@@ -155,6 +178,11 @@ int FoliageChunk::removeTreesInRadius(const glm::vec3& center, float radius)
 
     m_trees.erase(newEnd, m_trees.end());
     return removed;
+}
+
+bool FoliageChunk::removeOneTreeAt(const glm::vec3& position)
+{
+    return removeOneAt(m_trees, position);
 }
 
 const std::vector<TreeInstance>& FoliageChunk::getTrees() const

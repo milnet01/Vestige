@@ -122,8 +122,6 @@ std::vector<FoliageInstanceRef> FoliageManager::eraseFoliage(
     int minGz = static_cast<int>(std::floor((center.z - radius) / FoliageChunk::CHUNK_SIZE));
     int maxGz = static_cast<int>(std::floor((center.z + radius) / FoliageChunk::CHUNK_SIZE));
 
-    float radiusSq = radius * radius;
-
     for (int gx = minGx; gx <= maxGx; ++gx)
     {
         for (int gz = minGz; gz <= maxGz; ++gz)
@@ -139,8 +137,7 @@ std::vector<FoliageInstanceRef> FoliageManager::eraseFoliage(
             const auto& before = it->second->getFoliage(typeId);
             for (const auto& inst : before)
             {
-                glm::vec3 diff = inst.position - center;
-                if (glm::dot(diff, diff) <= radiusSq)
+                if (FoliageChunk::inBrush(inst.position, center, radius))
                 {
                     FoliageInstanceRef ref;
                     ref.chunkKey = key;
@@ -168,8 +165,6 @@ std::vector<FoliageInstanceRef> FoliageManager::eraseAllFoliage(
     int minGz = static_cast<int>(std::floor((center.z - radius) / FoliageChunk::CHUNK_SIZE));
     int maxGz = static_cast<int>(std::floor((center.z + radius) / FoliageChunk::CHUNK_SIZE));
 
-    float radiusSq = radius * radius;
-
     for (int gx = minGx; gx <= maxGx; ++gx)
     {
         for (int gz = minGz; gz <= maxGz; ++gz)
@@ -186,8 +181,7 @@ std::vector<FoliageInstanceRef> FoliageManager::eraseAllFoliage(
                 const auto& before = it->second->getFoliage(typeId);
                 for (const auto& inst : before)
                 {
-                    glm::vec3 diff = inst.position - center;
-                    if (glm::dot(diff, diff) <= radiusSq)
+                    if (FoliageChunk::inBrush(inst.position, center, radius))
                     {
                         FoliageInstanceRef ref;
                         ref.chunkKey = key;
@@ -338,8 +332,6 @@ std::vector<std::pair<uint64_t, ScatterInstance>> FoliageManager::eraseScatter(
     int minGz = static_cast<int>(std::floor((center.z - radius) / FoliageChunk::CHUNK_SIZE));
     int maxGz = static_cast<int>(std::floor((center.z + radius) / FoliageChunk::CHUNK_SIZE));
 
-    float radiusSq = radius * radius;
-
     for (int gx = minGx; gx <= maxGx; ++gx)
     {
         for (int gz = minGz; gz <= maxGz; ++gz)
@@ -354,8 +346,7 @@ std::vector<std::pair<uint64_t, ScatterInstance>> FoliageManager::eraseScatter(
             const auto& scatterBefore = it->second->getScatter();
             for (const auto& inst : scatterBefore)
             {
-                glm::vec3 diff = inst.position - center;
-                if (glm::dot(diff, diff) <= radiusSq)
+                if (FoliageChunk::inBrush(inst.position, center, radius))
                 {
                     removed.emplace_back(key, inst);
                 }
@@ -381,8 +372,7 @@ void FoliageManager::removeScatterAt(uint64_t chunkKey, const glm::vec3& positio
     {
         return;
     }
-    // Remove with a tiny radius to match position precisely
-    it->second->removeScatterInRadius(position, 0.01f);
+    it->second->removeOneScatterAt(position);
 }
 
 // --- Tree API ---
@@ -431,8 +421,6 @@ std::vector<std::pair<uint64_t, TreeInstance>> FoliageManager::eraseTrees(
     const glm::vec3& center, float radius)
 {
     std::vector<std::pair<uint64_t, TreeInstance>> removed;
-    float radiusSq = radius * radius;
-
     int minGx = static_cast<int>(std::floor((center.x - radius) / FoliageChunk::CHUNK_SIZE));
     int maxGx = static_cast<int>(std::floor((center.x + radius) / FoliageChunk::CHUNK_SIZE));
     int minGz = static_cast<int>(std::floor((center.z - radius) / FoliageChunk::CHUNK_SIZE));
@@ -448,8 +436,7 @@ std::vector<std::pair<uint64_t, TreeInstance>> FoliageManager::eraseTrees(
 
             for (const auto& tree : it->second->getTrees())
             {
-                glm::vec3 diff = tree.position - center;
-                if (glm::dot(diff, diff) <= radiusSq)
+                if (FoliageChunk::inBrush(tree.position, center, radius))
                 {
                     removed.emplace_back(key, tree);
                 }
@@ -471,7 +458,7 @@ void FoliageManager::removeTreeAt(uint64_t chunkKey, const glm::vec3& position)
 {
     auto it = m_chunks.find(chunkKey);
     if (it == m_chunks.end()) return;
-    it->second->removeTreesInRadius(position, 0.01f);
+    it->second->removeOneTreeAt(position);
 }
 
 // --- Path clearing ---
