@@ -80,6 +80,11 @@ public:
     void setTransform(Entity& entity, const glm::vec2& position,
                       float rotationRadians);
 
+    /// @brief Writes each dynamic or kinematic body's pose to its entity's
+    /// transform: position, and rotation about Z. update() calls it for the
+    /// active scene. The body is the authority; move one with setTransform.
+    void syncTransforms(Scene& scene);
+
     // -- Headless (test-facing) --
 
     /// @brief Whether the underlying PhysicsWorld is initialised. False

@@ -26,13 +26,39 @@
 #include <Jolt/Physics/Collision/Shape/RotatedTranslatedShape.h>
 #include <Jolt/Physics/Collision/Shape/StaticCompoundShape.h>
 
+#include <glm/gtc/matrix_transform.hpp>
+
 #include <algorithm>
+#include <cmath>
 
 namespace Vestige
 {
 
 namespace
 {
+
+/// @brief The entity's world matrix, worked out now from its parents.
+/// Entity::getWorldMatrix() is a cache that Scene::update() fills, and a
+/// scene's bodies are made when it loads, before its first update.
+glm::mat4 currentWorldMatrix(const Entity& entity)
+{
+    glm::mat4 world = entity.transform.getLocalMatrix();
+    for (const Entity* parent = entity.getParent(); parent != nullptr;
+         parent = parent->getParent())
+    {
+        world = parent->transform.getLocalMatrix() * world;
+    }
+    return world;
+}
+
+/// @brief The angle about Z, in radians, that a matrix turns the entity's
+/// X axis by. @a scaleX is the entity's own X scale: a mirrored sprite
+/// (negative scale) points its X column backwards without being turned.
+float zAngleOf(const glm::mat4& matrix, float scaleX)
+{
+    const float sign = scaleX < 0.0f ? -1.0f : 1.0f;
+    return std::atan2(matrix[0][1] * sign, matrix[0][0] * sign);
+}
 
 /// @brief Builds a refcounted Jolt shape matching a 2D collider.
 /// Returns an empty Ref on malformed input. Z-extrusion makes the shape
@@ -225,6 +251,58 @@ void Physics2DSystem::update(float /*deltaTime*/)
         rb->linearVelocity  = glm::vec2(vLinear.GetX(), vLinear.GetY());
         rb->angularVelocity = vAngular.GetZ();
     }
+
+    syncTransforms(*scene);
+}
+
+void Physics2DSystem::syncTransforms(Scene& scene)
+{
+    if (!m_physicsWorld || !m_physicsWorld->isInitialized())
+    {
+        return;
+    }
+    auto& bodyInterface = m_physicsWorld->getBodyInterface();
+    for (const auto& [entityId, bodyId] : m_bodyByEntity)
+    {
+        if (bodyId.IsInvalid()
+            || bodyInterface.GetMotionType(bodyId) == JPH::EMotionType::Static)
+        {
+            continue;
+        }
+        Entity* entity = scene.findEntityById(entityId);
+        if (!entity)
+        {
+            continue;
+        }
+
+        // The body's pose is in world space, at the collider's zOffset.
+        const JPH::Vec3 bodyPos = bodyInterface.GetPosition(bodyId);
+        const JPH::Quat bodyRot = bodyInterface.GetRotation(bodyId);
+        const auto* cc = entity->getComponent<Collider2DComponent>();
+        const float zOffset = cc ? cc->zOffset : 0.0f;
+        glm::mat4 pose = glm::translate(
+            glm::mat4(1.0f),
+            glm::vec3(bodyPos.GetX(), bodyPos.GetY(), bodyPos.GetZ() - zOffset));
+        // A body locked to the plane turns about Z only.
+        pose = glm::rotate(pose, 2.0f * std::atan2(bodyRot.GetZ(), bodyRot.GetW()),
+                           glm::vec3(0.0f, 0.0f, 1.0f));
+
+        // The Transform is local to the parent. A parent with zero scale
+        // cannot be inverted: then the pose is written as if there were none.
+        if (const Entity* parent = entity->getParent())
+        {
+            const glm::mat4 parentWorld = currentWorldMatrix(*parent);
+            if (std::abs(glm::determinant(glm::mat3(parentWorld))) > 1e-12f)
+            {
+                pose = glm::inverse(parentWorld) * pose;
+            }
+        }
+
+        // Rotation about Z alone loses nothing as an Euler angle, so the
+        // plain fields are written and the inspector shows real values.
+        entity->transform.position   = glm::vec3(pose[3]);
+        entity->transform.rotation.z = glm::degrees(zAngleOf(pose, 1.0f));
+    }
 }
 
 void Physics2DSystem::onSceneLoad(Scene& scene)
@@ -283,11 +361,12 @@ JPH::BodyID Physics2DSystem::ensureBody(Entity& entity)
         return {};
     }
 
-    const glm::vec3 pos = entity.getWorldPosition();
+    const glm::mat4 world = currentWorldMatrix(entity);
+    const glm::vec3 pos(world[3]);
     JPH::Vec3 position(pos.x, pos.y, pos.z + cc->zOffset);
 
     // Z rotation only — 2D.
-    const float zRadians = 0.0f;  // TODO: extract Z rotation from transform when needed.
+    const float zRadians = zAngleOf(world, entity.transform.scale.x);
     JPH::Quat rotation = JPH::Quat::sRotation(JPH::Vec3::sAxisZ(), zRadians);
 
     // BodyCreationSettings with 2D DOF lock. We bypass PhysicsWorld's

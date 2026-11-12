@@ -64,7 +64,6 @@ std::unique_ptr<Entity> makeDynamic(const glm::vec2& pos,
     cc->shape = shape;
     cc->halfExtents = glm::vec2(0.5f);
     cc->radius = 0.5f;
-    e->update(0.0f);  // world position is a cache; ensureBody reads it
     return e;
 }
 
@@ -77,7 +76,6 @@ std::unique_ptr<Entity> makeStaticFloor(const glm::vec2& pos, const glm::vec2& h
     auto* cc = e->addComponent<Collider2DComponent>();
     cc->shape = ColliderShape2D::Box;
     cc->halfExtents = half;
-    e->update(0.0f);  // world position is a cache; ensureBody reads it
     return e;
 }
 
@@ -360,7 +358,6 @@ TEST(Physics2DSystem, SetTransformKeepsTheBodyInItsPlane)
     PhysicsFixture fx;
     auto e = makeDynamic({0.0f, 0.0f});
     e->transform.position.z = 2.0f;
-    e->update(0.0f);
     e->getComponent<Collider2DComponent>()->zOffset = 0.5f;
     const auto id = fx.system.ensureBody(*e);
     ASSERT_FALSE(id.IsInvalid());
@@ -390,4 +387,67 @@ TEST(Physics2DSystem, EdgeChainOnADynamicBodyIsRefused)
     EXPECT_TRUE(fx.system.ensureBody(*e).IsInvalid());
     EXPECT_EQ(fx.system.liveBodyCount(), 0u);
     EXPECT_TRUE(rb->bodyId.IsInvalid());
+}
+
+// 3D_E-0874: a scene's bodies are made when it loads, before its first
+// update. Entity::getWorldPosition() is a cache that update fills, so every
+// body was made at the origin, unrotated.
+TEST(Physics2DSystem, BodyIsMadeWhereTheEntityIsBeforeTheFirstUpdate)
+{
+    PhysicsFixture fx;
+    Scene scene("Physics2DScene");
+    Entity* parent = scene.createEntity("Parent");
+    parent->transform.position = glm::vec3(5.0f, 0.0f, 0.0f);
+    auto owned = std::make_unique<Entity>("Box");
+    owned->transform.position = glm::vec3(1.0f, 10.0f, 0.0f);
+    owned->transform.rotation.z = 30.0f;
+    owned->addComponent<RigidBody2DComponent>()->type = BodyType2D::Dynamic;
+    owned->addComponent<Collider2DComponent>()->shape = ColliderShape2D::Box;
+    Entity* box = parent->addChild(std::move(owned));
+
+    fx.system.onSceneLoad(scene);  // no scene.update() has run
+    const auto id = box->getComponent<RigidBody2DComponent>()->bodyId;
+    ASSERT_FALSE(id.IsInvalid());
+
+    const glm::vec3 pos = fx.world.getBodyPosition(id);
+    EXPECT_NEAR(pos.x, 6.0f, 1e-4f);
+    EXPECT_NEAR(pos.y, 10.0f, 1e-4f);
+    const glm::quat rot = fx.world.getBodyRotation(id);
+    EXPECT_NEAR(glm::degrees(2.0f * std::atan2(rot.z, rot.w)), 30.0f, 1e-3f);
+}
+
+// 3D_E-0874: nothing wrote a 2D body's pose back to its entity, so a falling
+// body fell in the physics world while its sprite stayed where it was placed.
+TEST(Physics2DSystem, MovingBodyMovesItsEntity)
+{
+    PhysicsFixture fx;
+    Scene scene("Physics2DScene");
+    Entity* parent = scene.createEntity("Parent");
+    parent->transform.position = glm::vec3(5.0f, 0.0f, 0.0f);
+    auto owned = std::make_unique<Entity>("Box");
+    owned->transform.position = glm::vec3(1.0f, 10.0f, 2.0f);
+    owned->addComponent<RigidBody2DComponent>()->type = BodyType2D::Dynamic;
+    auto* cc = owned->addComponent<Collider2DComponent>();
+    cc->shape = ColliderShape2D::Box;
+    cc->zOffset = 0.5f;
+    Entity* box = parent->addChild(std::move(owned));
+    scene.rebuildEntityIndex();  // addChild does not index; the system looks up by id
+
+    const auto id = fx.system.ensureBody(*box);
+    ASSERT_FALSE(id.IsInvalid());
+    fx.system.setTransform(*box, {6.0f, 10.0f}, glm::radians(45.0f));
+    fx.step(1.0f / 60.0f, 30);
+    fx.system.syncTransforms(scene);
+
+    const glm::vec3 body = fx.world.getBodyPosition(id);
+    ASSERT_LT(body.y, 9.5f) << "the body did not fall";
+    // The entity's position is local to its parent, 5 along x.
+    EXPECT_NEAR(box->transform.position.x, body.x - 5.0f, 1e-4f);
+    EXPECT_NEAR(box->transform.position.y, body.y, 1e-4f);
+    EXPECT_NEAR(box->transform.position.z, 2.0f, 1e-4f)
+        << "the collider's zOffset leaked into the entity";
+    const glm::quat rot = fx.world.getBodyRotation(id);
+    EXPECT_NEAR(box->transform.rotation.z,
+                glm::degrees(2.0f * std::atan2(rot.z, rot.w)), 1e-3f);
+    EXPECT_GT(box->transform.rotation.z, 1.0f) << "the test's rotation was lost";
 }
