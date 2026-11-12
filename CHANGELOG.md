@@ -25,6 +25,23 @@ may change any interface without notice.
 
 ## [Unreleased]
 
+### 2026-11-12 Fixed — 2D physics, script warnings, menus, model colours and ground planes (3D_E-0874)
+
+- **2D objects start where you placed them, and move when physics moves them**
+  Before, every 2D physics body was created at the scene's origin, unrotated, and a falling body never moved the object you see.
+
+- **A Publish Event script node that is not wired to anything now gets the "unreachable" warning**
+  Before, the editor counted it as a starting point and stayed silent.
+
+- **Closing the engine clears an open pop-up menu along with the screen behind it**
+  Before, the pop-up's buttons were kept, and keyboard focus still pointed at a removed button.
+
+- **Models whose vertex colours are stored as 16-bit numbers show their colours**
+  Before, such a glTF model loaded plain white.
+
+- **Built-in ground planes of different sizes are separate meshes**
+  Before, a 0.5 plane and a 0.9 plane shared one mesh, so the second came out the first one's size.
+
 ### 2026-11-12 Fixed — stopping the engine from the terminal shuts it down properly (3D_E-0969)
 
 - **Ctrl-C, a terminate signal and Windows' Ctrl-Break now close the engine the normal way**
