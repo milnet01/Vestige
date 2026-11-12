@@ -18,8 +18,22 @@
 #include "scene/scene.h"
 #include "scene/scene_manager.h"
 
+#include <cmath>
+
 namespace Vestige
 {
+
+namespace
+{
+
+/// A Duration a latent action can count down. Zero, negative, NaN and infinite
+/// ones cannot: the node finishes at once, as scheduleDelay does for bad seconds.
+bool isCountableDuration(float duration)
+{
+    return std::isfinite(duration) && duration > 0.0f;
+}
+
+} // namespace
 
 void registerLatentNodeTypes(NodeTypeRegistry& registry)
 {
@@ -107,7 +121,7 @@ void registerLatentNodeTypes(NodeTypeRegistry& registry)
             static const PinId pinAlpha = internPin("Alpha");
 
             float duration = ctx.readInputAs<float>(node, "Duration");
-            if (duration <= 0.0f)
+            if (!isCountableDuration(duration))
             {
                 // Degenerate case: finish immediately with Alpha = 1.
                 ScriptNodeInstance* mut = ctx.instance().getNodeInstance(node.nodeId);
@@ -182,7 +196,7 @@ void registerLatentNodeTypes(NodeTypeRegistry& registry)
 
             Entity* entity = ctx.findEntity(resolvedId);
 
-            if (!entity || duration <= 0.0f)
+            if (!entity || !isCountableDuration(duration))
             {
                 // Finish immediately.
                 if (entity)

@@ -697,6 +697,29 @@ TEST_F(NodeLibraryTest, TimelineZeroDurationFinishesImmediately)
     EXPECT_FLOAT_EQ(inst->outputValues[internPin("Alpha")].asFloat(), 1.0f);
 }
 
+// A NaN or infinite Duration can never count down to zero. It is treated like
+// a zero Duration (finish at once), as scheduleDelay treats bad seconds.
+TEST_F(NodeLibraryTest, TimelineNonFiniteDurationFinishesImmediately)
+{
+    for (float bad : {std::numeric_limits<float>::quiet_NaN(),
+                      std::numeric_limits<float>::infinity()})
+    {
+        ScriptGraph graph;
+        uint32_t tlId = graph.addNode("Timeline");
+        graph.findNode(tlId)->properties["Duration"] = ScriptValue(bad);
+
+        ScriptInstance instance;
+        instance.initialize(graph, 1);
+        ScriptContext ctx(instance, m_registry, nullptr);
+        ctx.executeNode(tlId);
+
+        EXPECT_EQ(instance.pendingActions().size(), 0u) << "Duration " << bad;
+        auto* inst = instance.getNodeInstance(tlId);
+        ASSERT_NE(inst, nullptr);
+        EXPECT_FLOAT_EQ(inst->outputValues[internPin("Alpha")].asFloat(), 1.0f);
+    }
+}
+
 TEST_F(NodeLibraryTest, WaitForConditionSchedulesConditionBasedLatent)
 {
     ScriptGraph graph;
