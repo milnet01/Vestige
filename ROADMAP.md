@@ -1,6 +1,6 @@
 <!-- ants-roadmap-format: 1 -->
 <!-- Generated from the Ants Terminal roadmap store. Edit it with roadmap_log; hand edits are discarded by the next write. -->
-<!-- ants-roadmap-id-high-water: 3D_E=970 3D_E#S=989 -->
+<!-- ants-roadmap-id-high-water: 3D_E=971 3D_E#S=989 -->
 
 # Vestige Engine Roadmap
 
@@ -7729,6 +7729,12 @@ shipped that have no invocation path at all.
   --demo-flythrough --frame-log run each left a file with its close line
   that `frameledger check` accepts. Left for 3D_E-0820: a real
   Ctrl-Break from a parent process on the Windows box.
+  2026-11-12 the owed Windows check is done, on wintest (Windows 10,
+  build of e3c866a): a Python parent started vestige.exe
+  --demo-flythrough --frame-log in a new process group and sent
+  CTRL_BREAK_EVENT after 12 s. The engine exited 0 in 0.32 s, logged
+  "Engine shutdown complete", and left a frame log of 167 frames (a
+  full run is 555) with its close line; `frameledger check` accepts it.
   **Layman:** When a frame-timing run is stopped early, the engine shuts down properly so the timing file is complete and can still be read.
   Kind: fix.
   Source: frameledger-FLED-0063-review-2026-11-11.
@@ -7748,6 +7754,22 @@ shipped that have no invocation path at all.
   Kind: chore.
   Source: 3D_E-0820 shipped 2026-11-12.
   Lanes: profiler, tools.
+
+- 🚧 [3D_E-0971] **Fill the frame log's load and GPU-busy header fields on Windows.**
+  MachineLoadSampler (engine/profiler/machine_load.cpp, 3D_E-0968) is
+  Linux-only: a Windows frame log's header has no load, gpu_busy_pct or
+  gpu_clock_mhz (seen on wintest 2026-11-12). Method agreed with
+  frameledger 2026-11-10: CPU share from GetSystemTimes, minus this
+  process's GetProcessTimes for the peak; GPU busy from the PDH
+  "GPU Engine" counters, whole card for start and end, other pids only
+  for the peak. gpu_clock_mhz has no general Windows source: leave it
+  out. Check on wintest against Task Manager's figures. CPU / GPU
+  placement: CPU-side counter reads on the sampler's own thread;
+  nothing on the GPU.
+  **Layman:** On Windows a speed test cannot yet say when another program was busy, so a slow reading caused by that is trusted when it should not be.
+  Kind: enhancement.
+  Source: 3D_E-0968 Windows half 2026-11-12.
+  Lanes: profiler.
 
 ## 0.3.0 — An editor a builder can use
 
