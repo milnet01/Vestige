@@ -161,9 +161,15 @@ Viseme AudioAnalyzer::getEstimatedViseme() const
 
 float AudioAnalyzer::getJawOpenWeight() const
 {
-    // Smoothstep from silence threshold to 0.3 RMS
-    float t = std::clamp((m_rms - m_silenceThreshold) / (0.3f - m_silenceThreshold),
-                         0.0f, 1.0f);
+    // Smoothstep from silence threshold to 0.3 RMS. A threshold at or above
+    // 0.3 leaves no ramp to divide by: the jaw is then shut up to the
+    // threshold and open above it.
+    const float ramp = 0.3f - m_silenceThreshold;
+    if (ramp <= 0.0f)
+    {
+        return (m_rms > m_silenceThreshold) ? 1.0f : 0.0f;
+    }
+    float t = std::clamp((m_rms - m_silenceThreshold) / ramp, 0.0f, 1.0f);
     // Smoothstep: 3t^2 - 2t^3
     return t * t * (3.0f - 2.0f * t);
 }

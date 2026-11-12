@@ -40,6 +40,23 @@ TEST_F(AudioAnalyzerTest, SilenceGivesZeroRMS)
     EXPECT_EQ(analyzer.getEstimatedViseme(), Viseme::X);
 }
 
+// The jaw ramps from the silence threshold up to 0.3 RMS. A threshold at or
+// above 0.3 leaves no ramp: silence must still close the jaw.
+TEST_F(AudioAnalyzerTest, HighSilenceThresholdKeepsJawShutOnSilence)
+{
+    std::vector<float> silence(1024, 0.0f);
+    for (float threshold : {0.3f, 0.5f})
+    {
+        analyzer.setSilenceThreshold(threshold);
+        analyzer.feedSamples(silence.data(), silence.size(), 44100);
+        EXPECT_FLOAT_EQ(analyzer.getJawOpenWeight(), 0.0f) << "threshold " << threshold;
+    }
+
+    std::vector<float> loud(1024, 0.9f);
+    analyzer.feedSamples(loud.data(), loud.size(), 44100);
+    EXPECT_FLOAT_EQ(analyzer.getJawOpenWeight(), 1.0f);
+}
+
 TEST_F(AudioAnalyzerTest, LoudSignalGivesHighRMS)
 {
     std::vector<float> loud(1024, 0.5f);
