@@ -16,6 +16,7 @@
 #include <gtest/gtest.h>
 #include "resource/resource_manager.h"
 #include "resource/lru_cache.h"
+#include "gl_test_fixture.h"
 
 namespace Vestige::ResourceManagerLru::Test
 {
@@ -185,6 +186,26 @@ TEST(ResourceManagerLruTest, ClearAllOnEmptyCacheDoesNotCrash)
     rm.clearAll();
     EXPECT_EQ(rm.getTextureCount(), 0u);
     EXPECT_EQ(rm.getMeshCount(), 0u);
+}
+
+// 3D_E-0874 — the plane cache key was the size cut to a whole number, so a
+// 0.5 plane and a 0.9 plane were one mesh. Needs a GL context: a mesh uploads.
+class ResourceManagerPlaneMeshTest : public ::Vestige::Test::GLTestFixture {};
+
+TEST_F(ResourceManagerPlaneMeshTest, PlanesOfDifferentSizeAreDifferentMeshes_0874)
+{
+    ResourceManager rm;
+    const auto half = rm.getPlaneMesh(0.5f);
+    const auto most = rm.getPlaneMesh(0.9f);
+    ASSERT_NE(half, nullptr);
+    ASSERT_NE(most, nullptr);
+    EXPECT_NE(half, most) << "a 0.9 plane was served the cached 0.5 plane";
+    EXPECT_EQ(rm.getPlaneMesh(0.5f), half) << "the same size missed the cache";
+
+    // A saved scene names a mesh by its key: the key must lead back to it.
+    EXPECT_EQ(rm.getMeshByKey(rm.findMeshKey(most)), most);
+    // Whole sizes keep the key older scenes saved.
+    EXPECT_EQ(rm.findMeshKey(rm.getPlaneMesh(30.0f)), "__builtin_plane_30");
 }
 
 }  // namespace Vestige::ResourceManagerLru::Test

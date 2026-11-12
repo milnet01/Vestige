@@ -11,6 +11,7 @@
 #include "utils/asset_path.h"
 #include "core/logger.h"
 
+#include <cstdio>
 #include <stdexcept>
 
 namespace Vestige
@@ -145,7 +146,12 @@ std::shared_ptr<Mesh> ResourceManager::getCubeMesh()
 
 std::shared_ptr<Mesh> ResourceManager::getPlaneMesh(float size)
 {
-    std::string key = "__builtin_plane_" + std::to_string(static_cast<int>(size));
+    // The size in full: cut to a whole number, a 0.5 plane and a 0.9 plane
+    // shared one mesh. %.9g reads back to the same float in getMeshByKey and
+    // prints a whole size as before ("30"), the key older scenes saved.
+    char sizeText[32];
+    std::snprintf(sizeText, sizeof(sizeText), "%.9g", static_cast<double>(size));
+    std::string key = std::string("__builtin_plane_") + sizeText;
     auto it = m_meshes.find(key);
     if (it != m_meshes.end())
     {
