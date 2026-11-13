@@ -4,9 +4,9 @@
 /// @file codegen_cpp.cpp
 /// @brief C++ code generator implementation.
 #include "formula/codegen_cpp.h"
+#include "formula/codegen_glsl.h"
 
 #include <cmath>
-#include <iomanip>
 #include <sstream>
 #include <stdexcept>
 #include <string>
@@ -311,29 +311,9 @@ std::string CodegenCpp::floatLiteral(float val)
         return val > 0 ? "std::numeric_limits<float>::infinity()"
                        : "(-std::numeric_limits<float>::infinity())";
 
-    std::ostringstream oss;
-
-    // Use scientific notation for very small or very large values
-    if (val != 0.0f && (std::abs(val) < 0.001f || std::abs(val) >= 1e7f))
-    {
-        oss << std::scientific << std::setprecision(6) << val << "f";
-    }
-    else
-    {
-        // Fixed notation with enough precision
-        oss << std::setprecision(8) << val;
-
-        std::string s = oss.str();
-        // Ensure there's a decimal point
-        if (s.find('.') == std::string::npos && s.find('e') == std::string::npos)
-        {
-            s += ".0";
-        }
-        s += "f";
-        return s;
-    }
-
-    return oss.str();
+    // A finite value is written with the same digits in both languages;
+    // C++ adds the suffix.
+    return CodegenGlsl::floatLiteral(val) + "f";
 }
 
 } // namespace Vestige

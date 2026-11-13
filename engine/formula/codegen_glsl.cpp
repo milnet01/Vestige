@@ -7,6 +7,7 @@
 #include "formula/safe_math.h"
 
 #include <cmath>
+#include <cstdlib>
 #include <iomanip>
 #include <sstream>
 #include <stdexcept>
@@ -321,26 +322,37 @@ std::string CodegenGlsl::floatLiteral(float val)
     if (std::isinf(val))
         return val > 0 ? "(1.0 / 0.0)" : "(-1.0 / 0.0)";
 
-    std::ostringstream oss;
+    // Scientific notation for very small or very large values.
+    const bool scientific =
+        val != 0.0f && (std::abs(val) < 0.001f || std::abs(val) >= 1e7f);
 
-    if (val != 0.0f && (std::abs(val) < 0.001f || std::abs(val) >= 1e7f))
+    // Print the fewest digits that read back as val, so the generated code
+    // computes with the coefficient that was fitted. Nine significant digits
+    // always do for a float; scientific precision counts the digits after
+    // the first, so eight there.
+    std::string s;
+    const int enough = scientific ? 8 : 9;
+    for (int precision = scientific ? 6 : 8; precision <= enough; ++precision)
     {
-        oss << std::scientific << std::setprecision(6) << val;
-    }
-    else
-    {
-        oss << std::setprecision(8) << val;
-
-        std::string s = oss.str();
-        // Ensure there's a decimal point (GLSL requires it for float literals)
-        if (s.find('.') == std::string::npos && s.find('e') == std::string::npos)
+        std::ostringstream oss;
+        if (scientific)
         {
-            s += ".0";
+            oss << std::scientific;
         }
-        return s;
+        oss << std::setprecision(precision) << val;
+        s = oss.str();
+        if (std::strtof(s.c_str(), nullptr) == val)
+        {
+            break;
+        }
     }
 
-    return oss.str();
+    // Ensure there's a decimal point (GLSL requires it for float literals)
+    if (s.find('.') == std::string::npos && s.find('e') == std::string::npos)
+    {
+        s += ".0";
+    }
+    return s;
 }
 
 } // namespace Vestige

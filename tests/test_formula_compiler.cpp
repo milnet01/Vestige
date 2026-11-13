@@ -18,7 +18,10 @@
 
 #include <gtest/gtest.h>
 #include <cmath>
+#include <cstdint>
 #include <cstdio>
+#include <cstdlib>
+#include <cstring>
 #include <filesystem>
 #include <fstream>
 #include <limits>
@@ -71,6 +74,30 @@ TEST(CodegenCpp, FloatLiterals)
     // Zero
     std::string litZero = CodegenCpp::floatLiteral(0.0f);
     EXPECT_NE(litZero.find('f'), std::string::npos);
+}
+
+// 3D_E-0874: a generated literal must read back as the float it was written
+// from, or exported code computes with a different coefficient than the fit.
+TEST(CodegenCpp, FloatLiteralsRoundTrip)
+{
+    // A fixed sweep across every finite positive float, both signs.
+    for (uint32_t bits = 1; bits < 0x7F800000u; bits += 104729u)
+    {
+        float positive = 0.0f;
+        std::memcpy(&positive, &bits, sizeof(positive));
+        for (const float val : {positive, -positive})
+        {
+            const std::string cpp = CodegenCpp::floatLiteral(val);
+            ASSERT_FALSE(cpp.empty());
+            ASSERT_EQ(cpp.back(), 'f') << cpp;
+            ASSERT_EQ(std::strtof(cpp.substr(0, cpp.size() - 1).c_str(), nullptr), val)
+                << "C++ literal " << cpp << " for bits 0x" << std::hex << bits;
+
+            const std::string glsl = CodegenGlsl::floatLiteral(val);
+            ASSERT_EQ(std::strtof(glsl.c_str(), nullptr), val)
+                << "GLSL literal " << glsl << " for bits 0x" << std::hex << bits;
+        }
+    }
 }
 
 // ===========================================================================
