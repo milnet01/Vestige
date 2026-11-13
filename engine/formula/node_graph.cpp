@@ -577,7 +577,9 @@ std::unique_ptr<ExprNode> NodeGraph::nodeToExpr(NodeId nodeId,
         {
             if (c.targetNode == nodeId && c.targetPort == inputPort.id)
             {
-                return nodeToExpr(c.sourceNode, visited, visitsLeft, depth + 1);
+                // The output node is not a level of the tree, so it does
+                // not count against the depth cap.
+                return nodeToExpr(c.sourceNode, visited, visitsLeft, depth);
             }
         }
         // Unconnected: use default
@@ -669,7 +671,10 @@ struct FromExprHelper
         // Phase 10.9 Sc2: cap depth so a hostile preset (100k-deep
         // unary chain) can't blow the stack on import. Returns 0 (the
         // "unreachable" fallback) which gets serialised as a no-op.
-        if (depth > kMaxNodeToExprDepth)
+        // The root is built at depth 1 (the output node's column is 0), so
+        // a tree level is depth - 1: accept the levels ExprNode::fromJson
+        // and the evaluator accept, 0 up to the cap.
+        if (depth - 1 > kMaxNodeToExprDepth)
         {
             return 0;
         }

@@ -8,6 +8,8 @@
 
 #include <gtest/gtest.h>
 
+#include <memory>
+
 using namespace Vestige;
 
 // ===========================================================================
@@ -1228,4 +1230,50 @@ TEST(NodeGraph_Clear, ResetsEverything)
     // contract matters at this surface.
     NodeId newId = graph.addNode(NodeGraph::createLiteralNode(2.0f));
     EXPECT_GT(newId, 0u);
+}
+
+// ===========================================================================
+// Depth cap: the graph converters accept what the loader accepts (3D_E-0874)
+// ===========================================================================
+
+TEST(NodeGraph_DepthCap, DeepestLoadableTreeSurvivesTheRoundTrip)
+{
+    // ExprNode::fromJson and the evaluator accept a root plus 256 levels
+    // under it. Build exactly that: 256 negates over a literal.
+    const int negates = 256;
+    std::unique_ptr<ExprNode> original = ExprNode::literal(7.0f);
+    for (int i = 0; i < negates; ++i)
+    {
+        original = ExprNode::unaryOp("negate", std::move(original));
+    }
+
+    NodeGraph graph = NodeGraph::fromExpressionTree(*original);
+    // One node per tree level, plus the output node.
+    EXPECT_EQ(graph.nodeCount(), static_cast<size_t>(negates) + 2u);
+
+    NodeId outputId = 0;
+    for (const auto& [id, node] : graph.getNodes())
+    {
+        if (node.operation == "output")
+        {
+            outputId = id;
+            break;
+        }
+    }
+    ASSERT_NE(outputId, 0u);
+
+    auto roundTripped = graph.toExpressionTree(outputId);
+    ASSERT_NE(roundTripped, nullptr);
+
+    const ExprNode* level = roundTripped.get();
+    int seen = 0;
+    while (level->type == ExprNodeType::UNARY_OP)
+    {
+        ASSERT_EQ(level->children.size(), 1u);
+        level = level->children[0].get();
+        ++seen;
+    }
+    EXPECT_EQ(seen, negates);
+    ASSERT_EQ(level->type, ExprNodeType::LITERAL);
+    EXPECT_FLOAT_EQ(level->value, 7.0f);
 }
