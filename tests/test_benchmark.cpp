@@ -19,6 +19,9 @@
 #include <cmath>
 #include <filesystem>
 #include <fstream>
+#include <optional>
+#include <string>
+#include <vector>
 
 using namespace Vestige;
 
@@ -448,4 +451,52 @@ TEST(SelfBenchmarkBatch, DirectoryYieldsOneSectionPerDataset)
     EXPECT_LT(md.find("## alpha.csv"), md.find("## beta.csv"));
 
     fs::remove_all(dir);
+}
+
+// ---------------------------------------------------------------------------
+// 3D_E-0874: a flag given last, with no value, is an error and not the GUI
+// ---------------------------------------------------------------------------
+
+namespace
+{
+
+std::optional<int> runCli(std::optional<int> (*cli)(int, char**),
+                          std::vector<std::string> args)
+{
+    std::vector<char*> argv;
+    for (auto& s : args) argv.push_back(s.data());
+    return cli(static_cast<int>(argv.size()), argv.data());
+}
+
+}  // namespace
+
+TEST(WorkbenchCliArgs, FlagWithoutItsValueIsAUsageError)
+{
+    // std::nullopt means "no CLI verb asked for, open the GUI".
+    const auto bench = runCli(runBenchmarkCli,
+                              {"formula_workbench", "--self-benchmark"});
+    ASSERT_TRUE(bench.has_value());
+    EXPECT_EQ(*bench, 2);
+
+    const auto output = runCli(runBenchmarkCli,
+                               {"formula_workbench", "--output"});
+    ASSERT_TRUE(output.has_value());
+    EXPECT_EQ(*output, 2);
+
+    const auto sr = runCli(runSymbolicRegressionCli,
+                           {"formula_workbench", "--symbolic-regression"});
+    ASSERT_TRUE(sr.has_value());
+    EXPECT_EQ(*sr, 2);
+
+    const auto suggest = runCli(runSuggestFormulasCli,
+                                {"formula_workbench", "--suggest-formulas"});
+    ASSERT_TRUE(suggest.has_value());
+    EXPECT_EQ(*suggest, 2);
+}
+
+TEST(WorkbenchCliArgs, NoVerbStillOpensTheGui)
+{
+    EXPECT_FALSE(runCli(runBenchmarkCli, {"formula_workbench"}).has_value());
+    EXPECT_FALSE(runCli(runSymbolicRegressionCli, {"formula_workbench"}).has_value());
+    EXPECT_FALSE(runCli(runSuggestFormulasCli, {"formula_workbench"}).has_value());
 }

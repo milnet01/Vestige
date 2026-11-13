@@ -102,6 +102,9 @@ std::string renderBenchmarkMarkdown(const std::vector<BenchmarkEntry>& entries);
 /// Usage:
 ///   formula_workbench --self-benchmark data.csv
 ///   formula_workbench --self-benchmark data.csv --output report.md
+///
+/// A flag given last, with no value, prints an error and returns 2. The
+/// symbolic-regression and suggest-formulas CLIs below do the same.
 std::optional<int> runBenchmarkCli(int argc, char** argv);
 
 /// @brief §3.5 — shell out to ``scripts/pysr_driver.py`` for symbolic

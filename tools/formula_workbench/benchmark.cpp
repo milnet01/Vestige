@@ -439,6 +439,19 @@ std::string renderBenchmarkMarkdown(const std::vector<BenchmarkEntry>& entries)
 // CLI entry — parsed by main.cpp before GLFW init
 // ---------------------------------------------------------------------------
 
+namespace
+{
+
+/// A flag given last has no value to read. Ignoring it would open the GUI,
+/// which a script calling the CLI cannot see: report it and exit 2 instead.
+int missingValue(const std::string& flag)
+{
+    std::fprintf(stderr, "error: %s needs a value\n", flag.c_str());
+    return 2;
+}
+
+}  // namespace
+
 std::optional<int> runBenchmarkCli(int argc, char** argv)
 {
     std::string csvPath;
@@ -448,12 +461,16 @@ std::optional<int> runBenchmarkCli(int argc, char** argv)
     for (int i = 1; i < argc; ++i)
     {
         std::string a = argv[i];
-        if (a == "--self-benchmark" && i + 1 < argc)
+        if ((a == "--self-benchmark" || a == "--output") && i + 1 >= argc)
+        {
+            return missingValue(a);
+        }
+        if (a == "--self-benchmark")
         {
             csvPath = argv[++i];
             requested = true;
         }
-        else if (a == "--output" && i + 1 < argc)
+        else if (a == "--output")
         {
             outputPath = argv[++i];
         }
@@ -875,8 +892,14 @@ std::optional<int> runSymbolicRegressionCli(int argc, char** argv)
     std::string csv;
     for (int i = 1; i < argc; ++i)
     {
-        if (std::string(argv[i]) == "--symbolic-regression" && i + 1 < argc)
+        if (std::string(argv[i]) == "--symbolic-regression")
+        {
+            if (i + 1 >= argc)
+            {
+                return missingValue("--symbolic-regression");
+            }
             csv = argv[++i];
+        }
     }
     if (csv.empty()) return std::nullopt;
 
@@ -897,8 +920,14 @@ std::optional<int> runSuggestFormulasCli(int argc, char** argv)
     std::string csv;
     for (int i = 1; i < argc; ++i)
     {
-        if (std::string(argv[i]) == "--suggest-formulas" && i + 1 < argc)
+        if (std::string(argv[i]) == "--suggest-formulas")
+        {
+            if (i + 1 >= argc)
+            {
+                return missingValue("--suggest-formulas");
+            }
             csv = argv[++i];
+        }
     }
     if (csv.empty()) return std::nullopt;
 
