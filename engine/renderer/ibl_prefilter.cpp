@@ -4,6 +4,7 @@
 /// @file ibl_prefilter.cpp
 /// @brief Shared cube mesh, views and face pass for IBL captures.
 #include "renderer/ibl_prefilter.h"
+#include "renderer/framebuffer.h"
 #include "core/logger.h"
 
 #include <glm/gtc/matrix_transform.hpp>
@@ -88,8 +89,8 @@ bool runIblFacePass(const IblFacePassParams& params)
     const GLenum status = glCheckNamedFramebufferStatus(params.captureFbo, GL_FRAMEBUFFER);
     if (status != GL_FRAMEBUFFER_COMPLETE)
     {
-        Logger::error("IBL capture framebuffer incomplete — status: 0x"
-            + std::to_string(static_cast<unsigned int>(status)));
+        Logger::error("IBL capture framebuffer incomplete — status: "
+            + framebufferStatusText(status));
         return false;
     }
 

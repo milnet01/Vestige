@@ -7,6 +7,8 @@
 
 #include <glad/gl.h>
 
+#include <string>
+
 namespace Vestige
 {
 
@@ -129,5 +131,9 @@ private:
     bool m_isDepthRenderbuffer = false;  // Tracks depth attachment type for cleanup
     bool m_isComplete = false;           // True if FBO passed completeness check
 };
+
+/// @brief A framebuffer status as the hexadecimal text the GL headers and
+///        documentation use, such as "0x8CD6", for an error message.
+std::string framebufferStatusText(GLenum status);
 
 } // namespace Vestige

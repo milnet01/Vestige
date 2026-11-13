@@ -4,6 +4,7 @@
 /// @file point_shadow_map.cpp
 /// @brief Point light shadow map implementation (depth cubemap).
 #include "renderer/point_shadow_map.h"
+#include "renderer/framebuffer.h"
 #include "core/logger.h"
 
 #include <glm/gtc/matrix_transform.hpp>
@@ -51,8 +52,8 @@ PointShadowMap::PointShadowMap(const PointShadowConfig& config)
     GLenum status = glCheckNamedFramebufferStatus(m_fbo, GL_FRAMEBUFFER);
     if (status != GL_FRAMEBUFFER_COMPLETE)
     {
-        Logger::error("Point shadow map FBO incomplete: 0x"
-            + std::to_string(static_cast<unsigned int>(status)));
+        Logger::error("Point shadow map FBO incomplete: "
+            + framebufferStatusText(status));
     }
 
     // Pre-compute the projection matrix (90 degree FOV for cube faces)

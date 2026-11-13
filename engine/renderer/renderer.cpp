@@ -4,6 +4,7 @@
 /// @file renderer.cpp
 /// @brief Renderer implementation with Blinn-Phong/PBR lighting, shadows, and FBO pipeline.
 #include "renderer/renderer.h"
+#include "renderer/framebuffer.h"
 #include "renderer/gi_math.h"  // GI_ALPHA / GI_DECAY / GI_STRENGTH_DEFAULT (Slice R4)
 #include "renderer/dynamic_mesh.h"
 #include "renderer/foliage_renderer.h"
@@ -642,8 +643,8 @@ void Renderer::initFramebuffers(int width, int height, int msaaSamples)
             GLenum status = glCheckNamedFramebufferStatus(m_bloomFbo, GL_FRAMEBUFFER);
             if (status != GL_FRAMEBUFFER_COMPLETE)
             {
-                Logger::error("Bloom FBO incomplete — status: 0x"
-                    + std::to_string(status));
+                Logger::error("Bloom FBO incomplete — status: "
+                    + framebufferStatusText(status));
             }
         }
 
@@ -2474,8 +2475,8 @@ void Renderer::captureLightProbe(int probeIndex, const SceneRenderData& renderDa
         GLenum status = glCheckNamedFramebufferStatus(captureFbo, GL_FRAMEBUFFER);
         if (status != GL_FRAMEBUFFER_COMPLETE)
         {
-            Logger::error("Light probe capture FBO incomplete — status: 0x"
-                + std::to_string(status));
+            Logger::error("Light probe capture FBO incomplete — status: "
+                + framebufferStatusText(status));
             glDeleteTextures(1, &captureCubemap);
             glDeleteFramebuffers(1, &captureFbo);
             glDeleteRenderbuffers(1, &captureRbo);
@@ -2606,8 +2607,8 @@ void Renderer::captureSHGrid(const SceneRenderData& renderData,
         GLenum status = glCheckNamedFramebufferStatus(captureFbo, GL_FRAMEBUFFER);
         if (status != GL_FRAMEBUFFER_COMPLETE)
         {
-            Logger::error("SH-grid capture FBO incomplete — status: 0x"
-                + std::to_string(status));
+            Logger::error("SH-grid capture FBO incomplete — status: "
+                + framebufferStatusText(status));
             glDeleteTextures(1, &captureCubemap);
             glDeleteFramebuffers(1, &captureFbo);
             glDeleteRenderbuffers(1, &captureRbo);

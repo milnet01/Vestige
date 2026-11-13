@@ -6,6 +6,7 @@
 #include "renderer/framebuffer.h"
 #include "core/logger.h"
 
+#include <cstdio>
 #include <string>
 
 namespace Vestige
@@ -382,8 +383,8 @@ void Framebuffer::create()
     GLenum status = glCheckNamedFramebufferStatus(m_fboId, GL_FRAMEBUFFER);
     if (status != GL_FRAMEBUFFER_COMPLETE)
     {
-        Logger::error("Framebuffer incomplete — status: 0x"
-            + std::to_string(static_cast<unsigned int>(status)));
+        Logger::error("Framebuffer incomplete — status: "
+            + framebufferStatusText(status));
         m_isComplete = false;
     }
     else
@@ -450,6 +451,13 @@ void Framebuffer::cleanup()
 bool Framebuffer::isComplete() const
 {
     return m_isComplete;
+}
+
+std::string framebufferStatusText(GLenum status)
+{
+    char text[16];
+    std::snprintf(text, sizeof(text), "0x%X", static_cast<unsigned int>(status));
+    return text;
 }
 
 } // namespace Vestige

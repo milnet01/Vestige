@@ -364,3 +364,11 @@ TEST_F(FramebufferMrtTest, ThreeAttachmentFboHasNoFourthDrawBuffer)
     glGetIntegerv(GL_DRAW_BUFFER3, &db3);
     EXPECT_EQ(db3, static_cast<GLint>(GL_NONE));
 }
+
+// The message prefix "0x" promised hexadecimal, but the digits after it were
+// decimal: 0x36054 names no GL value (3D_E-0874, lane 04).
+TEST(FramebufferStatusTextTest, WritesTheStatusInHexadecimal)
+{
+    EXPECT_EQ(framebufferStatusText(GL_FRAMEBUFFER_INCOMPLETE_ATTACHMENT), "0x8CD6");
+    EXPECT_EQ(framebufferStatusText(GL_FRAMEBUFFER_UNSUPPORTED), "0x8CDD");
+}

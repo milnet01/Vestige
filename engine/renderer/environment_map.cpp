@@ -4,6 +4,7 @@
 /// @file environment_map.cpp
 /// @brief IBL environment map generation implementation.
 #include "renderer/environment_map.h"
+#include "renderer/framebuffer.h"
 #include "renderer/fullscreen_quad.h"
 #include "renderer/ibl_capture_sequence.h"
 #include "renderer/ibl_prefilter.h"
@@ -80,8 +81,8 @@ bool EnvironmentMap::initialize(const std::string& assetPath)
     GLenum status = glCheckNamedFramebufferStatus(m_captureFbo, GL_FRAMEBUFFER);
     if (status != GL_FRAMEBUFFER_COMPLETE)
     {
-        Logger::error("IBL capture FBO incomplete — status: 0x"
-            + std::to_string(static_cast<unsigned int>(status)));
+        Logger::error("IBL capture FBO incomplete — status: "
+            + framebufferStatusText(status));
         return false;
     }
 
