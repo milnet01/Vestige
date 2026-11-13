@@ -630,6 +630,31 @@ TEST_F(BreakableComponentTest, PrecomputeFragments)
     EXPECT_GE(static_cast<int>(comp.getFragments().size()), 2);
 }
 
+// The seed is a hash of the mesh, so two meshes that differ only in depth
+// must not share one (3D_E-0874: z was left out of the hash).
+TEST_F(BreakableComponentTest, FractureSeedDependsOnDepth)
+{
+    std::vector<glm::vec3> positions;
+    std::vector<uint32_t> indices;
+    createBoxVerticesAndIndices(positions, indices);
+
+    std::vector<glm::vec3> deeper = positions;
+    for (auto& p : deeper)
+    {
+        p.z *= 3.0f;
+    }
+
+    BreakableComponent shallow;
+    shallow.fragmentCount = 4;
+    shallow.precomputeFragments(positions, indices);
+
+    BreakableComponent deep;
+    deep.fragmentCount = 4;
+    deep.precomputeFragments(deeper, indices);
+
+    EXPECT_NE(shallow.getFractureSeed(), deep.getFractureSeed());
+}
+
 // ============================================================
 // DISMEMBERMENT ZONES TESTS
 // ============================================================

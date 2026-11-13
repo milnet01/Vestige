@@ -67,6 +67,9 @@ public:
     /// @brief Access pre-computed fragments.
     const std::vector<FractureFragment>& getFragments() const { return m_fragments; }
 
+    /// @brief The seed precomputeFragments derived from the mesh (0 before it runs).
+    uint32_t getFractureSeed() const { return m_fractureSeed; }
+
 private:
     bool m_fractured = false;
     std::vector<FractureFragment> m_fragments;

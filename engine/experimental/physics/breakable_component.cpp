@@ -52,6 +52,7 @@ void BreakableComponent::precomputeFragments(const std::vector<glm::vec3>& verti
     {
         seed ^= std::hash<float>{}(v.x) + 0x9e3779b9 + (seed << 6) + (seed >> 2);
         seed ^= std::hash<float>{}(v.y) + 0x9e3779b9 + (seed << 6) + (seed >> 2);
+        seed ^= std::hash<float>{}(v.z) + 0x9e3779b9 + (seed << 6) + (seed >> 2);
     }
     m_fractureSeed = static_cast<uint32_t>(seed);
 
