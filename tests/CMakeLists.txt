@@ -545,6 +545,32 @@ if(Python3_FOUND)
     set_tests_properties(LocalizationAuditNamesTheFirstUse PROPERTIES
                          PASS_REGULAR_EXPRESSION "first use [^\n]*twice\\.cpp:8\\)")
 
+    # One tr("ui....") call is one call site. It was counted twice, once as a
+    # tr() call and once as a key-shaped literal (3D_E-0874).
+    add_test(
+        NAME LocalizationAuditCountsACallSiteOnce
+        COMMAND Python3::Interpreter
+                ${CMAKE_SOURCE_DIR}/tools/localization_audit.py --strict
+                --root ${CMAKE_CURRENT_SOURCE_DIR}/fixtures/localization_audit_count
+                --reference ${CMAKE_CURRENT_SOURCE_DIR}/fixtures/localization_audit_count/en.json
+                --secondary ${CMAKE_CURRENT_SOURCE_DIR}/fixtures/localization_audit_count/en.json
+    )
+    set_tests_properties(LocalizationAuditCountsACallSiteOnce PROPERTIES
+                         PASS_REGULAR_EXPRESSION ", 1 tr\\(\\) call site")
+
+    # A hardcoded literal is flagged on a line that also calls c_str(): only a
+    # whole-word tr( excuses a line (3D_E-0874).
+    add_test(
+        NAME LocalizationAuditCatchesALiteralBesideCStr
+        COMMAND Python3::Interpreter
+                ${CMAKE_SOURCE_DIR}/tools/localization_audit.py --strict
+                --root ${CMAKE_CURRENT_SOURCE_DIR}/fixtures/localization_audit_c_str
+                --reference ${CMAKE_CURRENT_SOURCE_DIR}/fixtures/localization_audit_c_str/en.json
+                --secondary ${CMAKE_CURRENT_SOURCE_DIR}/fixtures/localization_audit_c_str/en.json
+    )
+    set_tests_properties(LocalizationAuditCatchesALiteralBesideCStr
+                         PROPERTIES WILL_FAIL TRUE)
+
     # --- 3D_E-0628 — input-poll audit (input spec § 12) ------------------------
     # "No raw key poll is reachable from gameplay code." The spec defines the
     # rule as two greps and says to wire them into the suite as part of

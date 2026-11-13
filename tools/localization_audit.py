@@ -60,6 +60,7 @@ _EXEMPT = "// i18n-exempt"
 
 # --- Check 2: tr("...") literal keys -----------------------------------------
 _TR_KEY = re.compile(r"""\btr\s*\(\s*"([^"]*)"\s*\)""")
+_TR_CALL = re.compile(r"\btr\s*\(")
 
 # 3D_E-0024 — any literal shaped like a string-table key, wherever it sits (a
 # menu table, a trf call), must exist in the reference too. tr("...") alone
@@ -93,11 +94,18 @@ def scan_sources(roots: list[Path]) -> tuple[list[str], list[tuple[str, str]]]:
                 continue
             for n, line in enumerate(lines, start=1):
                 loc = f"{path}:{n}"
+                # A key inside tr("...") is one use: the key-shaped literal
+                # there is the same text, not a second call site.
+                tr_spans = []
                 for m in _TR_KEY.finditer(line):
                     tr_uses.append((m.group(1), loc))
+                    tr_spans.append(m.span())
                 for m in _KEY_LITERAL.finditer(line):
-                    tr_uses.append((m.group(1), loc))
-                if _EXEMPT in line or "tr(" in line:
+                    if not any(a <= m.start() < b for a, b in tr_spans):
+                        tr_uses.append((m.group(1), loc))
+                # Only a whole-word tr( excuses a line: c_str( and str( end
+                # in the same four characters.
+                if _EXEMPT in line or _TR_CALL.search(line):
                     continue
                 if _EMPTY_LITERAL.search(line):
                     continue
