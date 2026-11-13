@@ -1,6 +1,6 @@
 <!-- ants-roadmap-format: 1 -->
 <!-- Generated from the Ants Terminal roadmap store. Edit it with roadmap_log; hand edits are discarded by the next write. -->
-<!-- ants-roadmap-id-high-water: 3D_E=975 3D_E#S=989 -->
+<!-- ants-roadmap-id-high-water: 3D_E=976 3D_E#S=989 -->
 
 # Vestige Engine Roadmap
 
@@ -6348,6 +6348,32 @@ shipped that have no invocation path at all.
   `frameledger floor --fps 60` on a quiet machine, record the new
   baseline there (the old one lists no inputs, 3D_E-0972), then turn on
   the per-frame gate and amend CLAUDE.md.
+  Quiet-machine reading 2026-11-13 (late afternoon, commit 0070a79, Release,
+  headless 1920x1080, browser closed, other programs' GPU peak 5.4-8.6%):
+  five-run baseline saved at
+  Vestige_private/perf-baseline/rx6600-2026-11-13-0070a79 (lists inputs;
+  `compare` accepts it: three fresh runs against it, 47 of 47 measures
+  unchanged). `frameledger floor --fps 60`: all 25 one-second windows hold
+  60 FPS in every run (slowest window averages about 12.3 ms), but the
+  per-frame check fails: 48-53 of about 2270 frames per run exceed
+  16.667 ms (longest 22-24 ms). They are single frames at different places
+  each run. On them cpu/RenderScene's median is 15.3 ms against 9.2 ms
+  overall (+6.1 ms); the GPU span rises only about 1.4 ms. So the machine
+  was not the cause, and the per-frame gate is NOT turned on. Next lead:
+  3D_E-0975 (a buffer update in renderScene that makes the driver flush
+  and wait).
+  Correction, same day (2026-11-13, evening): the sentence above saying the
+  machine was not the cause is withdrawn. Later that afternoon old and new
+  builds flown in turn BOTH showed bursts of 40-245 ms frames while other
+  programs' share read low on some runs, and the card's idle
+  gpu_busy_percent swung between 0 and 99 with no user program holding
+  it. The desktop compositor (kwin_wayland) is the suspect: its fdinfo is
+  not readable by the user, so a per-process check cannot see it. So the
+  48-53 over-budget frames may be partly the machine's. What IS
+  established: on those frames the main thread waited in the driver, and
+  3D_E-0975 removed the wait that was found (808a5f5). The baseline above
+  predates 808a5f5, which makes the typical frame about 15% shorter, so
+  it must be recorded again on a quiet desktop. Per-frame gate still off.
   **Layman:** Once the game holds 60 frames a second, also remove the single slow frames that show as stutter.
   Kind: perf.
   Source: user-decision-2026-10-24.
@@ -7879,7 +7905,7 @@ shipped that have no invocation path at all.
   Source: 3D_E-0970 captures 2026-11-13.
   Lanes: profiler.
 
-- 📋 [3D_E-0973] **IndirectBuffer recreates its three buffers at an exact fit, as InstanceBuffer did.**
+- ✅ [3D_E-0973] **IndirectBuffer recreates its three buffers at an exact fit, as InstanceBuffer did.**
   engine/renderer/indirect_buffer.cpp IndirectBuffer::upload deletes and
   recreates the command buffer and both matrix SSBOs whenever the count
   passes the last capacity by one. On InstanceBuffer that cost a slow frame
@@ -7887,6 +7913,9 @@ shipped that have no invocation path at all.
   grows these buffers, so no cost is measured here. Give them the same
   headroom, with a test like InstanceBufferCapacityTest.
   CPU / GPU placement: CPU-side buffer management; no shader change.
+  Shipped 2026-11-13 in 53cd0ec: the three buffers grow by
+  InstanceBuffer::grownCapacity through one helper;
+  IndirectBufferCapacityTest seen red then green.
   **Layman:** A second drawing buffer is rebuilt every time one more object appears, which can cause a stutter in scenes that use it.
   Kind: perf.
   Source: 3D_E-0795 investigation 2026-11-13.
@@ -7907,7 +7936,7 @@ shipped that have no invocation path at all.
   Source: 3D_E-0795 investigation 2026-11-13.
   Lanes: renderer, profiler.
 
-- 📋 [3D_E-0975] **A buffer update in renderScene makes the driver flush and wait.**
+- ✅ [3D_E-0975] **A buffer update in renderScene makes the driver flush and wait.**
   Seen under gdb on the meadow flythrough (2026-11-13, Mesa 26.2.6):
   glNamedBufferSubData called from Renderer::renderScene reaches
   tc_buffer_subdata, si_buffer_map and si_flush_gfx_cs, so the driver
@@ -7918,9 +7947,38 @@ shipped that have no invocation path at all.
   pass, and the bone-matrix SSBO. If it is per batch, give each pass its
   own region or orphan the buffer instead of rewriting it in place.
   CPU / GPU placement: CPU-side upload pattern; no shader change.
+  Shipped 2026-11-13 in 808a5f5. The buffer was TreeRenderer's shared
+  instance buffer: every tree tier of every pass wrote 512 bytes at its
+  start while the draw before it still read it (480 of 487 main-thread
+  driver waits in one gdb run, all issued from drawShadowTier). Each tier
+  now claims its own range and draws with a base instance; waits under
+  that buffer fell to 0. Old and new flown in turn, three runs each:
+  median frame 10.78-11.04 ms to 9.23-9.28 ms, frame/cpu_span about
+  10.6 ms to 1.9 ms. Picture unchanged within run-to-run noise. The
+  over-budget frame count is not claimed (desktop was not quiet).
   **Layman:** One kind of data upload may make the graphics driver pause mid-frame; find out which and how much it costs.
   Kind: investigate.
   Source: 3D_E-0795 investigation 2026-11-13.
+  Lanes: renderer, profiler.
+
+- 📋 [3D_E-0976] **A second in-place buffer write still makes the driver wait, about 13 times a flythrough.**
+  After 808a5f5 (3D_E-0975), gdb on the meadow flythrough (breakpoint on
+  drmSyncobjWait in the main thread, Mesa 26.2.6) still shows 13 waits
+  under a BufferSubData of 4288-4416 bytes at offset 0, reached when a
+  GpuTimer::beginPass in Engine::run makes the driver thread catch up.
+  That size is 67-69 matrices. The writer was not identified: break on
+  _mesa_marshal_NamedBufferSubData with a size condition and read the
+  backtrace, as was done for the tree buffer. Candidates: the renderer's
+  InstanceBuffer (rewritten from offset 0 once per batch per pass) and
+  the foliage instance buffer. Fix as the trees were: a range per write,
+  or one upload per frame.
+  Related: GpuTimer::beginPass calls glPushDebugGroup, which makes the
+  driver thread finish its queue at every pass; whether that costs frame
+  time in a Release build is not measured.
+  CPU / GPU placement: CPU-side upload pattern; no shader change.
+  **Layman:** One more data upload still makes the graphics driver pause now and then; find it and give it the same fix the trees got.
+  Kind: investigate.
+  Source: 3D_E-0975 investigation 2026-11-13.
   Lanes: renderer, profiler.
 
 ## 0.3.0 — An editor a builder can use

@@ -25,6 +25,12 @@ may change any interface without notice.
 
 ## [Unreleased]
 
+### 2026-11-13 Fixed — drawing trees no longer makes the graphics driver wait (3D_E-0975, 3D_E-0973)
+
+- **Each group of trees writes its positions to its own part of the shared buffer**
+  Before, every group in every pass wrote at the start of one buffer that the previous draw was often still reading, and the Mesa driver (radeonsi, 26.2.6) stopped to wait for the graphics card each time. Measured on the RX 6600 on 2026-11-13, Release build, old and new builds flown in turn over the meadow, three runs each: the middle frame time fell from 10.78–11.04 ms to 9.23–9.28 ms, and the engine's own work per frame from about 10.6 ms to 1.9 ms. The picture is unchanged. How many frames still exceed 16.667 ms is not yet measured: the desktop was not quiet during the comparison (3D_E-0795 stays open).
+- **The indirect draw buffer keeps spare room**, as the instance buffer has since 3D_E-0795. Before, one more draw command recreated its three buffers. The meadow never grows them, so no frame time is claimed.
+
 ### 2026-11-13 Fixed — the meadow flythrough no longer stutters at fixed points (3D_E-0795)
 
 - **A scene's first two frames draw every object, so the graphics driver finishes building its shaders while loading**
