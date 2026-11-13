@@ -7499,6 +7499,14 @@ shipped that have no invocation path at all.
   the localisation audit counts a tr() call once and is excused only by a
   whole-word tr(. The perf_gate missing-key row is moot: 200eea0 deleted
   the file (3D_E-0970).
+  2026-11-13 (fifth batch): seven more rows, red test first where one
+  can fail. 28a0965 a framebuffer status is printed in hexadecimal after
+  "0x" (lane 04, and six more messages with the same fault); a3c106b three
+  physics files include <algorithm> or <limits> themselves (lane 07, two
+  rows, no test possible); 499a2c9 four audit-tool rows (lane 25): a
+  failed link is reported, a rename is filed under its new name, a
+  base_ref that reads as an option reaches no git command, and a
+  self-referential CMake set() names its own file and line.
   **Layman:** About 290 lower-risk possible bugs and the medium findings are still unchecked.
   Kind: review-fix.
   Source: review-readability 2026-10-31 at 7b2a81d.

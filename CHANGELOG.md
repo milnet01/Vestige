@@ -83,6 +83,12 @@ may change any interface without notice.
 - **The localisation check counts each `tr()` call once, and `c_str()` no longer excuses a line**
   Before, a `tr("ui.x")` call was counted twice in the clean message, and a hardcoded label on a line that also called `c_str()` or `str()` was not checked.
 
+- **A "framebuffer incomplete" error names the real GL status**
+  Before, seven such messages wrote `0x` followed by a decimal number, such as `0x36061`, which matches nothing in the GL headers. They now write the hexadecimal value, such as `0x8CDD`.
+
+- **The audit tool reports a failed link, follows renames, and names the right CMake file**
+  Before, a build that failed only at the link step produced no finding. A renamed file was filed under a name made of both paths. A self-referential `set()` in a sub-directory was reported against the top-level `CMakeLists.txt` at the wrong line. A `base_ref` starting with `-` could reach `git diff` as an option; it is now refused.
+
 - **A script's pure nodes stop at the node limit**
   Before, only the depth limit applied, and a short chain of nodes feeding two inputs each could run for a very long time.
 
