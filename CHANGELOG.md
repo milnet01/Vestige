@@ -74,6 +74,15 @@ may change any interface without notice.
 - **The shader check's clean message counts only shaders on the standard version**
   Before, it also counted a shader whose other version was marked exempt.
 
+- **Generated C++ writes `sign` once**
+  Before, each `sign` wrote its argument twice, so a formula with nested `sign` calls doubled in size at each level. It now uses `glm::sign`, which gives the same values.
+
+- **A lookup table uses the value you pass for a coefficient**
+  Before, `LutGenerator::generate` replaced a value passed under a coefficient's name with the formula's default, without saying so.
+
+- **The localisation check counts each `tr()` call once, and `c_str()` no longer excuses a line**
+  Before, a `tr("ui.x")` call was counted twice in the clean message, and a hardcoded label on a line that also called `c_str()` or `str()` was not checked.
+
 - **A script's pure nodes stop at the node limit**
   Before, only the depth limit applied, and a short chain of nodes feeding two inputs each could run for a very long time.
 

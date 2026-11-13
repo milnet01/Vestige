@@ -6315,6 +6315,20 @@ shipped that have no invocation path at all.
   the meadow flythrough, measure the over-budget frames, fix their
   causes, then turn on failure (2) in Vestige's gate and amend CLAUDE.md's
   Performance section (a rule 14 check is owed on that edit).
+  2026-11-13, measured: five quiet 1920x1080 Release flythroughs at 0508b49
+  (the baseline in Vestige_private/perf-baseline/rx6600-2026-11-13), read
+  with `frameledger floor --fps 60`. Every one-second window held 60 FPS
+  (slowest averaged 12.3 ms). Two to four frames a run, of about 2350
+  after warm-up, pass 16.667 ms. One hitch repeats in all five runs at
+  frame 696-706, about 8 s in: one frame of 21.4-22.8 ms where gpu/Shadow
+  goes from 3.2 ms to 14-15 ms and gpu/Scene and gpu/Terrain double or
+  more (the CPU waits 10.8 ms in present), then one or two frames where
+  cpu/RenderScene is 14.6-16.7 ms against a 9.6 ms median. So every GPU
+  pass stalls together for one frame, then the CPU pays: it looks like
+  one event (an upload, a rebuild or a first-use shader variant), not a
+  slow pass. Cause not yet found. The others are single cpu/RenderScene
+  frames of 16.8-22.2 ms at frames 1080-1082, 1355-1367 and 1529, not in
+  every run. Next: find what the flythrough crosses at about 8 s.
   **Layman:** Once the game holds 60 frames a second, also remove the single slow frames that show as stutter.
   Kind: perf.
   Source: user-decision-2026-10-24.
@@ -7479,6 +7493,12 @@ shipped that have no invocation path at all.
   Workbench flag with no value exits 2; 993f5f8 shader_lint counts only
   shaders on the standard version; 79d1548 pure script nodes stop at
   MAX_NODES_PER_CHAIN.
+  2026-11-13 (fourth batch): four more rows, red test first. fd8a6ee
+  generated C++ writes sign as glm::sign, naming its argument once, and
+  LutGenerator keeps a caller's value over a coefficient default; c805e7e
+  the localisation audit counts a tr() call once and is excused only by a
+  whole-word tr(. The perf_gate missing-key row is moot: 200eea0 deleted
+  the file (3D_E-0970).
   **Layman:** About 290 lower-risk possible bugs and the medium findings are still unchecked.
   Kind: review-fix.
   Source: review-readability 2026-10-31 at 7b2a81d.
