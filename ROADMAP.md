@@ -7468,6 +7468,10 @@ shipped that have no invocation path at all.
   tools/fps_floor.py exits 2 on a row it cannot read; 7dfb1d2 the
   generated formula header includes <limits>; 24ce293 mirror detection
   reads L and R only as whole words; 2128c67 the fracture seed hashes z.
+  2026-11-13 (second batch): three more rows, red test first. d052cae
+  generated formula comments drop a trailing backslash, and a function
+  name keeps one leading underscore (CodegenCpp and CodegenGlsl);
+  2bdffa3 the localisation audit names a missing key's first use.
   **Layman:** About 290 lower-risk possible bugs and the medium findings are still unchecked.
   Kind: review-fix.
   Source: review-readability 2026-10-31 at 7b2a81d.

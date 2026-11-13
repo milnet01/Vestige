@@ -38,6 +38,15 @@ may change any interface without notice.
 
 - **Two breakable meshes that differ only in depth no longer break along the same pattern**
 
+- **A formula description ending in a backslash no longer breaks the generated code**
+  Before, the backslash joined the next line to the comment and swallowed the function's first line.
+
+- **A formula named with a leading underscore generates a legal function name**
+  Before, `_1foo` became `1foo`, which does not compile.
+
+- **The localisation audit reports where a missing key is first used**
+  Before, it named the last place while saying "first use".
+
 ### 2026-11-12 Changed — the 60 FPS rule is measured at 1920x1080, and the meadow passes it (3D_E-0704)
 
 - **The measuring recipe in `CLAUDE.md` names `--window-size=1920x1080`**
