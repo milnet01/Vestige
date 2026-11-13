@@ -63,6 +63,7 @@ def scan_shaders(roots: list[Path]) -> tuple[list[str], int]:
     """Return (violations, shader_count).
 
     violations: human-readable "file:line: message" strings.
+    shader_count: the files whose own `#version` line is the standard one.
     """
     violations: list[str] = []
     count = 0
@@ -74,13 +75,14 @@ def scan_shaders(roots: list[Path]) -> tuple[list[str], int]:
                 lines = path.read_text(encoding="utf-8").splitlines()
             except (UnicodeDecodeError, OSError):
                 continue
-            count += 1
             for n, line in enumerate(lines, start=1):
                 if _EXEMPT in line:
                     continue
                 loc = f"{path}:{n}"
 
                 m = _VERSION.match(line)
+                if m and m.group(1) == _ALLOWED_VERSION:
+                    count += 1
                 if m and m.group(1) != _ALLOWED_VERSION:
                     violations.append(
                         f"{loc}: #version is `{m.group(1)}`, expected "

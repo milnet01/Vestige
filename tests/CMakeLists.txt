@@ -605,6 +605,18 @@ if(Python3_FOUND)
     set_tests_properties(ShaderLintCatchesViolation
                          PROPERTIES WILL_FAIL TRUE)
 
+    # The clean message counts only shaders on the standard version: the
+    # fixture holds one, beside one whose other version is marked exempt.
+    add_test(
+        NAME ShaderLintCountsShadersOnTheStandardVersion
+        COMMAND Python3::Interpreter
+                ${CMAKE_SOURCE_DIR}/tools/shader_lint.py --strict
+                --root ${CMAKE_CURRENT_SOURCE_DIR}/fixtures/shader_lint_count
+    )
+    set_tests_properties(ShaderLintCountsShadersOnTheStandardVersion
+                         PROPERTIES PASS_REGULAR_EXPRESSION
+                         "clean .+ 1 shader\\(s\\) on")
+
     # --- Shader compile check (3D_E-0638) -------------------------------------
     # Compiles every shader with glslangValidator, the Khronos reference front
     # end: the only semantic check the shaders get before a GPU runs them.
