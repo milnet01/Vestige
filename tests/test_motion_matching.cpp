@@ -726,6 +726,27 @@ TEST(MirrorGeneratorTest, AutoDetectLeftRight)
     EXPECT_EQ(config.bonePairs[0].second, 2);
 }
 
+// "_L" is a side marker only as a whole word: in "Arm_Lower_L" the "_L" of
+// "_Lower" is not one, and swapping it named a bone that does not exist
+// (3D_E-0874).
+TEST(MirrorGeneratorTest, AutoDetectIgnoresASideLetterInsideAWord)
+{
+    Skeleton skeleton;
+    skeleton.m_joints.resize(3);
+    skeleton.m_joints[0].name = "Hips";
+    skeleton.m_joints[0].parentIndex = -1;
+    skeleton.m_joints[1].name = "Arm_Lower_L";
+    skeleton.m_joints[1].parentIndex = 0;
+    skeleton.m_joints[2].name = "Arm_Lower_R";
+    skeleton.m_joints[2].parentIndex = 0;
+
+    MirrorConfig config = MirrorGenerator::autoDetect(skeleton);
+
+    ASSERT_EQ(config.bonePairs.size(), 1u);
+    EXPECT_EQ(config.bonePairs[0].first, 1);
+    EXPECT_EQ(config.bonePairs[0].second, 2);
+}
+
 TEST(MirrorGeneratorTest, FromNames)
 {
     auto skeleton = createTestSkeleton();

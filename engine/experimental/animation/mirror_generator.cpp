@@ -36,13 +36,27 @@ static std::string swapSide(const std::string& name)
     if (tryReplace("left", "right")) return result;
     if (tryReplace("right", "left")) return result;
 
-    // Prefix: "L_" <-> "R_"
-    if (tryReplace("L_", "R_")) return result;
-    if (tryReplace("R_", "L_")) return result;
+    // A lone "L" or "R" between underscores or the ends of the name: "L_Arm",
+    // "Arm_L", "Arm_L_Lower". It must be a whole word: the "_L" that opens
+    // "_Lower" in "Arm_Lower_L" is not a side marker.
+    for (size_t i = 0; result.size() > 1 && i < result.size(); ++i)
+    {
+        const bool startsWord = (i == 0) || (result[i - 1] == '_');
+        const bool endsWord = (i + 1 == result.size()) || (result[i + 1] == '_');
+        if (!startsWord || !endsWord)
+            continue;
 
-    // Suffix: "_L" <-> "_R"
-    if (tryReplace("_L", "_R")) return result;
-    if (tryReplace("_R", "_L")) return result;
+        if (result[i] == 'L')
+        {
+            result[i] = 'R';
+            return result;
+        }
+        if (result[i] == 'R')
+        {
+            result[i] = 'L';
+            return result;
+        }
+    }
 
     // Single letter prefix: "l" <-> "r" (only if followed by uppercase)
     if (result.size() >= 2 && result[0] == 'l' && std::isupper(result[1]))
