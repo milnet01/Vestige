@@ -4,6 +4,7 @@
 /// @file test_instanced_rendering.cpp
 /// @brief Unit tests for instanced rendering batch-building logic.
 #include "renderer/instance_buffer.h"
+#include "renderer/tree_renderer.h"
 
 #include <gtest/gtest.h>
 #include <glm/glm.hpp>
@@ -287,4 +288,44 @@ TEST(InstanceBufferCapacityTest, GrowthAtLeastDoublesAndAlwaysFits)
     EXPECT_EQ(InstanceBuffer::grownCapacity(257, 256), 512u);
     EXPECT_EQ(InstanceBuffer::grownCapacity(5000, 256), 5000u);
     EXPECT_EQ(InstanceBuffer::grownCapacity(1, 0), InstanceBuffer::MIN_CAPACITY);
+}
+
+// 3D_E-0975. Every tree tier used to write its instances at the start of one
+// shared buffer, over data the draw before it might still be reading, and the
+// driver waited for the graphics card each time. Tiers now claim one range
+// each; ranges may only be reused after a wrap, which discards the buffer.
+TEST(TreeInstanceRangeTest, RangesDoNotOverlapUntilAWrap)
+{
+    const int capacity = 64;
+    int cursor = 0;
+    int endOfPrevious = 0;
+    int wraps = 0;
+    for (int count : {8, 8, 3, 20, 20, 8, 1, 30, 30})
+    {
+        bool wrapped = false;
+        const int first = TreeRenderer::claimInstanceRange(cursor, count, capacity, wrapped);
+        if (wrapped)
+        {
+            ++wraps;
+            EXPECT_EQ(first, 0);
+        }
+        else
+        {
+            EXPECT_EQ(first, endOfPrevious);
+        }
+        ASSERT_LE(first + count, capacity);
+        EXPECT_EQ(cursor, first + count);
+        endOfPrevious = first + count;
+    }
+    // 8+8+3+20+20 = 59 fit; the next 8 do not, and neither does the last 30.
+    EXPECT_EQ(wraps, 2);
+}
+
+TEST(TreeInstanceRangeTest, AClaimThatExactlyFillsTheBufferDoesNotWrap)
+{
+    int cursor = 40;
+    bool wrapped = true;
+    EXPECT_EQ(TreeRenderer::claimInstanceRange(cursor, 24, 64, wrapped), 40);
+    EXPECT_FALSE(wrapped);
+    EXPECT_EQ(cursor, 64);
 }

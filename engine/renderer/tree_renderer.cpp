@@ -279,6 +279,52 @@ void TreeRenderer::ensureInstanceCapacity(int count)
                          m_meshInstanceCapacity * static_cast<GLsizeiptr>(sizeof(float)),
                          nullptr, GL_DYNAMIC_STORAGE_BIT);
     bindInstanceBuffers();  // re-point every VAO at the new buffers
+    m_meshInstanceCursor = 0;
+}
+
+int TreeRenderer::claimInstanceRange(int& cursor, int count, int capacity, bool& wrapped)
+{
+    wrapped = cursor + count > capacity;
+    if (wrapped)
+    {
+        cursor = 0;
+    }
+    const int first = cursor;
+    cursor += count;
+    return first;
+}
+
+GLuint TreeRenderer::uploadTierInstances(const std::vector<Bucketed>& bucket)
+{
+    const int count = static_cast<int>(bucket.size());
+    ensureInstanceCapacity(count);
+
+    m_matScratch.resize(bucket.size());
+    m_alphaScratch.resize(bucket.size());
+    for (size_t i = 0; i < bucket.size(); ++i)
+    {
+        m_matScratch[i] = bucket[i].model;
+        m_alphaScratch[i] = bucket[i].alpha;
+    }
+
+    bool wrapped = false;
+    const int first = claimInstanceRange(m_meshInstanceCursor, count,
+                                         m_meshInstanceCapacity, wrapped);
+    if (wrapped)
+    {
+        // Back at the start, where an earlier draw may still be reading:
+        // declare the old contents dead so the driver hands out fresh
+        // storage instead of waiting for that draw.
+        glInvalidateBufferData(m_meshInstanceVbo);
+        glInvalidateBufferData(m_meshAlphaVbo);
+    }
+    glNamedBufferSubData(m_meshInstanceVbo,
+                         first * static_cast<GLintptr>(sizeof(glm::mat4)),
+                         count * static_cast<GLsizeiptr>(sizeof(glm::mat4)), m_matScratch.data());
+    glNamedBufferSubData(m_meshAlphaVbo,
+                         first * static_cast<GLintptr>(sizeof(float)),
+                         count * static_cast<GLsizeiptr>(sizeof(float)), m_alphaScratch.data());
+    return static_cast<GLuint>(first);
 }
 
 void TreeRenderer::setLightingUniforms(Shader& shader, CascadedShadowMap* csm,
@@ -300,19 +346,7 @@ void TreeRenderer::drawMeshTier(const std::vector<PrimDraw>& prims,
         return;
     }
     int count = static_cast<int>(bucket.size());
-    ensureInstanceCapacity(count);
-
-    m_matScratch.resize(bucket.size());
-    m_alphaScratch.resize(bucket.size());
-    for (size_t i = 0; i < bucket.size(); ++i)
-    {
-        m_matScratch[i] = bucket[i].model;
-        m_alphaScratch[i] = bucket[i].alpha;
-    }
-    glNamedBufferSubData(m_meshInstanceVbo, 0,
-                         count * static_cast<GLsizeiptr>(sizeof(glm::mat4)), m_matScratch.data());
-    glNamedBufferSubData(m_meshAlphaVbo, 0,
-                         count * static_cast<GLsizeiptr>(sizeof(float)), m_alphaScratch.data());
+    const GLuint baseInstance = uploadTierInstances(bucket);
 
     for (const PrimDraw& prim : prims)
     {
@@ -382,9 +416,9 @@ void TreeRenderer::drawMeshTier(const std::vector<PrimDraw>& prims,
         }
 
         glBindVertexArray(prim.mesh->getVao());
-        glDrawElementsInstanced(GL_TRIANGLES,
-                                static_cast<GLsizei>(prim.mesh->getIndexCount()),
-                                GL_UNSIGNED_INT, nullptr, count);
+        glDrawElementsInstancedBaseInstance(GL_TRIANGLES,
+                                            static_cast<GLsizei>(prim.mesh->getIndexCount()),
+                                            GL_UNSIGNED_INT, nullptr, count, baseInstance);
     }
 }
 
@@ -523,21 +557,9 @@ void TreeRenderer::drawShadowTier(const std::vector<PrimDraw>& prims,
         return;
     }
     int count = static_cast<int>(bucket.size());
-    ensureInstanceCapacity(count);
-
     // T9: upload the model matrices AND the signed crossfade-dissolve alpha (@12)
     // so the depth pass dissolves in lockstep with the visible canopy (tree_shadow.*).
-    m_matScratch.resize(bucket.size());
-    m_alphaScratch.resize(bucket.size());
-    for (size_t i = 0; i < bucket.size(); ++i)
-    {
-        m_matScratch[i] = bucket[i].model;
-        m_alphaScratch[i] = bucket[i].alpha;
-    }
-    glNamedBufferSubData(m_meshInstanceVbo, 0,
-                         count * static_cast<GLsizeiptr>(sizeof(glm::mat4)), m_matScratch.data());
-    glNamedBufferSubData(m_meshAlphaVbo, 0,
-                         count * static_cast<GLsizeiptr>(sizeof(float)), m_alphaScratch.data());
+    const GLuint baseInstance = uploadTierInstances(bucket);
 
     for (const PrimDraw& prim : prims)
     {
@@ -585,9 +607,9 @@ void TreeRenderer::drawShadowTier(const std::vector<PrimDraw>& prims,
         }
 
         glBindVertexArray(prim.mesh->getVao());
-        glDrawElementsInstanced(GL_TRIANGLES,
-                                static_cast<GLsizei>(prim.mesh->getIndexCount()),
-                                GL_UNSIGNED_INT, nullptr, count);
+        glDrawElementsInstancedBaseInstance(GL_TRIANGLES,
+                                            static_cast<GLsizei>(prim.mesh->getIndexCount()),
+                                            GL_UNSIGNED_INT, nullptr, count, baseInstance);
     }
 }
 

@@ -158,6 +158,14 @@ public:
     ///        set per frame at the engine's tree-render call site.
     bool msaaActive = false;
 
+    /// @brief Claims @p count instances of a buffer that holds @p capacity,
+    ///        starting at @p cursor, and moves the cursor past them. When
+    ///        they do not fit before the end, the claim starts again at 0
+    ///        and @p wrapped is set: the caller must then discard the
+    ///        buffer's old contents. @p count must not exceed @p capacity.
+    /// @return The first claimed instance.
+    static int claimInstanceRange(int& cursor, int count, int capacity, bool& wrapped);
+
 private:
     /// @brief One primitive to draw for a tier: its mesh VAO, the node's baked
     ///        world matrix (§4.4), and its material (alpha mode / albedo).
@@ -199,6 +207,16 @@ private:
     ///        rebinding all VAOs if a reallocation happened.
     void ensureInstanceCapacity(int count);
 
+    /// @brief Copies a bucket's model matrices and alphas into the next unused
+    ///        slice of the shared instance buffers.
+    ///
+    /// Each tier of each pass gets its own slice, because rewriting a slice
+    /// an earlier draw may still be reading makes the driver send its queued
+    /// commands and wait for the graphics card (radeonsi, Mesa 26.2, measured
+    /// on the meadow flythrough 2026-11-13, 3D_E-0975).
+    /// @return The slice's first instance, for the draw call's base instance.
+    GLuint uploadTierInstances(const std::vector<Bucketed>& bucket);
+
     /// @brief Uploads a bucket's model matrices + alphas and draws every prim in
     ///        @a prims instanced, honouring per-material alpha mode. The far
     ///        impostor tier passes @a forceAlphaTest to cut out its BLEND atlas
@@ -232,6 +250,7 @@ private:
     GLuint m_meshInstanceVbo = 0;   ///< Per-instance model mat4.
     GLuint m_meshAlphaVbo = 0;      ///< Per-instance crossfade alpha (float).
     int m_meshInstanceCapacity = 0;
+    int m_meshInstanceCursor = 0;   ///< First instance no tier has written since the last wrap.
 
     // Per-frame staging (reused to avoid per-frame allocation). All three tiers
     // are meshes drawn per species (distinct VAOs), so each outer vector is
