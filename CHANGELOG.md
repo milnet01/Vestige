@@ -25,12 +25,25 @@ may change any interface without notice.
 
 ## [Unreleased]
 
+### 2026-11-13 Fixed — the meadow flythrough no longer stutters at fixed points (3D_E-0795)
+
+- **A scene's first two frames draw every object, so the graphics driver finishes building its shaders while loading**
+  Before, the Mesa driver built a new version of a shader the first time a single, unbatched object came into view. On the meadow flythrough that cost one frame of about 22 ms, 8 seconds in, in every run. Measured on the RX 6600 with the old and new builds flown in turn: the old build stuttered there in three flights of three, the new one in none.
+
+- **The instance buffer keeps spare room**
+  Before, it was thrown away and recreated each time one more object of a kind came into view, which cost a slow frame three times later in the same flythrough. It now starts with room for 256 instances and at least doubles.
+
+### 2026-11-13 Added — a frame log lists the asset files the run read (3D_E-0972)
+
+- **`--frame-log` fills the header's `inputs` field: one entry per asset folder (`models`, `textures`, `shaders` and so on), with a SHA-256 over the files the run read from it and their total size.** `frameledger compare` uses it to refuse two runs whose content differs. Only files the run actually read count. Files outside the asset folder, such as settings, are not listed.
+- **The `--override "inputs=..."` workaround is gone** from the `PerfGate` ctest entries and the README recipe. It was added and removed between releases.
+- **A baseline recorded before this change lists no inputs, so compare refuses it against a new run.** Record a new baseline.
+
 ### 2026-11-13 Changed — frameledger compare replaces tools/perf_gate.py (3D_E-0970)
 
 - **The slowdown check is now `frameledger compare --baseline`, run from the vendored `external/frameledger/frameledger.pyz` (v0.5.0, Python 3.10 or newer). `tools/perf_gate.py` and `tests/fixtures/perf_gate/` are deleted.** A baseline is a text file listing three or more frame logs taken with `--frame-log`; the README's Tooling section has the recipe. No baseline is committed.
 - **The ctest entries `PerfGateSelftest`, `PerfGatePassesUnchangedRuns` and `PerfGateCatchesRegression` run the analyser over small run files in `tests/fixtures/perf_compare/`.** The last two pin the exit code: 0 for unchanged runs, 1 for slower ones.
 - **`docs/standards/versioning-overrides.md` now names `tools/fps_floor.py` as the parser of the `--profile-log` CSV.** It reads columns by heading, so a column's heading is the contract and the column order is not.
-- **Workaround: every compare call passes `--override "inputs=..."`, because `--frame-log` lists no inputs and compare refuses runs whose inputs are unknown** (3D_E-0972)
 
 ### 2026-11-13 Changed — the vendored frameledger header is 0.5.0 (3D_E-0970)
 

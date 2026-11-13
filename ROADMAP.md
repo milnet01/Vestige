@@ -1,6 +1,6 @@
 <!-- ants-roadmap-format: 1 -->
 <!-- Generated from the Ants Terminal roadmap store. Edit it with roadmap_log; hand edits are discarded by the next write. -->
-<!-- ants-roadmap-id-high-water: 3D_E=972 3D_E#S=989 -->
+<!-- ants-roadmap-id-high-water: 3D_E=975 3D_E#S=989 -->
 
 # Vestige Engine Roadmap
 
@@ -6329,6 +6329,25 @@ shipped that have no invocation path at all.
   slow pass. Cause not yet found. The others are single cpu/RenderScene
   frames of 16.8-22.2 ms at frames 1080-1082, 1355-1367 and 1529, not in
   every run. Next: find what the flythrough crosses at about 8 s.
+  2026-11-13, causes found and fixed (2019ab7). The 8 s stutter was Mesa
+  building a shader variant mid-flight: the first lone object to come into
+  view was drawn by Renderer::drawMesh with a plain vertex layout, after
+  every earlier draw had been batched, and the scene and water passes each
+  built a variant (about 8 ms apiece; gdb on si_build_shader_variant names
+  the caller). Fix: a new renderer and each loaded scene draw two frames
+  without frustum culling (Renderer::requestWarmup). The stutters near
+  12.5, 15.4 and 17.1 s were InstanceBuffer recreated one instance larger
+  each time; it now keeps headroom. Old and new builds flown in turn,
+  three each: old stutters at 8.03 s in all three (23-26 ms), new in none.
+  Ruled out by test: grass shadows, clock-based events, shader-cache
+  misses, VRAM migration, frame-log writes, both fdinfo scans, tree LOD
+  changes, camera jumps; the GPU does no extra work on the stutter frame.
+  STILL OWED: the machine was not quiet after the fix (another program
+  held 13-23% of the GPU; both builds then show 60-76 frames a run just
+  over 16.7 ms, against 2-4 this morning). Re-measure with
+  `frameledger floor --fps 60` on a quiet machine, record the new
+  baseline there (the old one lists no inputs, 3D_E-0972), then turn on
+  the per-frame gate and amend CLAUDE.md.
   **Layman:** Once the game holds 60 frames a second, also remove the single slow frames that show as stutter.
   Kind: perf.
   Source: user-decision-2026-10-24.
@@ -7834,7 +7853,7 @@ shipped that have no invocation path at all.
   Source: 3D_E-0968 Windows half 2026-11-12.
   Lanes: profiler.
 
-- 📋 [3D_E-0972] **Fill the frame log's inputs field so frameledger compare needs no override.**
+- ✅ [3D_E-0972] **Fill the frame log's inputs field so frameledger compare needs no override.**
   --frame-log writes "inputs":[] (engine/profiler/frame_ledger_log.cpp).
   frameledger compare refuses two sets of runs whose inputs are both
   empty (exit 3), so every compare call, the PerfGate ctest entries and
@@ -7845,10 +7864,64 @@ shipped that have no invocation path at all.
   start-up. When this ships, drop the override from tests/CMakeLists.txt
   and README.md and re-record the baseline.
   CPU / GPU placement: CPU file hashing at run start; nothing on the GPU.
+  2026-11-13, built (5844ab4). Decision: record only the files a run
+  read, noted by each loader and hashed with SHA-256 after the last frame,
+  grouped by top-level asset folder; files outside the asset root are not
+  inputs. Hashing the whole asset folder was measured at 30 s a run and a
+  time-keyed cache would miss after every build, since the build copies
+  the assets. The meadow reads 290 files, 88.7 MB. Checked against an
+  strace of the flythrough: every group's hash and size match. The
+  override is gone from tests/CMakeLists.txt and README.md. Not done: the
+  private baseline is not re-recorded, for want of a quiet machine; that
+  is carried on 3D_E-0795.
   **Layman:** The speed check cannot yet tell whether two runs showed the same scene content, so it has to be told to trust that; record the content so it can check.
   Kind: enhancement.
   Source: 3D_E-0970 captures 2026-11-13.
   Lanes: profiler.
+
+- 📋 [3D_E-0973] **IndirectBuffer recreates its three buffers at an exact fit, as InstanceBuffer did.**
+  engine/renderer/indirect_buffer.cpp IndirectBuffer::upload deletes and
+  recreates the command buffer and both matrix SSBOs whenever the count
+  passes the last capacity by one. On InstanceBuffer that cost a slow frame
+  each time (3D_E-0795, fixed with headroom in 2019ab7). The meadow never
+  grows these buffers, so no cost is measured here. Give them the same
+  headroom, with a test like InstanceBufferCapacityTest.
+  CPU / GPU placement: CPU-side buffer management; no shader change.
+  **Layman:** A second drawing buffer is rebuilt every time one more object appears, which can cause a stutter in scenes that use it.
+  Kind: perf.
+  Source: 3D_E-0795 investigation 2026-11-13.
+  Lanes: renderer, profiler.
+
+- 📋 [3D_E-0974] **Measure what the two per-run scans of /proc/self/fdinfo cost a frame.**
+  MemoryTracker::readGpuVram runs on the main thread every 60 frames and
+  reads every file under /proc/self/fdinfo (54 files on the meadow);
+  MachineLoad's sampler thread does the same once a second while a frame
+  log is open. Under strace each scan took 5-6 ms, but strace inflates
+  system calls, so the true cost is not known. Switching both off did not
+  remove the 3D_E-0795 stutter. Measure the main-thread scan without
+  strace; if it costs more than a fraction of a millisecond, read only the
+  DRM descriptors found on the first scan, or move it off the main thread.
+  CPU / GPU placement: CPU file reads; nothing on the GPU.
+  **Layman:** The engine's memory read-out may itself slow a frame now and then; measure it.
+  Kind: investigate.
+  Source: 3D_E-0795 investigation 2026-11-13.
+  Lanes: renderer, profiler.
+
+- 📋 [3D_E-0975] **A buffer update in renderScene makes the driver flush and wait.**
+  Seen under gdb on the meadow flythrough (2026-11-13, Mesa 26.2.6):
+  glNamedBufferSubData called from Renderer::renderScene reaches
+  tc_buffer_subdata, si_buffer_map and si_flush_gfx_cs, so the driver
+  flushes its commands and maps the buffer because the buffer is still in
+  use by an earlier draw. Which buffer it is was not identified (the
+  caller is inlined), nor how often it happens outside gdb or what it
+  costs. Candidates: the instance buffers, uploaded once per batch per
+  pass, and the bone-matrix SSBO. If it is per batch, give each pass its
+  own region or orphan the buffer instead of rewriting it in place.
+  CPU / GPU placement: CPU-side upload pattern; no shader change.
+  **Layman:** One kind of data upload may make the graphics driver pause mid-frame; find out which and how much it costs.
+  Kind: investigate.
+  Source: 3D_E-0795 investigation 2026-11-13.
+  Lanes: renderer, profiler.
 
 ## 0.3.0 — An editor a builder can use
 
@@ -10058,6 +10131,15 @@ Outdoor landscapes surrounding the Temple complex — hills, valleys, and the Ki
   budget's churn; UTA-0211 (not built) decide per froxel cell which
   lights reach it, instead of one shadow read per froxel per light.
   Unverified for Vestige until measured here.
+  Input for step 1 (2026-11-13, GL pipeline-statistics queries around one
+  meadow frame, Release, 1920x1080): about 40 million vertices and 14.5
+  million primitives are submitted per frame (34 M on frames that skip
+  cascades 2 and 3, 43-45 M on frames that draw one), yet only 2.6 million
+  primitives reach clipping and 19 million samples pass. So most submitted
+  geometry is discarded before rasterising; which pass submits it is not
+  yet split out. Also seen: about 67 compute dispatches a frame (count of
+  radeonsi's per-dispatch debug lines over one flight). Step 1 itself,
+  the grass and tree share of the shadow pass, is still not measured.
   **Layman:** Shadows cost more than a third of each frame; most of that work is redrawn every frame even when nothing moved.
   Kind: perf.
   Source: tech-survey-2026-09-02.
