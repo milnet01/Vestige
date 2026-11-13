@@ -13,6 +13,8 @@
 #include <gtest/gtest.h>
 
 #include <limits>
+#include <string>
+#include <vector>
 
 using namespace Vestige;
 
@@ -395,4 +397,58 @@ TEST_F(ScriptContextTest, EntryPinDefaultsToInvalidForDirectExecute)
     // After executeNode returns, m_entryPin is still INVALID_PIN_ID
     // (executeNode doesn't touch it; only triggerOutput does).
     EXPECT_EQ(ctx.entryPin(), INVALID_PIN_ID);
+}
+
+// 3D_E-0874: pure nodes count towards MAX_NODES_PER_CHAIN and stop at it.
+TEST_F(ScriptContextTest, PureEvaluationStopsAtTheNodeLimit)
+{
+    // A pure node that cannot be memoized and reads two inputs. Wiring both
+    // inputs of each node to the node before it doubles the work per link:
+    // a short chain asks for far more evaluations than the limit allows,
+    // while staying well inside MAX_CALL_DEPTH.
+    m_registry.registerNode({
+        "TestFanOut", "Test Fan Out", "Test", "",
+        {
+            {PinKind::DATA, "A", ScriptDataType::FLOAT, ScriptValue(1.0f)},
+            {PinKind::DATA, "B", ScriptDataType::FLOAT, ScriptValue(1.0f)},
+        },
+        {
+            {PinKind::DATA, "Value", ScriptDataType::FLOAT, ScriptValue(0.0f)},
+        },
+        "",
+        true,  // isPure
+        false,
+        [](ScriptContext& ctx, const ScriptNodeInstance& node)
+        {
+            const float a = ctx.readInput(node, std::string("A")).asFloat();
+            const float b = ctx.readInput(node, std::string("B")).asFloat();
+            ctx.setOutput(node, "Value", ScriptValue(a + b));
+        },
+        false,  // memoizable
+    });
+
+    ScriptGraph graph;
+    graph.name = "FanOut";
+    const int links = 19;  // 2^18 - 1 evaluations below the top node
+    std::vector<uint32_t> ids;
+    for (int i = 0; i < links; ++i)
+    {
+        ids.push_back(graph.addNode("TestFanOut"));
+    }
+    uint32_t connectionId = 1;
+    for (int i = 1; i < links; ++i)
+    {
+        graph.connections.push_back({connectionId++, ids[i - 1], "Value", ids[i], "A"});
+        graph.connections.push_back({connectionId++, ids[i - 1], "Value", ids[i], "B"});
+    }
+
+    ScriptInstance instance;
+    instance.initialize(graph, 1);
+
+    ScriptContext ctx(instance, m_registry, nullptr);
+    const ScriptNodeInstance* top = instance.getNodeInstance(ids.back());
+    ASSERT_NE(top, nullptr);
+    ctx.readInput(*top, std::string("A"));
+
+    EXPECT_LE(ctx.nodesExecuted(), ScriptContext::MAX_NODES_PER_CHAIN);
 }

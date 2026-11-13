@@ -388,6 +388,19 @@ ScriptValue ScriptContext::evaluatePureNode(uint32_t nodeId, PinId outputPinId)
         return ScriptValue(0.0f);
     }
 
+    // Pure nodes count towards the same limit as executeNode's. A node that
+    // is not memoized and feeds two inputs doubles the work at each link, so
+    // the depth limit alone does not bound it.
+    if (m_nodesExecuted >= MAX_NODES_PER_CHAIN)
+    {
+        Logger::error("[ScriptContext] Max nodes per chain (" +
+                      std::to_string(MAX_NODES_PER_CHAIN) +
+                      ") exceeded evaluating pure node '" +
+                      nodeInst->typeName + "' in graph '" +
+                      m_instance.graph().name + "'");
+        return ScriptValue(0.0f);
+    }
+
     ++m_callDepth;
     ++m_nodesExecuted;
     desc->execute(*this, *nodeInst);
