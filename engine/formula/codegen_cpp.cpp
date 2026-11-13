@@ -24,6 +24,10 @@ std::string sanitizeComment(const std::string& text)
     out.reserve(text.size());
     for (char c : text)
         out += (c == '\n' || c == '\r') ? ' ' : c;
+    // A line ending in a backslash joins the next line to the comment, and
+    // GCC joins them through trailing spaces too. Drop that tail.
+    while (!out.empty() && (out.back() == '\\' || out.back() == ' ' || out.back() == '\t'))
+        out.pop_back();
     return out;
 }
 
@@ -237,9 +241,15 @@ std::string CodegenCpp::toCppFunctionName(const std::string& formulaName)
     std::string result;
     result.reserve(formulaName.size());
 
+    // One leading underscore stays, so "_1foo" and "_" remain identifiers.
+    const size_t start = (!formulaName.empty() && formulaName[0] == '_') ? 1 : 0;
+    if (start == 1)
+        result += '_';
+
     bool capitalizeNext = false;
-    for (char c : formulaName)
+    for (size_t i = start; i < formulaName.size(); ++i)
     {
+        const char c = formulaName[i];
         if (c == '_')
         {
             capitalizeNext = true;

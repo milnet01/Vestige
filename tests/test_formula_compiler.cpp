@@ -293,6 +293,42 @@ TEST(CodegenGlsl, ProvenanceCommentSanitisesNewlines)
     EXPECT_EQ(code.find("src\r"), std::string::npos);
 }
 
+// A comment line that ends in a backslash joins the next line to the comment
+// (C++ and GLSL both), which would swallow the function's signature. Trailing
+// spaces after the backslash do not stop GCC joining them (3D_E-0874).
+TEST(CodegenBoth, ACommentCannotSwallowTheNextLine)
+{
+    for (const char* description : {"ends in a backslash\\", "then a space\\ "})
+    {
+        FormulaDefinition f;
+        f.name = "splice_test";
+        f.description = description;
+        f.inputs = {{"x", FormulaValueType::FLOAT, "", 0.0f}};
+        f.output = {FormulaValueType::FLOAT, ""};
+        f.expressions[QualityTier::FULL] = ExprNode::variable("x");
+
+        for (const std::string& code : {CodegenCpp::generateFunction(f),
+                                        CodegenGlsl::generateFunction(f)})
+        {
+            EXPECT_EQ(code.find("\\\n"), std::string::npos) << code;
+            EXPECT_EQ(code.find("\\ \n"), std::string::npos) << code;
+        }
+    }
+}
+
+// Underscores are dropped from a function name, but the validators allow a
+// leading one: "_1foo" became "1foo" and "_" became "", neither a legal
+// identifier. One leading underscore is kept (3D_E-0874).
+TEST(CodegenBoth, FunctionNameKeepsOneLeadingUnderscore)
+{
+    EXPECT_EQ(CodegenCpp::toCppFunctionName("_1foo"), "_1foo");
+    EXPECT_EQ(CodegenCpp::toCppFunctionName("_"), "_");
+    EXPECT_EQ(CodegenCpp::toCppFunctionName("_wind_speed"), "_windSpeed");
+    EXPECT_EQ(CodegenGlsl::toGlslFunctionName("_1foo"), "_1foo");
+    EXPECT_EQ(CodegenGlsl::toGlslFunctionName("_"), "_");
+    EXPECT_EQ(CodegenGlsl::toGlslFunctionName("_wind_speed"), "_windSpeed");
+}
+
 TEST(CodegenGlsl, GenerateFileEmitsBanner)
 {
     // 3D_E-0012: the --export-glsl verb passes a provenance banner (tool
