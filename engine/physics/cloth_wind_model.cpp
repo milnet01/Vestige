@@ -3,6 +3,7 @@
 
 #include "physics/cloth_wind_model.h"
 
+#include <algorithm>
 #include <cmath>
 #include <cstring>
 
