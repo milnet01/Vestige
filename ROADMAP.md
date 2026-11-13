@@ -6307,7 +6307,7 @@ shipped that have no invocation path at all.
   Source: ut-ants-review-2026-10-24.
   Lanes: profiler.
 
-- 📋 [3D_E-0795] **After the 60 FPS per-second floor holds, also gate on frame time: no frame after warm-up beyond 16.67 ms.**
+- ✅ [3D_E-0795] **After the 60 FPS per-second floor holds, also gate on frame time: no frame after warm-up beyond 16.67 ms.**
   User decision 2026-10-24: frame time matters as well as FPS, but
   in order: 60 FPS first (CLAUDE.md's per-second rule), then frame time.
   Needs per-frame capture (3D_E-0786) and frameledger's floor check S8
@@ -6374,6 +6374,23 @@ shipped that have no invocation path at all.
   3D_E-0975 removed the wait that was found (808a5f5). The baseline above
   predates 808a5f5, which makes the typical frame about 15% shorter, so
   it must be recorded again on a quiet desktop. Per-frame gate still off.
+  Shipped 2026-11-13 (evening). Quiet desktop (idle gpu_busy_percent 0-6
+  before each run), Release, headless 1920x1080. Old (0070a79) and new
+  (7150e33) builds flown in turn, three each: no frame over 16.667 ms in
+  any; longest frame old 15.3-16.2 ms, new 12.5-13.5 ms; median old
+  10.7 ms, new 9.26 ms. So the 48-53 over-budget frames read that
+  afternoon were the machine's. Five-run baseline at 4961504 (clean tree)
+  saved in Vestige_private/perf-baseline/rx6600-2026-11-13-4961504:
+  `frameledger floor --fps 60` passes all five, every one-second window
+  holds (slowest averages 10.2-10.3 ms), no frame over the budget. One
+  further run was set aside as disturbed (kept there, renamed): 232 slow
+  frames from second 17 to the end, cpu_span unchanged at 2.0 ms, and the
+  idle card read 44-77% straight after it. The watcher that re-recorded
+  that run would have discarded any failing try; it took one try. Per-frame
+  gate turned on: CLAUDE.md's Performance section now names
+  `frameledger floor --fps 60` on a --frame-log and asks for a quiet
+  desktop. No automatic review ran on that edit: global rule 14 now owes
+  none for a CLAUDE.md.
   **Layman:** Once the game holds 60 frames a second, also remove the single slow frames that show as stutter.
   Kind: perf.
   Source: user-decision-2026-10-24.

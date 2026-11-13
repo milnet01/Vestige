@@ -53,3 +53,14 @@ Project rule 5 extends the global no-workarounds rule rather than replacing
 it. The global rule forbids a workaround without a root-cause fix; the
 project rule adds that a workaround which genuinely ships is named in the
 commit message and in `CHANGELOG.md`, so it stays discoverable afterwards.
+
+## Why the 60 FPS rule also judges single frames
+
+Until 2026-11-13 the Performance section judged one-second samples only,
+read by `tools/fps_floor.py`. The user decided on 2026-10-24 that frame
+time matters too, in order: hold 60 FPS per second first, then remove the
+single slow frames (3D_E-0795). On 2026-11-13 five quiet flythroughs at
+4961504 passed `frameledger floor --fps 60` with no frame over 16.667 ms,
+so the section now names that check. The quiet-desktop sentence was added
+the same day: a busy desktop compositor had made both old and new builds
+show slow frames that were not the engine's.

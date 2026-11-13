@@ -25,6 +25,24 @@ may change any interface without notice.
 
 ## [Unreleased]
 
+### 2026-11-13 Changed — the 60 FPS rule now also judges every single frame (3D_E-0795)
+
+- **No frame of the meadow flythrough takes longer than 16.667 ms**
+  Measured on the RX 6600 on 2026-11-13, Release build, headless at 1920x1080, on a quiet desktop: five runs at 4961504 each pass `frameledger floor --fps 60`, with every one-second window holding 60 FPS and no frame over the budget. The build from that morning (0070a79) and the new one, flown in turn three times each, also showed none; the old build's longest frame was 15.3–16.2 ms and the new one's 12.5–13.5 ms.
+- **`CLAUDE.md`'s Performance section names the new check.** It asks for `--frame-log` and `frameledger floor --fps 60`, which fails on a single slow frame as well as a slow second, and for a quiet desktop first. `tools/fps_floor.py` stays for the once-a-second `--profile-log` file.
+- **A sixth run was set aside, not counted.** Its slow frames ran from second 17 to the end with the engine's own work per frame unchanged, and the idle graphics card read 44–77% busy straight after it: the desktop, not the engine.
+
+### 2026-11-13 Fixed — texture filter mode, refused sizes and oversize height maps (3D_E-0874)
+
+- **A texture keeps its filter mode when it is loaded again**
+  Before, every load put the filtering back to trilinear while the texture still reported the mode chosen earlier, and a mode chosen before the first load was thrown away.
+
+- **A texture file refused for being too large no longer reports that size**
+  Width and height now read 0 on a texture that holds nothing.
+
+- **An oversize height map is refused before its normal map is sized**
+  Before, the buffer size was worked out first, in a number type too small for a map past the limit.
+
 ### 2026-11-13 Fixed — drawing grass no longer makes the graphics driver wait (3D_E-0976)
 
 - **Each kind of grass writes its positions to its own part of the foliage buffer**
