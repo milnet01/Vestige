@@ -117,6 +117,56 @@ TEST_F(TextureUploadTest, PngInMemoryWithUnalignedRowsReadsBackIntact)
     std::filesystem::remove(path);
 }
 
+// 3D_E-0874 lane 04: a file wider than a texture may be was refused, but the
+// refused size stayed readable from getWidth/getHeight on a texture that held
+// nothing.
+TEST_F(TextureUploadTest, RefusedOversizeFileLeavesNoSize)
+{
+    constexpr int tooWide = 16385;  // one past Texture's 16384 limit
+    const std::vector<uint8_t> row(static_cast<size_t>(tooWide), 128);
+    const std::string path = (std::filesystem::temp_directory_path()
+        / ("vestige_texture_oversize_" + Testing::vestigeTestStamp() + ".png")).string();
+    ASSERT_NE(stbi_write_png(path.c_str(), tooWide, 1, 1, row.data(), tooWide), 0);
+
+    Texture texture;
+    EXPECT_FALSE(texture.loadFromFile(path, /*linear=*/true));
+    EXPECT_FALSE(texture.isLoaded());
+    EXPECT_EQ(texture.getWidth(), 0);
+    EXPECT_EQ(texture.getHeight(), 0);
+    EXPECT_EQ(Texture::generateNormalFromHeight(path, 1.0f), nullptr);
+    std::filesystem::remove(path);
+}
+
+// 3D_E-0874 lane 04: a filter mode chosen before the pixels arrived was thrown
+// away, and a reload put the texture back to trilinear while getFilterMode
+// still named the mode chosen earlier.
+TEST_F(TextureUploadTest, FilterModeChosenBeforeLoadIsApplied)
+{
+    const auto src = sourcePixels();
+    Texture texture;
+    texture.setFilterMode(TextureFilterMode::NEAREST);
+    EXPECT_EQ(texture.getFilterMode(), TextureFilterMode::NEAREST);
+    ASSERT_TRUE(texture.loadFromMemory(src.data(), kW, kH, kChannels, /*linear=*/true));
+
+    GLint magFilter = 0;
+    glGetTextureParameteriv(texture.getId(), GL_TEXTURE_MAG_FILTER, &magFilter);
+    EXPECT_EQ(magFilter, GL_NEAREST);
+}
+
+TEST_F(TextureUploadTest, FilterModeSurvivesAReload)
+{
+    const auto src = sourcePixels();
+    Texture texture;
+    ASSERT_TRUE(texture.loadFromMemory(src.data(), kW, kH, kChannels, /*linear=*/true));
+    texture.setFilterMode(TextureFilterMode::NEAREST);
+    ASSERT_TRUE(texture.loadFromMemory(src.data(), kW, kH, kChannels, /*linear=*/true));
+
+    GLint magFilter = 0;
+    glGetTextureParameteriv(texture.getId(), GL_TEXTURE_MAG_FILTER, &magFilter);
+    EXPECT_EQ(magFilter, GL_NEAREST);
+    EXPECT_EQ(texture.getFilterMode(), TextureFilterMode::NEAREST);
+}
+
 // 3D_E-0874 lane 04: generateNormalFromHeight flipped the height rows on load
 // and loadFromMemory flipped them again, so the generated bumps sat upside down
 // against the albedo loaded from the same image. A height map with one bright

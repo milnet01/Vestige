@@ -32,8 +32,8 @@ TEST(TextureFilterTest, SetFilterModeWithoutGlContextDoesNotCrash)
     Texture texture;
     EXPECT_FALSE(texture.isLoaded());
     EXPECT_NO_THROW(texture.setFilterMode(TextureFilterMode::NEAREST));
-    // Filter mode stored even without GL context
-    // Note: actual GL state change skipped when m_textureId == 0
+    // Stored for the next upload; the GL call is skipped while m_textureId == 0.
+    EXPECT_EQ(texture.getFilterMode(), TextureFilterMode::NEAREST);
 }
 
 TEST(TextureFilterTest, MoveConstructorPreservesFilterMode)

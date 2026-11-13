@@ -158,6 +158,9 @@ void Texture::createAndUpload(GLenum internalFormat, GLenum dataFormat, GLenum d
         glPixelStorei(GL_UNPACK_ALIGNMENT, 4);
     }
     glGenerateTextureMipmap(m_textureId);
+
+    // A new texture starts trilinear; put back the mode chosen for this one.
+    applyFilterMode();
 }
 
 bool Texture::loadFromFile(const std::string& filePath, bool linear)
@@ -196,6 +199,8 @@ bool Texture::loadFromFile(const std::string& filePath, bool linear)
     {
         Logger::error("Texture dimensions invalid or too large: " + filePath);
         stbi_image_free(data);
+        m_width = 0;
+        m_height = 0;
         return false;
     }
 
@@ -256,6 +261,8 @@ bool Texture::loadFromMemory(const unsigned char* compressedData, size_t dataSiz
     {
         Logger::error("Texture from memory: dimensions invalid or too large");
         stbi_image_free(data);
+        m_width = 0;
+        m_height = 0;
         return false;
     }
 
@@ -441,8 +448,16 @@ std::shared_ptr<Texture> Texture::generateNormalFromHeight(
         return nullptr;
     }
 
+    // Refuse an oversize map here: past the limit, w * h * 3 overflows an int.
+    if (!validTextureSize(w, h))
+    {
+        Logger::error("Height map dimensions invalid or too large: " + heightMapPath);
+        stbi_image_free(heightData);
+        return nullptr;
+    }
+
     // Generate normal map using Sobel filter on height gradients
-    std::vector<unsigned char> normalData(static_cast<size_t>(w * h * 3));
+    std::vector<unsigned char> normalData(static_cast<size_t>(w) * static_cast<size_t>(h) * 3);
 
     for (int y = 0; y < h; y++)
     {
@@ -505,14 +520,17 @@ std::shared_ptr<Texture> Texture::generateNormalFromHeight(
 
 void Texture::setFilterMode(TextureFilterMode mode)
 {
-    if (m_textureId == 0)
-    {
-        return;
-    }
-
+    // Kept even with nothing loaded: the next upload applies it.
     m_filterMode = mode;
+    if (m_textureId != 0)
+    {
+        applyFilterMode();
+    }
+}
 
-    switch (mode)
+void Texture::applyFilterMode()
+{
+    switch (m_filterMode)
     {
         case TextureFilterMode::NEAREST:
             glTextureParameteri(m_textureId, GL_TEXTURE_MIN_FILTER, GL_NEAREST_MIPMAP_NEAREST);
