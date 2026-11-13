@@ -25,6 +25,11 @@ may change any interface without notice.
 
 ## [Unreleased]
 
+### 2026-11-13 Changed — the vendored frameledger header is 0.5.0 (3D_E-0970)
+
+- **`external/frameledger/frameledger.h` comes from frameledger's v0.5.0 release**
+  The only change to the header is `FLED_VERSION`, a string naming the release it shipped in. The frame log Vestige writes is unchanged.
+
 ### 2026-11-13 Fixed — frame-rate check, formula export, mirroring and fracture bugs (3D_E-0874)
 
 - **The frame-rate floor check says when a log row cannot be read**

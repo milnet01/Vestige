@@ -7765,6 +7765,10 @@ shipped that have no invocation path at all.
   the ctest perf_gate entries and tests/fixtures/perf_gate for the
   compare call; delete tools/perf_gate.py and its design doc pointer.
   The captures need a quiet machine.
+  2026-11-13: frameledger 0.5.0 is released with --baseline, and its
+  header is vendored from the v0.5.0 release zip (the zip's SHA-256
+  matched the release's; the header matched the tag). The captures, the
+  ctest swap and the deletion remain.
   **Layman:** Two tools check for slowdowns; keep the newer one.
   Kind: chore.
   Source: 3D_E-0820 shipped 2026-11-12.
