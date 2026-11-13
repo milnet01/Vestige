@@ -158,6 +158,23 @@ TEST(CodegenCpp, EmitUnaryOps)
     EXPECT_NE(CodegenCpp::emitExpression(*sat, {}).find("std::clamp"), std::string::npos);
 }
 
+// The ternary form wrote its argument twice, so each nested sign doubled the
+// generated code (3D_E-0874).
+TEST(CodegenCpp, SignEmitsItsArgumentOnce)
+{
+    auto nested = ExprNode::unaryOp("sign",
+        ExprNode::unaryOp("sign", ExprNode::unaryOp("sin", ExprNode::variable("x"))));
+    const std::string code = CodegenCpp::emitExpression(*nested, {});
+
+    size_t count = 0;
+    for (size_t at = code.find("std::sin"); at != std::string::npos;
+         at = code.find("std::sin", at + 1))
+    {
+        ++count;
+    }
+    EXPECT_EQ(count, 1u) << code;
+}
+
 TEST(CodegenCpp, EmitConditional)
 {
     auto cond = ExprNode::conditional(
@@ -733,6 +750,22 @@ TEST(LutGenerator, Generate1D)
 
     // At depth=10, should be small (exp(-4.0) ~ 0.018)
     EXPECT_NEAR(result.data[63], std::exp(-4.0f), 0.01f);
+}
+
+// A value the caller passes for a coefficient's name is the caller's choice,
+// not a default to overwrite (3D_E-0874).
+TEST(LutGenerator, CallerValueBeatsACoefficientDefault)
+{
+    auto formula = PhysicsTemplates::createBeerLambert();
+    ASSERT_EQ(formula.coefficients.count("alpha"), 1u);
+
+    LutAxisDef axis{"depth", 0.0f, 10.0f, 64};
+    auto result = LutGenerator::generate(formula, {axis}, QualityTier::FULL,
+                                          {{"I0", 1.0f}, {"alpha", 0.0f}});
+    ASSERT_TRUE(result.success);
+
+    // With alpha = 0 nothing is absorbed: exp(0) at every depth.
+    EXPECT_NEAR(result.data[63], 1.0f, 0.001f);
 }
 
 TEST(LutGenerator, Generate2D)

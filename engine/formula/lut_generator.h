@@ -66,6 +66,7 @@ public:
     /// @param axes 1-3 axis definitions specifying input ranges and resolution.
     /// @param tier Quality tier to evaluate.
     /// @param extraVars Additional variable values (for inputs not on an axis).
+    ///        One named after a coefficient replaces that coefficient's value.
     /// @return LUT data and metadata.
     static LutGenerateResult generate(
         const FormulaDefinition& formula,

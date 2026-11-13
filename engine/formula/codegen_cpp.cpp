@@ -117,8 +117,10 @@ std::string CodegenCpp::emitExpression(const ExprNode& node,
             return "(-" + arg + ")";
         if (node.op == "saturate")
             return "std::clamp(" + arg + ", 0.0f, 1.0f)";
+        // glm::sign gives 1, -1 or 0 as the evaluator does, and names the
+        // argument once: a ternary doubled the code at each nested sign.
         if (node.op == "sign")
-            return "(" + arg + " > 0.0f ? 1.0f : (" + arg + " < 0.0f ? -1.0f : 0.0f))";
+            return "glm::sign(" + arg + ")";
 
         // Safe-math wrappers for ops that the evaluator guards against
         // degenerate inputs (AUDIT.md §H12 / FIXPLAN E4).

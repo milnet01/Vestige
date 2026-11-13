@@ -93,10 +93,11 @@ LutGenerateResult LutGenerator::generate(
     ExpressionEvaluator evaluator;
     std::unordered_map<std::string, float> vars = extraVars;
 
-    // Add coefficient defaults
+    // Add coefficient defaults. A value the caller passed under the same
+    // name stays: it is the caller's choice, not a default.
     for (const auto& [name, val] : formula.coefficients)
     {
-        vars[name] = val;
+        vars.try_emplace(name, val);
     }
 
     // Add input defaults for variables not on axes and not in extraVars.
