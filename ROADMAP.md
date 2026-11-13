@@ -7472,6 +7472,13 @@ shipped that have no invocation path at all.
   generated formula comments drop a trailing backslash, and a function
   name keeps one leading underscore (CodegenCpp and CodegenGlsl);
   2bdffa3 the localisation audit names a missing key's first use.
+  2026-11-13 (third batch): six more rows, red test first. f52b6aa the
+  node graph converters accept the depth the loader accepts; de7cede
+  generated float literals carry the fewest digits that read back
+  exactly; 678b906 the Workbench keeps ** inside a code span; c088580 a
+  Workbench flag with no value exits 2; 993f5f8 shader_lint counts only
+  shaders on the standard version; 79d1548 pure script nodes stop at
+  MAX_NODES_PER_CHAIN.
   **Layman:** About 290 lower-risk possible bugs and the medium findings are still unchecked.
   Kind: review-fix.
   Source: review-readability 2026-10-31 at 7b2a81d.

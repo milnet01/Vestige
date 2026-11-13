@@ -47,6 +47,24 @@ may change any interface without notice.
 - **The localisation audit reports where a missing key is first used**
   Before, it named the last place while saying "first use".
 
+- **A formula as deep as the loader allows survives the node editor**
+  Before, the node graph took one level fewer than the loader, so the deepest value of such a formula was dropped.
+
+- **Numbers in generated C++ and GLSL read back exactly**
+  Before, a coefficient could be written with too few digits, so exported code computed with a slightly different number than the fit. Numbers that were already exact are written as before.
+
+- **The Workbench's Suggestions panel shows `x0**2` inside a code span**
+  Before, the `**` was taken for a bold marker and the formula read `x02`.
+
+- **A Workbench command-line flag given without its value is reported**
+  Before, `--self-benchmark`, `--output`, `--symbolic-regression` or `--suggest-formulas` as the last word was ignored and the window opened. It now prints an error and exits 2.
+
+- **The shader check's clean message counts only shaders on the standard version**
+  Before, it also counted a shader whose other version was marked exempt.
+
+- **A script's pure nodes stop at the node limit**
+  Before, only the depth limit applied, and a short chain of nodes feeding two inputs each could run for a very long time.
+
 ### 2026-11-12 Changed — the 60 FPS rule is measured at 1920x1080, and the meadow passes it (3D_E-0704)
 
 - **The measuring recipe in `CLAUDE.md` names `--window-size=1920x1080`**
