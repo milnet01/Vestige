@@ -96,6 +96,7 @@ add_executable(vestige_tests
     test_performance_profiler.cpp
     test_frame_ledger_log.cpp
     test_machine_load.cpp
+    test_run_inputs.cpp
     test_obj_loader.cpp
     test_skeleton.cpp
     test_animation_sampler.cpp
@@ -287,6 +288,7 @@ add_executable(vestige_tests
     test_obj_mtl_warning.cpp
     test_cube_loader_hardening.cpp
     test_json_size_cap.cpp
+    test_sha256.cpp
     test_utf8.cpp
     test_rtl.cpp
     test_string_table.cpp
@@ -688,13 +690,12 @@ if(Python3_FOUND)
     # 40-frame slice of a real meadow flythrough; the slower_* set is the same
     # frames with every time multiplied by 1.4.
     #
-    # The override is needed because the frame log lists no inputs yet
-    # (3D_E-0972), and compare refuses runs whose inputs are unknown.
+    # Each fixture's header lists the inputs of a real meadow run, the same
+    # in all nine, so compare accepts them as the same content (3D_E-0972).
     set(_fled ${CMAKE_SOURCE_DIR}/external/frameledger/frameledger.pyz)
     set(_fled_fixtures ${CMAKE_CURRENT_SOURCE_DIR}/fixtures/perf_compare)
     set(_fled_compare -I ${_fled} compare
-            --baseline ${_fled_fixtures}/baseline.txt
-            --override "inputs=the frame log lists no inputs yet")
+            --baseline ${_fled_fixtures}/baseline.txt)
     # ctest cannot pin an exit code itself, so a one-line Python wrapper
     # compares it: its first argument is the exit code the rest must give.
     set(_exits_with -c

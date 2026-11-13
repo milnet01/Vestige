@@ -4,6 +4,7 @@
 /// @file sprite_atlas.cpp
 /// @brief SpriteAtlas — TexturePacker JSON-Array atlas loader.
 #include "renderer/sprite_atlas.h"
+#include "profiler/run_inputs.h"
 #include "core/logger.h"
 
 #include <nlohmann/json.hpp>
@@ -16,6 +17,7 @@ namespace Vestige
 std::shared_ptr<SpriteAtlas> SpriteAtlas::loadFromJson(const std::string& jsonPath)
 try
 {
+    noteRunInput(jsonPath);
     std::ifstream file(jsonPath);
     if (!file.is_open())
     {

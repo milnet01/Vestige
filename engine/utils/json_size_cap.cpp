@@ -2,6 +2,7 @@
 // SPDX-License-Identifier: MIT
 
 #include "utils/json_size_cap.h"
+#include "profiler/run_inputs.h"
 
 #include <filesystem>
 #include <fstream>
@@ -35,6 +36,7 @@ namespace Vestige::JsonSizeCap
             return std::nullopt;
         }
 
+        noteRunInput(path);
         std::ifstream file(path);
         if (!file.is_open())
         {
@@ -88,6 +90,7 @@ namespace Vestige::JsonSizeCap
             return std::nullopt;
         }
 
+        noteRunInput(path);
         std::ifstream file(path);
         if (!file.is_open())
         {

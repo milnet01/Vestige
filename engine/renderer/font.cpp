@@ -4,6 +4,7 @@
 /// @file font.cpp
 /// @brief Font implementation using FreeType for glyph rasterization.
 #include "renderer/font.h"
+#include "profiler/run_inputs.h"
 #include "core/logger.h"
 
 #include <ft2build.h>
@@ -93,6 +94,7 @@ bool Font::loadFromFile(const std::string& filePath, int pixelSize,
     }
 
     FT_Face face;
+    noteRunInput(filePath);
     if (FT_New_Face(ft, filePath.c_str(), 0, &face))
     {
         Logger::error("Failed to load font: " + filePath);

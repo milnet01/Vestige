@@ -71,6 +71,11 @@ std::string frameLedgerHeaderJson(const FrameLedgerRunInfo& info)
         {"started_utc", info.startedUtc},
         {"os", info.os},
     };
+    for (const RunInput& input : info.inputs)
+    {
+        header["inputs"].push_back(
+            {{"name", input.name}, {"hash", "sha256:" + input.sha256}, {"bytes", input.bytes}});
+    }
     const MachineLoad& load = info.load;
     addStartEnd(header, "load", load.loadStart, load.loadEnd, load.loadPeak);
     addStartEnd(header, "gpu_busy_pct", load.gpuBusyStart, load.gpuBusyEnd, load.gpuBusyPeak);

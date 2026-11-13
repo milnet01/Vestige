@@ -315,14 +315,15 @@ docs/              Design notes, research documents, automated audit reports
 
   # 2. after a change, capture three runs again and check them against it
   python3 -I external/frameledger/frameledger.pyz compare --baseline baseline.txt \
-      --new run_1.csv run_2.csv run_3.csv \
-      --override "inputs=the frame log lists no inputs yet"
+      --new run_1.csv run_2.csv run_3.csv
   ```
   The baseline file lists its runs by path, relative to itself, so keep them
   together. Exit 0 means nothing got slower, 1 means something did, and 2
   means the runs cannot be judged — for one, when another program was using
-  the machine during a run. The `--override` is needed until the frame log
-  records its inputs.
+  the machine during a run. Exit 3 means the runs are not comparable: for
+  one, when a texture, model or shader the run read has changed since the
+  baseline was recorded. Each run file lists what it read, hashed by asset
+  folder, and compare refuses two runs whose lists differ.
   Use `--demo-flythrough --no-vsync`, not `--visual-test`: the visual-test
   harness reads pixels and writes PNGs and a report inside its frames, so its
   timings are not the engine's. Use a Release build. Discard the first capture

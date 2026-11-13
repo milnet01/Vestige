@@ -2743,6 +2743,11 @@ void Engine::shutdown()
 
     // Shut down remaining engine-owned subsystems
     m_profileLog.close();  // flushes the final partial interval, if any
+    if (m_frameLedgerLog.isOpen())
+    {
+        // Hashed here, after the last frame, so it costs the run nothing.
+        m_frameLogInfo.inputs = hashRunInputs(notedRunInputs(), m_assetPath);
+    }
     m_frameLedgerLog.close(m_frameLogInfo.runId.empty()
                                ? std::string()
                                : frameLedgerHeaderJson(m_frameLogInfo));

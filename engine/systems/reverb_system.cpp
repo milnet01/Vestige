@@ -4,6 +4,7 @@
 /// @file reverb_system.cpp
 /// @brief ReverbSystem implementation (AX2 R3 — zone selection + slot drive).
 #include "systems/reverb_system.h"
+#include "profiler/run_inputs.h"
 
 #include "audio/acoustic_baker.h"
 #include "audio/acoustic_probe_component.h"
@@ -72,6 +73,7 @@ std::vector<LoadedAcousticProbe> loadAcousticsIndex(const std::string& sceneSour
         return probes;  // Unbaked scene — caller falls back to authored zones.
     }
 
+    noteRunInput(indexPath);
     std::ifstream in(indexPath, std::ios::binary);
     nlohmann::json j;
     try

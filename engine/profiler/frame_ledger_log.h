@@ -11,6 +11,7 @@
 #pragma once
 
 #include "profiler/machine_load.h"
+#include "profiler/run_inputs.h"
 
 #include <frameledger.h>
 
@@ -47,17 +48,19 @@ struct FrameLedgerRunInfo
     std::string startedUtc;
     std::string os;
     MachineLoad load;  ///< Known in full only after the last frame.
+    std::vector<RunInput> inputs;  ///< Asset files read; known after the last frame.
 };
 
-/// @brief Builds the header's one-line JSON object. `inputs` is empty: the run
-///        does not hash its assets yet, and `frameledger check` warns on that.
+/// @brief Builds the header's one-line JSON object. `inputs` lists
+///        `info.inputs`, which is empty until the run has ended (3D_E-0972).
 ///        `load`, `gpu_busy_pct` and `gpu_clock_mhz` each appear only once both
 ///        their start and their end are known.
 std::string frameLedgerHeaderJson(const FrameLedgerRunInfo& info);
 
 /// @brief Room `FrameLedgerLog::open` keeps after the header for the three
-///        load fields, which `close` writes once the run has ended.
-constexpr std::size_t FRAME_LEDGER_HEADER_RESERVE = 256;
+///        load fields and the `inputs` list, which `close` writes once the
+///        run has ended. An input group takes about 120 bytes.
+constexpr std::size_t FRAME_LEDGER_HEADER_RESERVE = 2048;
 
 /// @brief `GL_RENDERER` without its parenthesised driver details, so a driver
 ///        update does not read as a different GPU when two runs are compared.

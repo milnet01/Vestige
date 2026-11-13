@@ -112,6 +112,7 @@ set(ENGINE_SOURCES
     utils/gltf_loader_impl.cpp
     utils/cube_loader.cpp
     utils/json_size_cap.cpp
+    utils/sha256.cpp
     utils/utf8.cpp
     utils/rtl.cpp
     localization/string_table.cpp
@@ -271,6 +272,7 @@ set(ENGINE_SOURCES
     profiler/profile_log.cpp
     profiler/frame_ledger_log.cpp
     profiler/machine_load.cpp
+    profiler/run_inputs.cpp
     editor/panels/performance_panel.cpp
     editor/panels/validation_panel.cpp
     editor/panels/script_editor_panel.cpp

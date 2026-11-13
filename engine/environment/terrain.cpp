@@ -5,6 +5,7 @@
 /// @brief Heightmap-based terrain with CDLOD quadtree LOD system.
 
 #include "environment/terrain.h"
+#include "profiler/run_inputs.h"
 #include "environment/terrain_material_blend.h"
 #include "core/logger.h"
 #include "utils/atomic_write.h"
@@ -801,6 +802,7 @@ bool Terrain::loadHeightmap(const std::filesystem::path& path)
         return false;
     }
 
+    noteRunInput(path);
     std::ifstream file(path, std::ios::binary | std::ios::ate);
     if (!file.is_open())
     {
@@ -888,6 +890,7 @@ bool Terrain::loadSplatmap(const std::filesystem::path& path)
         return false;
     }
 
+    noteRunInput(path);
     std::ifstream file(path, std::ios::binary | std::ios::ate);
     if (!file.is_open())
     {

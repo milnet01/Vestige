@@ -4,6 +4,7 @@
 /// @file audio_clip.cpp
 /// @brief AudioClip implementation — loads and decodes audio files.
 #include "audio/audio_clip.h"
+#include "profiler/run_inputs.h"
 #include "core/logger.h"
 
 #include <AL/al.h>
@@ -127,6 +128,7 @@ std::optional<AudioClip> AudioClip::loadFromFile(const std::string& filePath)
 std::optional<AudioClip> AudioClip::loadWav(const std::string& filePath)
 {
     drwav wav;
+    noteRunInput(filePath);
     if (!drwav_init_file(&wav, filePath.c_str(), nullptr))
     {
         Logger::error("[AudioClip] Failed to open WAV: " + filePath);
@@ -210,6 +212,7 @@ std::optional<AudioClip> AudioClip::loadFlac(const std::string& filePath)
     unsigned int channels;
     unsigned int sampleRate;
     drflac_uint64 totalFrames;
+    noteRunInput(filePath);
     drflac_int16* pSamples = drflac_open_file_and_read_pcm_frames_s16(
         filePath.c_str(), &channels, &sampleRate, &totalFrames, nullptr);
 
@@ -248,6 +251,7 @@ std::optional<AudioClip> AudioClip::loadOgg(const std::string& filePath)
     int channels;
     int sampleRate;
     short* pSamples;
+    noteRunInput(filePath);
     int totalFrames = stb_vorbis_decode_filename(
         filePath.c_str(), &channels, &sampleRate, &pSamples);
 

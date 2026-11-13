@@ -4,6 +4,7 @@
 /// @file skybox.cpp
 /// @brief Skybox implementation.
 #include "renderer/skybox.h"
+#include "profiler/run_inputs.h"
 #include "core/logger.h"
 
 #include <glm/glm.hpp>
@@ -122,6 +123,10 @@ bool Skybox::loadCubemap(const std::vector<std::string>& faces)
     int width = 0;
     int height = 0;
     int channels = 0;
+    for (const std::string& face : faces)
+    {
+        noteRunInput(face);
+    }
     unsigned char* firstData = stbi_load(faces[0].c_str(), &width, &height, &channels, 4);
     if (!firstData)
     {
@@ -228,11 +233,13 @@ bool Skybox::loadEquirectangular(const std::string& path)
 
     if (isHdr)
     {
+        noteRunInput(path);
         hdrData = stbi_loadf(path.c_str(), &width, &height, &channels, 3);
         channels = 3;  // Forced to 3 channels
     }
     else
     {
+        noteRunInput(path);
         ldrData = stbi_load(path.c_str(), &width, &height, &channels, 3);
         channels = 3;
     }

@@ -179,6 +179,22 @@ TEST(FrameLedgerLogOpen, AnEmptyRunIdIsRefused)
     EXPECT_FALSE(std::filesystem::exists("unused.csv"));
 }
 
+TEST(FrameLedgerHeader, ListsTheRunInputsInTheFormatsShape)
+{
+    FrameLedgerRunInfo info;
+    info.runId = "r";
+    EXPECT_EQ(nlohmann::json::parse(frameLedgerHeaderJson(info))["inputs"],
+              nlohmann::json::array());
+
+    info.inputs = {{"models", std::string(64, 'a'), 11}, {"textures", std::string(64, 'b'), 7}};
+    const nlohmann::json inputs = nlohmann::json::parse(frameLedgerHeaderJson(info))["inputs"];
+    ASSERT_EQ(inputs.size(), 2u);
+    EXPECT_EQ(inputs[0], (nlohmann::json{{"name", "models"},
+                                         {"hash", "sha256:" + std::string(64, 'a')},
+                                         {"bytes", 11}}));
+    EXPECT_EQ(inputs[1]["name"], "textures");
+}
+
 TEST(FrameLedgerHeader, IsOneLineOfJsonWithEveryRequiredField)
 {
     FrameLedgerRunInfo info;
@@ -245,6 +261,12 @@ TEST(FrameLedgerHeader, LoadFieldsFitTheReservedRoom)
     info.load.gpuBusyPeak = 99.999;
     info.load.gpuClockStartMhz = 12345.0;
     info.load.gpuClockEndMhz = 12345.0;
+    // And the inputs: more groups than the asset tree has top-level folders.
+    for (int i = 0; i < 12; ++i)
+    {
+        info.inputs.push_back({"asset_folder_" + std::to_string(i), std::string(64, 'f'),
+                               123456789012ULL});
+    }
     EXPECT_LE(frameLedgerHeaderJson(info).size() - without, FRAME_LEDGER_HEADER_RESERVE);
 }
 

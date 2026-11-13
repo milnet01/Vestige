@@ -4,6 +4,7 @@
 /// @file foliage_renderer.cpp
 /// @brief FoliageRenderer implementation — instanced star-mesh grass with wind.
 #include "renderer/foliage_renderer.h"
+#include "profiler/run_inputs.h"
 #include "renderer/cascaded_shadow_map.h"
 #include "renderer/sampler_fallback.h"
 #include "renderer/directional_shadow_uniforms.h"
@@ -631,6 +632,7 @@ void FoliageRenderer::setTypeTexture(uint32_t typeId, const std::string& path)
     int w = 0;
     int h = 0;
     int channels = 0;
+    noteRunInput(path);
     unsigned char* data = stbi_load(path.c_str(), &w, &h, &channels, 4);  // force RGBA
     const bool decodeNull = (data == nullptr);
 

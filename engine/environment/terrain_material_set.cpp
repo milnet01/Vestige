@@ -4,6 +4,7 @@
 /// @file terrain_material_set.cpp
 /// @brief TerrainMaterialSet — decodes the ground layers and builds the 2D arrays.
 #include "environment/terrain_material_set.h"
+#include "profiler/run_inputs.h"
 #include "core/logger.h"
 
 #include <stb_image.h>
@@ -43,6 +44,7 @@ DecodedImage decodeForced(const std::string& path, int desiredChannels)
     int w = 0;
     int h = 0;
     int channels = 0;
+    noteRunInput(path);
     unsigned char* data = stbi_load(path.c_str(), &w, &h, &channels, desiredChannels);
     if (!data)
     {

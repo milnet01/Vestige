@@ -4,6 +4,7 @@
 /// @file obj_loader.cpp
 /// @brief OBJ file loader implementation.
 #include "utils/obj_loader.h"
+#include "profiler/run_inputs.h"
 #include "core/logger.h"
 
 #include <array>
@@ -193,6 +194,7 @@ bool ObjLoader::load(const std::string& filePath,
         }
     }
 
+    noteRunInput(filePath);
     std::ifstream file(filePath);
     if (!file.is_open())
     {

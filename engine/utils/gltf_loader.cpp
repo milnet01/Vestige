@@ -4,6 +4,7 @@
 /// @file gltf_loader.cpp
 /// @brief glTF 2.0 loading implementation with native PBR material support.
 #include "utils/gltf_loader.h"
+#include "profiler/run_inputs.h"
 #include "animation/skeleton.h"
 #include "animation/animation_clip.h"
 #include "animation/morph_target.h"
@@ -1593,6 +1594,7 @@ std::unique_ptr<Model> GltfLoader::load(const std::string& filePath,
                     "gltfDir: " + path);
                 return false;
             }
+            noteRunInput(path);
             return tinygltf::ReadWholeFile(out, readErr, path, nullptr);
         },
         // WriteWholeFile — not used during load, but SetFsCallbacks

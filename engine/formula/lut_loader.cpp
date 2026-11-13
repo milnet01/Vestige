@@ -4,6 +4,7 @@
 /// @file lut_loader.cpp
 /// @brief Binary LUT loader implementation.
 #include "formula/lut_loader.h"
+#include "profiler/run_inputs.h"
 #include "core/logger.h"
 
 #include <algorithm>
@@ -21,6 +22,7 @@ namespace Vestige
 
 bool LutLoader::loadFromFile(const std::string& path)
 {
+    noteRunInput(path);
     std::ifstream file(path, std::ios::binary);
     if (!file.is_open())
     {

@@ -4,6 +4,7 @@
 /// @file texture.cpp
 /// @brief Texture implementation using stb_image and tinyexr.
 #include "renderer/texture.h"
+#include "profiler/run_inputs.h"
 #include "core/logger.h"
 
 #include <stb_image.h>
@@ -173,6 +174,7 @@ bool Texture::loadFromFile(const std::string& filePath, bool linear)
     stbi_set_flip_vertically_on_load_thread(true);
 
     int channels = 0;
+    noteRunInput(filePath);
     unsigned char* data = stbi_load(filePath.c_str(), &m_width, &m_height, &channels, 0);
     if (data && channels == 2)
     {
@@ -318,6 +320,7 @@ bool Texture::decodeExr(const std::string& filePath, int& width, int& height,
 {
     float* data = nullptr;
     const char* err = nullptr;
+    noteRunInput(filePath);
     int ret = LoadEXR(&data, &width, &height, filePath.c_str(), &err);
 
     if (ret != TINYEXR_SUCCESS)
@@ -430,6 +433,7 @@ std::shared_ptr<Texture> Texture::generateNormalFromHeight(
     int w = 0;
     int h = 0;
     int channels = 0;
+    noteRunInput(heightMapPath);
     unsigned char* heightData = stbi_load(heightMapPath.c_str(), &w, &h, &channels, 1);
     if (!heightData)
     {

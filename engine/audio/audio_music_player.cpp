@@ -5,6 +5,7 @@
 /// @brief Streaming-music player implementation (W8 part 2/2).
 
 #include "audio/audio_music_player.h"
+#include "profiler/run_inputs.h"
 #include "audio/audio_clip.h"
 
 #include "audio/audio_engine.h"
@@ -77,6 +78,7 @@ bool AudioMusicPlayer::loadLayer(MusicLayer layer, const std::string& clipPath)
     }
 
     int error = 0;
+    noteRunInput(safePath);
     stb_vorbis* decoder =
         stb_vorbis_open_filename(safePath.c_str(), &error, nullptr);
     if (decoder == nullptr)
