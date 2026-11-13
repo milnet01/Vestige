@@ -683,6 +683,16 @@ if(Python3_FOUND)
     )
     set_tests_properties(FpsFloorReportsNoSampleAfterWarmUp PROPERTIES
                          PASS_REGULAR_EXPRESSION "no frame samples after 2.0 s")
+    # A row cut off mid-write (the run was killed) cannot be judged: exit 2,
+    # never 1, which means "below the floor" (3D_E-0874). ctest cannot pin an
+    # exit code itself, so a one-line Python wrapper compares it.
+    add_test(
+        NAME FpsFloorSaysAGarbledRowCannotBeJudged
+        COMMAND Python3::Interpreter -c
+                "raise SystemExit(__import__('subprocess').call([__import__('sys').executable] + __import__('sys').argv[1:]) != 2)"
+                ${CMAKE_SOURCE_DIR}/tools/fps_floor.py
+                ${CMAKE_CURRENT_SOURCE_DIR}/fixtures/fps_floor/truncated_row.csv
+    )
 else()
     message(WARNING
         "Python3 not found — skipping localization_audit + shader_lint + "

@@ -10,7 +10,8 @@ lies wholly after warm-up. An average would hide hitches. tools/perf_gate.py is 
 check: it compares against a committed baseline, not against this floor.
 
 Exit 0 when every sample meets the floor, 1 when one does not, 2 when the
-file holds no sample after warm-up.
+file cannot be judged: it holds no sample after warm-up, or a row that cannot
+be read (a run killed mid-write leaves one).
 """
 
 from __future__ import annotations
@@ -35,12 +36,21 @@ def main() -> int:
     samples = []
     covered_from = 0.0
     with args.csv.open(newline="") as f:
-        for row in csv.DictReader(f):
-            if row["category"] == "frame" and row["name"] == "total":
-                t = float(row["time_s"])
-                if covered_from >= args.warmup_s:
-                    samples.append((t, float(row["fps"])))
-                covered_from = t
+        reader = csv.DictReader(f)
+        for row in reader:
+            try:
+                if row["category"] == "frame" and row["name"] == "total":
+                    t = float(row["time_s"])
+                    fps = float(row["fps"])
+                    if covered_from >= args.warmup_s:
+                        samples.append((t, fps))
+                    covered_from = t
+            except (KeyError, TypeError, ValueError):
+                # A missing column reads as None (TypeError) or is absent
+                # from the header (KeyError); a cut-off number is a ValueError.
+                print(f"line {reader.line_num} of {args.csv} is not a readable "
+                      f"profiler row")
+                return 2
 
     if not samples:
         print(f"no frame samples after {args.warmup_s} s in {args.csv}")
