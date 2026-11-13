@@ -7464,6 +7464,10 @@ shipped that have no invocation path at all.
   at 1.5x/2x (the page's positions do not scale at all: a layout
   decision, not a one-line fix). The open rows are listed by the
   grep in the session note.
+  2026-11-13: four more rows fixed, red test first. f790582
+  tools/fps_floor.py exits 2 on a row it cannot read; 7dfb1d2 the
+  generated formula header includes <limits>; 24ce293 mirror detection
+  reads L and R only as whole words; 2128c67 the fracture seed hashes z.
   **Layman:** About 290 lower-risk possible bugs and the medium findings are still unchecked.
   Kind: review-fix.
   Source: review-readability 2026-10-31 at 7b2a81d.

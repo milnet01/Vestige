@@ -25,6 +25,19 @@ may change any interface without notice.
 
 ## [Unreleased]
 
+### 2026-11-13 Fixed — frame-rate check, formula export, mirroring and fracture bugs (3D_E-0874)
+
+- **The frame-rate floor check says when a log row cannot be read**
+  Before, a row cut off mid-write ended in a Python error with the same exit code as a run that was too slow. It now names the line and exits 2.
+
+- **The generated formula header includes `<limits>`**
+  It uses that header for infinite and not-a-number values, and compiled only where another include brought it in.
+
+- **Left/right bone pairing no longer trips on a name like `Arm_Lower_L`**
+  Before, the pair was silently skipped, so a mirrored animation left those bones unmirrored.
+
+- **Two breakable meshes that differ only in depth no longer break along the same pattern**
+
 ### 2026-11-12 Changed — the 60 FPS rule is measured at 1920x1080, and the meadow passes it (3D_E-0704)
 
 - **The measuring recipe in `CLAUDE.md` names `--window-size=1920x1080`**
