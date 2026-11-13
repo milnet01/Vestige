@@ -73,7 +73,7 @@ std::vector<LoadedAcousticProbe> loadAcousticsIndex(const std::string& sceneSour
         return probes;  // Unbaked scene — caller falls back to authored zones.
     }
 
-    noteRunInput(indexPath);
+    noteRunInput(indexPath.string());
     std::ifstream in(indexPath, std::ios::binary);
     nlohmann::json j;
     try

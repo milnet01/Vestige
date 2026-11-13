@@ -802,7 +802,7 @@ bool Terrain::loadHeightmap(const std::filesystem::path& path)
         return false;
     }
 
-    noteRunInput(path);
+    noteRunInput(path.string());
     std::ifstream file(path, std::ios::binary | std::ios::ate);
     if (!file.is_open())
     {
@@ -890,7 +890,7 @@ bool Terrain::loadSplatmap(const std::filesystem::path& path)
         return false;
     }
 
-    noteRunInput(path);
+    noteRunInput(path.string());
     std::ifstream file(path, std::ios::binary | std::ios::ate);
     if (!file.is_open())
     {
