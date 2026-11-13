@@ -4,6 +4,7 @@
 /// @file engine.cpp
 /// @brief Engine implementation — main loop and subsystem orchestration.
 #include "core/engine.h"
+#include "core/system_events.h"
 #include "utils/path_sandbox.h"
 #include "utils/asset_path.h"
 #include "utils/asset_locator.h"
@@ -853,6 +854,15 @@ bool Engine::initialize(const EngineConfig& config)
         m_isCursorCaptured = true;
         m_controller->setEnabled(true);
     }
+
+    // A newly loaded scene brings objects no frame has drawn yet (3D_E-0795).
+    m_eventBus.subscribe<SceneLoadedEvent>([this](const SceneLoadedEvent&)
+    {
+        if (m_renderer)
+        {
+            m_renderer->requestWarmup();
+        }
+    });
 
     // Subscribe to window close event
     m_eventBus.subscribe<WindowCloseEvent>([this](const WindowCloseEvent&)

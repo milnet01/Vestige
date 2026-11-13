@@ -84,6 +84,23 @@ public:
     /// @param deltaTime Time elapsed since last frame (for auto-exposure smoothing).
     void endFrame(float deltaTime = 1.0f / 60.0f);
 
+    /// @brief Frames drawn without frustum culling after `requestWarmup`.
+    ///        Two, so a pass that only runs on alternate frames is covered.
+    static constexpr int WARMUP_FRAMES = 2;
+
+    /// @brief Draws the next WARMUP_FRAMES frames without frustum culling of
+    ///        scene objects, in the scene, water and shadow passes. A graphics
+    ///        driver may build a shader's machine code only when it is first
+    ///        drawn with a given vertex layout, which costs a slow frame. Mesa
+    ///        did so the first time a lone object came into view, 8 ms twice
+    ///        (3D_E-0795). Drawing everything once moves that work to load
+    ///        time. A new renderer starts warming up; call this when a scene
+    ///        has loaded.
+    void requestWarmup() { m_warmupFramesLeft = WARMUP_FRAMES; }
+
+    /// @brief True while warm-up frames are still owed.
+    bool isWarmingUp() const { return m_warmupFramesLeft > 0; }
+
     /// @brief Renders a mesh with material and lighting.
     /// @param boneMatrices Optional bone matrices for skeletal animation (nullptr for static).
     /// @param morphWeights Optional morph target weights (nullptr if no morphs).
@@ -866,6 +883,7 @@ private:
 
     // Frame counter for staggered cascade updates
     uint32_t m_shadowFrameCount = 0;
+    int m_warmupFramesLeft = WARMUP_FRAMES;  ///< See requestWarmup().
 
     // Reusable per-frame vectors (avoid allocation every frame)
     std::vector<SceneRenderData::RenderItem> m_culledItems;

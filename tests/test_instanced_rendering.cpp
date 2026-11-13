@@ -3,6 +3,8 @@
 
 /// @file test_instanced_rendering.cpp
 /// @brief Unit tests for instanced rendering batch-building logic.
+#include "renderer/instance_buffer.h"
+
 #include <gtest/gtest.h>
 #include <glm/glm.hpp>
 
@@ -258,4 +260,31 @@ TEST(DynamicGiPredicateTest, EveryConditionIsRequired)
     EXPECT_FALSE(Renderer::dynamicGiActive(true, true, false, true, true));
     EXPECT_FALSE(Renderer::dynamicGiActive(true, true, true, false, true));
     EXPECT_FALSE(Renderer::dynamicGiActive(true, true, true, true, false));
+}
+
+// 3D_E-0795. An exact-fit buffer was recreated each time one more object of a
+// kind came into view: the meadow flythrough's batch sizes went 19, 20, 21 ...
+// 26, one new buffer and one slow frame each.
+TEST(InstanceBufferCapacityTest, GrowthLeavesRoomForTheNextFewInstances)
+{
+    size_t capacity = 0;
+    int reallocations = 0;
+    for (size_t needed : {2u, 7u, 8u, 19u, 22u, 25u, 57u, 20u, 21u, 59u, 22u, 23u, 24u, 25u, 26u})
+    {
+        if (needed > capacity)
+        {
+            capacity = InstanceBuffer::grownCapacity(needed, capacity);
+            ++reallocations;
+        }
+        ASSERT_GE(capacity, needed);
+    }
+    EXPECT_EQ(reallocations, 1);
+    EXPECT_EQ(capacity, InstanceBuffer::MIN_CAPACITY);
+}
+
+TEST(InstanceBufferCapacityTest, GrowthAtLeastDoublesAndAlwaysFits)
+{
+    EXPECT_EQ(InstanceBuffer::grownCapacity(257, 256), 512u);
+    EXPECT_EQ(InstanceBuffer::grownCapacity(5000, 256), 5000u);
+    EXPECT_EQ(InstanceBuffer::grownCapacity(1, 0), InstanceBuffer::MIN_CAPACITY);
 }

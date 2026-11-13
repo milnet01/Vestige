@@ -881,6 +881,11 @@ void Renderer::beginFrame()
 
 void Renderer::endFrame(float deltaTime)
 {
+    if (m_warmupFramesLeft > 0)
+    {
+        --m_warmupFramesLeft;
+    }
+
     if (!m_resolveFbo || !m_screenQuad)
     {
         return;
@@ -3259,7 +3264,7 @@ void Renderer::renderScene(const SceneRenderData& renderData, const Camera& came
     m_culledItems.reserve(renderData.renderItems.size());
     for (const auto& item : renderData.renderItems)
     {
-        if (item.worldBounds.getSize() == glm::vec3(0.0f)
+        if (isWarmingUp() || item.worldBounds.getSize() == glm::vec3(0.0f)
             || isAabbInFrustum(item.worldBounds, frustumPlanes))
         {
             m_culledItems.push_back(item);
@@ -3760,7 +3765,7 @@ void Renderer::renderScene(const SceneRenderData& renderData, const Camera& came
         m_sortedTransparentItems.reserve(renderData.transparentItems.size());
         for (const auto& item : renderData.transparentItems)
         {
-            if (isAabbInFrustum(item.worldBounds, frustumPlanes))
+            if (isWarmingUp() || isAabbInFrustum(item.worldBounds, frustumPlanes))
             {
                 m_sortedTransparentItems.push_back(item);
             }
@@ -3967,7 +3972,7 @@ void Renderer::renderShadowPass(const std::vector<SceneRenderData::RenderItem>& 
         m_cascadeCulledCasters.reserve(shadowCasterItems.size());
         for (const auto& item : shadowCasterItems)
         {
-            if (item.worldBounds.getSize() == glm::vec3(0.0f)
+            if (isWarmingUp() || item.worldBounds.getSize() == glm::vec3(0.0f)
                 || isAabbInFrustum(item.worldBounds, cascadePlanes))
             {
                 m_cascadeCulledCasters.push_back(item);
