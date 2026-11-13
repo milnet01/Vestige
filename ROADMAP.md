@@ -7921,7 +7921,7 @@ shipped that have no invocation path at all.
   Source: 3D_E-0795 investigation 2026-11-13.
   Lanes: renderer, profiler.
 
-- 📋 [3D_E-0974] **Measure what the two per-run scans of /proc/self/fdinfo cost a frame.**
+- ✅ [3D_E-0974] **Measure what the two per-run scans of /proc/self/fdinfo cost a frame.**
   MemoryTracker::readGpuVram runs on the main thread every 60 frames and
   reads every file under /proc/self/fdinfo (54 files on the meadow);
   MachineLoad's sampler thread does the same once a second while a frame
@@ -7931,6 +7931,21 @@ shipped that have no invocation path at all.
   strace; if it costs more than a fraction of a millisecond, read only the
   DRM descriptors found on the first scan, or move it off the main thread.
   CPU / GPU placement: CPU file reads; nothing on the GPU.
+  Measured 2026-11-13, no code change. Method, without strace: the
+  main-thread scan runs on frame 59 of every 60, so the median frame/wall
+  of those frames was compared with the mean of the other 59 phase
+  medians (frames after 300, about 35 samples a phase, RX 6600, Release,
+  headless 1920x1080; the desktop was not quiet, which this phase-locked
+  comparison tolerates). At 0070a79, eight runs: +0.89 to +1.33 ms
+  (spread of the other phases 0.42 ms). At 7150e33, three runs: +0.32 to
+  +0.45 ms (spread 0.31 ms), so the scan frame no longer stands out; some
+  other phase was slower in every run. A trial that skipped descriptors
+  not pointing at /dev/dri (read_symlink before reading the record) read
+  +0.23 to +0.38 ms in three runs flown in turn: no difference beyond the
+  spread, so it was dropped. Verdict: a fraction of a millisecond, under
+  this item's own bar. The sampler-thread scan was not measured: it is
+  off the main thread. Why the figure fell between the two commits was
+  not investigated (3D_E-0975 landed in between).
   **Layman:** The engine's memory read-out may itself slow a frame now and then; measure it.
   Kind: investigate.
   Source: 3D_E-0795 investigation 2026-11-13.
