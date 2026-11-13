@@ -174,11 +174,14 @@ def _audit_cmake(config: Config, result: BuildAuditResult, findings: list[Findin
 
     # Concatenate all CMake content for flag checking
     all_cmake_content = ""
+    cmake_contents: list[tuple[str, str]] = []  # (path relative to the root, text)
     for cmake_file in cmake_files:
         try:
-            all_cmake_content += cmake_file.read_text(errors="replace") + "\n"
+            text = cmake_file.read_text(errors="replace")
         except OSError:
             continue
+        all_cmake_content += text + "\n"
+        cmake_contents.append((cmake_file.relative_to(config.root).as_posix(), text))
 
     if not all_cmake_content.strip():
         return
@@ -271,18 +274,18 @@ def _audit_cmake(config: Config, result: BuildAuditResult, findings: list[Findin
 
     # Check for self-referential variables (common CMake mistake)
     self_ref_pattern = re.compile(r"set\(\s*(\w+)\s+\$\{\1\}\s*\)")
-    for m in self_ref_pattern.finditer(all_cmake_content):
-        line_num = all_cmake_content[:m.start()].count("\n") + 1
-        findings.append(Finding(
-            file=main_cmake_rel,
-            line=line_num,
-            severity=Severity.LOW,
-            category="build_quality",
-            source_tier=4,
-            title=f"Self-referential CMake variable: {m.group(1)}",
-            detail=f"set({m.group(1)} ${{{m.group(1)}}}) is a no-op",
-            pattern_name="cmake_self_ref",
-        ))
+    for cmake_rel, text in cmake_contents:
+        for m in self_ref_pattern.finditer(text):
+            findings.append(Finding(
+                file=cmake_rel,
+                line=text[:m.start()].count("\n") + 1,
+                severity=Severity.LOW,
+                category="build_quality",
+                source_tier=4,
+                title=f"Self-referential CMake variable: {m.group(1)}",
+                detail=f"set({m.group(1)} ${{{m.group(1)}}}) is a no-op",
+                pattern_name="cmake_self_ref",
+            ))
 
     log.info("Build audit: %d security flags checked, %d findings",
              len(_SECURITY_FLAGS), len(findings))

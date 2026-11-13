@@ -50,12 +50,19 @@ def run(config: Config) -> tuple[ChangeSummary, list[Finding]]:
         log.warning("Not a git repository — skipping Tier 3")
         return summary, findings
 
+    # Only the web UI validates base_ref; the CLI and the YAML pass it as
+    # written. One starting with "-" would reach git as an option
+    # ("--output=FILE" writes FILE), so it reaches no git command at all.
+    if not isinstance(base_ref, str) or not base_ref or base_ref.startswith("-"):
+        log.warning("base_ref %r is not a git revision — skipping Tier 3", base_ref)
+        return summary, findings
+
     log.info("Tier 3: analyzing changes since %s", base_ref)
 
-    # Get changed files with status (shell=False; base_ref is validated at
-    # the web-UI boundary before reaching here, AUDIT.md §C1 / FIXPLAN C1b).
+    # Get changed files with status (shell=False). The trailing "--" stops git
+    # reading a base_ref that also names a file as a path.
     rc, stdout, _ = run_cmd(
-        ["git", "diff", "--name-status", base_ref],
+        ["git", "diff", "--name-status", base_ref, "--"],
         cwd=config.root,
     )
     if rc != 0:
@@ -66,7 +73,7 @@ def run(config: Config) -> tuple[ChangeSummary, list[Finding]]:
 
     # Get line counts
     rc, numstat_out, _ = run_cmd(
-        ["git", "diff", "--numstat", base_ref],
+        ["git", "diff", "--numstat", base_ref, "--"],
         cwd=config.root,
     )
     line_counts = _parse_numstat(numstat_out)
@@ -120,10 +127,11 @@ def _parse_name_status(output: str) -> list[dict]:
     """Parse `git diff --name-status` output."""
     entries: list[dict] = []
     for line in output.strip().splitlines():
-        parts = line.split("\t", 1)
-        if len(parts) == 2:
-            status, fname = parts
-            entries.append({"file": fname, "status": status[0], "added": 0, "removed": 0})
+        # A rename or a copy is "R<score>\told\tnew"; the new name is the
+        # file that exists now and the one later diffs are asked about.
+        parts = line.split("\t")
+        if len(parts) >= 2 and parts[0]:
+            entries.append({"file": parts[-1], "status": parts[0][0], "added": 0, "removed": 0})
     return entries
 
 

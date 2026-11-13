@@ -63,7 +63,10 @@ def run_build(config: Config) -> tuple[list[Finding], dict]:
                 ))
 
     summary["build_ok"] = (rc == 0)
-    if rc != 0 and summary["errors"] == 0:
+    # A linker error has no file:line, so it is counted but makes no finding.
+    # Report the failure unless some error already has a finding of its own.
+    located_error = any(f.severity is Severity.HIGH for f in findings)
+    if rc != 0 and not located_error:
         findings.append(Finding(
             file="",
             line=None,
