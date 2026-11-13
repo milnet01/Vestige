@@ -21,6 +21,7 @@
 #include <cstdio>
 #include <filesystem>
 #include <fstream>
+#include <limits>
 #include <set>
 #include <sstream>
 
@@ -177,6 +178,21 @@ TEST(CodegenCpp, GenerateHeader)
     EXPECT_NE(header.find("fresnelSchlick"), std::string::npos);
     EXPECT_NE(header.find("beerLambert"), std::string::npos);
     EXPECT_NE(header.find("hookeSpring"), std::string::npos);
+}
+
+// The generator writes an infinite or NaN literal as std::numeric_limits, so
+// the header it emits has to include <limits> itself (3D_E-0874).
+TEST(CodegenCpp, HeaderIncludesLimitsForTheNonFiniteLiteralsItEmits)
+{
+    FormulaDefinition formula;
+    formula.name = "upper_bound";
+    formula.expressions[QualityTier::FULL] =
+        ExprNode::literal(std::numeric_limits<float>::infinity());
+
+    std::string header = CodegenCpp::generateHeader({&formula});
+
+    ASSERT_NE(header.find("std::numeric_limits"), std::string::npos);
+    EXPECT_NE(header.find("#include <limits>"), std::string::npos);
 }
 
 // ===========================================================================

@@ -207,6 +207,8 @@ std::string CodegenCpp::generateHeader(const std::vector<const FormulaDefinition
     out << "#pragma once\n\n";
     out << "#include <algorithm>\n";
     out << "#include <cmath>\n";
+    // floatLiteral() writes an infinite or NaN value as std::numeric_limits.
+    out << "#include <limits>\n";
     out << "#include <glm/glm.hpp>\n";
     // AUDIT.md §H12 / FIXPLAN E4: safe-math helpers keep emitted functions
     // behaviourally identical to the tree-walking evaluator the LM curve
