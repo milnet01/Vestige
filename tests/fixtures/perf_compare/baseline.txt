@@ -1,0 +1,5 @@
+# frameledger-baseline {"schema":1}
+# Three 40-frame slices of real meadow-flythrough runs (RX 6600, 2026-11-13).
+old_1.csv
+old_2.csv
+old_3.csv

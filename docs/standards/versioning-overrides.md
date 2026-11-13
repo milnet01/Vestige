@@ -90,19 +90,19 @@ cheap to judge. It does not bound the promise.
 `app/` defines the flags. Removing a flag, renaming one, or changing what a
 flag does is breaking. Changing what a flag *prints* is breaking only where the
 output is structured for a machine — `--profile-log` writes a CSV that
-`tools/perf_gate.py` parses. Three parts, because they do not behave alike.
+`tools/fps_floor.py` parses. Three parts, because they do not behave alike.
 
-**The column order and what each column means are the contract.** That parser
-reads every field by position, so reordering or repurposing a column is
-breaking.
+**The column headings and what each column means are the contract.** That
+parser finds `category`, `name`, `time_s` and `fps` by heading, so renaming or
+repurposing a column is breaking.
 
-**The row labels are the contract too.** It builds its lookup key from the
-`category` and `name` *values* and special-cases `frame,total`, so renaming a
-profiling category or pass is breaking — every consumer keyed on that string
-silently stops finding the series rather than failing.
+**The row labels are the contract too.** It picks its rows by the `category`
+and `name` *values* `frame,total`, so renaming a profiling category or pass is
+breaking — every consumer keyed on that string silently stops finding the
+series rather than failing.
 
-**The header row is not the contract.** It is discarded on read, so renaming a
-column heading is a PATCH.
+**The column order is not the contract.** No field is read by position, so
+reordering the columns is a PATCH.
 
 ### How the engine is installed
 

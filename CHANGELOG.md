@@ -25,6 +25,13 @@ may change any interface without notice.
 
 ## [Unreleased]
 
+### 2026-11-13 Changed — frameledger compare replaces tools/perf_gate.py (3D_E-0970)
+
+- **The slowdown check is now `frameledger compare --baseline`, run from the vendored `external/frameledger/frameledger.pyz` (v0.5.0, Python 3.10 or newer). `tools/perf_gate.py` and `tests/fixtures/perf_gate/` are deleted.** A baseline is a text file listing three or more frame logs taken with `--frame-log`; the README's Tooling section has the recipe. No baseline is committed.
+- **The ctest entries `PerfGateSelftest`, `PerfGatePassesUnchangedRuns` and `PerfGateCatchesRegression` run the analyser over small run files in `tests/fixtures/perf_compare/`.** The last two pin the exit code: 0 for unchanged runs, 1 for slower ones.
+- **`docs/standards/versioning-overrides.md` now names `tools/fps_floor.py` as the parser of the `--profile-log` CSV.** It reads columns by heading, so a column's heading is the contract and the column order is not.
+- **Workaround: every compare call passes `--override "inputs=..."`, because `--frame-log` lists no inputs and compare refuses runs whose inputs are unknown** (3D_E-0972)
+
 ### 2026-11-13 Changed — the vendored frameledger header is 0.5.0 (3D_E-0970)
 
 - **`external/frameledger/frameledger.h` comes from frameledger's v0.5.0 release**

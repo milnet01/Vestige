@@ -1,5 +1,9 @@
 # Phase 10 — Automated Performance-Regression Gate (design)
 
+> **Retired 2026-11-13 (3D_E-0970).** `tools/perf_gate.py` and its fixtures are
+> deleted. `frameledger compare --baseline` does this job now (README, Tooling).
+> The rest of this document is history.
+
 Roadmap item: **3D_E-0030** (Rendering Enhancements). Kind: investigate → tool.
 Depends on: 3D_E-0027 meadow benchmark scene + the profiler CSV logger
 (`engine/profiler/profile_log.{h,cpp}`, meadow §8.1 — **landed**, commit 9507430).

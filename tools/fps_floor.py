@@ -6,8 +6,9 @@
 CLAUDE.md's 60 FPS rule: a Release build running
     vestige --demo-flythrough --no-vsync --profile-log=run.csv
 must read at least 60 FPS in every one-second `frame,total` sample that
-lies wholly after warm-up. An average would hide hitches. tools/perf_gate.py is a different
-check: it compares against a committed baseline, not against this floor.
+lies wholly after warm-up. An average would hide hitches. frameledger compare
+(external/frameledger/frameledger.pyz) is a different check: it compares against a saved
+baseline, not against this floor.
 
 Exit 0 when every sample meets the floor, 1 when one does not, 2 when the
 file cannot be judged: it holds no sample after warm-up, or a row that cannot

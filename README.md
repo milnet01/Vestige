@@ -297,28 +297,37 @@ docs/              Design notes, research documents, automated audit reports
   (physics curves, lighting attenuation, animation easings) as JSON
   the engine loads at asset time. Per project rules, numerical design
   goes through the Workbench rather than hand-coded magic constants.
-- **Performance-regression gate** (`tools/perf_gate.py`) — compares a
-  profiler CSV (captured with the engine's `--profile-log[=PATH]`) to a
-  committed baseline and flags per-pass slowdowns. Run it on real GPU
-  hardware (timings are meaningless on CI's software renderer):
+- **Performance-regression gate** (`external/frameledger/frameledger.pyz`) —
+  [frameledger](https://github.com/milnet01/frameledger) `compare` judges fresh
+  frame logs (captured with the engine's `--frame-log=PATH`) against a saved
+  baseline and names each measure that got slower. It needs Python 3.10 or
+  newer. Run it on real GPU hardware (timings are meaningless on CI's software
+  renderer).
   **No baseline is committed** — GPU timings are meaningless across
   different hardware, so the first step on any machine is to record your
   own, then compare later runs against it:
   ```bash
-  # 1. record a reference run on YOUR hardware (do this once)
-  ./build/bin/vestige --demo-flythrough --no-vsync --profile-log=baseline-run.csv
-  python3 tools/perf_gate.py --update-baseline --current baseline-run.csv \
-      --out my-baseline.json --hardware "RX 6600"
+  # 1. record three or more reference runs on YOUR hardware (do this once)
+  ./build/bin/vestige --demo-flythrough --no-vsync --frame-log=base_1.csv
+  ./build/bin/vestige --demo-flythrough --no-vsync --frame-log=base_2.csv
+  ./build/bin/vestige --demo-flythrough --no-vsync --frame-log=base_3.csv
+  printf '# frameledger-baseline {"schema":1}\nbase_1.csv\nbase_2.csv\nbase_3.csv\n' > baseline.txt
 
-  # 2. after a change, capture again and check it against that baseline
-  ./build/bin/vestige --demo-flythrough --no-vsync --profile-log=run.csv
-  python3 tools/perf_gate.py --baseline my-baseline.json --current run.csv
+  # 2. after a change, capture three runs again and check them against it
+  python3 -I external/frameledger/frameledger.pyz compare --baseline baseline.txt \
+      --new run_1.csv run_2.csv run_3.csv \
+      --override "inputs=the frame log lists no inputs yet"
   ```
+  The baseline file lists its runs by path, relative to itself, so keep them
+  together. Exit 0 means nothing got slower, 1 means something did, and 2
+  means the runs cannot be judged — for one, when another program was using
+  the machine during a run. The `--override` is needed until the frame log
+  records its inputs.
   Use `--demo-flythrough --no-vsync`, not `--visual-test`: the visual-test
   harness reads pixels and writes PNGs and a report inside its frames, so its
   timings are not the engine's. Use a Release build. Discard the first capture
   of a session — it runs cold and reads slow.
-  A self-test over committed fixtures (`tests/fixtures/perf_gate/`) runs
+  A check over small committed run files (`tests/fixtures/perf_compare/`) runs
   as part of `ctest`, so the gate itself is covered even on CI's software
   renderer.
 

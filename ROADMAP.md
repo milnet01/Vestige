@@ -1,6 +1,6 @@
 <!-- ants-roadmap-format: 1 -->
 <!-- Generated from the Ants Terminal roadmap store. Edit it with roadmap_log; hand edits are discarded by the next write. -->
-<!-- ants-roadmap-id-high-water: 3D_E=971 3D_E#S=989 -->
+<!-- ants-roadmap-id-high-water: 3D_E=972 3D_E#S=989 -->
 
 # Vestige Engine Roadmap
 
@@ -7755,7 +7755,7 @@ shipped that have no invocation path at all.
   Source: frameledger-FLED-0063-review-2026-11-11.
   Lanes: core, profiler.
 
-- 📋 [3D_E-0970] **Retire tools/perf_gate.py's live gate for frameledger compare against a saved baseline.**
+- ✅ [3D_E-0970] **Retire tools/perf_gate.py's live gate for frameledger compare against a saved baseline.**
   gpu_mb now measures this process alone on Linux and Windows
   (3D_E-0820), so frameledger compare can judge memory. What remains:
   a frameledger release holding `--baseline FILE` (FLED-0035, built
@@ -7769,6 +7769,14 @@ shipped that have no invocation path at all.
   header is vendored from the v0.5.0 release zip (the zip's SHA-256
   matched the release's; the header matched the tag). The captures, the
   ctest swap and the deletion remain.
+  2026-11-13: shipped. frameledger.pyz (v0.5.0, from the release zip;
+  the zip's SHA-256 matched the published digest) is vendored beside the
+  header (user's choice). The PerfGate ctest entries run it over
+  tests/fixtures/perf_compare; tools/perf_gate.py and
+  tests/fixtures/perf_gate are deleted. The live baseline (five quiet
+  runs at 0508b49, RX 6600, 1920x1080) is kept outside git at
+  Vestige_private/perf-baseline/rx6600-2026-11-13 (user's choice; 29
+  MB). Every compare call carries --override inputs until 3D_E-0972.
   **Layman:** Two tools check for slowdowns; keep the newer one.
   Kind: chore.
   Source: 3D_E-0820 shipped 2026-11-12.
@@ -7796,6 +7804,22 @@ shipped that have no invocation path at all.
   **Layman:** On Windows a speed test cannot yet say when another program was busy, so a slow reading caused by that is trusted when it should not be.
   Kind: enhancement.
   Source: 3D_E-0968 Windows half 2026-11-12.
+  Lanes: profiler.
+
+- 📋 [3D_E-0972] **Fill the frame log's inputs field so frameledger compare needs no override.**
+  --frame-log writes "inputs":[] (engine/profiler/frame_ledger_log.cpp).
+  frameledger compare refuses two sets of runs whose inputs are both
+  empty (exit 3), so every compare call, the PerfGate ctest entries and
+  the README recipe pass --override "inputs=...". The format (frameledger
+  spec § 4.2) wants [{"name", "hash": "sha256:<hex>", "bytes"}]. Open:
+  what the meadow flythrough's inputs are (the scene is built in code;
+  its textures and models are files) and what hashing them costs at
+  start-up. When this ships, drop the override from tests/CMakeLists.txt
+  and README.md and re-record the baseline.
+  CPU / GPU placement: CPU file hashing at run start; nothing on the GPU.
+  **Layman:** The speed check cannot yet tell whether two runs showed the same scene content, so it has to be told to trust that; record the content so it can check.
+  Kind: enhancement.
+  Source: 3D_E-0970 captures 2026-11-13.
   Lanes: profiler.
 
 ## 0.3.0 — An editor a builder can use

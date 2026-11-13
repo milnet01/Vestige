@@ -653,33 +653,47 @@ if(Python3_FOUND)
             "(ShaderCompileGlslang) is not registered.")
     endif()
 
-    # --- Performance-regression gate (3D_E-0030) -------------------------------
-    # Comparator that reduces a profiler CSV and compares it to a committed
-    # baseline (design: docs/phases/phase_10_perf_regression_gate_design.md). The
-    # live gate runs on real GPU hardware; here we only exercise the hardware-
-    # agnostic comparator over committed fixtures — valid on GPU-less CI.
+    # --- Performance-regression gate (3D_E-0970) -------------------------------
+    # frameledger compare judges fresh runs against a saved baseline: a text
+    # file that lists the baseline's run files. The live check needs real GPU
+    # hardware and a baseline recorded there (README, Tooling). Here the vendored
+    # analyser (external/frameledger/frameledger.pyz, Python 3.10 or newer) runs
+    # over small committed run files, which is valid on GPU-less CI. Each is a
+    # 40-frame slice of a real meadow flythrough; the slower_* set is the same
+    # frames with every time multiplied by 1.4.
     #
-    # --selftest asserts every fixture's expected verdict + exit (design §10),
-    # including the floor / MISSING / INCONCLUSIVE / --strict-warn / INV-4 paths.
+    # The override is needed because the frame log lists no inputs yet
+    # (3D_E-0972), and compare refuses runs whose inputs are unknown.
+    set(_fled ${CMAKE_SOURCE_DIR}/external/frameledger/frameledger.pyz)
+    set(_fled_fixtures ${CMAKE_CURRENT_SOURCE_DIR}/fixtures/perf_compare)
+    set(_fled_compare -I ${_fled} compare
+            --baseline ${_fled_fixtures}/baseline.txt
+            --override "inputs=the frame log lists no inputs yet")
+    # ctest cannot pin an exit code itself, so a one-line Python wrapper
+    # compares it: its first argument is the exit code the rest must give.
+    set(_exits_with -c
+            "import subprocess, sys; raise SystemExit(subprocess.call([sys.executable] + sys.argv[2:]) != int(sys.argv[1]))")
+
+    # The analyser's own checks pass on this Python.
     add_test(
         NAME PerfGateSelftest
-        COMMAND Python3::Interpreter
-                ${CMAKE_SOURCE_DIR}/tools/perf_gate.py --selftest
-                --root ${CMAKE_CURRENT_SOURCE_DIR}/fixtures/perf_gate
+        COMMAND Python3::Interpreter -I ${_fled} --selftest
     )
-
-    # Pins that the real compare path exits non-zero on a genuine regression:
-    # regressed.csv is frame,total +40% vs the baseline. WILL_FAIL inverts the
-    # pass condition (same shape as ShaderLintCatchesViolation).
+    # Runs as fast as the baseline's pass: exit 0.
+    add_test(
+        NAME PerfGatePassesUnchangedRuns
+        COMMAND Python3::Interpreter ${_exits_with} 0 ${_fled_compare}
+                --new ${_fled_fixtures}/same_1.csv ${_fled_fixtures}/same_2.csv
+                      ${_fled_fixtures}/same_3.csv
+    )
+    # Slower runs are reported as slower: exit 1, never 2 (cannot be judged)
+    # or 3 (refused), which WILL_FAIL would also accept.
     add_test(
         NAME PerfGateCatchesRegression
-        COMMAND Python3::Interpreter
-                ${CMAKE_SOURCE_DIR}/tools/perf_gate.py
-                --baseline ${CMAKE_CURRENT_SOURCE_DIR}/fixtures/perf_gate/baseline.json
-                --current ${CMAKE_CURRENT_SOURCE_DIR}/fixtures/perf_gate/regressed.csv
+        COMMAND Python3::Interpreter ${_exits_with} 1 ${_fled_compare}
+                --new ${_fled_fixtures}/slower_1.csv ${_fled_fixtures}/slower_2.csv
+                      ${_fled_fixtures}/slower_3.csv
     )
-    set_tests_properties(PerfGateCatchesRegression
-                         PROPERTIES WILL_FAIL TRUE)
 
     # tools/fps_floor.py (3D_E-0792): a steady run whose only slow frame is in
     # the warm-up passes; one hitch after warm-up fails; a file with nothing
@@ -721,5 +735,5 @@ if(Python3_FOUND)
 else()
     message(WARNING
         "Python3 not found — skipping localization_audit + shader_lint + "
-        "perf_gate ctest gates.")
+        "frameledger compare ctest gates.")
 endif()

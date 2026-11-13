@@ -9,7 +9,7 @@ C++17 · OpenGL 4.5 · GLFW · GLM · CMake · Google Test. Jolt Physics · Open
 Ryzen 5 5600 · RX 6600 (RDNA2, GL 4.6, Vulkan 1.3) · 32 GB · Linux.
 
 ## Performance
-**60 FPS minimum — hard requirement.** Measure it on the dev hardware with a Release build: `vestige --demo-flythrough --no-vsync --window-size=1920x1080 --profile-log=run.csv` at the default quality, then `tools/fps_floor.py run.csv`. Every one-second sample after two seconds of warm-up must read at least 60 FPS. An average hides hitches, and a Debug or ASan build is not a reading. `tools/perf_gate.py` is a different check: it compares against a committed baseline. Profile before optimizing. Prefer GPU-efficient paths (batching, instancing, culling).
+**60 FPS minimum — hard requirement.** Measure it on the dev hardware with a Release build: `vestige --demo-flythrough --no-vsync --window-size=1920x1080 --profile-log=run.csv` at the default quality, then `tools/fps_floor.py run.csv`. Every one-second sample after two seconds of warm-up must read at least 60 FPS. An average hides hitches, and a Debug or ASan build is not a reading. Comparing against a saved baseline is a different check: `frameledger compare --baseline` (README, Tooling). Profile before optimizing. Prefer GPU-efficient paths (batching, instancing, culling).
 
 ## Global rules apply
 Everything in `~/.claude/CLAUDE.md` and the standards it points at is in force here. Read them there; they are not restated below, because a rule stated twice is two rules that will disagree.
