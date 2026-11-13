@@ -1,6 +1,6 @@
 <!-- ants-roadmap-format: 1 -->
 <!-- Generated from the Ants Terminal roadmap store. Edit it with roadmap_log; hand edits are discarded by the next write. -->
-<!-- ants-roadmap-id-high-water: 3D_E=976 3D_E#S=989 -->
+<!-- ants-roadmap-id-high-water: 3D_E=977 3D_E#S=989 -->
 
 # Vestige Engine Roadmap
 
@@ -7961,7 +7961,7 @@ shipped that have no invocation path at all.
   Source: 3D_E-0795 investigation 2026-11-13.
   Lanes: renderer, profiler.
 
-- 📋 [3D_E-0976] **A second in-place buffer write still makes the driver wait, about 13 times a flythrough.**
+- ✅ [3D_E-0976] **A second in-place buffer write still makes the driver wait, about 13 times a flythrough.**
   After 808a5f5 (3D_E-0975), gdb on the meadow flythrough (breakpoint on
   drmSyncobjWait in the main thread, Mesa 26.2.6) still shows 13 waits
   under a BufferSubData of 4288-4416 bytes at offset 0, reached when a
@@ -7976,10 +7976,39 @@ shipped that have no invocation path at all.
   driver thread finish its queue at every pass; whether that costs frame
   time in a Release build is not measured.
   CPU / GPU placement: CPU-side upload pattern; no shader change.
+  Shipped 2026-11-13. The writer was the foliage instance buffer
+  (FoliageRenderer::uploadInstances, GL buffer 31 in the run), not the
+  renderer's InstanceBuffer. Method: gdb python hooks printed the GL buffer
+  name under each main-thread drmSyncobjWait and the engine caller of each
+  4-4.8 KB NamedBufferSubData. At HEAD every such wait was the foliage
+  buffer (3 in that run; 12 and 13 in others); InstanceBuffer never waited,
+  so it was left alone (a ring for it was written, shown not to change the
+  wait count, and dropped). Fix: each upload claims its own range
+  (TreeRenderer::claimInstanceRange) and draws with a base instance; a wrap
+  discards the buffer. Two gdb runs of the fixed build: 0 waits under a
+  buffer write. --demo-capture, every 40th frame, 2% fuzz: fixed vs old
+  differs by 57-323 pixels, old vs old by 130-842. No frame-time claim:
+  the desktop was not quiet. No unit test added: uploadInstances is
+  private and needs a loaded FoliageRenderer; the claim logic is covered by
+  TreeInstanceRangeTest. The glPushDebugGroup question moved to its own item.
   **Layman:** One more data upload still makes the graphics driver pause now and then; find it and give it the same fix the trees got.
   Kind: investigate.
   Source: 3D_E-0975 investigation 2026-11-13.
   Lanes: renderer, profiler.
+
+- 📋 [3D_E-0977] **Measure what glPushDebugGroup in GpuTimer::beginPass costs a Release frame.**
+  GpuTimer::beginPass calls glPushDebugGroup. Under Mesa's glthread
+  that call makes the driver thread finish its queue
+  (_mesa_glthread_finish_before, seen in gdb backtraces, Mesa 26.2.6), at
+  every pass of every frame. Whether that costs frame time in a Release
+  build is not measured. Needs a quiet desktop: fly a build with the
+  debug groups compiled out against HEAD, in turn, and compare
+  frame/cpu_span and the count of frames over 16.667 ms.
+  CPU / GPU placement: CPU-side driver call pattern; no shader change.
+  **Layman:** The engine's timing labels make the graphics driver catch up at every pass; find out whether that slows a normal frame.
+  Kind: investigate.
+  Source: 3D_E-0976 investigation 2026-11-13.
+  Lanes: profiler, renderer.
 
 ## 0.3.0 — An editor a builder can use
 

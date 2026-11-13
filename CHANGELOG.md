@@ -25,6 +25,11 @@ may change any interface without notice.
 
 ## [Unreleased]
 
+### 2026-11-13 Fixed — drawing grass no longer makes the graphics driver wait (3D_E-0976)
+
+- **Each kind of grass writes its positions to its own part of the foliage buffer**
+  Before, every kind in every pass wrote at the start of one buffer, and now and then the Mesa driver (radeonsi, 26.2.6) stopped to wait for the graphics card before letting the write through. This was the wait left over after the tree fix (3D_E-0975). Found and checked with gdb on the meadow flythrough on 2026-11-13: runs without the fix stopped there between 3 and 13 times each, and two runs with it did not stop there at all. The picture is unchanged. No frame-time gain is claimed: the desktop was not quiet, so none was measured.
+
 ### 2026-11-13 Fixed — drawing trees no longer makes the graphics driver wait (3D_E-0975, 3D_E-0973)
 
 - **Each group of trees writes its positions to its own part of the shared buffer**
