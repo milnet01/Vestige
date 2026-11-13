@@ -3,10 +3,15 @@
 
 /// @file test_instanced_rendering.cpp
 /// @brief Unit tests for instanced rendering batch-building logic.
+#include "gl_test_fixture.h"
+
+#include "renderer/indirect_buffer.h"
 #include "renderer/instance_buffer.h"
 #include "renderer/tree_renderer.h"
 
 #include <gtest/gtest.h>
+
+#include <array>
 #include <glm/glm.hpp>
 
 #include "renderer/renderer.h"
@@ -328,4 +333,36 @@ TEST(TreeInstanceRangeTest, AClaimThatExactlyFillsTheBufferDoesNotWrap)
     EXPECT_EQ(TreeRenderer::claimInstanceRange(cursor, 24, 64, wrapped), 40);
     EXPECT_FALSE(wrapped);
     EXPECT_EQ(cursor, 64);
+}
+
+// 3D_E-0973. IndirectBuffer allocated each of its three buffers at an exact
+// fit, so one more draw command or instance deleted and recreated them, as
+// InstanceBuffer did before 3D_E-0795.
+class IndirectBufferCapacityTest : public Vestige::Test::GLTestFixture {};
+
+TEST_F(IndirectBufferCapacityTest, OneMoreCommandReusesAllThreeBuffers)
+{
+    auto sizes = [](const IndirectBuffer& buffer)
+    {
+        std::array<GLint64, 3> out{};
+        glGetNamedBufferParameteri64v(buffer.getCommandBuffer(), GL_BUFFER_SIZE, &out[0]);
+        glGetNamedBufferParameteri64v(buffer.getMatrixSsbo(), GL_BUFFER_SIZE, &out[1]);
+        glGetNamedBufferParameteri64v(buffer.getPrevMatrixSsbo(), GL_BUFFER_SIZE, &out[2]);
+        return out;
+    };
+    const MeshPoolEntry entry{0, 0, 3};
+    const std::vector<glm::mat4> one(1, glm::mat4(1.0f));
+
+    IndirectBuffer buffer;
+    buffer.addCommand(entry, one, one);
+    buffer.upload();
+    const auto before = sizes(buffer);
+    ASSERT_GE(before[0], static_cast<GLint64>(sizeof(DrawElementsIndirectCommand)));
+    ASSERT_GE(before[1], static_cast<GLint64>(sizeof(glm::mat4)));
+
+    buffer.clear();
+    buffer.addCommand(entry, one, one);
+    buffer.addCommand(entry, one, one);
+    buffer.upload();
+    EXPECT_EQ(sizes(buffer), before);
 }

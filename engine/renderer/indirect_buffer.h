@@ -75,6 +75,12 @@ public:
     GLuint getCommandBuffer() const;
 
 private:
+    /// @brief Copies @p count elements of @p elementSize bytes into @p buffer,
+    ///        first recreating it with InstanceBuffer::grownCapacity's headroom
+    ///        when they exceed @p capacity (counted in elements).
+    static void uploadWithHeadroom(GLuint& buffer, size_t& capacity, const void* data,
+                                   size_t count, size_t elementSize);
+
     // CPU-side staging buffers (rebuilt per frame)
     std::vector<DrawElementsIndirectCommand> m_commands;
     std::vector<glm::mat4> m_allMatrices;

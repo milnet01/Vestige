@@ -5,6 +5,8 @@
 /// @brief Indirect draw command buffer and matrix SSBO implementation.
 #include "renderer/indirect_buffer.h"
 
+#include "renderer/instance_buffer.h"
+
 namespace Vestige
 {
 
@@ -68,57 +70,30 @@ void IndirectBuffer::upload()
         return;
     }
 
-    // Upload commands to indirect buffer
-    auto cmdSize = static_cast<GLsizeiptr>(
-        m_commands.size() * sizeof(DrawElementsIndirectCommand));
+    uploadWithHeadroom(m_commandBuffer, m_commandCapacity, m_commands.data(),
+                       m_commands.size(), sizeof(DrawElementsIndirectCommand));
+    uploadWithHeadroom(m_matrixSsbo, m_matrixCapacity, m_allMatrices.data(),
+                       m_allMatrices.size(), sizeof(glm::mat4));
+    // Previous-frame matrices, in the parallel SSBO (motion vectors, binding 4).
+    uploadWithHeadroom(m_prevMatrixSsbo, m_prevMatrixCapacity, m_allPrevMatrices.data(),
+                       m_allPrevMatrices.size(), sizeof(glm::mat4));
+}
 
-    if (m_commands.size() > m_commandCapacity)
+void IndirectBuffer::uploadWithHeadroom(GLuint& buffer, size_t& capacity, const void* data,
+                                        size_t count, size_t elementSize)
+{
+    if (count > capacity)
     {
-        // Reallocate (immutable storage — must delete and recreate)
-        glDeleteBuffers(1, &m_commandBuffer);
-        glCreateBuffers(1, &m_commandBuffer);
-        m_commandCapacity = m_commands.size();
-        glNamedBufferStorage(m_commandBuffer, cmdSize, m_commands.data(),
-                             GL_DYNAMIC_STORAGE_BIT);
+        // Immutable storage cannot grow: delete and recreate, with room to
+        // spare so one more command or instance does not recreate it again
+        // (a recreation cost a slow frame on InstanceBuffer, 3D_E-0795).
+        glDeleteBuffers(1, &buffer);
+        glCreateBuffers(1, &buffer);
+        capacity = InstanceBuffer::grownCapacity(count, capacity);
+        glNamedBufferStorage(buffer, static_cast<GLsizeiptr>(capacity * elementSize),
+                             nullptr, GL_DYNAMIC_STORAGE_BIT);
     }
-    else
-    {
-        glNamedBufferSubData(m_commandBuffer, 0, cmdSize, m_commands.data());
-    }
-
-    // Upload matrices to SSBO
-    auto matSize = static_cast<GLsizeiptr>(
-        m_allMatrices.size() * sizeof(glm::mat4));
-
-    if (m_allMatrices.size() > m_matrixCapacity)
-    {
-        glDeleteBuffers(1, &m_matrixSsbo);
-        glCreateBuffers(1, &m_matrixSsbo);
-        m_matrixCapacity = m_allMatrices.size();
-        glNamedBufferStorage(m_matrixSsbo, matSize, m_allMatrices.data(),
-                             GL_DYNAMIC_STORAGE_BIT);
-    }
-    else
-    {
-        glNamedBufferSubData(m_matrixSsbo, 0, matSize, m_allMatrices.data());
-    }
-
-    // Upload previous-frame matrices to the parallel SSBO (motion vectors, binding 4).
-    auto prevSize = static_cast<GLsizeiptr>(
-        m_allPrevMatrices.size() * sizeof(glm::mat4));
-
-    if (m_allPrevMatrices.size() > m_prevMatrixCapacity)
-    {
-        glDeleteBuffers(1, &m_prevMatrixSsbo);
-        glCreateBuffers(1, &m_prevMatrixSsbo);
-        m_prevMatrixCapacity = m_allPrevMatrices.size();
-        glNamedBufferStorage(m_prevMatrixSsbo, prevSize, m_allPrevMatrices.data(),
-                             GL_DYNAMIC_STORAGE_BIT);
-    }
-    else
-    {
-        glNamedBufferSubData(m_prevMatrixSsbo, 0, prevSize, m_allPrevMatrices.data());
-    }
+    glNamedBufferSubData(buffer, 0, static_cast<GLsizeiptr>(count * elementSize), data);
 }
 
 void IndirectBuffer::draw() const
