@@ -268,6 +268,30 @@ std::vector<Block> parseMarkdown(std::string_view source)
     return out;
 }
 
+// We don't have a bold font loaded, so rendering the markers verbatim would
+// look worse than plain text.
+std::string stripBoldMarkers(std::string_view text)
+{
+    std::string out;
+    out.reserve(text.size());
+    bool inCode = false;
+    for (size_t i = 0; i < text.size(); ++i)
+    {
+        if (text[i] == '`')
+        {
+            inCode = !inCode;
+        }
+        else if (!inCode && i + 1 < text.size()
+                 && text[i] == '*' && text[i + 1] == '*')
+        {
+            ++i;
+            continue;
+        }
+        out.push_back(text[i]);
+    }
+    return out;
+}
+
 // ---------------------------------------------------------------------------
 // Renderer
 // ---------------------------------------------------------------------------
@@ -279,24 +303,6 @@ constexpr ImVec4 kCodeColor    { 0.55f, 0.90f, 1.00f, 1.0f };   // cyan-ish
 constexpr ImVec4 kH1Color      { 1.00f, 0.95f, 0.60f, 1.0f };   // warm yellow
 constexpr ImVec4 kH2Color      { 0.75f, 1.00f, 0.75f, 1.0f };   // soft green
 constexpr ImVec4 kH3Color      { 0.85f, 0.85f, 1.00f, 1.0f };   // soft blue
-
-// Strips ``**bold**`` markers. We don't have a bold font loaded, so
-// rendering them verbatim would look worse than plain text.
-std::string stripBoldMarkers(const std::string& text)
-{
-    std::string out;
-    out.reserve(text.size());
-    for (size_t i = 0; i < text.size(); ++i)
-    {
-        if (i + 1 < text.size() && text[i] == '*' && text[i + 1] == '*')
-        {
-            ++i;
-            continue;
-        }
-        out.push_back(text[i]);
-    }
-    return out;
-}
 
 // Inline renderer: walks ``text`` and splits it into spans around
 // backtick-delimited code pairs. Words are emitted one at a time with

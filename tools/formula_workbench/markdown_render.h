@@ -57,6 +57,12 @@ struct Block
 /// styling when drawing.
 std::vector<Block> parseMarkdown(std::string_view source);
 
+/// @brief Removes ``**bold**`` markers, which the renderer cannot draw.
+///
+/// Text inside a backtick code span is left alone: there ``**`` is a
+/// formula's power operator.
+std::string stripBoldMarkers(std::string_view text);
+
 /// @brief Renders a parsed block list into the current ImGui window.
 ///
 /// Uses ``ImGui::TextWrapped`` / ``ImGui::BeginTable`` / ``ImGui::Separator``

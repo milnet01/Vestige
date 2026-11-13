@@ -13,6 +13,7 @@
 
 using Vestige::markdown::BlockType;
 using Vestige::markdown::parseMarkdown;
+using Vestige::markdown::stripBoldMarkers;
 
 TEST(MarkdownParser, EmptyInputProducesNoBlocks)
 {
@@ -237,4 +238,14 @@ TEST(MarkdownParser, EscapedPipeInsideTableCell)
     ASSERT_EQ(blocks[0].rows.size(), 1u);
     EXPECT_EQ(blocks[0].rows[0][0], "one \\| two");
     EXPECT_EQ(blocks[0].rows[0][1], "three");
+}
+
+// 3D_E-0874: a formula in a code span keeps its `**` (power) operator.
+TEST(MarkdownInline, BoldMarkersAreKeptInsideCodeSpans)
+{
+    EXPECT_EQ(stripBoldMarkers("**Best:** `a * x0**2 + b`"),
+              "Best: `a * x0**2 + b`");
+    // Outside a code span the markers still go, before and after one.
+    EXPECT_EQ(stripBoldMarkers("**a** `b**c` **d**"), "a `b**c` d");
+    EXPECT_EQ(stripBoldMarkers("no markers"), "no markers");
 }
