@@ -7493,7 +7493,7 @@ shipped that have no invocation path at all.
   Workbench flag with no value exits 2; 993f5f8 shader_lint counts only
   shaders on the standard version; 79d1548 pure script nodes stop at
   MAX_NODES_PER_CHAIN.
-  2026-11-13 (fourth batch): four more rows, red test first. fd8a6ee
+  2026-11-13 (fourth batch): four more rows, red test first. e6eac3b
   generated C++ writes sign as glm::sign, naming its argument once, and
   LutGenerator keeps a caller's value over a coefficient default; c805e7e
   the localisation audit counts a tr() call once and is excused only by a
