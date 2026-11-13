@@ -157,8 +157,13 @@ private:
     ///        setup lives in one place (Rule 3). Returns 0 on GL failure.
     GLuint uploadRGBA8(const uint8_t* pixels, int w, int h);
 
-    /// @brief Uploads foliage instances to the GPU instance buffer.
-    void uploadInstances(const std::vector<FoliageInstance>& instances);
+    /// @brief Uploads foliage instances to a range of the GPU instance buffer
+    ///        that no upload has written since the buffer was last discarded.
+    ///        Writing every type at the start, over instances the frame
+    ///        before may still be drawing, made the driver wait for the
+    ///        graphics card (3D_E-0976).
+    /// @return The first instance of the range, for a base-instance draw.
+    GLuint uploadInstances(const std::vector<FoliageInstance>& instances);
 
     /// @brief Pre-allocated instance-buffer capacity. Phase 10.9 Pe3:
     ///        sized to cover a typical chunk's visible foliage so the
@@ -173,6 +178,7 @@ private:
     GLuint m_starVbo = 0;
     GLuint m_instanceVbo = 0;
     int m_instanceCapacity = 0;
+    int m_instanceCursor = 0;   ///< First instance no upload has written since the last discard.
 
     // Per-type procedural textures (typeId → GL texture handle)
     std::unordered_map<uint32_t, GLuint> m_typeTextures;

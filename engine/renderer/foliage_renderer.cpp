@@ -10,6 +10,7 @@
 #include "renderer/directional_shadow_uniforms.h"
 #include "renderer/scoped_blend_state.h"
 #include "renderer/scoped_cull_face.h"
+#include "renderer/tree_renderer.h"
 #include "core/logger.h"
 
 #include <stb_image.h>
@@ -203,9 +204,9 @@ void FoliageRenderer::render(
             glBindTextureUnit(0, texIt->second);
         }
 
-        uploadInstances(instances);
-        glDrawArraysInstanced(GL_TRIANGLES, 0, 18,
-                              static_cast<GLsizei>(instances.size()));
+        const GLuint first = uploadInstances(instances);
+        glDrawArraysInstancedBaseInstance(GL_TRIANGLES, 0, 18,
+                                          static_cast<GLsizei>(instances.size()), first);
     }
 
     // R4: blend + cull state restored by RAII on function exit (was
@@ -303,9 +304,9 @@ void FoliageRenderer::renderShadow(
             glBindTextureUnit(0, texIt->second);
         }
 
-        uploadInstances(instances);
-        glDrawArraysInstanced(GL_TRIANGLES, 0, 18,
-                              static_cast<GLsizei>(instances.size()));
+        const GLuint first = uploadInstances(instances);
+        glDrawArraysInstancedBaseInstance(GL_TRIANGLES, 0, 18,
+                                          static_cast<GLsizei>(instances.size()), first);
     }
 }
 
@@ -384,6 +385,7 @@ void FoliageRenderer::createStarMesh()
     // visible instances, common for grass/rocks/trees in one biome)
     // never triggers a reallocation. (Phase 10.9 Pe3.)
     m_instanceCapacity = INITIAL_INSTANCE_CAPACITY;
+    m_instanceCursor = 0;
     glCreateBuffers(1, &m_instanceVbo);
     glNamedBufferStorage(m_instanceVbo,
                          m_instanceCapacity * static_cast<GLsizeiptr>(sizeof(FoliageInstance)),
@@ -669,7 +671,7 @@ void FoliageRenderer::setTypeTexture(uint32_t typeId, const std::string& path)
     m_typeTextures[typeId] = uploaded;
 }
 
-void FoliageRenderer::uploadInstances(const std::vector<FoliageInstance>& instances)
+GLuint FoliageRenderer::uploadInstances(const std::vector<FoliageInstance>& instances)
 {
     int count = static_cast<int>(instances.size());
 
@@ -695,12 +697,24 @@ void FoliageRenderer::uploadInstances(const std::vector<FoliageInstance>& instan
 
         // Re-bind to VAO binding point 1
         glVertexArrayVertexBuffer(m_starVao, 1, m_instanceVbo, 0, sizeof(FoliageInstance));
+        m_instanceCursor = 0;
     }
 
-    // Upload instance data
-    glNamedBufferSubData(m_instanceVbo, 0,
+    bool wrapped = false;
+    const int first = TreeRenderer::claimInstanceRange(m_instanceCursor, count,
+                                                       m_instanceCapacity, wrapped);
+    if (wrapped)
+    {
+        // Back at the start, where an earlier draw may still be reading:
+        // declare the old contents dead so the driver hands out fresh
+        // storage instead of waiting for that draw.
+        glInvalidateBufferData(m_instanceVbo);
+    }
+    glNamedBufferSubData(m_instanceVbo,
+                         first * static_cast<GLintptr>(sizeof(FoliageInstance)),
                          count * static_cast<GLsizeiptr>(sizeof(FoliageInstance)),
                          instances.data());
+    return static_cast<GLuint>(first);
 }
 
 } // namespace Vestige
