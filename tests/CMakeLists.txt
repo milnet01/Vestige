@@ -532,6 +532,19 @@ if(Python3_FOUND)
         set_tests_properties(${_l10n_name} PROPERTIES WILL_FAIL TRUE)
     endforeach()
 
+    # A missing key used twice is reported at its first use, as the message
+    # says (3D_E-0874: it named the last). The fixture's first use is line 8.
+    add_test(
+        NAME LocalizationAuditNamesTheFirstUse
+        COMMAND Python3::Interpreter
+                ${CMAKE_SOURCE_DIR}/tools/localization_audit.py --strict
+                --root ${CMAKE_CURRENT_SOURCE_DIR}/fixtures/localization_audit_first_use
+                --reference ${CMAKE_CURRENT_SOURCE_DIR}/fixtures/localization_audit_first_use/en.json
+                --secondary ${CMAKE_CURRENT_SOURCE_DIR}/fixtures/localization_audit_first_use/en.json
+    )
+    set_tests_properties(LocalizationAuditNamesTheFirstUse PROPERTIES
+                         PASS_REGULAR_EXPRESSION "first use [^\n]*twice\\.cpp:8\\)")
+
     # --- 3D_E-0628 — input-poll audit (input spec § 12) ------------------------
     # "No raw key poll is reachable from gameplay code." The spec defines the
     # rule as two greps and says to wire them into the suite as part of

@@ -143,7 +143,10 @@ def main(argv: list[str] | None = None) -> int:
 
     hardcoded, tr_uses = scan_sources(roots)
     missing_tr = sorted({k for k, _ in tr_uses if k not in ref_keys})
-    missing_locs = {k: loc for k, loc in tr_uses if k not in ref_keys}
+    missing_locs: dict[str, str] = {}
+    for k, loc in tr_uses:
+        if k not in ref_keys:
+            missing_locs.setdefault(k, loc)  # keep the first use, not the last
 
     failed = False
 
