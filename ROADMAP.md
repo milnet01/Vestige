@@ -1,6 +1,6 @@
 <!-- ants-roadmap-format: 1 -->
 <!-- Generated from the Ants Terminal roadmap store. Edit it with roadmap_log; hand edits are discarded by the next write. -->
-<!-- ants-roadmap-id-high-water: 3D_E=977 3D_E#S=989 -->
+<!-- ants-roadmap-id-high-water: 3D_E=978 3D_E#S=989 -->
 
 # Vestige Engine Roadmap
 
@@ -8041,6 +8041,22 @@ shipped that have no invocation path at all.
   Kind: investigate.
   Source: 3D_E-0976 investigation 2026-11-13.
   Lanes: profiler, renderer.
+
+- 📋 [3D_E-0978] **The frame log's header says pipelined false, but the engine's CPU and GPU work overlap.**
+  engine/profiler/frame_ledger_log.cpp hard-codes "pipelined": false.
+  FLED-0001 § 4.2 defines it as: CPU work for frame N+1 overlaps GPU
+  work for frame N. The baseline runs at 4961504 show the overlap:
+  median wall 9.24 ms, gpu_span 9.23 ms, cpu_span 1.85 ms, so wall is
+  far below cpu + gpu; gpu_span > wall on about half the frames, and
+  cpu_span > wall on none. Found while reviewing frameledger's
+  FLED-0037 span_over_wall draft (2026-11-14).
+  Done when: the header says true where the GL driver queues frames
+  (work out whether it is always so with no vsync and with vsync), a
+  test pins the value, and report's CPU/GPU-bound share is read again
+  on a fresh run.
+  **Layman:** The speed log tells the analyser the wrong thing about how the engine runs, so some of its judgements could be wrong.
+  Kind: fix.
+  Source: frameledger-review-2026-11-14.
 
 ## 0.3.0 — An editor a builder can use
 

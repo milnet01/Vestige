@@ -66,6 +66,22 @@ class TestExtractSymbols:
         names = [s["name"] for s in syms]
         assert "computeSomething" in names
 
+    def test_method_declarations_are_not_free_functions(self, tmp_path: Path):
+        # A method is used through its object; only free functions and
+        # classes are checked. Nested braces in the body must not end it.
+        p = _write(tmp_path, "widget.h",
+                   "class Widget {\n"
+                   "public:\n"
+                   "    struct Opts { int depth; };\n"
+                   "    void publicMethod(int x);\n"
+                   "private:\n"
+                   "    void privateHelper();\n"
+                   "};\n"
+                   "void freeAfterClass(int x);\n")
+        syms = _extract_symbols_from_header(p, "widget.h")
+        names = sorted(s["name"] for s in syms)
+        assert names == ["Opts", "Widget", "freeAfterClass"]
+
     def test_skips_blocklisted_names(self, tmp_path: Path):
         p = _write(tmp_path, "x.h",
                    "void run();\n"
@@ -122,20 +138,52 @@ class TestAnalyzeDeadPublicApi:
         assert "LiveWidget" not in names
 
     def test_self_reference_in_own_header_does_not_save(self, tmp_path: Path):
-        # The detector excludes the declaration itself from the count
-        # (count <= 1 means dead). A typedef alias inside the SAME
-        # header still counts as dead from the project's POV.
+        # A typedef alias inside the SAME header is not a use from the
+        # rest of the project: the declaring header is left out.
         _write(tmp_path, "alias.h",
                "class HiddenWidget {};\n"
                "using HiddenWidgetAlias = HiddenWidget;\n")
         config = _make_config(tmp_path)
         result, findings = analyze_dead_public_api(config)
         names = [s["name"] for s in result.dead_symbols]
-        # HiddenWidget appears 2x in the same file — declaration + alias
-        # — so the corpus-wide count is 2 and it's NOT flagged. This
-        # matches the documented permissive behaviour: we'd rather miss
-        # a dead symbol than incorrectly flag a live one.
-        assert "HiddenWidget" not in names
+        assert "HiddenWidget" in names
+
+    def test_own_cpp_definition_does_not_save(self, tmp_path: Path):
+        # Declared in its header and defined in its own .cpp, called from
+        # nowhere else: dead (user decision 2026-11-14, strict rule).
+        _write(tmp_path, "engine/util/maths.h",
+               "class MathsHelper {\n"
+               "public:\n"
+               "    MathsHelper();\n"
+               "};\n"
+               "int clampValue(int v);\n")
+        _write(tmp_path, "engine/util/maths.cpp",
+               '#include "maths.h"\n'
+               "MathsHelper::MathsHelper() {}\n"
+               "int clampValue(int v) { return v; }\n")
+        config = _make_config(tmp_path)
+        result, findings = analyze_dead_public_api(config)
+        names = sorted(s["name"] for s in result.dead_symbols)
+        assert names == ["MathsHelper", "clampValue"]
+
+    def test_use_in_another_file_saves_it(self, tmp_path: Path):
+        _write(tmp_path, "engine/util/maths.h", "int clampValue(int v);\n")
+        _write(tmp_path, "engine/util/maths.cpp",
+               "int clampValue(int v) { return v; }\n")
+        _write(tmp_path, "engine/core/user.cpp",
+               "int f() { return clampValue(3); }\n")
+        config = _make_config(tmp_path)
+        result, findings = analyze_dead_public_api(config)
+        assert result.dead_symbols == []
+
+    def test_same_stem_cpp_elsewhere_still_counts_as_use(self, tmp_path: Path):
+        # Only the header's own .cpp (same directory) is left out.
+        _write(tmp_path, "engine/util/maths.h", "int clampValue(int v);\n")
+        _write(tmp_path, "tools/maths.cpp",
+               "int f() { return clampValue(3); }\n")
+        config = _make_config(tmp_path)
+        result, findings = analyze_dead_public_api(config)
+        assert result.dead_symbols == []
 
     def test_extra_blocklist_via_config(self, tmp_path: Path):
         _write(tmp_path, "h.h",
