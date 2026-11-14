@@ -132,6 +132,27 @@ class TestCountCoverageForSubsystem:
         t1.write_text("#include <engine/core/x.h>\nTEST(X,Y){}\n")
         assert _count_coverage_for_subsystem("core", [t1]) == 1
 
+    def test_counts_via_include_relative_to_engine_dir(self, tmp_path: Path):
+        """Vestige's tests put engine/ on the include path and write
+        ``#include "renderer/x.h"``; that must count."""
+        tests_dir = tmp_path / "tests"
+        t1 = _write_test(tests_dir, "test_alpha.cpp",
+                         includes=["core/something.h"])
+        assert _count_coverage_for_subsystem("core", [t1]) == 1
+
+    def test_include_follows_configured_engine_dir(self, tmp_path: Path):
+        tests_dir = tmp_path / "tests"
+        t1 = _write_test(tests_dir, "test_alpha.cpp",
+                         includes=["src/core/something.h"])
+        assert _count_coverage_for_subsystem(
+            "core", [t1], engine_rel="src") == 1
+
+    def test_include_of_other_subsystem_dir_not_counted(self, tmp_path: Path):
+        tests_dir = tmp_path / "tests"
+        t1 = _write_test(tests_dir, "test_alpha.cpp",
+                         includes=["third_party/core/x.h"])
+        assert _count_coverage_for_subsystem("core", [t1]) == 0
+
     def test_counts_via_filename_prefix(self, tmp_path: Path):
         tests_dir = tmp_path / "tests"
         t1 = _write_test(tests_dir, "test_scene_loader.cpp")

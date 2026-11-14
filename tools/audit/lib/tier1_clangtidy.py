@@ -340,14 +340,17 @@ def _get_target_files(config: Config, max_files: int) -> list[str]:
         extensions=[".cpp"],
         exclude_dirs=config.exclude_dirs,
     )
-    # Prioritize engine/ over tests/
-    engine_files = [f for f in files if "engine/" in str(f)]
-    app_files = [f for f in files if "app/" in str(f)]
-    test_files = [f for f in files if "tests/" in str(f)]
+    # Prioritize engine/ over app/ over tests/, judged by the top-level
+    # directory under the root: the root's own path may contain "engine/",
+    # and tests/engine/x.cpp is a test.
+    rel_files = [relative_path(f, config.root) for f in files]
 
-    ordered = engine_files + app_files + test_files
-    selected = ordered[:max_files]
-    return [relative_path(f, config.root) for f in selected]
+    def top(rel: str) -> str:
+        return rel.split("/", 1)[0]
+
+    ordered = [r for top_dir in ("engine", "app", "tests")
+               for r in rel_files if top(r) == top_dir]
+    return ordered[:max_files]
 
 
 def _parse_output(output: str, config: Config) -> list[Finding]:

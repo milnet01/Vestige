@@ -240,6 +240,22 @@ class TestAnalyzePython:
         assert len(funcs) == 1
         assert funcs[0]["score"] == 1
 
+    def test_python_nested_def_scored_once(self):
+        # The inner def's if counts for inner only, not for outer too.
+        code = (
+            "def outer(x):\n"
+            "    if x:\n"
+            "        pass\n"
+            "    def inner(y):\n"
+            "        if y:\n"
+            "            if y > 1:\n"
+            "                return 1\n"
+            "        return 0\n"
+            "    return inner(x)\n"
+        )
+        funcs = {f["name"]: f["score"] for f in _analyze_python(code, "t.py")}
+        assert funcs == {"outer": 1, "inner": 3}
+
     def test_python_nested_if(self):
         # if (+1, nesting=0) -> if (+1 base + 1 nesting = +2) = 3
         code = (

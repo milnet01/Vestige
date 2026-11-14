@@ -386,6 +386,8 @@ def _analyze_python(content: str, rel_path: str) -> list[dict[str, Any]]:
         # Track nesting of control structures via indentation
         # Each control keyword pushes its indent; lines deeper are nested
         control_stack: list[int] = []  # indent levels of control structures
+        # Indent of a nested def being skipped: it is scored on its own.
+        nested_def_indent: int | None = None
 
         for k in range(body_start, min(body_end, len(lines))):
             raw_line = lines[k]
@@ -397,6 +399,14 @@ def _analyze_python(content: str, rel_path: str) -> list[dict[str, Any]]:
             # If we've dedented past function scope, stop
             if line_indent <= func_indent and raw_line.strip():
                 break
+
+            if nested_def_indent is not None:
+                if line_indent > nested_def_indent:
+                    continue
+                nested_def_indent = None
+            if _PY_FUNC_RE.match(raw_line):
+                nested_def_indent = line_indent
+                continue
 
             code = _strip_strings_and_comments(raw_line, "python")
             stripped = code.strip()

@@ -60,8 +60,9 @@ def run(config: Config) -> list[Finding]:
     # cppcheck writes XML to stderr
     findings.extend(_parse_xml(stderr, config))
 
-    if not findings:
-        # Try parsing text output as fallback
+    if "<?xml" not in stderr:
+        # Not XML (an older cppcheck, or args overriding --xml): read text.
+        # XML whose findings were all filtered is a clean result, not this.
         findings.extend(_parse_text(stderr, config))
 
     log.info("cppcheck: %d findings", len(findings))
@@ -74,7 +75,7 @@ def _parse_xml(xml_text: str, config: Config) -> list[Finding]:
     try:
         import xmltodict
     except ImportError:
-        log.warning("xmltodict not installed — falling back to text parsing")
+        log.warning("xmltodict not installed — cppcheck XML output not read")
         return findings
 
     if "<?xml" not in xml_text:

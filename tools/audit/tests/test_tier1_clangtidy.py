@@ -166,3 +166,26 @@ def test_the_job_cap_from_the_environment_limits_the_workers(monkeypatch):
 def test_a_configured_job_count_still_wins_over_the_environment(monkeypatch):
     monkeypatch.setenv("AUDIT_CLANG_TIDY_JOBS", "1")
     assert _clangtidy_workers({"jobs": 3}) == 3
+
+
+def test_target_files_are_ordered_by_their_path_under_the_root(
+        tmp_path, monkeypatch):
+    """The engine/app/tests split reads the path under the root: a root that
+    itself contains engine/ must not pull every file into the engine list,
+    and tests/engine/x.cpp is a test, listed once."""
+    from types import SimpleNamespace
+
+    import lib.tier1_clangtidy as clangtidy
+
+    root = tmp_path / "engine" / "proj"
+    files = [root / "tests" / "engine" / "x.cpp",
+             root / "app" / "main.cpp",
+             root / "engine" / "a.cpp"]
+    for f in files:
+        f.parent.mkdir(parents=True, exist_ok=True)
+        f.write_text("")
+    monkeypatch.setattr(clangtidy, "enumerate_files", lambda **_: files)
+    config = SimpleNamespace(root=root, source_dirs=["."], exclude_dirs=[])
+
+    assert clangtidy._get_target_files(config, max_files=10) == [
+        "engine/a.cpp", "app/main.cpp", "tests/engine/x.cpp"]

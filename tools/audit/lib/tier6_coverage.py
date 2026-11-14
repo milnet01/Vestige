@@ -85,11 +85,15 @@ def _count_coverage_for_subsystem(
     subsystem: str,
     test_files: list[Path],
     extra_keywords: list[str] | None = None,
+    engine_rel: str = "engine",
 ) -> int:
     """Return the number of test files that reference *subsystem*.
 
     Three signals count:
-      * ``#include ..."engine/<subsystem>/..."`` or ``<engine/<subsystem>/...>``
+      * ``#include ..."<engine_rel>/<subsystem>/..."`` or
+        ``<<engine_rel>/<subsystem>/...>``, or the same path without the
+        ``<engine_rel>/`` prefix (tests that put the engine directory on
+        their include path write ``#include "renderer/x.h"``)
       * Filename starting with ``test_<subsystem>`` (e.g. ``test_camera.cpp``
         for the ``scene`` subsystem is a weaker signal than the include,
         but for cases where the subsystem name *is* the file prefix it
@@ -108,9 +112,10 @@ def _count_coverage_for_subsystem(
     not signal strength.
     """
     # Build regex that matches either quoted or angle-bracket include
-    # paths referencing engine/<subsystem>/...
+    # paths referencing [<engine_rel>/]<subsystem>/...
+    engine_prefix = re.escape(engine_rel.strip("/") + "/")
     include_re = re.compile(
-        rf'#\s*include\s*["<]engine/{re.escape(subsystem)}/',
+        rf'#\s*include\s*["<](?:{engine_prefix})?{re.escape(subsystem)}/',
     )
     name_prefix = f"test_{subsystem}"
     keyword_prefixes = [f"test_{kw}" for kw in (extra_keywords or [])]
@@ -235,7 +240,8 @@ def run(config: Config) -> list[Finding]:
     findings: list[Finding] = []
     for subsystem in subsystems:
         keywords = keyword_map.get(subsystem)
-        count = _count_coverage_for_subsystem(subsystem, test_files, keywords)
+        count = _count_coverage_for_subsystem(
+            subsystem, test_files, keywords, engine_rel)
         if count == 0:
             findings.append(_make_finding(subsystem, 0, engine_rel))
         elif count < thin_threshold:
