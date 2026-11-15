@@ -64,7 +64,9 @@ std::string frameLedgerHeaderJson(const FrameLedgerRunInfo& info)
         {"resolution", {info.width, info.height}},
         {"render_scale", info.renderScale},
         {"vsync", info.vsync},
-        {"pipelined", false},
+        // The frame loop never waits for the GPU (no glFinish, no fence wait),
+        // so the driver runs frame N on the GPU while the CPU builds N+1.
+        {"pipelined", true},
         {"display", info.display},
         {"scene", info.scene},
         {"inputs", nlohmann::json::array()},

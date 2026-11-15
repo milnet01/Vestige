@@ -217,6 +217,18 @@ TEST(FrameLedgerHeader, IsOneLineOfJsonWithEveryRequiredField)
     EXPECT_EQ(header["resolution"][1], 720);
 }
 
+// 3D_E-0978: the engine never waits for the GPU's frame to finish, so its CPU
+// work overlaps the GPU's; frameledger's report uses this to judge CPU/GPU-bound.
+TEST(FrameLedgerHeader, SaysTheFramesArePipelined)
+{
+    FrameLedgerRunInfo info;
+    info.runId = "r";
+    info.vsync = false;
+    EXPECT_EQ(nlohmann::json::parse(frameLedgerHeaderJson(info))["pipelined"], true);
+    info.vsync = true;
+    EXPECT_EQ(nlohmann::json::parse(frameLedgerHeaderJson(info))["pipelined"], true);
+}
+
 // 3D_E-0968: the load fields need both ends of the run. Until then the header
 // leaves them out, which the format reads as unknown.
 TEST(FrameLedgerHeader, LoadFieldsAppearOnlyOnceStartAndEndAreKnown)
