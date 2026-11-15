@@ -8028,7 +8028,7 @@ shipped that have no invocation path at all.
   Source: 3D_E-0975 investigation 2026-11-13.
   Lanes: renderer, profiler.
 
-- 📋 [3D_E-0977] **Measure what glPushDebugGroup in GpuTimer::beginPass costs a Release frame.**
+- ✅ [3D_E-0977] **Measure what glPushDebugGroup in GpuTimer::beginPass costs a Release frame.**
   GpuTimer::beginPass calls glPushDebugGroup. Under Mesa's glthread
   that call makes the driver thread finish its queue
   (_mesa_glthread_finish_before, seen in gdb backtraces, Mesa 26.2.6), at
@@ -8037,12 +8037,19 @@ shipped that have no invocation path at all.
   debug groups compiled out against HEAD, in turn, and compare
   frame/cpu_span and the count of frames over 16.667 ms.
   CPU / GPU placement: CPU-side driver call pattern; no shader change.
+  Measured 2026-11-15, no code change. A Release build with the
+  glPushDebugGroup/glPopDebugGroup calls in gpu_timer.cpp patched out was
+  flown in turn with HEAD, three flights each, quiet card. Medians: wall
+  9.24 vs 9.24 ms, gpu_span 9.24 vs 9.24 ms, cpu_span 1.78 vs 1.85 ms.
+  The groups cost about 0.07 ms of CPU a frame, which the overlap with
+  GPU work hides; no flight of either build had a frame over 16.667 ms.
+  Keep the debug groups.
   **Layman:** The engine's timing labels make the graphics driver catch up at every pass; find out whether that slows a normal frame.
   Kind: investigate.
   Source: 3D_E-0976 investigation 2026-11-13.
   Lanes: profiler, renderer.
 
-- 📋 [3D_E-0978] **The frame log's header says pipelined false, but the engine's CPU and GPU work overlap.**
+- ✅ [3D_E-0978] **The frame log's header says pipelined false, but the engine's CPU and GPU work overlap.**
   engine/profiler/frame_ledger_log.cpp hard-codes "pipelined": false.
   FLED-0001 § 4.2 defines it as: CPU work for frame N+1 overlaps GPU
   work for frame N. The baseline runs at 4961504 show the overlap:
@@ -8054,6 +8061,9 @@ shipped that have no invocation path at all.
   (work out whether it is always so with no vsync and with vsync), a
   test pins the value, and report's CPU/GPU-bound share is read again
   on a fresh run.
+  Closed 2026-11-15. Code at 4abe871. On a fresh quiet Release run
+  (1ba436e's tree, header "pipelined":true), frameledger report reads
+  99.9% of frames GPU-bound and 0.1% CPU-bound.
   **Layman:** The speed log tells the analyser the wrong thing about how the engine runs, so some of its judgements could be wrong.
   Kind: fix.
   Source: frameledger-review-2026-11-14.
@@ -10275,6 +10285,17 @@ Outdoor landscapes surrounding the Temple complex — hills, valleys, and the Ki
   yet split out. Also seen: about 67 compute dispatches a frame (count of
   radeonsi's per-dispatch debug lines over one flight). Step 1 itself,
   the grass and tree share of the shadow pass, is still not measured.
+  Step 1 measured (2026-11-15, 1ba436e's switches, Release, RX 6600,
+  --demo-flythrough at 1920x1080, quiet card, three interleaved flights
+  per variant, medians of gpu/Shadow and frame/wall): the shadow pass is
+  now 1.72 ms of a 9.24 ms frame, not the 4.49 ms above.
+  - grass-shadow off: shadow 1.22 ms (-0.50), wall -0.64 ms.
+  - tree-shadow off: shadow 1.39 ms (-0.33), wall -0.28 ms.
+  - foliage-shadow off: shadow 1.70 ms (-0.02), wall -0.01 ms.
+  So vegetation is about half the pass; grass alone (cascade 0 only) is
+  the largest caster. The other 0.87 ms is terrain and objects. Steps 2
+  and 3 are worth at most the static share of that. Still open: which
+  pass submits the 40 M vertices.
   **Layman:** Shadows cost more than a third of each frame; most of that work is redrawn every frame even when nothing moved.
   Kind: perf.
   Source: tech-survey-2026-09-02.

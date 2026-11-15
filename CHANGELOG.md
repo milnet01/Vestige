@@ -25,6 +25,17 @@ may change any interface without notice.
 
 ## [Unreleased]
 
+### 2026-11-15 Fixed — frame log pipelining, shadow-share switches (3D_E-0978, 3D_E-0658)
+
+- **The frame log's header says pipelined true** (3D_E-0978)
+  The engine's CPU work for one frame overlaps the GPU work for the
+  last, so frameledger's report can now say which side bounds a frame:
+  99.9% GPU-bound on the meadow flythrough.
+
+- **--isolate-feature accepts tree-shadow and foliage-shadow** (3D_E-0658)
+  Each turns one vegetation shadow caster off, as grass-shadow already
+  did, to measure its share of the shadow pass.
+
 ### 2026-11-13 Changed — the 60 FPS rule now also judges every single frame (3D_E-0795)
 
 - **No frame of the meadow flythrough takes longer than 16.667 ms**
