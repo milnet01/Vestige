@@ -26,6 +26,10 @@ class SpriteRendererGlState : public GLTestFixture
 protected:
     void TearDown() override
     {
+        if (!Vestige::Test::GLTestEnvironment::wasInitialized())
+        {
+            return;  // skipped: there are no GL functions to call
+        }
         // The GL context is shared by every test: leave GL's defaults.
         glDisable(GL_BLEND);
         glBlendFunc(GL_ONE, GL_ZERO);
