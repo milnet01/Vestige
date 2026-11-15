@@ -110,8 +110,10 @@ private:
     // GL state we restore on end().
     GLboolean m_savedDepthMask = GL_TRUE;
     GLboolean m_savedBlend     = GL_FALSE;
-    GLint     m_savedBlendSrc  = GL_ONE;
-    GLint     m_savedBlendDst  = GL_ZERO;
+    GLint     m_savedBlendSrcRgb   = GL_ONE;
+    GLint     m_savedBlendDstRgb   = GL_ZERO;
+    GLint     m_savedBlendSrcAlpha = GL_ONE;
+    GLint     m_savedBlendDstAlpha = GL_ZERO;
     bool      m_frameActive    = false;
     bool      m_initialized    = false;
 };

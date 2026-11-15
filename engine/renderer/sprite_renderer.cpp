@@ -138,8 +138,10 @@ void SpriteRenderer::begin(const glm::mat4& viewProj)
     // blend / depth assumptions.
     glGetBooleanv(GL_DEPTH_WRITEMASK, &m_savedDepthMask);
     m_savedBlend = glIsEnabled(GL_BLEND);
-    glGetIntegerv(GL_BLEND_SRC_ALPHA, &m_savedBlendSrc);
-    glGetIntegerv(GL_BLEND_DST_ALPHA, &m_savedBlendDst);
+    glGetIntegerv(GL_BLEND_SRC_RGB, &m_savedBlendSrcRgb);
+    glGetIntegerv(GL_BLEND_DST_RGB, &m_savedBlendDstRgb);
+    glGetIntegerv(GL_BLEND_SRC_ALPHA, &m_savedBlendSrcAlpha);
+    glGetIntegerv(GL_BLEND_DST_ALPHA, &m_savedBlendDstAlpha);
 }
 
 void SpriteRenderer::drawBatch(const SpriteAtlas& atlas,
@@ -201,11 +203,15 @@ void SpriteRenderer::end()
 
     // Restore cached state so subsequent passes are not surprised.
     glDepthMask(m_savedDepthMask);
+    // The function is restored even with blending off: the next pass to
+    // enable blending would otherwise inherit ours.
+    glBlendFuncSeparate(static_cast<GLenum>(m_savedBlendSrcRgb),
+                        static_cast<GLenum>(m_savedBlendDstRgb),
+                        static_cast<GLenum>(m_savedBlendSrcAlpha),
+                        static_cast<GLenum>(m_savedBlendDstAlpha));
     if (m_savedBlend)
     {
         glEnable(GL_BLEND);
-        glBlendFunc(static_cast<GLenum>(m_savedBlendSrc),
-                    static_cast<GLenum>(m_savedBlendDst));
     }
     else
     {

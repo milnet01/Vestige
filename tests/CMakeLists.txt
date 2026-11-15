@@ -325,6 +325,7 @@ add_executable(vestige_tests
     test_sprite_atlas.cpp
     test_sprite_animation.cpp
     test_sprite_renderer.cpp
+    test_sprite_renderer_gl_state.cpp
     test_physics2d_system.cpp
     test_tilemap.cpp
     test_camera_2d.cpp
