@@ -14,6 +14,7 @@
 #include "renderer/cascaded_shadow_map.h"   // CSM shadow-receive binding (G4)
 #include "renderer/sampler_fallback.h"      // Mesa sampler2DArray fallback (G4)
 #include "renderer/directional_shadow_uniforms.h"
+#include "renderer/scoped_blend_state.h"
 #include "renderer/scoped_cull_face.h"      // two-sided blade casting (3D_E-0042)
 #include "utils/frustum.h"                  // extractFrustumPlanes + isAabbInFrustum (reuse)
 
@@ -328,11 +329,12 @@ void GrassRenderer::render(const glm::mat4& viewProjection,
     }
 
     // Opaque, two-sided blades (design §5.1): depth-tested + written, blend off, back-face
-    // cull off. Set explicitly so prior passes' state can't leak in.
+    // cull off. Set explicitly so prior passes' state can't leak in; the guards hand the
+    // caller's blend and cull state back so ours cannot leak out either.
     glEnable(GL_DEPTH_TEST);
     glDepthMask(GL_TRUE);
-    glDisable(GL_BLEND);
-    glDisable(GL_CULL_FACE);
+    ScopedBlendState blendGuard{false, GL_ONE, GL_ZERO};
+    ScopedCullFace cullGuard{false};
 
     m_shader.use();
 

@@ -191,6 +191,7 @@ add_executable(vestige_tests
     test_cloth_backend_factory.cpp
     test_gpu_cloth_simulator.cpp
     test_grass_shadow_parity.cpp
+    test_grass_renderer_gl_state.cpp
     test_tree_shadow_parity.cpp
     test_texture_exr.cpp
     test_cloth_cpu_gpu_parity.cpp
