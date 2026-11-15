@@ -7569,6 +7569,9 @@ shipped that have no invocation path at all.
   failed link is reported, a rename is filed under its new name, a
   base_ref that reads as an option reaches no git command, and a
   self-referential CMake set() names its own file and line.
+  2026-11-15: lane-05 text_renderer.cpp:587 (height-map glyph cap) and
+  water_fbo.cpp:111 (failed resize left incomplete targets bound) fixed
+  at 9835ad6, each proven red first.
   **Layman:** About 290 lower-risk possible bugs and the medium findings are still unchecked.
   Kind: review-fix.
   Source: review-readability 2026-10-31 at 7b2a81d.

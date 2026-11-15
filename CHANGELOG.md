@@ -25,6 +25,16 @@ may change any interface without notice.
 
 ## [Unreleased]
 
+### 2026-11-15 Fixed — water reflection targets and long engraved text (3D_E-0874)
+
+- **A water reflection target that fails to build is freed, not drawn into** (3D_E-0874)
+  The engine then skips the reflection and refraction passes, and the
+  water falls back to the sky cubemap. Before, it rendered into the
+  broken target every frame.
+
+- **Engraved (height-map) text stops at 1024 letters** (3D_E-0874)
+  Past 8192 letters it overflowed the text buffer and drew nothing.
+
 ### 2026-11-15 Fixed — frame log pipelining, shadow-share switches (3D_E-0978, 3D_E-0658)
 
 - **The frame log's header says pipelined true** (3D_E-0978)
