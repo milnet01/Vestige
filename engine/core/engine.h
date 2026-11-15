@@ -81,9 +81,10 @@ struct EngineConfig
     /// @brief Every name --isolate-feature accepts. The --help text and the
     /// parser read this list; add a name here and handle it in
     /// Engine::initialize().
-    static constexpr std::array<const char*, 8> ISOLATE_FEATURE_NAMES = {
+    static constexpr std::array<const char*, 10> ISOLATE_FEATURE_NAMES = {
         "motion-overlay", "bloom", "ssao", "ibl", "ibl-diffuse",
-        "ibl-specular", "sh-grid", "grass-shadow",
+        "ibl-specular", "sh-grid", "grass-shadow", "tree-shadow",
+        "foliage-shadow",
     };
 
     /// @brief Optional .scene file to load at startup (CLI: --scene PATH).

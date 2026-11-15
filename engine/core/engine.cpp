@@ -1383,6 +1383,17 @@ bool Engine::initialize(const EngineConfig& config)
             // goes away, which is exactly the pixel delta the feature is worth.
             m_renderer->setGrassShadowCaster(nullptr);
         }
+        else if (f == "tree-shadow")
+        {
+            // 3D_E-0658 step 1: the trees' share of the shadow pass.
+            m_renderer->setTreeShadowCaster(nullptr);
+        }
+        else if (f == "foliage-shadow")
+        {
+            // 3D_E-0658 step 1: the bushes' and plants' share of the shadow pass.
+            // Keep the manager: the tree caster reads the same chunk store.
+            m_renderer->setFoliageShadowCaster(nullptr, m_foliageManager);
+        }
         else
         {
             // parseArgs only lets EngineConfig::ISOLATE_FEATURE_NAMES
