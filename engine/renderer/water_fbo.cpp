@@ -81,14 +81,14 @@ bool WaterFbo::init(int reflW, int reflH, int refrW, int refrH)
     GLenum reflStatus = glCheckNamedFramebufferStatus(m_reflectionFbo, GL_FRAMEBUFFER);
     GLenum refrStatus = glCheckNamedFramebufferStatus(m_refractionFbo, GL_FRAMEBUFFER);
 
-    if (reflStatus != GL_FRAMEBUFFER_COMPLETE)
+    if (reflStatus != GL_FRAMEBUFFER_COMPLETE || refrStatus != GL_FRAMEBUFFER_COMPLETE)
     {
-        Logger::error("Water reflection FBO incomplete");
-        return false;
-    }
-    if (refrStatus != GL_FRAMEBUFFER_COMPLETE)
-    {
-        Logger::error("Water refraction FBO incomplete");
+        Logger::error(std::string("Water ")
+            + (reflStatus != GL_FRAMEBUFFER_COMPLETE ? "reflection" : "refraction")
+            + " FBO incomplete; planar water passes are off at this size");
+        // Free both, so nothing renders into or samples a broken target.
+        // destroy*Fbo keeps the sizes, so resize() does not retry every frame.
+        shutdown();
         return false;
     }
 
@@ -98,17 +98,17 @@ bool WaterFbo::init(int reflW, int reflH, int refrW, int refrH)
     return true;
 }
 
-void WaterFbo::resize(int reflW, int reflH, int refrW, int refrH)
+bool WaterFbo::resize(int reflW, int reflH, int refrW, int refrH)
 {
     // Skip if size hasn't changed
     if (reflW == m_reflectionWidth && reflH == m_reflectionHeight
         && refrW == m_refractionWidth && refrH == m_refractionHeight)
     {
-        return;
+        return isComplete();
     }
 
     shutdown();
-    init(reflW, reflH, refrW, refrH);
+    return init(reflW, reflH, refrW, refrH);
 }
 
 void WaterFbo::shutdown()

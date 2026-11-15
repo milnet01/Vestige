@@ -408,3 +408,24 @@ TEST_F(FontGLTest, MruCacheSkipsStackWalk)
     // First glyph warms the MRU (1 lookup); the next 999 reuse the cached font.
     EXPECT_EQ(tr.getFontStack().lookupCalls(), 1u);
 }
+
+// 3D_E-0874 lane-05 (text_renderer.cpp generateTextHeightMap): the height-map
+// path had no glyph cap, so text longer than the VBO's 8192 glyphs overflowed
+// glNamedBufferSubData (GL_INVALID_VALUE) and drew nothing. It now stops at
+// the per-call cap the 2D and 3D paths use.
+TEST_F(FontGLTest, HeightMapOfOverlongTextRaisesNoGlError)
+{
+    TextRenderer tr;
+    ASSERT_TRUE(tr.initialize(arimoPath(), assetRoot(), 48));
+    while (glGetError() != GL_NO_ERROR) {}
+
+    const std::string overlong(9000, 'A');  // past the 8192-glyph VBO
+    std::shared_ptr<Texture> tex;
+    {
+        // First draw on llvmpipe allocates JIT state it never frees.
+        Vestige::Test::ScopedLeakCheckDisable noLeakTracking;
+        tex = tr.generateTextHeightMap(overlong, 256, 64, false);
+    }
+    EXPECT_NE(tex, nullptr);
+    EXPECT_EQ(glGetError(), static_cast<GLenum>(GL_NO_ERROR));
+}

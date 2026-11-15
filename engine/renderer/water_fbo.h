@@ -33,11 +33,17 @@ public:
     /// @param reflH Reflection FBO height.
     /// @param refrW Refraction FBO width.
     /// @param refrH Refraction FBO height.
-    /// @return True if both FBOs are complete.
+    /// @return True if both FBOs are complete. On false both are freed, so the
+    ///        texture getters return 0, and the sizes asked for are kept.
     bool init(int reflW, int reflH, int refrW, int refrH);
 
-    /// @brief Resizes both FBOs (destroys and recreates).
-    void resize(int reflW, int reflH, int refrW, int refrH);
+    /// @brief Resizes both FBOs (destroys and recreates). A size equal to the
+    ///        current one does nothing, so a size that failed is not retried.
+    /// @return True if both FBOs are complete at the new size.
+    bool resize(int reflW, int reflH, int refrW, int refrH);
+
+    /// @brief True if both FBOs exist (the last init succeeded).
+    bool isComplete() const { return m_reflectionFbo != 0 && m_refractionFbo != 0; }
 
     /// @brief Releases all GPU resources.
     void shutdown();

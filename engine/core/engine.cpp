@@ -2312,14 +2312,16 @@ void Engine::run()
                     const int targetH = m_renderer->getRenderHeight();
                     const glm::ivec2 reflSize = waterReflectionTargetSize(targetW, targetH,
                                                                     planarPasses.reflectionScale);
-                    m_waterFbo->resize(reflSize.x, reflSize.y,
+                    // A failed resize frees both targets: skip the passes, and the
+                    // water shader falls back to the cubemap (texture ids are 0).
+                    const bool planarTargetsOk = m_waterFbo->resize(reflSize.x, reflSize.y,
                                        std::max(1, targetW / 4), std::max(1, targetH / 4));
 
                     // Save renderer view state (geometryOnly passes overwrite m_lastProjection etc.)
                     m_renderer->saveViewState();
 
                     // --- Refraction pass: render scene below water ---
-                    if (planarPasses.refraction)
+                    if (planarPasses.refraction && planarTargetsOk)
                     {
                         VESTIGE_PROFILE_SCOPE("WaterRefraction");
                         // Flat GPU scope: renderScene's geometryOnly path opens none.
@@ -2341,7 +2343,7 @@ void Engine::run()
                     }
 
                     // --- Reflection pass: render scene above water with reflected camera ---
-                    if (planarPasses.reflection)
+                    if (planarPasses.reflection && planarTargetsOk)
                     {
                         VESTIGE_PROFILE_SCOPE("WaterReflection");
                         m_profiler.getGpuTimer().beginPass("WaterReflection");

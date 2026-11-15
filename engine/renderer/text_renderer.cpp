@@ -584,7 +584,8 @@ std::shared_ptr<Texture> TextRenderer::generateTextHeightMap(const std::string& 
     // Pe1 / L2 — glyphs grouped by font, one upload+draw per font. Same
     // per-vertex colour layout as the 2D / 3D paths so the shader matches.
     // L3 — decode + RTL-reorder into visual order before emission.
-    const std::vector<uint32_t>& cps = toVisualCodepoints(text);
+    // Capped like the 2D / 3D paths: a run past the VBO's size uploads nothing.
+    const std::vector<uint32_t>& cps = toVisualCodepoints(text, MAX_GLYPHS_PER_CALL);
     std::vector<GlyphRun> runs;
     m_mruFont = nullptr;
     for (uint32_t cp : cps)
