@@ -213,4 +213,28 @@ TEST_F(InspectorTransformUndoTest, MaterialClickThatEditedNothingRecordsNothing)
     EXPECT_TRUE(m_history.canUndo()) << "a real change was not recorded";
 }
 
+// 3D_E-0874 lane 14: "Clear Matrix Override" cleared the override straight
+// away, outside the command history, so Undo could not bring back the
+// imported matrix.
+TEST_F(InspectorTransformUndoTest, ClearMatrixOverrideIsUndoable)
+{
+    const glm::mat4 imported = glm::translate(glm::mat4(1.0f), glm::vec3(7.0f, 8.0f, 9.0f));
+    m_entity->transform.setLocalMatrix(imported);
+    frame();
+    ImGuiWindow* window = ImGui::FindWindowByName("inspector");
+    const auto button = locate(ImHashStr("Clear Matrix Override", 0, window->ID));
+    ASSERT_TRUE(button.has_value()) << "Clear Matrix Override button not found";
+
+    click(*button);
+    ASSERT_FALSE(m_entity->transform.hasMatrixOverride());
+    ASSERT_TRUE(m_history.canUndo()) << "the clear was not recorded";
+
+    m_history.undo();
+    EXPECT_TRUE(m_entity->transform.hasMatrixOverride());
+    EXPECT_EQ(m_entity->transform.getLocalMatrix(), imported);
+
+    m_history.redo();
+    EXPECT_FALSE(m_entity->transform.hasMatrixOverride());
+}
+
 } // namespace Vestige::Test

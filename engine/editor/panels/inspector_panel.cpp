@@ -9,6 +9,7 @@
 #include "editor/light_color.h"
 #include "editor/command_history.h"
 #include "editor/commands/transform_command.h"
+#include "editor/commands/clear_matrix_override_command.h"
 #include "editor/commands/entity_property_command.h"
 #include "editor/selection.h"
 #include "scene/entity.h"
@@ -315,7 +316,15 @@ void InspectorPanel::drawTransform(Entity& entity)
                            "(e.g. from glTF). Clear override to edit TRS.");
         if (ImGui::Button("Clear Matrix Override"))
         {
-            entity.transform.clearMatrixOverride();
+            if (m_commandHistory && m_currentScene)
+            {
+                m_commandHistory->execute(std::make_unique<ClearMatrixOverrideCommand>(
+                    *m_currentScene, entity.getId(), entity.transform.getLocalMatrix()));
+            }
+            else
+            {
+                entity.transform.clearMatrixOverride();  // no history: nothing to undo into
+            }
         }
         ImGui::Spacing();
         return;
