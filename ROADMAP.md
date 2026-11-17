@@ -7576,6 +7576,12 @@ shipped that have no invocation path at all.
   used a literal 16) fixed at a28c370; lane-12 benchmark.cpp:293 (perfect
   fit ranked below weaker fits) fixed at 57bcc8b with the code owner's
   ranking decision. Each proven red first.
+  2026-11-17: lane-15 editor rows fixed, each proven red first:
+  terrain_panel.cpp:122 (Sculpt tab kept painting) at 8f877f3;
+  history_panel.cpp:80 (scroll snapped back) at 613ebcc;
+  script_editor_panel.cpp:123 (Ctrl+S saved the scene) at 985d1d2;
+  script_editor_panel.cpp:356 and :387 (empty script would not reopen;
+  failed Save As kept the new path) at 7d4c702.
   **Layman:** About 290 lower-risk possible bugs and the medium findings are still unchecked.
   Kind: review-fix.
   Source: review-readability 2026-10-31 at 7b2a81d.

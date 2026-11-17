@@ -25,6 +25,30 @@ may change any interface without notice.
 
 ## [Unreleased]
 
+### 2026-11-17 Fixed — terrain, history and script editor panels (3D_E-0874)
+
+- **The terrain brush stops painting when you go back to Sculpt** (3D_E-0874)
+  Visiting the Terrain panel's Paint tab left the brush painting on the
+  Sculpt tab, with no sculpt mode shown as chosen. The Sculpt tab now
+  gives the brush back the sculpt mode it had before.
+
+- **You can scroll the History panel** (3D_E-0874)
+  The list jumped back to the current step every frame. It now scrolls
+  there only when the current step changes, after an undo, redo or edit.
+
+- **Ctrl+N, Ctrl+O and Ctrl+S work in the script editor** (3D_E-0874)
+  While the script editor has focus, these keys act on the script, as
+  its File menu says. Before, Ctrl+S in the script editor saved the
+  scene. Elsewhere they still act on the scene. Holding a shortcut down
+  no longer repeats it.
+
+- **A new, empty script opens again after saving** (3D_E-0874)
+  Before, the script editor refused to reopen it.
+
+- **A failed Save As in the script editor keeps the old file** (3D_E-0874)
+  Before, a Save As that failed left the editor pointing at the file it
+  never wrote, so the next Save failed too.
+
 ### 2026-11-17 Fixed — occlusion ray limit, Formula Workbench ranking (3D_E-0874)
 
 - **The audio occlusion ray limit is set in one place** (3D_E-0874)
