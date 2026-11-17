@@ -197,6 +197,14 @@ void markComplete(OnboardingSettings& ob, const std::string& nowIso)
 
 } // namespace
 
+bool firstRunNextSkipStopsAutoOpen(const OnboardingSettings& onboarding)
+{
+    // Once completed the wizard no longer auto-opens (it was reopened from
+    // the Help menu), so there is nothing for a skip to stop.
+    return !onboarding.hasCompletedFirstRun
+        && onboarding.skipCount + 1 >= kSkipAutoCompleteThreshold;
+}
+
 FirstRunTransition applyFirstRunIntent(
     FirstRunWizardStep currentStep,
     const OnboardingSettings& current,
@@ -383,7 +391,7 @@ FirstRunWizardSceneOp FirstRunWizard::draw()
             {
                 fire(FirstRunIntent::SkipForNow);
             }
-            if (m_onboarding->skipCount > 0)
+            if (firstRunNextSkipStopsAutoOpen(*m_onboarding))
             {
                 ImGui::SameLine();
                 ImGui::TextDisabled(
@@ -391,8 +399,8 @@ FirstRunWizardSceneOp FirstRunWizard::draw()
             }
 
             ImGui::Spacing();
-            ImGui::TextDisabled(
-                "You can reopen this wizard any time from Help → Show Welcome.");
+            ImGui::TextDisabled("You can reopen this wizard any time from Help → %s.",
+                                kFirstRunWizardMenuLabel);
         }
         else if (m_step == FirstRunWizardStep::TemplatePicker)
         {

@@ -128,6 +128,14 @@ FirstRunTransition applyFirstRunIntent(
     FirstRunIntent intent,
     const std::string& nowIso);
 
+/// @brief The Help menu item that reopens the wizard. The wizard's own
+///        text names it, so both read from here.
+inline constexpr const char* kFirstRunWizardMenuLabel = "First-Run Wizard";
+
+/// @brief Whether the welcome step should warn that the next "Skip for
+///        now" stops the wizard auto-opening.
+bool firstRunNextSkipStopsAutoOpen(const OnboardingSettings& onboarding);
+
 // --------------------------------------------------------------
 // Featured-template filter (Q1 resolution)
 // --------------------------------------------------------------

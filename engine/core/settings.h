@@ -387,7 +387,7 @@ struct AccessibilitySettings
 ///  - `hasCompletedFirstRun` — terminal flag. True once the user
 ///    has reached Finish or Start Empty, or has Skipped twice.
 ///    Once true the wizard no longer auto-opens; re-opening is
-///    always available via `Help → Show Welcome`.
+///    always available via `Help → First-Run Wizard`.
 ///  - `completedAt` — ISO-8601 wall-clock timestamp recorded at
 ///    the moment `hasCompletedFirstRun` was set. Empty string
 ///    means never completed. Useful for "welcome back to Vestige"

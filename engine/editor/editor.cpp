@@ -1076,7 +1076,7 @@ void Editor::drawPanels(Renderer* renderer, Scene* scene, Camera* camera,
                 {
                     m_settingsEditorPanel.open();
                 }
-                if (ImGui::MenuItem("First-Run Wizard"))
+                if (ImGui::MenuItem(kFirstRunWizardMenuLabel))
                 {
                     m_firstRunWizard.openFromHelpMenu();
                 }

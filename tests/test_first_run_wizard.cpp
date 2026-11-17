@@ -393,3 +393,22 @@ TEST(FirstRunWizardPick, OutOfRangeIndexGivesNothing)
     EXPECT_FALSE(pickWizardTemplate({a, hidden}, {}, root, 1).has_value());
     EXPECT_FALSE(pickWizardTemplate({a}, {}, root, -1).has_value());
 }
+
+// 3D_E-0874 lane 15: the "stops auto-opening after the next skip" hint is
+// true only while the wizard still auto-opens. Reopened from the Help menu
+// after completion, it must not show.
+TEST(FirstRunWizard, NextSkipHintOnlyWhileTheWizardStillAutoOpens)
+{
+    OnboardingSettings ob;
+    EXPECT_FALSE(firstRunNextSkipStopsAutoOpen(ob));  // no skip yet
+
+    ob.skipCount = 1;
+    EXPECT_TRUE(firstRunNextSkipStopsAutoOpen(ob));   // one skip left
+
+    ob.skipCount = 2;
+    ob.hasCompletedFirstRun = true;                   // skipped twice
+    EXPECT_FALSE(firstRunNextSkipStopsAutoOpen(ob));
+
+    ob.skipCount = 1;                                 // finished after one skip
+    EXPECT_FALSE(firstRunNextSkipStopsAutoOpen(ob));
+}
