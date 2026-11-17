@@ -167,9 +167,12 @@ private:
     void computeBoneMatrices();
 
     /// @brief Advances a clip's time and samples all channels into the given pose buffers.
+    /// @param speed, looping The clip's own playback settings: an outgoing clip keeps
+    /// the ones it had when the crossfade began.
     /// @return How many times a looping clip wrapped: positive forward, negative when
     /// playing backward, 0 when it did not wrap or does not loop.
     int advanceAndSample(int clipIndex, float& time, float deltaTime,
+                         float speed, bool looping,
                          std::vector<glm::vec3>& translations,
                          std::vector<glm::quat>& rotations,
                          std::vector<glm::vec3>& scales);
@@ -224,6 +227,8 @@ private:
     float m_crossfadeDuration = 0.0f;
     int m_sourceClipIndex = -1;         ///< -1 = frozen pose (no clip to advance)
     float m_sourceTime = 0.0f;
+    float m_sourceSpeed = 1.0f;         ///< The outgoing clip's speed when the fade began
+    bool m_sourceLooping = true;        ///< The outgoing clip's looping when the fade began
     std::vector<glm::vec3> m_sourceTranslations;
     std::vector<glm::quat> m_sourceRotations;
     std::vector<glm::vec3> m_sourceScales;

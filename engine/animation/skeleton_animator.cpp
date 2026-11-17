@@ -20,6 +20,7 @@ SkeletonAnimator::~SkeletonAnimator() = default;
 // ---------------------------------------------------------------------------
 int SkeletonAnimator::advanceAndSample(
     int clipIndex, float& time, float deltaTime,
+    float speed, bool looping,
     std::vector<glm::vec3>& translations,
     std::vector<glm::quat>& rotations,
     std::vector<glm::vec3>& scales)
@@ -36,10 +37,10 @@ int SkeletonAnimator::advanceAndSample(
     }
 
     // Advance time
-    time += deltaTime * m_speed;
+    time += deltaTime * speed;
     int wraps = 0;
 
-    if (m_looping)
+    if (looping)
     {
         wraps = static_cast<int>(std::floor(time / clip->getDuration()));
         time = std::fmod(time, clip->getDuration());
@@ -220,6 +221,7 @@ void SkeletonAnimator::update(float deltaTime)
         // Sample source (outgoing) clip into source buffers
         // If m_sourceClipIndex == -1, buffers hold a frozen pose — skip sampling
         int sourceWraps = advanceAndSample(m_sourceClipIndex, m_sourceTime, deltaTime,
+                                           m_sourceSpeed, m_sourceLooping,
                                            m_sourceTranslations, m_sourceRotations,
                                            m_sourceScales);
         // A frozen source leaves last frame's blended weights here, which is its pose.
@@ -227,6 +229,7 @@ void SkeletonAnimator::update(float deltaTime)
 
         // Sample target (incoming) clip into primary buffers
         int targetWraps = advanceAndSample(m_activeClipIndex, m_currentTime, deltaTime,
+                                           m_speed, m_looping,
                                            m_localTranslations, m_localRotations,
                                            m_localScales);
         addRootWrapTravel(m_sourceClipIndex, sourceWraps, 1.0f - blendFactor,
@@ -266,6 +269,7 @@ void SkeletonAnimator::update(float deltaTime)
     {
         // Single clip playback
         int wraps = advanceAndSample(m_activeClipIndex, m_currentTime, deltaTime,
+                                     m_speed, m_looping,
                                      m_localTranslations, m_localRotations, m_localScales);
         addRootWrapTravel(m_activeClipIndex, wraps, 1.0f, wrapOffset, wrapTurn);
 
@@ -675,6 +679,8 @@ void SkeletonAnimator::crossfadeToIndex(int index, float duration)
         m_sourceScales = m_localScales;
         m_sourceClipIndex = m_activeClipIndex;
         m_sourceTime = m_currentTime;
+        m_sourceSpeed = m_speed;
+        m_sourceLooping = m_looping;
     }
     else
     {

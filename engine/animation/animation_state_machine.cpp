@@ -126,9 +126,11 @@ void AnimationStateMachine::update(SkeletonAnimator& animator, float /*deltaTime
         if (targetState.clipIndex < 0 || targetState.clipIndex >= animator.getClipCount())
             continue;
         m_currentState = transition.toState;
+        // Fade first: the outgoing clip keeps the speed and loop it had, and
+        // the new state's apply to the incoming clip only.
+        animator.crossfadeToIndex(targetState.clipIndex, transition.crossfadeDuration);
         animator.setSpeed(targetState.playbackSpeed);
         animator.setLooping(targetState.loop);
-        animator.crossfadeToIndex(targetState.clipIndex, transition.crossfadeDuration);
 
         // Consume triggers used by this transition
         for (const auto& cond : transition.conditions)

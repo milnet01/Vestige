@@ -346,3 +346,59 @@ TEST_F(StateMachineTest, TransitionToStateWithMissingClipDoesNotFire)
     EXPECT_FLOAT_EQ(m_animator.getSpeed(), 1.0f);
     EXPECT_TRUE(m_animator.isLooping());
 }
+
+// 3D_E-0874 lane 9 — a transition's speed and loop apply to the incoming
+// clip only. The state machine set them before starting the crossfade, and
+// the animator sampled both clips with the one speed and loop flag, so the
+// outgoing clip sped up, slowed down or stopped looping mid-fade.
+namespace
+{
+float jointX(const SkeletonAnimator& animator)
+{
+    return animator.getBoneMatrices()[0][3].x;
+}
+
+AnimTransition fadeIdleToWalk()
+{
+    AnimTransition trans;
+    trans.fromState = 0;
+    trans.toState = 1;
+    trans.crossfadeDuration = 1.0f;
+    trans.conditions.push_back({"go", AnimCompareOp::GREATER, 0.5f});
+    return trans;
+}
+} // namespace
+
+TEST_F(StateMachineTest, OutgoingClipKeepsItsSpeedDuringTheFade)
+{
+    AnimationStateMachine sm;
+    sm.addState({"idle", 0, 1.0f, true});    // 2 s, x 0 -> 1
+    sm.addState({"walk", 1, 4.0f, false});   // 1 s, x 0 -> 1
+    sm.addTransition(fadeIdleToWalk());
+    sm.start(m_animator);
+    m_animator.update(1.0f);                  // idle at 1.0 s: x = 0.5
+    sm.setFloat("go", 1.0f);
+    sm.update(m_animator, 0.0f);
+    ASSERT_EQ(sm.getCurrentStateName(), "walk");
+
+    m_animator.update(0.25f);
+    // idle at 1.25 s (x 0.625), walk at 4 x 0.25 = 1.0 s (x 1.0), blend 0.25.
+    EXPECT_NEAR(jointX(m_animator), 0.71875f, 1e-4f);
+}
+
+TEST_F(StateMachineTest, OutgoingClipKeepsLoopingDuringTheFade)
+{
+    AnimationStateMachine sm;
+    sm.addState({"idle", 0, 1.0f, true});
+    sm.addState({"walk", 1, 1.0f, false});
+    sm.addTransition(fadeIdleToWalk());
+    sm.start(m_animator);
+    m_animator.update(1.9f);                  // idle at 1.9 s: x = 0.95
+    sm.setFloat("go", 1.0f);
+    sm.update(m_animator, 0.0f);
+    ASSERT_EQ(sm.getCurrentStateName(), "walk");
+
+    m_animator.update(0.2f);
+    // idle wraps to 0.1 s (x 0.05), walk at 0.2 s (x 0.2), blend 0.2.
+    EXPECT_NEAR(jointX(m_animator), 0.08f, 1e-4f);
+}
