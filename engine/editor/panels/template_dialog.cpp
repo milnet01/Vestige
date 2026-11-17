@@ -342,6 +342,14 @@ void TemplateDialog::applyTemplate(const GameTemplateConfig& config,
     // so SceneLoadedEvent announces the filled scene.
     Scene::Replacement replacement(*scene);
 
+    // Set the skybox either way, before the 2D returns below: a template
+    // without one must not keep the previous scene's sky. With one, the
+    // default procedural sky shows (no HDRI path needed).
+    if (renderer)
+    {
+        renderer->setSkyboxEnabled(config.createSkybox);
+    }
+
     // 2D template dispatch — route to createSideScrollerTemplate /
     // createShmupTemplate instead of the 3D-oriented flow below.
     if (config.type == GameTemplateType::SIDE_SCROLLER_2D)
@@ -400,13 +408,6 @@ void TemplateDialog::applyTemplate(const GameTemplateConfig& config,
         cameraComp->projectionType = config.projectionType;
         cameraComp->fov = config.fov;
         cameraComp->orthoSize = config.orthoSize;
-    }
-
-    // Load skybox
-    if (config.createSkybox && renderer)
-    {
-        // Use default procedural sky (no HDRI path needed)
-        renderer->setSkyboxEnabled(true);
     }
 }
 

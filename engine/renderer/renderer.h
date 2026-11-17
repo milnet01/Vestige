@@ -164,6 +164,7 @@ public:
 
     /// @brief Enables or disables the skybox (disable for indoor scenes).
     void setSkyboxEnabled(bool enabled) { m_skyboxEnabled = enabled; }
+    bool isSkyboxEnabled() const { return m_skyboxEnabled; }
 
     /// @brief Loads an equirectangular HDRI as the skybox and regenerates the IBL environment map.
     /// @param path File path to equirectangular image (.hdr, .jpg, .png, etc.).

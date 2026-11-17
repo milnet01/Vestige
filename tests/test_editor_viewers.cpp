@@ -9,6 +9,11 @@
 #include "editor/panels/hdri_viewer_panel.h"
 #include "editor/panels/model_viewer_panel.h"
 #include "editor/panels/template_dialog.h"
+#include "core/event_bus.h"
+#include "renderer/renderer.h"
+#include "resource/resource_manager.h"
+#include "scene/scene.h"
+#include "gl_test_fixture.h"
 
 #include <cmath>
 #include <filesystem>
@@ -318,4 +323,25 @@ TEST_F(GameTemplateTest, PointAndClickConfig)
     auto pac = findTemplate(GameTemplateType::POINT_AND_CLICK);
     ASSERT_TRUE(pac.has_value());
     EXPECT_EQ(pac->projectionType, ProjectionType::PERSPECTIVE);
+}
+
+// 3D_E-0874 lane-14: applyTemplate only ever turned the skybox on, so a
+// template without one (and every 2D template, which returns before the
+// skybox step) kept the previous scene's sky. Every template now leaves
+// the skybox as it says.
+class TemplateSkyboxTest : public Test::GLTestFixture {};
+
+TEST_F(TemplateSkyboxTest, EachTemplateSetsTheSkyboxItAsksFor)
+{
+    EventBus bus;
+    Renderer renderer(bus);
+    ResourceManager resources;
+    Scene scene;
+    for (const auto& config : TemplateDialog::getTemplates())
+    {
+        // The previous scene's state is the opposite of what the template asks.
+        renderer.setSkyboxEnabled(!config.createSkybox);
+        TemplateDialog::applyTemplate(config, &scene, &resources, &renderer);
+        EXPECT_EQ(renderer.isSkyboxEnabled(), config.createSkybox) << config.displayName;
+    }
 }
