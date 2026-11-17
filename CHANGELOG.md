@@ -25,6 +25,19 @@ may change any interface without notice.
 
 ## [Unreleased]
 
+### 2026-11-17 Fixed — occlusion ray limit, Formula Workbench ranking (3D_E-0874)
+
+- **The audio occlusion ray limit is set in one place** (3D_E-0874)
+  The settings check and the editor's "Occlusion detail" slider now
+  follow the engine's limit. Before, each held its own copy of 16, so
+  changing the limit would have left them behind.
+
+- **The Formula Workbench benchmark ranks a perfect fit first** (3D_E-0874)
+  A formula that fits the data exactly used to rank below weaker fits.
+  A fit with too few data points to score now ranks after the scored
+  fits. Neither shows a made-up score: their AIC, BIC and ΔAIC cells
+  read "—".
+
 ### 2026-11-15 Fixed — water reflection targets and long engraved text (3D_E-0874)
 
 - **A water reflection target that fails to build is freed, not drawn into** (3D_E-0874)

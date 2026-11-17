@@ -7572,6 +7572,10 @@ shipped that have no invocation path at all.
   2026-11-15: lane-05 text_renderer.cpp:587 (height-map glyph cap) and
   water_fbo.cpp:111 (failed resize left incomplete targets bound) fixed
   at 9835ad6, each proven red first.
+  2026-11-17: lane-20 settings.cpp:752 (ray-count clamp and slider
+  used a literal 16) fixed at a28c370; lane-12 benchmark.cpp:293 (perfect
+  fit ranked below weaker fits) fixed at 57bcc8b with the code owner's
+  ranking decision. Each proven red first.
   **Layman:** About 290 lower-risk possible bugs and the medium findings are still unchecked.
   Kind: review-fix.
   Source: review-readability 2026-10-31 at 7b2a81d.
