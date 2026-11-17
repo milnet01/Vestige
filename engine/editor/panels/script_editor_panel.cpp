@@ -104,6 +104,16 @@ void ScriptEditorPanel::draw()
     }
 }
 
+void ScriptEditorPanel::warnConnectionOnce(uint32_t connectionId,
+                                           const std::string& message)
+{
+    // renderGraph runs every frame; one warning per connection is enough.
+    if (m_warnedConnections.insert(connectionId).second)
+    {
+        Logger::warning(message);
+    }
+}
+
 void ScriptEditorPanel::drawShortcuts()
 {
     // The File menu's keys, claimed while this panel has focus. The default
@@ -253,6 +263,8 @@ void ScriptEditorPanel::renderGraph()
             m_widget.setNodePosition(node.id, node.posX, node.posY);
         }
         m_needsLayout = false;
+        // A different script is shown: its undrawable connections warn anew.
+        m_warnedConnections.clear();
         // Can't fit-to-view on the same frame — imgui-node-editor uses the
         // previous frame's measured bounds, which are zero for fresh nodes.
         // Defer so the next frame has real bounds to work with.
@@ -316,7 +328,7 @@ void ScriptEditorPanel::renderGraph()
         const ScriptNodeDef* tgtNodeDef = m_graph.findNode(conn.targetNode);
         if (!srcNodeDef || !tgtNodeDef)
         {
-            Logger::warning("[ScriptEditor] Connection " +
+            warnConnectionOnce(conn.id, "[ScriptEditor] Connection " +
                 std::to_string(conn.id) +
                 " references missing node — skipping (AUDIT.md §M4)");
             continue;
@@ -335,7 +347,7 @@ void ScriptEditorPanel::renderGraph()
         auto tgtIt = tgtDesc->inputIndexByName.find(conn.targetPin);
         if (srcIt == srcDesc->outputIndexByName.end())
         {
-            Logger::warning("[ScriptEditor] Connection " +
+            warnConnectionOnce(conn.id, "[ScriptEditor] Connection " +
                 std::to_string(conn.id) + " has unknown source pin '" +
                 conn.sourcePin + "' on node type '" + srcNodeDef->typeName +
                 "' — skipping (AUDIT.md §M4)");
@@ -343,7 +355,7 @@ void ScriptEditorPanel::renderGraph()
         }
         if (tgtIt == tgtDesc->inputIndexByName.end())
         {
-            Logger::warning("[ScriptEditor] Connection " +
+            warnConnectionOnce(conn.id, "[ScriptEditor] Connection " +
                 std::to_string(conn.id) + " has unknown target pin '" +
                 conn.targetPin + "' on node type '" + tgtNodeDef->typeName +
                 "' — skipping (AUDIT.md §M4)");

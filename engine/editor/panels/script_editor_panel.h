@@ -16,7 +16,9 @@
 #include <imgui.h>
 #include <imfilebrowser.h>
 
+#include <cstdint>
 #include <string>
+#include <unordered_set>
 
 namespace Vestige
 {
@@ -88,6 +90,7 @@ public:
 
 private:
     void drawShortcuts();
+    void warnConnectionOnce(uint32_t connectionId, const std::string& message);
     void drawMenuBar();
     void drawCanvas();
     void renderGraph();
@@ -112,6 +115,8 @@ private:
     ScriptGraph m_graph;
     std::string m_currentPath;
     const NodeTypeRegistry* m_registry = nullptr;
+    /// @brief Connections already warned about as undrawable in this script.
+    std::unordered_set<uint32_t> m_warnedConnections;
     ImGui::FileBrowser m_openBrowser;
     ImGui::FileBrowser m_saveBrowser;
 };
