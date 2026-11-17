@@ -143,7 +143,8 @@ void TextureViewerPanel::openTexture(std::shared_ptr<Texture> texture,
         m_maxMipLevel = 0;
     }
 
-    // Detect PBR groups in same directory
+    // Detect PBR groups in same directory; a texture with no folder has none.
+    m_pbrGroups.clear();
     if (!path.empty())
     {
         std::filesystem::path fsPath(path);

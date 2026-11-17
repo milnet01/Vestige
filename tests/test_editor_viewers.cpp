@@ -10,6 +10,8 @@
 #include "editor/panels/model_viewer_panel.h"
 #include "editor/panels/template_dialog.h"
 
+#include <filesystem>
+#include <fstream>
 #include <optional>
 #include <set>
 
@@ -94,6 +96,29 @@ TEST(TextureViewerTest, PbrGroupDetectionEmptyDirReturnsNoGroups)
 {
     auto groups = TextureViewerPanel::detectPbrGroups("/nonexistent/path");
     EXPECT_TRUE(groups.empty());
+}
+
+// 3D_E-0874 lane-14: opening a texture with no path kept the PBR sets
+// found beside the previous texture, so the panel listed another
+// folder's sets.
+TEST(TextureViewerTest, OpeningATextureWithNoPathClearsPbrSets)
+{
+    const auto dir = std::filesystem::temp_directory_path() / "vestige_pbr_sets_test";
+    std::filesystem::create_directories(dir);
+    for (const char* name : {"brick_albedo.png", "brick_normal.png"})
+    {
+        std::ofstream(dir / name) << "x";
+    }
+
+    TextureViewerPanel panel;
+    panel.openTexture(nullptr, (dir / "brick_albedo.png").string());
+    const std::size_t foundBeside = panel.getPbrGroups().size();
+    panel.openTexture(nullptr, "");
+    const std::size_t afterNoPath = panel.getPbrGroups().size();
+    std::filesystem::remove_all(dir);
+
+    ASSERT_EQ(foundBeside, 1u);
+    EXPECT_EQ(afterNoPath, 0u);
 }
 
 // ==========================================================================

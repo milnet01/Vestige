@@ -88,6 +88,9 @@ public:
 
     const glm::vec2& getPanOffset() const { return m_panOffset; }
 
+    /// @brief PBR sets found beside the open texture.
+    const std::vector<PbrTextureGroup>& getPbrGroups() const { return m_pbrGroups; }
+
     /// @brief Detects PBR texture groups in a directory.
     /// @param directoryPath Path to scan for related textures.
     /// @return Detected PBR texture groups.
