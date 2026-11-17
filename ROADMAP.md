@@ -7615,6 +7615,13 @@ shipped that have no invocation path at all.
   (8ba1501): skybox.frag takes u_exposure in EV stops (as
   equirect_preview.frag), default 0 = unchanged, set only by the HDRI
   viewer. Lane-14 has no open rows.
+  2026-11-17 (late): lane-09 skeleton_animator 210 fixed at 2e5a0be
+  (crossfade mixes morph weights by the bone blend factor) and
+  animation_state_machine 125 at 7a5babc (the outgoing clip keeps the
+  speed and looping it had when the fade began; the state machine fades
+  first, then applies the new state's settings). Both proven red first.
+  lane-06 particle_simulate 395 and 401 marked latent: nothing calls
+  enableDepthCollision, so depth collision never runs.
   **Layman:** About 290 lower-risk possible bugs and the medium findings are still unchecked.
   Kind: review-fix.
   Source: review-readability 2026-10-31 at 7b2a81d.

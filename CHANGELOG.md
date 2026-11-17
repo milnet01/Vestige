@@ -25,6 +25,19 @@ may change any interface without notice.
 
 ## [Unreleased]
 
+### 2026-11-17 Fixed — animation crossfades (3D_E-0874)
+
+- **Faces blend into the next animation instead of jumping** (3D_E-0874)
+  During a crossfade the bones blended, but morph-target weights (facial
+  shapes) snapped to the new clip on the first frame. They now blend
+  with the bones.
+
+- **The outgoing animation keeps its speed and looping while it fades
+  out** (3D_E-0874)
+  A state-machine transition applied the new state's speed and loop
+  setting to the old clip too, so it sped up, slowed down or froze on
+  its last frame during the fade.
+
 ### 2026-11-17 Fixed — Inspector, templates and viewer panels (3D_E-0874)
 
 - **A changed image shows its new look in the asset browser** (3D_E-0874)
