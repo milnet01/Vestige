@@ -43,4 +43,49 @@ TEST(ScriptEditorOpen, OpensTheAbsolutePathItsDialogReturns)
     fs::remove_all(dir);
 }
 
+// 3D_E-0874 lane 15: a new, untouched script has no name and no nodes. Saved
+// and reopened, it must open, not be mistaken for a failed load.
+TEST(ScriptEditorOpen, ReopensAnEmptyNewScript)
+{
+    const fs::path dir = fs::temp_directory_path()
+        / ("vestige_script_empty_" + Testing::vestigeTestStamp());
+    fs::create_directories(dir);
+    const fs::path file = dir / "blank.vscript";
+
+    ScriptEditorPanel writer;
+    writer.newGraph();
+    ASSERT_TRUE(writer.saveAs(file.string()));
+
+    ScriptEditorPanel reader;
+    reader.graph().name = "previous";
+    EXPECT_TRUE(reader.open(file.string()));
+    EXPECT_TRUE(reader.graph().name.empty());
+
+    fs::remove_all(dir);
+}
+
+// 3D_E-0874 lane 15: a Save As that fails keeps the script's previous path,
+// so a later Save still writes where the script last saved.
+TEST(ScriptEditorOpen, FailedSaveAsKeepsThePreviousPath)
+{
+    const fs::path dir = fs::temp_directory_path()
+        / ("vestige_script_saveas_" + Testing::vestigeTestStamp());
+    fs::create_directories(dir);
+    const fs::path file = dir / "door.vscript";
+
+    ScriptEditorPanel panel;
+    panel.graph().name = "door";
+    ASSERT_TRUE(panel.saveAs(file.string()));
+
+    panel.graph().name = "door2";
+    EXPECT_FALSE(panel.saveAs((dir / "no_such_folder" / "x.vscript").string()));
+    EXPECT_TRUE(panel.save()) << "Save lost the previous path";
+
+    ScriptEditorPanel reader;
+    ASSERT_TRUE(reader.open(file.string()));
+    EXPECT_EQ(reader.graph().name, "door2");
+
+    fs::remove_all(dir);
+}
+
 } // namespace Vestige::Test

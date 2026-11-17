@@ -370,27 +370,17 @@ void ScriptEditorPanel::newGraph()
 
 bool ScriptEditorPanel::open(const std::string& path)
 {
-    // AUDIT.md §M2 / FIXPLAN H2: match the header contract — preserve the
-    // existing graph if the load fails. ScriptGraph::loadFromChosenFile returns
-    // an empty graph on failure (and logs the error), so we treat
-    // "path is non-empty AND loaded graph has no nodes AND no connections"
-    // as failure. Genuinely empty graphs saved by the user will have the
-    // "name" field populated via fromJson; we key on name + nodes to
-    // avoid false negatives on freshly-created-but-untouched graphs.
+    // AUDIT.md §M2: preserve the existing graph if the load fails. The loader
+    // logs why it failed; an empty graph is a valid script, not a failure.
     auto loaded = ScriptGraph::loadFromChosenFile(path);
-    const bool loadLikelyFailed =
-        !path.empty() &&
-        loaded.nodes.empty() &&
-        loaded.connections.empty() &&
-        loaded.name.empty();
-    if (loadLikelyFailed)
+    if (!loaded)
     {
         Logger::warning("[ScriptEditor] open() failed — preserving "
                         "existing graph (AUDIT.md §M2): " + path);
         return false;
     }
 
-    m_graph = std::move(loaded);
+    m_graph = std::move(*loaded);
     m_currentPath = path;
     m_dirty = false;
     m_needsLayout = true;
@@ -414,8 +404,15 @@ bool ScriptEditorPanel::save()
 
 bool ScriptEditorPanel::saveAs(const std::string& path)
 {
+    // Take the new path only once the save works, so a failed Save As leaves
+    // Save writing where the script last saved.
+    if (!m_graph.saveToFile(path))
+    {
+        return false;
+    }
     m_currentPath = path;
-    return save();
+    m_dirty = false;
+    return true;
 }
 
 } // namespace Vestige

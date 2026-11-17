@@ -10,6 +10,7 @@
 
 #include <nlohmann/json.hpp>
 
+#include <optional>
 #include <string>
 #include <vector>
 
@@ -87,7 +88,9 @@ struct ScriptGraph
 
     /// @brief Load a ScriptGraph from a path the user picked in a file dialog.
     /// The pick is trusted, so any path is accepted (user decision 2026-11-11).
-    static ScriptGraph loadFromChosenFile(const std::string& filePath);
+    /// @return The graph, or nullopt when the file cannot be opened, parsed or
+    ///         validated. An empty graph is a valid result, not a failure.
+    static std::optional<ScriptGraph> loadFromChosenFile(const std::string& filePath);
 
     /// @brief Save this ScriptGraph to a .vscript file. The path is the user's
     /// own pick (the editor's Save As), so it is not restricted.

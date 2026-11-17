@@ -426,10 +426,10 @@ ScriptGraph ScriptGraph::loadFromFile(const std::string& filePath)
         Logger::error("[ScriptGraph] Rejected path (traversal): " + filePath);
         return {};
     }
-    return loadFromChosenFile(filePath);
+    return loadFromChosenFile(filePath).value_or(ScriptGraph{});
 }
 
-ScriptGraph ScriptGraph::loadFromChosenFile(const std::string& filePath)
+std::optional<ScriptGraph> ScriptGraph::loadFromChosenFile(const std::string& filePath)
 {
     std::ifstream file(filePath);
     if (!file.is_open())
