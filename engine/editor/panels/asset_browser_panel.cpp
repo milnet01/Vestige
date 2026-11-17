@@ -213,7 +213,7 @@ void AssetBrowserPanel::processOneThumbnail()
 void AssetBrowserPanel::pollFileChanges()
 {
     auto now = std::chrono::steady_clock::now();
-    if (now - m_lastPoll < std::chrono::seconds(2))
+    if (now - m_lastPoll < m_pollInterval)
     {
         return;
     }
@@ -239,20 +239,27 @@ void AssetBrowserPanel::pollFileChanges()
         }
     }
 
-    // Check for changes
+    // Check for changes. A file rewritten in place is reloaded into the
+    // shared texture cache, so its thumbnail and every material using it
+    // show the new image; its old thumbnail id is forgotten.
     if (current.size() != m_fileTimestamps.size())
     {
         needsRescan = true;
     }
-    else
+    for (const auto& [path, time] : current)
     {
-        for (const auto& [path, time] : current)
+        auto it = m_fileTimestamps.find(path);
+        if (it == m_fileTimestamps.end())
         {
-            auto it = m_fileTimestamps.find(path);
-            if (it == m_fileTimestamps.end() || it->second != time)
+            needsRescan = true;
+        }
+        else if (it->second != time)
+        {
+            needsRescan = true;
+            m_thumbnailCache.erase(path);
+            if (m_resources)
             {
-                needsRescan = true;
-                break;
+                m_resources->reloadTexture(path);
             }
         }
     }

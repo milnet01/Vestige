@@ -54,6 +54,10 @@ public:
     /// @brief Draws the asset browser panel contents.
     void draw();
 
+    /// @brief Sets how often draw() checks the folder for changed files.
+    ///        Default two seconds; tests shorten it.
+    void setPollInterval(std::chrono::milliseconds interval) { m_pollInterval = interval; }
+
 private:
     void drawSearchBar();
     void drawBreadcrumbs();
@@ -84,6 +88,7 @@ private:
     // File watching (polling)
     std::unordered_map<std::string, std::filesystem::file_time_type> m_fileTimestamps;
     std::chrono::steady_clock::time_point m_lastPoll;
+    std::chrono::milliseconds m_pollInterval{2000};
 
     ResourceManager* m_resources = nullptr;
 

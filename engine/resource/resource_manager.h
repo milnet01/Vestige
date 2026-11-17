@@ -38,6 +38,15 @@ public:
     /// @return Shared pointer to the texture, or nullptr on failure.
     std::shared_ptr<Texture> loadTexture(const std::string& filePath, bool linear = false);
 
+    /// @brief Re-reads a changed image file into its cached textures, in place.
+    ///
+    /// Both cached forms (sRGB and linear) are refreshed, so every material
+    /// holding them shows the new image and findTexturePath still finds them.
+    /// Each keeps its filter mode. A form whose reload fails keeps its old
+    /// image. A file not in the cache is left alone.
+    /// @return True if at least one cached form was reloaded.
+    bool reloadTexture(const std::string& filePath);
+
     /// @brief Gets a solid-color fallback texture.
     std::shared_ptr<Texture> getDefaultTexture();
 

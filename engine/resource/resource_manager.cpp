@@ -88,6 +88,34 @@ std::shared_ptr<Texture> ResourceManager::loadTexture(const std::string& filePat
     return texture;
 }
 
+bool ResourceManager::reloadTexture(const std::string& filePath)
+{
+    const std::string key = AssetPath::toKey(m_assetRoot, filePath);
+    bool reloaded = false;
+    for (const bool linear : {false, true})
+    {
+        auto it = m_textures.find(key + (linear ? ":linear" : ":srgb"));
+        if (it == m_textures.end())
+        {
+            continue;
+        }
+        const std::string safePath = validatePath(openPathFor(key));
+        // Load beside the cached image, so a file caught mid-write leaves it intact.
+        Texture fresh;
+        if (safePath.empty() || !fresh.loadFromFile(safePath, linear))
+        {
+            Logger::warning("Failed to reload texture: " + filePath + " — keeping the old image");
+            continue;
+        }
+        Texture& cached = *it->second.value;
+        const TextureFilterMode mode = cached.getFilterMode();
+        cached = std::move(fresh);
+        cached.setFilterMode(mode);
+        reloaded = true;
+    }
+    return reloaded;
+}
+
 std::shared_ptr<Texture> ResourceManager::getDefaultTexture()
 {
     if (!m_defaultTexture)
