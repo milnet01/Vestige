@@ -1,6 +1,6 @@
 <!-- ants-roadmap-format: 1 -->
 <!-- Generated from the Ants Terminal roadmap store. Edit it with roadmap_log; hand edits are discarded by the next write. -->
-<!-- ants-roadmap-id-high-water: 3D_E=978 3D_E#S=989 -->
+<!-- ants-roadmap-id-high-water: 3D_E=979 3D_E#S=989 -->
 
 # Vestige Engine Roadmap
 
@@ -8074,6 +8074,29 @@ shipped that have no invocation path at all.
   **Layman:** The speed log tells the analyser the wrong thing about how the engine runs, so some of its judgements could be wrong.
   Kind: fix.
   Source: frameledger-review-2026-11-14.
+
+- 📋 [3D_E-0979] **Formula Workbench --export-glsl takes a name prefix (--prefix xr_).**
+  Asked by ExperiRays for EXRAY-0005. engine/formula/codegen_glsl.cpp
+  writes fixed names: each function as toGlslFunctionName(name), the
+  safe-math prelude as safeDiv/safeSqrt/safeLog/safePow, guards
+  VESTIGE_FORMULA_PRELUDE and VESTIGE_FORMULA_FN_<name>. Two exports
+  included in one shader (the lab's copy and an engine's own) share
+  those guards, so whichever comes first wins silently, even at another
+  library version.
+  Add `--prefix P` to --export-glsl (parsed in
+  tools/formula_workbench/benchmark.cpp): P goes before every function
+  name, every prelude function and every call to it, and into both guard
+  kinds. No prefix gives today's output byte for byte. P must be a valid
+  GLSL identifier start and not begin with gl_; refuse it otherwise.
+  Test: export with and without the prefix; the unprefixed text equals
+  today's; the prefixed text has no unprefixed name or guard left, and
+  both compile together in one shader on the GL test context.
+  CPU / GPU placement: a build-time tool; the output runs on the GPU as
+  it does today.
+  **Layman:** Let a project stamp its own prefix on exported shader formulas, so two copies of the formula library in one shader no longer clash.
+  Kind: feature.
+  Source: experirays-request-2026-11-17.
+  Lanes: formula.
 
 ## 0.3.0 — An editor a builder can use
 
