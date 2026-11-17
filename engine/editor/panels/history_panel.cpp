@@ -69,8 +69,11 @@ void HistoryPanel::draw(CommandHistory& history)
         }
     }
 
-    // Auto-scroll to current position when it changes
-    if (currentIndex >= 0)
+    // Auto-scroll to current position only when it changes, so the user can
+    // scroll away from it between changes.
+    const bool indexChanged = (currentIndex != m_lastScrolledIndex);
+    m_lastScrolledIndex = currentIndex;
+    if (indexChanged && currentIndex >= 0)
     {
         float itemHeight = ImGui::GetTextLineHeightWithSpacing();
         float targetY = static_cast<float>(currentIndex + 1) * itemHeight;

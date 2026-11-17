@@ -21,6 +21,10 @@ public:
     /// @brief Draws the history panel contents inside the current ImGui window.
     /// @param history Command history to display.
     void draw(CommandHistory& history);
+
+private:
+    /// @brief Current index at the last draw; the list scrolls only when it changes.
+    int m_lastScrolledIndex = -2;
 };
 
 } // namespace Vestige
