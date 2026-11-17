@@ -8139,7 +8139,15 @@ shipped that have no invocation path at all.
     metres (CODING_STANDARDS.md § 27). Test every triangle's winding
     against its stored normal.
   - asset.extras.xr: version 1, engine "vestige", scene_key
-    vestige:<sha256 of the .scene file>:<exporter revision>.
+    vestige:<sha256 of the input manifest>:<exporter revision>, and
+    input_manifest, the manifest text (EXRAY-0001 § 4.2 at ExperiRays
+    9270c0f). The manifest has one line per file the exporter reads: the
+    .scene, the terrain files it names, each model and texture it
+    resolves. Each line is "<path> <sha256>", the path as the .scene
+    stores it (asset-relative; terrain files relative to the scene
+    folder). Lines are sorted byte by byte and joined by \n, with no
+    trailing newline. The key changes whenever any id or index the
+    extras carry would mean something else.
   - Node motion: static, moving, "wind" (foliage, trees) or "water".
     Foliage goes one node per chunk, via EXT_mesh_gpu_instancing, in
     extensionsUsed only.
