@@ -8,6 +8,7 @@
 #include "renderer/renderer.h"
 #include "resource/resource_manager.h"
 
+#include <glm/gtc/matrix_transform.hpp>
 #include <imgui.h>
 
 #include <algorithm>
@@ -23,8 +24,10 @@ namespace Vestige
 
 static constexpr float MIN_EXPOSURE = -10.0f;
 static constexpr float MAX_EXPOSURE = 10.0f;
-static constexpr float MIN_PITCH = -90.0f;
-static constexpr float MAX_PITCH = 90.0f;
+// One degree short of straight up/down: at 90 the view looks along its own
+// up vector and lookAt flips it (as Camera and ModelViewerPanel clamp).
+static constexpr float MIN_PITCH = -89.0f;
+static constexpr float MAX_PITCH = 89.0f;
 
 // ============================================================================
 // Initialization
@@ -146,6 +149,16 @@ void HdriViewerPanel::setPreviewAngles(float yaw, float pitch)
 
     m_previewPitch = std::clamp(pitch, MIN_PITCH, MAX_PITCH);
     m_skyboxDirty = true;
+}
+
+glm::mat4 HdriViewerPanel::previewView(float yawDeg, float pitchDeg)
+{
+    const float yawRad = glm::radians(yawDeg);
+    const float pitchRad = glm::radians(pitchDeg);
+    const float cosPitch = std::cos(pitchRad);
+    const glm::vec3 dir(cosPitch * std::sin(yawRad), std::sin(pitchRad),
+                        cosPitch * std::cos(yawRad));
+    return glm::lookAt(glm::vec3(0.0f), dir, glm::vec3(0.0f, 1.0f, 0.0f));
 }
 
 // ============================================================================
@@ -401,16 +414,7 @@ void HdriViewerPanel::renderSkyboxFbo()
     glClear(GL_COLOR_BUFFER_BIT | GL_DEPTH_BUFFER_BIT);
     glEnable(GL_DEPTH_TEST);
 
-    // Set up view matrix from orbit angles
-    float yawRad = glm::radians(m_previewYaw);
-    float pitchRad = glm::radians(m_previewPitch);
-    float cosPitch = std::cos(pitchRad);
-    glm::vec3 dir(
-        cosPitch * std::sin(yawRad),
-        std::sin(pitchRad),
-        cosPitch * std::cos(yawRad)
-    );
-    glm::mat4 view = glm::lookAt(glm::vec3(0.0f), dir, glm::vec3(0.0f, 1.0f, 0.0f));
+    const glm::mat4 view = previewView(m_previewYaw, m_previewPitch);
     glm::mat4 proj = glm::perspective(glm::radians(90.0f), 1.0f, 0.1f, 10.0f);
 
     // Use skybox shader

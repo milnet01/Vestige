@@ -10,6 +10,7 @@
 #include "editor/panels/model_viewer_panel.h"
 #include "editor/panels/template_dialog.h"
 
+#include <cmath>
 #include <filesystem>
 #include <fstream>
 #include <optional>
@@ -159,6 +160,28 @@ TEST(HdriViewerTest, PreviewOrbitAngles)
 
     panel.setPreviewAngles(0.0f, -100.0f);
     EXPECT_GE(panel.getPreviewPitch(), -90.0f);
+}
+
+// 3D_E-0874 lane-14: dragging the cubemap preview to straight up or down
+// pointed the view along its own up vector. In float, cos(90 degrees) is
+// a tiny negative number, so lookAt's right axis flipped and the preview
+// turned upside down at the limit. The view at the limit must keep the
+// right axis it has a degree short of it.
+TEST(HdriViewerTest, PreviewDoesNotFlipAtThePitchLimits)
+{
+    HdriViewerPanel panel;
+    for (const float pull : {100.0f, -100.0f})
+    {
+        panel.setPreviewAngles(30.0f, pull);
+        const float limit = panel.getPreviewPitch();
+        const float shy = limit - std::copysign(1.0f, limit);
+        const glm::mat4 atLimit = HdriViewerPanel::previewView(30.0f, limit);
+        const glm::mat4 nearLimit = HdriViewerPanel::previewView(30.0f, shy);
+        // lookAt stores the right axis in the first row.
+        const glm::vec3 right(atLimit[0][0], atLimit[1][0], atLimit[2][0]);
+        const glm::vec3 rightNear(nearLimit[0][0], nearLimit[1][0], nearLimit[2][0]);
+        EXPECT_GT(glm::dot(right, rightNear), 0.99f) << "pitch limit " << limit;
+    }
 }
 
 // ==========================================================================

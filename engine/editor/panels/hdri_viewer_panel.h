@@ -60,6 +60,10 @@ public:
     float getPreviewPitch() const { return m_previewPitch; }
     void setPreviewAngles(float yaw, float pitch);
 
+    /// @brief The cubemap preview's view matrix, looking out from the origin
+    ///        at @a yawDeg / @a pitchDeg (degrees).
+    static glm::mat4 previewView(float yawDeg, float pitchDeg);
+
 private:
     void drawEquirectPreview();
     void drawSkyboxPreview();
