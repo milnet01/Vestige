@@ -38,6 +38,14 @@
 namespace Vestige
 {
 
+/// @brief Upper bound on occlusion rays cast per source: the size of the
+///        offset table (`occlusionRayOffsets`), the settings clamp and the
+///        editor slider's maximum. Defined here, not in the occlusion system,
+///        so settings code can use it without the physics headers.
+///        `kMaxOcclusionRaysPerFrame` is a literal 512 that does not follow
+///        it; update that by hand when you change this.
+inline constexpr int kMaxOcclusionRayCount = 16;
+
 /// @brief Canonical materials the raycaster can tag a hit with.
 ///        The enum is dense and stable so it can be persisted as an
 ///        integer in scene files without version gymnastics.

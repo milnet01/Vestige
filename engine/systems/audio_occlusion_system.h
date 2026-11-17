@@ -27,13 +27,6 @@ class PhysicsWorld;
 class JobSystem;
 class AudioEngine;
 
-/// @brief Upper bound on rays cast per source, and the size of the offset
-///        table (`occlusionRayOffsets`). The settings clamp in `settings.cpp`
-///        and the slider in `settings_editor_panel.cpp` use a literal 16, and
-///        `kMaxOcclusionRaysPerFrame` is a literal 512; none follow this
-///        constant, so update those sites by hand when you change it.
-inline constexpr int kMaxOcclusionRayCount = 16;
-
 /// @brief Hard ceiling on rays cast per frame across all sources (§4.5). The
 ///        pool-max product `MAX_SOURCES(32) × kMaxOcclusionRayCount(16)`, so at
 ///        the settings maximum the offered load exactly meets it and the

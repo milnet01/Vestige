@@ -229,7 +229,7 @@ struct AudioSettings
     bool occlusionEnabled = true;
 
     /// @brief AX1 — rays cast per spatial source (volumetric source sampling).
-    ///        Clamped to [1, kMaxOcclusionRayCount(16)]; 1 = binary blocked/clear.
+    ///        Clamped to [1, kMaxOcclusionRayCount]; 1 = binary blocked/clear.
     int occlusionRayCount = 8;
 
     /// @brief AX1 — cull radius in metres: beyond it, occlusion is imperceptible

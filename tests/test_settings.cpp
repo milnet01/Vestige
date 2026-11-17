@@ -11,6 +11,7 @@
 #include <gtest/gtest.h>
 
 #include "audio/audio_engine.h"
+#include "audio/audio_occlusion.h"
 #include "core/settings.h"
 #include "core/settings_apply.h"
 #include "core/settings_editor.h"
@@ -342,11 +343,11 @@ TEST(Settings, LoudnessTargetIsClampedByValidate)
 TEST(Settings, OcclusionFieldsAreClampedByValidate)
 {
     Settings s;
-    s.audio.occlusionRayCount    = 99;      // > kMaxOcclusionRayCount(16)
+    s.audio.occlusionRayCount    = 99;      // > kMaxOcclusionRayCount
     s.audio.occlusionMaxDistance = -5.0f;   // negative
     s.audio.occlusionSourceRadius = -1.0f;  // negative
     EXPECT_FALSE(validate(s));              // returns false when it had to clamp
-    EXPECT_EQ(s.audio.occlusionRayCount, 16);
+    EXPECT_EQ(s.audio.occlusionRayCount, kMaxOcclusionRayCount);
     EXPECT_FLOAT_EQ(s.audio.occlusionMaxDistance, 0.0f);
     EXPECT_FLOAT_EQ(s.audio.occlusionSourceRadius, 0.0f);
 

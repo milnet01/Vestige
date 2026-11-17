@@ -4,6 +4,7 @@
 /// @file settings_editor_panel.cpp
 /// @brief Phase 10 slice 13.5b — ImGui editor panel implementation.
 #include "editor/panels/settings_editor_panel.h"
+#include "audio/audio_occlusion.h"
 #include "localization/supported_languages.h"
 #include "core/accessibility_wire_strings.h"
 
@@ -458,7 +459,7 @@ void SettingsEditorPanel::drawAudioTab()
     // Tunables only matter while occlusion is on.
     ImGui::BeginDisabled(!p.audio.occlusionEnabled);
     int rays = p.audio.occlusionRayCount;
-    if (ImGui::SliderInt("Occlusion detail (rays)", &rays, 1, 16))
+    if (ImGui::SliderInt("Occlusion detail (rays)", &rays, 1, kMaxOcclusionRayCount))
     {
         m_editor->mutate([rays](Settings& s) { s.audio.occlusionRayCount = rays; });
     }

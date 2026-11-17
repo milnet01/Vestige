@@ -4,6 +4,7 @@
 /// @file settings.cpp
 /// @brief Phase 10 — persistent, user-editable engine settings.
 #include "core/settings.h"
+#include "audio/audio_occlusion.h"
 #include "core/accessibility_wire_strings.h"
 #include "localization/supported_languages.h"
 
@@ -747,11 +748,11 @@ bool validate(Settings& s)
         }
     }
 
-    // AX1 — occlusion ranges. Ray count in [1, kMaxOcclusionRayCount(16)]; a
+    // AX1 — occlusion ranges. Ray count in [1, kMaxOcclusionRayCount]; a
     // hand-edited settings.json out of range is clamped, not trusted. Distances
     // are non-negative (0 disables casting / collapses the sample sphere).
     const int rcOrig = s.audio.occlusionRayCount;
-    s.audio.occlusionRayCount = std::clamp(s.audio.occlusionRayCount, 1, 16);
+    s.audio.occlusionRayCount = std::clamp(s.audio.occlusionRayCount, 1, kMaxOcclusionRayCount);
     if (s.audio.occlusionRayCount != rcOrig)
     {
         clamped = true;
