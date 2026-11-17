@@ -81,6 +81,14 @@ void TerrainPanel::drawSculptSection(TerrainBrush& brush)
 
     ImGui::Spacing();
 
+    // The Paint tab switches the brush to PAINT; coming back here gives it
+    // the sculpt mode it had before, so the brush does not keep painting.
+    if (brush.mode == TerrainBrushMode::PAINT)
+    {
+        brush.mode = m_lastSculptMode;
+    }
+    m_lastSculptMode = brush.mode;
+
     // Mode selection
     ImGui::Text("Mode:");
     int modeInt = static_cast<int>(brush.mode);

@@ -40,6 +40,9 @@ private:
 
     bool m_open = false;
 
+    /// @brief Sculpt mode to restore when the Sculpt tab shows after painting.
+    TerrainBrushMode m_lastSculptMode = TerrainBrushMode::RAISE;
+
     // Auto-texture parameters (persisted across draws)
     float m_slopeGrassEnd = 0.3f;
     float m_slopeRockStart = 0.6f;
