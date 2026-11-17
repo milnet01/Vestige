@@ -1,6 +1,6 @@
 <!-- ants-roadmap-format: 1 -->
 <!-- Generated from the Ants Terminal roadmap store. Edit it with roadmap_log; hand edits are discarded by the next write. -->
-<!-- ants-roadmap-id-high-water: 3D_E=979 3D_E#S=989 -->
+<!-- ants-roadmap-id-high-water: 3D_E=989 3D_E#S=989 -->
 
 # Vestige Engine Roadmap
 
@@ -9436,6 +9436,111 @@ Retrofit completed across 8 commits — every Phase-10 Settings-store consumer n
   Source: found-2026-11-05.
   Lanes: editor.
 
+- 📋 [3D_E-0980] **Professional editor theme: one designed colour and spacing system, dark and light, applied to every panel.**
+  Today editor.cpp sets colours by hand on top of ImGui::StyleColorsDark.
+  Replace that with named colour tokens (background levels, text levels,
+  accent, selection, warning, error), spacing, rounding and border
+  values, loaded from one theme file. Ship a dark theme (default) and a
+  light theme; 3D_E-S0447's high-contrast mode and 3D_E-0886's readability
+  settings become further themes over the same tokens, not separate code.
+  Research first: compare the editors of Godot 4, Unreal 5, Unity 6 and
+  Blender (contrast levels, accent use, density), and cite what is read.
+  Done when: every panel draws from the tokens only (no colour literals
+  left in engine/editor), the theme switches live and persists, and
+  screenshots of each panel in both themes are reviewed.
+  CPU / GPU placement: CPU (ImGui style data); no new GPU work.
+  **Layman:** Give the editor a polished, consistent look that a studio would expect from a commercial tool.
+  Kind: ux.
+  Source: user-request-2026-11-17.
+  Lanes: editor.
+
+- 📋 [3D_E-0981] **Bundled UI and code fonts plus an icon set for toolbars, the hierarchy, the asset browser and component headers.**
+  A UI sans font, a monospace font for code and the console, and one
+  icon font merged into the ImGui font atlas, rebuilt at each DPI and
+  3D_E-S0446 scale step so text stays sharp. Icons on toolbar buttons,
+  entity types in the hierarchy, asset types in the browser, and each
+  component header in the inspector.
+  Candidates to check (licence read before vendoring, entry added to
+  THIRD_PARTY_NOTICES.md): Inter or Noto Sans, JetBrains Mono, Lucide or
+  Material Symbols.
+  Done when: no panel uses ImGui's built-in font, every toolbar action
+  has an icon and a tooltip, and text is sharp at 1.0x to 2.0x scale.
+  **Layman:** Use clean, sharp fonts and small icons throughout the editor so it is quicker to read and looks finished.
+  Kind: ux.
+  Source: user-request-2026-11-17.
+  Lanes: editor.
+
+- 📋 [3D_E-0982] **Main toolbar and status bar: play controls, transform tools, snapping, and live engine status.**
+  Toolbar: play / pause / step, move / rotate / scale, local or world
+  space, snap toggles and sizes, camera speed. Status bar: frame time and
+  FPS, selection count, unsaved-changes marker, background tasks (the
+  progress of 3D_E-S0443's async imports) and the hint strip of
+  3D_E-0897. Both use the theme tokens and icon set.
+  Done when: each toolbar control matches its menu and shortcut, and the
+  status bar updates live without costing the 60 FPS floor.
+  **Layman:** Put the most-used buttons in one bar at the top, and show what the engine is doing in a bar at the bottom.
+  Kind: ux.
+  Source: user-request-2026-11-17.
+  Lanes: editor.
+
+- 📋 [3D_E-0983] **A designed default layout, with save, reset and per-project layouts.**
+  Default: viewport centre, hierarchy left, inspector right, asset
+  browser and console bottom, matching what users of other engines
+  expect. Window → Layout → Save, Load, Reset to default; a project can
+  ship its own default. 3D_E-S0416's named workspace presets build on
+  this.
+  Done when: a fresh install opens to the default at 1920x1080 and
+  2560x1440 with no overlapping or empty panels, and Reset always
+  restores it.
+  **Layman:** Open the editor to a tidy, standard arrangement of panels, and let teams save and restore their own.
+  Kind: ux.
+  Source: user-request-2026-11-17.
+  Lanes: editor.
+
+- 📋 [3D_E-0984] **One look across every panel: shared widgets, a written UI style guide, and screenshot checks.**
+  Shared helpers for a property row (label column, value, reset button,
+  tooltip), section headers, empty states ("No terrain loaded" with the
+  action that fixes it), and confirm dialogs. A style guide in docs/
+  says when to use each. Each panel is moved onto them.
+  A headless screenshot test draws every panel in each theme and
+  compares against saved images, so a later change cannot quietly break
+  the look.
+  Done when: every panel uses the shared helpers, the guide exists, and
+  the screenshot test runs in the local gate.
+  **Layman:** Make every panel behave and look the same way, write the rules down, and catch any panel that drifts.
+  Kind: ux.
+  Source: user-request-2026-11-17.
+  Lanes: editor.
+
+- 📋 [3D_E-0985] **MCP server for the editor, so outside AI tools (Claude Code, Cursor and others) can work in a running Vestige.**
+  MCP (Model Context Protocol) is the common way AI tools connect to
+  other programs. Expose 3D_E-S0437's command API and 3D_E-S0438's scene
+  snapshot as MCP tools: read the scene and selection, run a command,
+  take a viewport screenshot, read the log, enter and leave play mode.
+  Local only (no network listener beyond localhost), off by default,
+  and every mutating call goes through undo and the editor's approval
+  setting, as 3D_E-S0919 to S0926 require of the built-in assistant.
+  Done when: Claude Code can place, move and delete an entity and read
+  the result back, and each change undoes with Ctrl+Z.
+  Blocked by: 3D_E-S0437, 3D_E-S0438.
+  **Layman:** Let a developer's own AI coding tool look at and change a scene in the running editor, safely and with their approval.
+  Kind: feature.
+  Source: user-request-2026-11-17.
+  Lanes: editor, tools.
+
+- 📋 [3D_E-0986] **Agent run mode: load a scene, run it for a set time, capture images, logs and frame data, and exit with a clear code.**
+  One command line, no window needed (headless where the platform
+  allows): --scene FILE, --run-seconds N, --capture-at T1,T2 (PNG),
+  --frame-log, --dump-scene JSON; exit 0 on a clean run, non-zero on a
+  script error, shader error or crash. Builds on --demo-flythrough,
+  --demo-capture and --frame-log, which exist today.
+  Done when: an agent can change a scene file, run this, and judge the
+  result from the outputs alone.
+  **Layman:** Let an AI tool test a game change by itself: run the scene, look at the pictures and numbers, and report back.
+  Kind: feature.
+  Source: user-request-2026-11-17.
+  Lanes: core, tools.
+
 ## 0.4.0 — Rendering and geometry at scale
 
 Breaks: the scene format's material and lighting blocks.
@@ -12780,6 +12885,43 @@ Biblical rendition of the Tabernacle as described in Exodus 25-40.
 - 📋 [3D_E-S0939] **Local-model inference (Ollama / llama.cpp) spawned as a separate process so a crash in the inference backend cannot take down the editor**
   **Layman:** A local AI model runs separately, so if it crashes the editor keeps going.
   Kind: implement.
+
+- 📋 [3D_E-0987] **Documentation written for AI tools: llms.txt, a generated component and scripting reference, and worked examples.**
+  An llms.txt index at the repository root; a component, script-node
+  and command reference generated from the source (so it cannot go
+  stale); and short worked examples ("add a door that opens on use").
+  Used by the built-in assistant and by outside tools over the MCP
+  server.
+  Done when: the reference is regenerated by the build, and a fresh AI
+  session given only these files writes a working door script.
+  **Layman:** Give AI tools an accurate, up-to-date description of the engine so the game code and scripts they write actually work.
+  Kind: doc.
+  Source: user-request-2026-11-17.
+  Lanes: docs.
+
+- 📋 [3D_E-0988] **One AI provider interface: Claude, OpenAI-compatible services and local models, chosen per project.**
+  The assistant (3D_E-S0906 onward) talks to one interface. Back ends:
+  the Anthropic API, any OpenAI-compatible endpoint (which covers many
+  hosted and local servers), and 3D_E-S0939's local process. Keys are
+  read from the user's environment or OS keychain, never stored in the
+  project.
+  Done when: the same prompt runs through each back end and the
+  assistant's features behave the same.
+  **Layman:** Let each studio pick which AI service it uses, or a local one, without changing how the editor's AI features work.
+  Kind: feature.
+  Source: user-request-2026-11-17.
+  Lanes: editor.
+
+- 📋 [3D_E-0989] **Provenance record for AI-made content: which tool and model made each asset, script or scene change.**
+  Each asset, script graph or scene change made by an AI tool (built-in
+  or over MCP) carries a record: tool, model, date, prompt reference.
+  A project report lists them. Builds on 3D_E-S0925's action log.
+  Done when: the report lists every AI-made item in a project and
+  nothing else.
+  **Layman:** Keep a record of what in a project was made with AI help, so a studio can answer licensing and review questions.
+  Kind: feature.
+  Source: user-request-2026-11-17.
+  Lanes: editor, assets.
 
 ## 1.4.0 — Multiplayer
 
