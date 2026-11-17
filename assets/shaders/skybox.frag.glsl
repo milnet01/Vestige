@@ -14,6 +14,8 @@ uniform samplerCube u_skyboxTexture;
 // Radiance cap for lighting captures (Skybox::IBL_MAX_RADIANCE); 0 = uncapped,
 // which the visible sky uses so the sun keeps its brightness (3D_E-0772).
 uniform float u_maxRadiance;
+// Exposure in EV stops, set only by the HDRI viewer's preview; 0 leaves the sky as is.
+uniform float u_exposure = 0.0;
 
 void main()
 {
@@ -24,6 +26,7 @@ void main()
         {
             fragColor.rgb = min(fragColor.rgb, vec3(u_maxRadiance));
         }
+        fragColor.rgb *= exp2(u_exposure);
     }
     else
     {

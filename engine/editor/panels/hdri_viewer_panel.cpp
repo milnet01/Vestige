@@ -422,6 +422,7 @@ void HdriViewerPanel::renderSkyboxFbo()
     m_skyboxShader.setMat4("u_view", view);
     m_skyboxShader.setMat4("u_projection", proj);
     m_skyboxShader.setBool("u_hasCubemap", true);
+    m_skyboxShader.setFloat("u_exposure", m_exposure);
 
     // Bind the cubemap
     glActiveTexture(GL_TEXTURE0);
