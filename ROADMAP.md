@@ -10299,6 +10299,27 @@ Outdoor landscapes surrounding the Temple complex — hills, valleys, and the Ki
   the largest caster. The other 0.87 ms is terrain and objects. Steps 2
   and 3 are worth at most the static share of that. Still open: which
   pass submits the 40 M vertices.
+  Vertex source found (2026-11-17, a temporary GL pipeline-statistics
+  segment per GpuTimer pass and per cascade caster type, reverted after;
+  Release, meadow --demo-flythrough, averaged over the flight). Total
+  39.8 M vertices / 14.5 M primitives a frame, matching the 2026-11-13
+  figure. About 35 M of it is the meadow's placed props (shrubs, lily
+  pads, nettles, rocks: 656 render items, 4.0 M triangles, all drawn at
+  full detail) submitted six times: Scene 6.3 M, WaterReflection 6.5 M,
+  WaterRefraction 6.4 M, shadow cascade objects c0 4.6 M, c1 6.6 M,
+  c2 2.2 M, c3 2.6 M. Grass is 1.5 M (main) + 1.0 M (shadow c0); trees
+  under 2 M in all. In the Scene pass only about 5% of submitted
+  primitives reach clipping.
+  Step 3 is already built: cascadeRebuildsThisFrame redraws c2 and c3
+  every fourth frame. So step 2 could only add caching for c0 and c1,
+  which follow the moving camera; it would need texel-snapped scrolling
+  caches and still only touch the shadow share of the props' cost.
+  Judgement: step 2 is not worth building now. Prop detail by distance
+  (3D_E-0929) cuts all six submissions of the same 4.0 M triangles,
+  across passes that cost Scene 1.04 + WaterReflection 0.65 +
+  WaterRefraction 0.56 + non-vegetation shadow 0.87 ms (2026-11-15
+  medians). Whether vertex work is what those milliseconds pay for is
+  not yet measured.
   **Layman:** Shadows cost more than a third of each frame; most of that work is redrawn every frame even when nothing moved.
   Kind: perf.
   Source: tech-survey-2026-09-02.
@@ -10764,6 +10785,13 @@ Outdoor landscapes surrounding the Temple complex — hills, valleys, and the Ki
   Code today: LOD exists only for terrain and trees (terrain.cpp,
   tree_renderer.h). Builds on 3D_E-S0598 meshoptimizer, S0603.
   Priority: medium.
+  Input (2026-11-17, from 3D_E-0658's measurement): the meadow's placed
+  props are 656 render items and 4.0 M triangles, all at full detail
+  (shrub_02 variants alone about 1.9 M), and are submitted six times a
+  frame (main view, two water views, four shadow cascades with c2/c3
+  staggered): about 35 M of the frame's 40 M vertices. This item is
+  the likeliest large cut to that number; measure the pass times with
+  the props' detail lowered before building it.
   **Layman:** Models get simpler far away automatically; you never set distances by hand.
   Kind: perf.
   Source: research-engine-survey-2026-11-05.
