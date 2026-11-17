@@ -135,6 +135,7 @@ add_executable(vestige_tests
     test_history_panel_scroll.cpp
     test_script_editor_shortcuts.cpp
     test_script_editor_warn_once.cpp
+    test_audio_panel_zone_ids.cpp
     test_asset_browser_unreadable.cpp
     test_script_editor_open.cpp
     test_audio_channel_formats.cpp

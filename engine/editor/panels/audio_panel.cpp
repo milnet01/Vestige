@@ -34,6 +34,26 @@
 namespace Vestige
 {
 
+namespace
+{
+
+/// The Zones tab lists reverb zones, acoustic probes and ambient zones in one
+/// window, and one entity can be in several lists. Scoping each row by its
+/// list keeps their ImGui IDs apart.
+void pushZoneRowId(const char* list, std::uint32_t entityId)
+{
+    ImGui::PushID(list);
+    ImGui::PushID(static_cast<int>(entityId));
+}
+
+void popZoneRowId()
+{
+    ImGui::PopID();
+    ImGui::PopID();
+}
+
+} // namespace
+
 // ----- State mutators (ImGui-free, unit-testable) ----------------
 
 Entity* AudioPanel::createReverbZone(Scene& scene)
@@ -379,13 +399,13 @@ void AudioPanel::drawZonesTab(Scene* scene)
                 return;
             }
             const std::uint32_t id = entity.getId();
-            ImGui::PushID(static_cast<int>(id));
+            pushZoneRowId("reverb", id);
             const bool isSelected = (id == m_selectedReverbZoneEntity);
             if (ImGui::Selectable(entity.getName().c_str(), isSelected))
             {
                 m_selectedReverbZoneEntity = id;
             }
-            ImGui::PopID();
+            popZoneRowId();
         });
 
         Entity* selected = scene->findEntityById(m_selectedReverbZoneEntity);
@@ -394,7 +414,7 @@ void AudioPanel::drawZonesTab(Scene* scene)
         if (z != nullptr)
         {
             ImGui::Separator();
-            ImGui::PushID(static_cast<int>(m_selectedReverbZoneEntity));
+            pushZoneRowId("reverb", m_selectedReverbZoneEntity);
             char nameBuf[128];
             std::snprintf(nameBuf, sizeof(nameBuf), "%s",
                           selected->getName().c_str());
@@ -424,7 +444,7 @@ void AudioPanel::drawZonesTab(Scene* scene)
             {
                 removeReverbZone(*scene, m_selectedReverbZoneEntity);
             }
-            ImGui::PopID();
+            popZoneRowId();
         }
     }
 
@@ -451,13 +471,13 @@ void AudioPanel::drawZonesTab(Scene* scene)
                 return;
             }
             const std::uint32_t id = entity.getId();
-            ImGui::PushID(static_cast<int>(id + 20000));
+            pushZoneRowId("probe", id);
             const bool isSelected = (id == m_selectedAcousticProbeEntity);
             if (ImGui::Selectable(entity.getName().c_str(), isSelected))
             {
                 m_selectedAcousticProbeEntity = id;
             }
-            ImGui::PopID();
+            popZoneRowId();
         });
 
         Entity* selected = scene->findEntityById(m_selectedAcousticProbeEntity);
@@ -466,7 +486,7 @@ void AudioPanel::drawZonesTab(Scene* scene)
         if (probe != nullptr)
         {
             ImGui::Separator();
-            ImGui::PushID(static_cast<int>(m_selectedAcousticProbeEntity + 20000));
+            pushZoneRowId("probe", m_selectedAcousticProbeEntity);
             char nameBuf[128];
             std::snprintf(nameBuf, sizeof(nameBuf), "%s", selected->getName().c_str());
             if (ImGui::InputText("Name", nameBuf, sizeof(nameBuf)))
@@ -484,7 +504,7 @@ void AudioPanel::drawZonesTab(Scene* scene)
             {
                 removeAcousticProbe(*scene, m_selectedAcousticProbeEntity);
             }
-            ImGui::PopID();
+            popZoneRowId();
         }
 
         ImGui::Separator();
@@ -554,13 +574,13 @@ void AudioPanel::drawZonesTab(Scene* scene)
             return;
         }
         const std::uint32_t id = entity.getId();
-        ImGui::PushID(static_cast<int>(id));
+        pushZoneRowId("ambient", id);
         const bool isSelected = (id == m_selectedAmbientZoneEntity);
         if (ImGui::Selectable(entity.getName().c_str(), isSelected))
         {
             m_selectedAmbientZoneEntity = id;
         }
-        ImGui::PopID();
+        popZoneRowId();
     });
 
     Entity* selected = scene->findEntityById(m_selectedAmbientZoneEntity);
@@ -571,7 +591,7 @@ void AudioPanel::drawZonesTab(Scene* scene)
         return;
     }
     ImGui::Separator();
-    ImGui::PushID(static_cast<int>(m_selectedAmbientZoneEntity));
+    pushZoneRowId("ambient", m_selectedAmbientZoneEntity);
     char nameBuf[128];
     std::snprintf(nameBuf, sizeof(nameBuf), "%s", selected->getName().c_str());
     if (ImGui::InputText("Name", nameBuf, sizeof(nameBuf)))
@@ -636,7 +656,7 @@ void AudioPanel::drawZonesTab(Scene* scene)
     {
         removeAmbientZone(*scene, m_selectedAmbientZoneEntity);
     }
-    ImGui::PopID();
+    popZoneRowId();
 }
 
 void AudioPanel::drawSpectrumViewer(AudioSystem* audioSystem)
