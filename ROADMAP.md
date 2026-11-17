@@ -7582,6 +7582,12 @@ shipped that have no invocation path at all.
   script_editor_panel.cpp:123 (Ctrl+S saved the scene) at 985d1d2;
   script_editor_panel.cpp:356 and :387 (empty script would not reopen;
   failed Save As kept the new path) at 7d4c702.
+  2026-11-17 (later): lane-15 script_editor_panel.cpp:289 (warning
+  every frame) at e0d2703; first_run_wizard.cpp:395 and :386 (wrong Help
+  item named; skip hint after completion) at 65e1c53; audio_panel.cpp:382
+  (duplicate ImGui ID across zone lists) at 996f32e. Each proven red
+  first. Left open: audio_panel.cpp:321 (Mute/Solo never reach playback;
+  needs per-source mute/solo state in the audio system, not the panel).
   **Layman:** About 290 lower-risk possible bugs and the medium findings are still unchecked.
   Kind: review-fix.
   Source: review-readability 2026-10-31 at 7b2a81d.

@@ -49,6 +49,19 @@ may change any interface without notice.
   Before, a Save As that failed left the editor pointing at the file it
   never wrote, so the next Save failed too.
 
+- **The script editor no longer floods the log** (3D_E-0874)
+  A connection it cannot draw is reported once, not on every frame.
+
+- **The first-run wizard points to the right menu item** (3D_E-0874)
+  It now says to reopen it from Help → First-Run Wizard. Before, it named
+  a "Show Welcome" item that does not exist. Its "stops auto-opening
+  after the next skip" note no longer shows when you reopen it by hand.
+
+- **Zone lists on the Audio panel no longer mix up rows** (3D_E-0874)
+  An entity that is both a reverb zone and an ambient zone shared one
+  ImGui ID across the two lists, so clicking one row could act on the
+  other.
+
 ### 2026-11-17 Fixed — occlusion ray limit, Formula Workbench ranking (3D_E-0874)
 
 - **The audio occlusion ray limit is set in one place** (3D_E-0874)
