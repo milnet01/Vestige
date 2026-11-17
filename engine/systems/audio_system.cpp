@@ -209,6 +209,19 @@ void AudioSystem::update(float deltaTime)
         const std::size_t busIdx = static_cast<std::size_t>(comp->bus);
         const float effDuck = duck * routerDuck[busIdx];
 
+        // The state pushed to this entity's source, with the editor's
+        // per-source Mute / Solo folded into the output gain (3D_E-0874).
+        auto composeState = [&]() -> AudioSourceAlState
+        {
+            AudioSourceAlState state =
+                composeAudioSourceAlState(*comp, position, mixer, effDuck,
+                                          listenerPos, air, pickTier(),
+                                          m_audioEngine.loudnessMakeupForPath(comp->clipPath),
+                                          comp->reverbSend);  // AX2 R3
+            state.gain *= m_sourceMuteSolo.gainMultiplier(entityId);
+            return state;
+        };
+
         m_sourceTracker.observe(entityId, comp->autoPlay);
         const AudioSourceTracker::TrackedSource* tracked =
             m_sourceTracker.find(entityId);
@@ -254,12 +267,7 @@ void AudioSystem::update(float deltaTime)
                 // Push the full composed state immediately so pitch
                 // / occlusion overrides on the component are heard on
                 // frame 1 rather than frame 2.
-                const AudioSourceAlState state =
-                    composeAudioSourceAlState(*comp, position, mixer, effDuck,
-                                              listenerPos, air, pickTier(),
-                                              m_audioEngine.loudnessMakeupForPath(comp->clipPath),
-                                              comp->reverbSend);  // AX2 R3
-                m_audioEngine.applySourceState(source, state);
+                m_audioEngine.applySourceState(source, composeState());
             }
             return;
         }
@@ -275,12 +283,7 @@ void AudioSystem::update(float deltaTime)
             // prunes the entry.
             return;
         }
-        const AudioSourceAlState alState =
-            composeAudioSourceAlState(*comp, position, mixer, effDuck,
-                                      listenerPos, air, pickTier(),
-                                      m_audioEngine.loudnessMakeupForPath(comp->clipPath),
-                                      comp->reverbSend);  // AX2 R3
-        m_audioEngine.applySourceState(source, alState);
+        m_audioEngine.applySourceState(source, composeState());
     });
 
     // Reap entries whose source has stopped or whose entity has
@@ -290,6 +293,8 @@ void AudioSystem::update(float deltaTime)
     m_sourceTracker.reap(
         [scene](std::uint32_t id) { return scene->findEntityById(id) == nullptr; },
         ownsPlayback);
+    m_sourceMuteSolo.forgetGone(
+        [scene](std::uint32_t id) { return scene->findEntityById(id) == nullptr; });
     for (auto it = m_lodTiers.begin(); it != m_lodTiers.end(); )
     {
         // AX5 — keep the tier map in step with the tracked sources.

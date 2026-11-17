@@ -19,6 +19,7 @@
 #include "editor/panels/audio_panel.h"
 #include "scene/entity.h"
 #include "scene/scene.h"
+#include "systems/audio_system.h"
 #include "audio_device_helpers.h"
 
 using namespace Vestige;
@@ -390,6 +391,28 @@ TEST(AudioPanel, SoloedSourcesOnlyPlay)
     EXPECT_NEAR(p.computeEffectiveSourceGain(7, AudioBus::Music), 1.0f, kEps);
     // 8 is not soloed and at least one source is → silent.
     EXPECT_NEAR(p.computeEffectiveSourceGain(8, AudioBus::Music), 0.0f, kEps);
+}
+
+// 3D_E-0874 lane-15: Mute and Solo used to change panel state only, so
+// ticking them changed nothing anyone heard. Wired, they write the state
+// AudioSystem multiplies into each source's AL_GAIN.
+TEST(AudioPanel, MuteAndSoloReachTheAudioSystem)
+{
+    AudioSystem system;
+    AudioPanel p;
+    p.wireSourceMuteSolo(&system.sourceMuteSolo());
+
+    p.setSourceMuted(42, true);
+    p.setSourceSoloed(7, true);
+
+    const AudioSourceMuteSolo& played = system.sourceMuteSolo();
+    EXPECT_EQ(played.gainMultiplier(42), 0.0f);
+    EXPECT_EQ(played.gainMultiplier(7), 1.0f);
+    EXPECT_EQ(played.gainMultiplier(8), 0.0f) << "a source left out of a solo is silent";
+    EXPECT_TRUE(p.isSourceSoloed(7));
+
+    p.setSourceSoloed(7, false);
+    EXPECT_EQ(played.gainMultiplier(8), 1.0f);
 }
 
 TEST(AudioPanel, MutedBeatsSolo)

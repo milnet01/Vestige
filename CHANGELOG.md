@@ -62,6 +62,14 @@ may change any interface without notice.
   ImGui ID across the two lists, so clicking one row could act on the
   other.
 
+- **Mute and Solo on the Audio panel's Sources tab now change what you
+  hear** (3D_E-0874)
+  Before, the checkboxes only changed the panel, and every source kept
+  playing. The audio system now holds the switches and applies them to
+  each auto-played sound source's volume every frame. A deleted entity's
+  switches are dropped, so a soloed entity you delete cannot leave the
+  scene silent.
+
 ### 2026-11-17 Fixed — occlusion ray limit, Formula Workbench ranking (3D_E-0874)
 
 - **The audio occlusion ray limit is set in one place** (3D_E-0874)

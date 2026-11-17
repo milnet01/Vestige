@@ -148,45 +148,27 @@ bool AudioPanel::removeAmbientZone(Scene& scene, std::uint32_t entityId)
 
 void AudioPanel::setSourceMuted(std::uint32_t entityId, bool muted)
 {
-    if (muted)
-    {
-        m_mutedSources.insert(entityId);
-    }
-    else
-    {
-        m_mutedSources.erase(entityId);
-    }
+    muteSolo().setMuted(entityId, muted);
 }
 
 bool AudioPanel::isSourceMuted(std::uint32_t entityId) const
 {
-    return m_mutedSources.count(entityId) != 0;
+    return muteSolo().isMuted(entityId);
 }
 
 void AudioPanel::setSourceSoloed(std::uint32_t entityId, bool soloed)
 {
-    if (soloed)
-    {
-        m_soloedSources.insert(entityId);
-    }
-    else
-    {
-        m_soloedSources.erase(entityId);
-    }
+    muteSolo().setSoloed(entityId, soloed);
 }
 
 bool AudioPanel::isSourceSoloed(std::uint32_t entityId) const
 {
-    return m_soloedSources.count(entityId) != 0;
+    return muteSolo().isSoloed(entityId);
 }
 
 float AudioPanel::computeEffectiveSourceGain(std::uint32_t entityId, AudioBus bus) const
 {
-    if (isSourceMuted(entityId))
-    {
-        return 0.0f;
-    }
-    if (hasAnySoloedSource() && !isSourceSoloed(entityId))
+    if (muteSolo().gainMultiplier(entityId) == 0.0f)
     {
         return 0.0f;
     }

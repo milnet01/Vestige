@@ -806,6 +806,14 @@ bool Engine::initialize(const EngineConfig& config)
                 m_systemRegistry.getSystem<ReverbSystem>());
             m_editor->getAudioPanel().wireAmbientSystem(
                 m_systemRegistry.getSystem<AmbientSystem>());
+
+            // 3D_E-0874 — the Sources tab's Mute / Solo write the state
+            // AudioSystem applies to each source's output gain.
+            if (auto* audioSystem = m_systemRegistry.getSystem<AudioSystem>())
+            {
+                m_editor->getAudioPanel().wireSourceMuteSolo(
+                    &audioSystem->sourceMuteSolo());
+            }
         }
     }
 

@@ -10,13 +10,13 @@
 #include "audio/audio_ambient.h"
 #include "audio/audio_mixer.h"
 #include "audio/audio_reverb.h"
+#include "audio/audio_source_mute_solo.h"
 #include "editor/panels/i_panel.h"
 
 #include <glm/glm.hpp>
 
 #include <cstdint>
 #include <string>
-#include <unordered_set>
 #include <vector>
 
 namespace Vestige
@@ -84,9 +84,10 @@ public:
     ///        the panel no longer owns a parallel copy of the mixer
     ///        state — edits flow through the Settings persistence
     ///        layer and land in the engine mixer via the existing
-    ///        `AudioMixerApplySink`. Mute / solo / ducking remain
-    ///        panel-local (they are editor-only affordances, not
-    ///        user preferences).
+    ///        `AudioMixerApplySink`. Per-source mute / solo and ducking
+    ///        are wired separately (`wireSourceMuteSolo`,
+    ///        `wireEngineDucking`): editor affordances, not user
+    ///        preferences, so they bypass Settings.
     ///
     /// Passing nullptr for either argument keeps the panel on its
     /// local fallback mixer — used by tests and any standalone
@@ -232,11 +233,16 @@ public:
 
     // -- Per-source mute / solo ------------------------------------
 
+    /// @brief Points Mute / Solo at the state `AudioSystem` applies to
+    ///        playback (`AudioSystem::sourceMuteSolo`). Null keeps the
+    ///        panel on a local copy, which reaches no sound (tests).
+    void wireSourceMuteSolo(AudioSourceMuteSolo* engineState) { m_engineMuteSolo = engineState; }
+
     void setSourceMuted(std::uint32_t entityId, bool muted);
     bool isSourceMuted(std::uint32_t entityId) const;
     void setSourceSoloed(std::uint32_t entityId, bool soloed);
     bool isSourceSoloed(std::uint32_t entityId) const;
-    bool hasAnySoloedSource() const { return !m_soloedSources.empty(); }
+    bool hasAnySoloedSource() const { return muteSolo().anySoloed(); }
 
     // -- Debug overlay ---------------------------------------------
 
@@ -245,8 +251,8 @@ public:
 
     /// @brief Returns the effective playback gain for a source,
     ///        taking its bus routing and the mute/solo state into
-    ///        account. Intended for both the ImGui meters and the
-    ///        engine-side AudioSystem when it consults this panel.
+    ///        account. Playback applies the same mute/solo rule in
+    ///        `AudioSystem` via `AudioSourceMuteSolo::gainMultiplier`.
     ///
     /// Rules:
     ///   - If any source is soloed and this one isn't → gain 0.
@@ -292,8 +298,16 @@ private:
     std::size_t   m_lastBakeFacetCount = 0;
     float         m_lastBakeVolumeM3   = 0.0f;
 
-    std::unordered_set<std::uint32_t> m_mutedSources;
-    std::unordered_set<std::uint32_t> m_soloedSources;
+    AudioSourceMuteSolo  m_localMuteSolo;              ///< Used until wired.
+    AudioSourceMuteSolo* m_engineMuteSolo = nullptr;   ///< AudioSystem's, applied to playback.
+    AudioSourceMuteSolo& muteSolo()
+    {
+        return (m_engineMuteSolo != nullptr) ? *m_engineMuteSolo : m_localMuteSolo;
+    }
+    const AudioSourceMuteSolo& muteSolo() const
+    {
+        return (m_engineMuteSolo != nullptr) ? *m_engineMuteSolo : m_localMuteSolo;
+    }
 
     bool m_showZoneOverlay = false;
 

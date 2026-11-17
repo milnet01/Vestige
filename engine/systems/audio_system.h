@@ -9,6 +9,7 @@
 #include "audio/audio_engine.h"
 #include "audio/audio_ducking.h"
 #include "audio/audio_lod.h"
+#include "audio/audio_source_mute_solo.h"
 #include "audio/audio_source_tracker.h"
 
 #include <array>
@@ -66,6 +67,11 @@ public:
     const std::unordered_map<std::uint32_t, AudioSourceTracker::TrackedSource>&
     activeSources() const { return m_sourceTracker.active(); }
 
+    /// @brief Per-entity Mute and Solo, applied to each auto-played source's
+    ///        output gain every frame. The Audio panel writes to it.
+    AudioSourceMuteSolo& sourceMuteSolo() { return m_sourceMuteSolo; }
+    const AudioSourceMuteSolo& sourceMuteSolo() const { return m_sourceMuteSolo; }
+
 private:
     static inline const std::string m_name = "Audio";
     AudioEngine m_audioEngine;
@@ -76,6 +82,9 @@ private:
     ///        (3D_E-0738). Entries are reaped when the source stops or the
     ///        entity leaves the scene.
     AudioSourceTracker m_sourceTracker;
+
+    /// @brief Editor Mute / Solo per entity; pruned with the tracker.
+    AudioSourceMuteSolo m_sourceMuteSolo;
 
     /// @brief AX5 — per-entity LOD tier from the previous frame, the
     ///        `previousTier` input to `audioLodTier` (hysteresis). Reaped

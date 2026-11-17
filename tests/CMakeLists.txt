@@ -121,6 +121,7 @@ add_executable(vestige_tests
     test_footstep_system.cpp
     test_impact_audio_system.cpp
     test_audio_source_tracker.cpp
+    test_audio_source_mute_solo.cpp
     test_audio_playback_ticket.cpp
     test_ambient_system.cpp
     test_audio_bus_activity.cpp
