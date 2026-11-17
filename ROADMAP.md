@@ -7592,6 +7592,21 @@ shipped that have no invocation path at all.
   Solo now live in AudioSourceMuteSolo, owned by AudioSystem, and
   multiply each auto-played source's output gain. Lane-15 has no open
   REAL rows left. Next: the lane-14 editor rows.
+  2026-11-17: lane-14 rows fixed: texture_viewer 147 (738ab60), hdri 413
+  (c129f5c; the fault is a 180-degree flip at +-90, not a NaN), template
+  409 (25d915e), inspector 1666 (662d1e4), inspector 314 (c7a8729).
+  Two lane-14 rows left, each wider than its row:
+  - asset_browser 172: a changed file keeps its old thumbnail.
+    ResourceManager caches one shared Texture per path and keeps it
+    while in use, and findTexturePath relies on that. So forgetting the
+    entry would break scene saving for materials still using it. The fix
+    is a reload in place (Texture::loadFromFile on the cached instance,
+    both :srgb and :linear keys) driven by the browser's write-time
+    poll; materials then update too. Check how Texture handles a second
+    load (GL id kept or replaced) first.
+  - hdri 132: the exposure slider is ignored because skybox.frag has no
+    exposure uniform. The shader is shared with the main renderer, so
+    add the uniform with default 1.0 and set it only from the preview.
   **Layman:** About 290 lower-risk possible bugs and the medium findings are still unchecked.
   Kind: review-fix.
   Source: review-readability 2026-10-31 at 7b2a81d.

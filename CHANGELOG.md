@@ -25,6 +25,29 @@ may change any interface without notice.
 
 ## [Unreleased]
 
+### 2026-11-17 Fixed — Inspector, templates and viewer panels (3D_E-0874)
+
+- **Each water surface's Inspector shows its own preset** (3D_E-0874)
+  The preset menu was shared by every water entity, so all of them
+  showed the last preset picked on any one. It now shows the preset
+  the surface's settings match, and "Custom" after a manual edit.
+
+- **Clear Matrix Override can be undone** (3D_E-0874)
+  Undo brings back the matrix imported with the model.
+
+- **New from Template sets the sky each template asks for** (3D_E-0874)
+  The 2.5D Side-Scroller, Isometric, Top-Down and 2D templates kept
+  the previous scene's sky. They now start without one.
+
+- **The HDRI cubemap preview no longer flips at straight up or down**
+  (3D_E-0874)
+  Dragging the view to the top or bottom turned it upside down. The
+  view now stops one degree short, as the other cameras do.
+
+- **The texture viewer forgets the last folder's PBR sets** (3D_E-0874)
+  Opening a texture with no path kept listing the PBR texture sets
+  found beside the previous one.
+
 ### 2026-11-17 Fixed — terrain, history and script editor panels (3D_E-0874)
 
 - **The terrain brush stops painting when you go back to Sculpt** (3D_E-0874)
