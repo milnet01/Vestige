@@ -108,8 +108,6 @@ void FileMenu::drawMenuItems(Scene* scene, Selection& selection)
 
 void FileMenu::processShortcuts(Scene* scene, Selection& selection)
 {
-    ImGuiIO& io = ImGui::GetIO();
-
     // File shortcuts work globally in editor mode (even during text input).
     // Guard against double-trigger from menu items by checking that no popup
     // is open (the unsaved changes modal blocks further shortcut processing).
@@ -118,23 +116,26 @@ void FileMenu::processShortcuts(Scene* scene, Selection& selection)
         return;
     }
 
-    if (io.KeyCtrl && !io.KeyShift && ImGui::IsKeyPressed(ImGuiKey_N))
+    // Global routes: a focused panel that claims the same keys (the script
+    // editor's Ctrl+N/O/S) takes them instead, so they act on its document.
+    const ImGuiInputFlags global = ImGuiInputFlags_RouteGlobal;
+    if (ImGui::Shortcut(ImGuiMod_Ctrl | ImGuiKey_N, global))
     {
         handleUnsavedChanges(PendingAction::NEW_SCENE, scene, selection);
     }
-    if (io.KeyCtrl && !io.KeyShift && ImGui::IsKeyPressed(ImGuiKey_O))
+    if (ImGui::Shortcut(ImGuiMod_Ctrl | ImGuiKey_O, global))
     {
         handleUnsavedChanges(PendingAction::OPEN_SCENE, scene, selection);
     }
-    if (io.KeyCtrl && !io.KeyShift && ImGui::IsKeyPressed(ImGuiKey_S))
+    if (ImGui::Shortcut(ImGuiMod_Ctrl | ImGuiKey_S, global))
     {
         saveScene(scene);
     }
-    if (io.KeyCtrl && io.KeyShift && ImGui::IsKeyPressed(ImGuiKey_S))
+    if (ImGui::Shortcut(ImGuiMod_Ctrl | ImGuiMod_Shift | ImGuiKey_S, global))
     {
         saveSceneAs(scene);
     }
-    if (io.KeyCtrl && !io.KeyShift && ImGui::IsKeyPressed(ImGuiKey_Q))
+    if (ImGui::Shortcut(ImGuiMod_Ctrl | ImGuiKey_Q, global))
     {
         handleUnsavedChanges(PendingAction::QUIT, scene, selection);
     }

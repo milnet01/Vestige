@@ -87,6 +87,7 @@ public:
     bool isDirty() const { return m_dirty; }
 
 private:
+    void drawShortcuts();
     void drawMenuBar();
     void drawCanvas();
     void renderGraph();

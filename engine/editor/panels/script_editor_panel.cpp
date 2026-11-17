@@ -81,6 +81,7 @@ void ScriptEditorPanel::draw()
     ImGui::SetNextWindowSize(ImVec2(900, 600), ImGuiCond_FirstUseEver);
     if (ImGui::Begin(title.c_str(), &m_open, ImGuiWindowFlags_MenuBar))
     {
+        drawShortcuts();
         drawMenuBar();
         drawCanvas();
     }
@@ -100,6 +101,35 @@ void ScriptEditorPanel::draw()
     {
         saveAs(m_saveBrowser.GetSelected().string());
         m_saveBrowser.ClearSelected();
+    }
+}
+
+void ScriptEditorPanel::drawShortcuts()
+{
+    // The File menu's keys, claimed while this panel has focus. The default
+    // focused route outranks the scene's global Ctrl+N/O/S routes.
+    if (ImGui::Shortcut(ImGuiMod_Ctrl | ImGuiKey_N))
+    {
+        newGraph();
+    }
+    if (ImGui::Shortcut(ImGuiMod_Ctrl | ImGuiKey_O))
+    {
+        m_openBrowser.Open();
+    }
+    if (ImGui::Shortcut(ImGuiMod_Ctrl | ImGuiKey_S))
+    {
+        if (m_currentPath.empty())
+        {
+            m_saveBrowser.Open();
+        }
+        else
+        {
+            save();
+        }
+    }
+    if (ImGui::Shortcut(ImGuiMod_Ctrl | ImGuiMod_Shift | ImGuiKey_S))
+    {
+        m_saveBrowser.Open();
     }
 }
 

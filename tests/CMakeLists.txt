@@ -133,6 +133,7 @@ add_executable(vestige_tests
     test_hierarchy_delete_key.cpp
     test_terrain_panel_tabs.cpp
     test_history_panel_scroll.cpp
+    test_script_editor_shortcuts.cpp
     test_asset_browser_unreadable.cpp
     test_script_editor_open.cpp
     test_audio_channel_formats.cpp
