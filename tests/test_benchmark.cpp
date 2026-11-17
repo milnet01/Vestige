@@ -272,6 +272,55 @@ TEST(BenchmarkRun, DeltaAicZeroForWinner)
 // renderBenchmarkMarkdown
 // ---------------------------------------------------------------------------
 
+// 3D_E-0874 lane-12 benchmark.cpp:293. A perfect fit (SSE 0) has no
+// finite AIC, but no fit can beat it, so it ranks first. A fit with too
+// few points has no AIC either, and ranks after every scored fit, its
+// AIC columns shown as "—" instead of a made-up 0.
+TEST(BenchmarkRank, PerfectFitFirstTooFewPointsAfterScoredFits)
+{
+    auto fit = [](const char* name, float aic, float r2)
+    {
+        BenchmarkEntry e;
+        e.formula_name = name;
+        e.aic = aic;
+        e.bic = aic;
+        e.r_squared = r2;
+        e.rmse = 0.1f;
+        e.converged = true;
+        e.status = "converged";
+        return e;
+    };
+    std::vector<BenchmarkEntry> v;
+    v.push_back(fit("worse", 10.0f, 0.8f));
+    BenchmarkEntry perfect = fit("perfect", 0.0f, 1.0f);
+    perfect.rmse = 0.0f;
+    perfect.aic_defined = false;
+    perfect.perfect_fit = true;
+    v.push_back(perfect);
+    BenchmarkEntry tooFew = fit("too_few", 0.0f, 0.9f);
+    tooFew.aic_defined = false;
+    v.push_back(tooFew);
+    v.push_back(fit("better", -50.0f, 0.95f));
+    BenchmarkEntry skipped;
+    skipped.formula_name = "skipped";
+    skipped.status = "no FULL-tier expression";
+    v.push_back(skipped);
+
+    rankBenchmarkEntries(v);
+
+    ASSERT_EQ(v.size(), 5u);
+    EXPECT_EQ(v[0].formula_name, "perfect");
+    EXPECT_EQ(v[1].formula_name, "better");
+    EXPECT_EQ(v[2].formula_name, "worse");
+    EXPECT_EQ(v[3].formula_name, "too_few");
+    EXPECT_EQ(v[4].formula_name, "skipped");
+    EXPECT_NEAR(v[1].delta_aic, 0.0f, 1e-4f);
+    EXPECT_NEAR(v[2].delta_aic, 60.0f, 1e-3f);
+
+    const std::string md = renderBenchmarkMarkdown(v);
+    EXPECT_NE(md.find("`too_few` | 0.9000 | 0.1000 | — | — | — |"), std::string::npos) << md;
+}
+
 TEST(BenchmarkRender, IncludesHeaderAndSummary)
 {
     const auto out = renderBenchmarkMarkdown({});

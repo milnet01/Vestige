@@ -306,7 +306,13 @@ runBenchmark(const FormulaLibrary& library,
                                       e.param_count);
         if (ic.degenerate)
         {
-            e.status = "AIC/BIC degenerate (n ≤ k+1 or SSE ≤ 0)";
+            // computeAicBic's two cases: n ≤ k+1 (too few points to
+            // score), or SSE 0 (a perfect fit, which no fit can beat).
+            e.aic_defined = false;
+            e.perfect_fit = static_cast<int>(data.size()) > e.param_count + 1;
+            e.status = e.perfect_fit
+                ? "perfect fit (SSE 0): AIC/BIC undefined, ranked first"
+                : "too few points for AIC/BIC (n ≤ k+1): ranked after scored fits";
             e.aic = 0.0f;
             e.bic = 0.0f;
         }
@@ -319,6 +325,12 @@ runBenchmark(const FormulaLibrary& library,
         out.push_back(std::move(e));
     }
 
+    rankBenchmarkEntries(out);
+    return out;
+}
+
+void rankBenchmarkEntries(std::vector<BenchmarkEntry>& entries)
+{
     // Sort entries that could be fit by AIC ascending. Skipped
     // entries (status != converged / not-converged) sort to the
     // bottom; their aic is 0 so a raw sort would mis-rank them.
@@ -332,34 +344,43 @@ runBenchmark(const FormulaLibrary& library,
             || e.rmse > 0.0f
             || e.r_squared > 0.0f;
     };
-    std::sort(out.begin(), out.end(),
-              [&was_fit](const BenchmarkEntry& a, const BenchmarkEntry& b)
+    // Leaderboard order: perfect fits (no AIC, none can beat them),
+    // then fits scored by AIC, then fits with too few points to score,
+    // then skipped entries.
+    auto rankClass = [&was_fit](const BenchmarkEntry& e)
     {
-        const bool a_fit = was_fit(a);
-        const bool b_fit = was_fit(b);
-        if (a_fit != b_fit) return a_fit;            // fittable first
-        if (!a_fit) return a.formula_name < b.formula_name;
-        return a.aic < b.aic;                        // lower AIC better
+        if (!was_fit(e)) return 3;
+        if (e.perfect_fit) return 0;
+        return e.aic_defined ? 1 : 2;
+    };
+    std::sort(entries.begin(), entries.end(),
+              [&rankClass](const BenchmarkEntry& a, const BenchmarkEntry& b)
+    {
+        const int ca = rankClass(a);
+        const int cb = rankClass(b);
+        if (ca != cb) return ca < cb;
+        if (ca == 0 && a.param_count != b.param_count)
+        {
+            return a.param_count < b.param_count;   // simpler perfect fit first
+        }
+        if (ca == 1 && a.aic != b.aic) return a.aic < b.aic;  // lower AIC better
+        return a.formula_name < b.formula_name;
     });
 
-    // Compute delta_aic relative to the best (first) fittable entry.
-    for (auto& e : out)
+    // delta_aic is each scored fit's gap from the best scored fit.
+    const BenchmarkEntry* best = nullptr;
+    for (const auto& e : entries)
     {
-        if (e.status == "converged" || e.rmse > 0.0f || e.r_squared > 0.0f)
+        if (rankClass(e) == 1)
         {
-            // Find the first fittable entry and use its AIC as the baseline.
-            for (const auto& ref : out)
-            {
-                if (ref.status == "converged" || ref.rmse > 0.0f
-                    || ref.r_squared > 0.0f)
-                {
-                    e.delta_aic = e.aic - ref.aic;
-                    break;
-                }
-            }
+            best = &e;
+            break;
         }
     }
-    return out;
+    for (auto& e : entries)
+    {
+        e.delta_aic = (best && rankClass(e) == 1) ? e.aic - best->aic : 0.0f;
+    }
 }
 
 // ---------------------------------------------------------------------------
@@ -395,6 +416,9 @@ std::string renderBenchmarkMarkdown(const std::vector<BenchmarkEntry>& entries)
     if (!fitted.empty())
     {
         out << "## Leaderboard (sorted by AIC ascending)\n\n";
+        out << "A perfect fit (SSE 0) has no AIC and ranks first; a fit "
+               "with too few points to score ranks after the scored fits. "
+               "Both show — for AIC, BIC and ΔAIC.\n\n";
         out << "| Rank | Formula | R² | RMSE | AIC | BIC | ΔAIC | Iter | Converged |\n";
         out << "|-----:|---------|----:|------:|------:|------:|------:|-----:|:---------:|\n";
         int rank = 1;
@@ -405,9 +429,16 @@ std::string renderBenchmarkMarkdown(const std::vector<BenchmarkEntry>& entries)
                 << " | `" << e->formula_name << "`"
                 << " | " << std::setprecision(4) << e->r_squared
                 << " | " << std::setprecision(4) << e->rmse
-                << " | " << std::setprecision(1) << e->aic
-                << " | " << std::setprecision(1) << e->bic
-                << " | " << std::setprecision(1) << e->delta_aic
+                << std::setprecision(1);
+            if (e->aic_defined)
+            {
+                out << " | " << e->aic << " | " << e->bic << " | " << e->delta_aic;
+            }
+            else
+            {
+                out << " | — | — | —";   // no AIC: see the entry's status
+            }
+            out
                 << " | " << e->iterations
                 << " | " << (e->converged ? "yes" : "no")
                 << " |\n";

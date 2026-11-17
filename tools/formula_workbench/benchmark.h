@@ -21,7 +21,8 @@
 ///     Standard formulas:
 ///        AIC = n · ln(SSE/n) + 2k
 ///        BIC = n · ln(SSE/n) + k · ln(n)
-///   - Ranking: entries sorted by AIC ascending. ``delta_aic``
+///   - Ranking: entries sorted by AIC ascending, with the two cases
+///     AIC cannot score placed as rankBenchmarkEntries says. ``delta_aic``
 ///     records each entry's gap from the best — gaps < 2 are
 ///     indistinguishable, > 10 are decisive (standard AIC reading,
 ///     per Burnham & Anderson 2004).
@@ -50,6 +51,12 @@ struct BenchmarkEntry
     bool converged = false;
     std::string status;   ///< Short explanation, e.g. "no float variable", "fit failed".
     float delta_aic = 0.0f;
+    /// False when AIC/BIC could not be computed (n ≤ k+1, or SSE 0);
+    /// aic, bic and delta_aic are then 0 and mean nothing.
+    bool aic_defined = true;
+    /// SSE 0 with n > k+1: AIC is undefined because no fit can beat
+    /// this one, so it ranks first.
+    bool perfect_fit = false;
 };
 
 /// @brief Compute AIC and BIC from a fit result.
@@ -79,13 +86,20 @@ loadCsvDataset(const std::string& path, std::string& errorOut,
                size_t* skippedRows = nullptr);
 
 /// @brief Fit every library formula against the given data. Entries
-/// are sorted by AIC ascending. Formulas that can't be fit (no float
+/// are in leaderboard order (rankBenchmarkEntries). Formulas that can't be fit (no float
 /// variable, empty expression, LM failed) still appear with ``status``
 /// explaining why, so the leaderboard is a complete picture of the
 /// attempt, not just the successes.
 std::vector<BenchmarkEntry>
 runBenchmark(const FormulaLibrary& library,
              const std::vector<DataPoint>& data);
+
+/// @brief Sort ``entries`` into leaderboard order and fill each
+/// ``delta_aic``: perfect fits first (fewest parameters first), then
+/// scored fits by AIC ascending, then fits too small to score, then
+/// skipped entries. Called by runBenchmark; exposed so tests can rank
+/// hand-built entries.
+void rankBenchmarkEntries(std::vector<BenchmarkEntry>& entries);
 
 /// @brief Render a markdown leaderboard for ``entries``.
 ///
