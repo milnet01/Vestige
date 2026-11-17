@@ -6,6 +6,7 @@
 #include "animation/skeleton_animator.h"
 #include "animation/animation_sampler.h"
 
+#include <algorithm>
 #include <cmath>
 
 namespace Vestige
@@ -221,6 +222,8 @@ void SkeletonAnimator::update(float deltaTime)
         int sourceWraps = advanceAndSample(m_sourceClipIndex, m_sourceTime, deltaTime,
                                            m_sourceTranslations, m_sourceRotations,
                                            m_sourceScales);
+        // A frozen source leaves last frame's blended weights here, which is its pose.
+        m_sourceMorphWeights = m_morphWeights;
 
         // Sample target (incoming) clip into primary buffers
         int targetWraps = advanceAndSample(m_activeClipIndex, m_currentTime, deltaTime,
@@ -242,6 +245,14 @@ void SkeletonAnimator::update(float deltaTime)
                 m_sourceRotations[idx], m_localRotations[idx], blendFactor);
             m_localScales[idx] = glm::mix(
                 m_sourceScales[idx], m_localScales[idx], blendFactor);
+        }
+
+        // Blend morph weights the same way. A weight the source has no value
+        // for keeps the target's.
+        const size_t morphCount = std::min(m_sourceMorphWeights.size(), m_morphWeights.size());
+        for (size_t m = 0; m < morphCount; ++m)
+        {
+            m_morphWeights[m] = glm::mix(m_sourceMorphWeights[m], m_morphWeights[m], blendFactor);
         }
 
         // Crossfade complete?

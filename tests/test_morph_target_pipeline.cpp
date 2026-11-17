@@ -214,3 +214,43 @@ TEST(MorphTargetPipeline, MorphTargetDataWithTargets)
     EXPECT_EQ(data.targetCount(), 1u);
     EXPECT_EQ(data.vertexCount, 10u);
 }
+
+// 3D_E-0874 lane 9 — a crossfade blends morph weights as it blends bones.
+// Both clips' samples wrote the one weight list and the incoming clip wrote
+// last, so a face snapped to the new clip's weights at the start of the fade.
+static std::shared_ptr<AnimationClip> makeConstantWeightClip(const std::string& name,
+                                                             float weight)
+{
+    auto clip = std::make_shared<AnimationClip>();
+    clip->m_name = name;
+    AnimationChannel ch;
+    ch.jointIndex = -1;
+    ch.targetPath = AnimTargetPath::WEIGHTS;
+    ch.interpolation = AnimInterpolation::LINEAR;
+    ch.timestamps = {0.0f, 1.0f};
+    ch.values = {weight, weight};
+    clip->m_channels.push_back(ch);
+    clip->computeDuration();
+    return clip;
+}
+
+TEST(MorphTargetPipeline, CrossfadeBlendsMorphWeights)
+{
+    SkeletonAnimator animator;
+    animator.setSkeleton(makeMinimalSkeleton());
+    animator.addClip(makeConstantWeightClip("closed", 0.0f));
+    animator.addClip(makeConstantWeightClip("open", 1.0f));
+    animator.setLooping(true);
+    animator.play("closed");
+    animator.update(0.1f);
+    ASSERT_EQ(animator.getMorphWeights().size(), 1u);
+    ASSERT_FLOAT_EQ(animator.getMorphWeights()[0], 0.0f);
+
+    animator.crossfadeTo("open", 1.0f);
+    animator.update(0.25f);
+    EXPECT_NEAR(animator.getMorphWeights()[0], 0.25f, 1e-5f) << "a quarter through the fade";
+    animator.update(0.25f);
+    EXPECT_NEAR(animator.getMorphWeights()[0], 0.5f, 1e-5f) << "halfway through the fade";
+    animator.update(0.5f);
+    EXPECT_FLOAT_EQ(animator.getMorphWeights()[0], 1.0f) << "the fade has ended";
+}

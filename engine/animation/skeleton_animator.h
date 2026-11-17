@@ -227,6 +227,9 @@ private:
     std::vector<glm::vec3> m_sourceTranslations;
     std::vector<glm::quat> m_sourceRotations;
     std::vector<glm::vec3> m_sourceScales;
+    /// The outgoing clip's morph weights this frame. Both clips sample into
+    /// m_morphWeights, so the source's are copied here before the target's land.
+    std::vector<float> m_sourceMorphWeights;
 
     // --- Morph target weights ---
     std::vector<float> m_morphWeights;
