@@ -7607,6 +7607,14 @@ shipped that have no invocation path at all.
   - hdri 132: the exposure slider is ignored because skybox.frag has no
     exposure uniform. The shader is shared with the main renderer, so
     add the uniform with default 1.0 and set it only from the preview.
+  2026-11-17 (later): the two wide lane-14 rows fixed, each proven red
+  first. asset_browser 172 (2ee250d): ResourceManager::reloadTexture
+  reloads both cached forms in place, loading beside the old image so a
+  half-written file keeps it, and keeping the filter mode; the browser's
+  write-time poll calls it and forgets the thumbnail id. hdri 132
+  (8ba1501): skybox.frag takes u_exposure in EV stops (as
+  equirect_preview.frag), default 0 = unchanged, set only by the HDRI
+  viewer. Lane-14 has no open rows.
   **Layman:** About 290 lower-risk possible bugs and the medium findings are still unchecked.
   Kind: review-fix.
   Source: review-readability 2026-10-31 at 7b2a81d.

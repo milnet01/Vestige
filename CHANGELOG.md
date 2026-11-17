@@ -27,6 +27,16 @@ may change any interface without notice.
 
 ### 2026-11-17 Fixed — Inspector, templates and viewer panels (3D_E-0874)
 
+- **A changed image shows its new look in the asset browser** (3D_E-0874)
+  An image edited on disk kept its old thumbnail, and materials kept
+  the old image, until restart. The browser now reloads it within two
+  seconds, and materials using it update too. A file caught half-saved
+  keeps the old image.
+
+- **The HDRI viewer's exposure slider brightens the cube preview**
+  (3D_E-0874)
+  The slider only changed the flat preview before.
+
 - **Each water surface's Inspector shows its own preset** (3D_E-0874)
   The preset menu was shared by every water entity, so all of them
   showed the last preset picked on any one. It now shows the preset
