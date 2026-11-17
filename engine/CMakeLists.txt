@@ -286,6 +286,7 @@ set(ENGINE_SOURCES
     editor/panels/ui_layout_panel.cpp
     editor/panels/ui_runtime_panel.cpp
     editor/panels/template_dialog.cpp
+    editor/panels/water_presets.cpp
     editor/panels/first_run_wizard.cpp
     editor/panels/update_dialog.cpp
     editor/panels/settings_editor_panel.cpp
