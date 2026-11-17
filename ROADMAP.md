@@ -1,6 +1,6 @@
 <!-- ants-roadmap-format: 1 -->
 <!-- Generated from the Ants Terminal roadmap store. Edit it with roadmap_log; hand edits are discarded by the next write. -->
-<!-- ants-roadmap-id-high-water: 3D_E=989 3D_E#S=989 -->
+<!-- ants-roadmap-id-high-water: 3D_E=990 3D_E#S=989 -->
 
 # Vestige Engine Roadmap
 
@@ -7588,6 +7588,10 @@ shipped that have no invocation path at all.
   (duplicate ImGui ID across zone lists) at 996f32e. Each proven red
   first. Left open: audio_panel.cpp:321 (Mute/Solo never reach playback;
   needs per-source mute/solo state in the audio system, not the panel).
+  2026-11-17: lane-15 audio_panel.cpp:321 fixed at b3663e9. Mute and
+  Solo now live in AudioSourceMuteSolo, owned by AudioSystem, and
+  multiply each auto-played source's output gain. Lane-15 has no open
+  REAL rows left. Next: the lane-14 editor rows.
   **Layman:** About 290 lower-risk possible bugs and the medium findings are still unchecked.
   Kind: review-fix.
   Source: review-readability 2026-10-31 at 7b2a81d.
@@ -8109,6 +8113,39 @@ shipped that have no invocation path at all.
   Kind: feature.
   Source: experirays-request-2026-11-17.
   Lanes: formula.
+
+- 📋 [3D_E-0990] **Export a scene and a camera path for ExperiRays, as EXRAY-0001 fixes them.**
+  The contract is ExperiRays' docs/specs/EXRAY-0001-gltf-extras.md,
+  accepted by the three engines 2026-11-17 (ExperiRays 2c2efbc). It
+  needs no Vestige spec. ExperiRays' EXRAY-0012 and EXRAY-0024 wait on
+  a Vestige scene.
+  Scene (.glb, glTF 2.0 binary; tinygltf already loads glTF here):
+  - Axes and units are the identity: Vestige is +Y up, right-handed,
+    metres (CODING_STANDARDS.md § 27). Test every triangle's winding
+    against its stored normal.
+  - asset.extras.xr: version 1, engine "vestige", scene_key
+    vestige:<sha256 of the .scene file>:<exporter revision>.
+  - Node motion: static, moving, "wind" (foliage, trees) or "water".
+    Foliage goes one node per chunk, via EXT_mesh_gpu_instancing, in
+    extensionsUsed only.
+  - Terrain is baked to a mesh plus a base-colour texture.
+  - Lights: KHR_lights_punctual, in extensionsUsed only. intensity is
+    diffuse's largest channel; color is diffuse / intensity. Spot cones
+    are acos(innerCutoff) and acos(outerCutoff). Point lights get no
+    range. xr.native_light holds ambient, specular, constant, linear and
+    quadratic.
+  - Materials: doubleSided, alphaMode and emissive, from Material.
+  - mesh.extras.xr.simplified once 3D_E-0929 exists.
+  Camera path (.xrpath.json): sample DemoFlythrough::poseAt at a fixed
+  step, turning yaw and pitch into a quaternion. time is the u_time
+  clock (flythrough seconds plus its offset).
+  Done when the experirays command that loads a scene and a path exits
+  0 on the meadow's export.
+  CPU / GPU placement: CPU. It is an offline, one-off export of file
+  data, not per-frame work.
+  **Layman:** Let the ExperiRays lab load a Vestige scene and replay its demo flythrough, so ray-tracing ideas can be tried on Vestige's own content.
+  Kind: feature.
+  Source: experirays-request-2026-11-17.
 
 ## 0.3.0 — An editor a builder can use
 
