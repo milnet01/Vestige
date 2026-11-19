@@ -33,7 +33,7 @@ may change any interface without notice.
   with it behave as before. New in the tool: `report FILE --html PAGE`
   draws a run as a picture.
 
-### 2026-11-19 Fixed — checkboxes, interaction prompt, formula export, empty animation tracks, model tangents, terrain loading, reused sounds (3D_E-0874)
+### 2026-11-19 Fixed — checkboxes, interaction prompt, formula export, empty animation tracks, model tangents, terrain loading, reused sounds, Workbench fit statistics (3D_E-0874)
 
 - **A checkbox shows when it has keyboard focus** (3D_E-0874)
   Only buttons drew a focus ring, so a checkbox reached with Tab looked
@@ -89,6 +89,28 @@ may change any interface without notice.
 - **Audit tool: `--ci` still writes the `--html` and `--sarif` reports**
   (3D_E-0874)
   With `--ci` the tool exited before writing either file.
+
+- **Formula Workbench: a fit clamped to bounds shows its real quality**
+  (3D_E-0874)
+  When a coefficient was pulled back inside its bounds after a fit, R²
+  and RMSE still described the unclamped fit. They are now worked out
+  again for the clamped values, and the status line says the fit was
+  clamped.
+
+- **Formula Workbench: no leftover AIC, BIC or adjusted R²** (3D_E-0874)
+  A fit with too few points, or an exact fit, showed these three numbers
+  from the fit before it and saved them to the fit history. The panel
+  now shows "n/a" with the reason.
+
+- **Audit tool: three smaller fixes** (3D_E-0874)
+  `--propose-fixes-show` no longer prints an older run's proposals. A
+  TypeScript project is detected as TypeScript, not JavaScript. A
+  project stored below a folder named `build` has its CMake dependencies
+  found.
+
+- **Cursor bridge: "close other tabs" needs its keep list** (3D_E-0874)
+  A request that left the list out closed every file tab. It is now
+  refused.
 
 ### 2026-11-17 Fixed — animation crossfades (3D_E-0874)
 

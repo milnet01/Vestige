@@ -7644,6 +7644,18 @@ shipped that have no invocation path at all.
   audio_engine 704-718 at 98d0a24 (a reused pooled source has its
   pitch, low-pass filter and reverb send reset), lane-24 audit.py 524
   at 9ccc0b7 (--ci no longer returns before --html and --sarif).
+  2026-11-19 (session 3), each proven red first: lane-12 workbench
+  1216 and 1240 fixed at af67045 (a bounds clamp re-scores the fit;
+  adjusted R², AIC and BIC are worked out fresh per fit and shown as
+  n/a when undefined; code moved to fit_diagnostics.{h,cpp}), lane-24
+  runner.py 211, auto_config.py 29 and 733 at e25e260 (stale proposals
+  file deleted, ts detected before js, artifact folders matched only
+  below the project root), lane-27 extension.ts 66 at aa540e7
+  (ide_close_others refuses a keep that is not an array of strings).
+  Checked and closed without a change: lane-10 audio_clip 157 (a test
+  showed dr_wav already cuts the frame count to the audio in the file)
+  and lane-22 gltf_loader 1213 (no effect: buildUpdateOrder appends the
+  skipped joint).
   **Layman:** About 290 lower-risk possible bugs and the medium findings are still unchecked.
   Kind: review-fix.
   Source: review-readability 2026-10-31 at 7b2a81d.
