@@ -61,9 +61,17 @@ const commands: Record<string, CommandHandler> = {
     return { path: args.path };
   },
 
-  /** Close every file-backed tab whose path is not in `keep`. */
+  /**
+   * Close every file-backed tab whose path is not in `keep`. `keep` must
+   * be given, as an array of strings: a missing one would otherwise mean
+   * "keep nothing" and close every tab. An empty array is that request,
+   * made on purpose.
+   */
   async ide_close_others(args: { keep: string[] }) {
-    const keep = new Set((args?.keep ?? []) as string[]);
+    if (!Array.isArray(args?.keep) || !args.keep.every((p) => typeof p === 'string')) {
+      throw new Error('keep required: an array of absolute paths');
+    }
+    const keep = new Set(args.keep);
     const toClose: vscode.Tab[] = [];
     for (const group of vscode.window.tabGroups.all) {
       for (const tab of group.tabs) {
