@@ -59,6 +59,13 @@ class TestDetectLanguage:
         (tmp_path / "tsconfig.json").write_text("{}")
         assert _detect_language(tmp_path) == "ts"
 
+    def test_ts_when_package_json_is_also_present(self, tmp_path: Path):
+        # A TypeScript project has both files; package.json alone must
+        # not decide it.
+        (tmp_path / "package.json").write_text("{}")
+        (tmp_path / "tsconfig.json").write_text("{}")
+        assert _detect_language(tmp_path) == "ts"
+
     def test_fallback_to_cpp(self, tmp_path: Path):
         # No marker files at all
         assert _detect_language(tmp_path) == "cpp"
@@ -310,6 +317,17 @@ class TestDetectCmakeDeps:
 
     def test_no_cmakelists_returns_empty(self, tmp_path: Path):
         assert _detect_cmake_deps(tmp_path) == []
+
+    def test_project_below_a_folder_named_build_is_still_scanned(
+            self, tmp_path: Path):
+        # Only folders inside the project count as build output; where
+        # the project itself was checked out does not.
+        root = tmp_path / "build" / "external" / "proj"
+        root.mkdir(parents=True)
+        (root / "CMakeLists.txt").write_text("find_package(Boost 1.74)\n")
+        (root / "build").mkdir()
+        (root / "build" / "CMakeLists.txt").write_text("find_package(Noise 1.0)\n")
+        assert _detect_cmake_deps(root) == [{"name": "Boost", "version": "1.74"}]
 
     def test_find_package_with_version(self, tmp_path: Path):
         (tmp_path / "CMakeLists.txt").write_text(

@@ -25,8 +25,9 @@ LANGUAGE_SIGNATURES: list[tuple[str, list[str]]] = [
     ("c",      ["*.c"]),
     ("python", ["setup.py", "pyproject.toml", "setup.cfg", "requirements.txt"]),
     ("java",   ["pom.xml", "build.gradle", "build.gradle.kts"]),
-    ("js",     ["package.json"]),
+    # ts before js: a TypeScript project has a package.json as well.
     ("ts",     ["tsconfig.json"]),
+    ("js",     ["package.json"]),
 ]
 
 # ---------------------------------------------------------------------------
@@ -717,9 +718,9 @@ def _detect_cmake_deps(root: Path) -> list[dict]:
     # Skip CMakeLists.txt that live inside build artifact directories or
     # third-party source trees — those produce noise (every dep's own
     # find_package probes get reported as if they were our project's
-    # deps). The matched substrings are checked against any path
-    # component, so `build/`, `external/foo-src/`, `build/_deps/...`
-    # all get filtered.
+    # deps). The names are checked against every path component below
+    # `root`, so `build/`, `external/foo-src/`, `build/_deps/...` all
+    # get filtered, and the folders `root` itself sits in do not count.
     BUILD_ARTIFACT_PARTS = {
         "build", "out", "_deps", "__pycache__",
         ".git", ".cache", "node_modules",
@@ -729,7 +730,8 @@ def _detect_cmake_deps(root: Path) -> list[dict]:
         # Path component check: skip anything whose path contains a known
         # artifact-dir name. Also skip CMake build trees that match
         # patterns like `build_release/`, `cmake-build-debug/`.
-        for part in path.parts:
+        parts = path.relative_to(root).parts
+        for part in parts:
             if part in BUILD_ARTIFACT_PARTS:
                 return True
             if part.startswith("build_") or part.startswith("cmake-build-"):
@@ -741,7 +743,7 @@ def _detect_cmake_deps(root: Path) -> list[dict]:
             # we care about are declared at the top-level CMakeLists.txt
             # via FetchContent_Declare or in external/CMakeLists.txt
             # itself — not in nested vendored CMakeLists.
-            if part == "external" and path.parts.index(part) < len(path.parts) - 2:
+            if part == "external" and parts.index(part) < len(parts) - 2:
                 # external/foo/CMakeLists.txt → skip; external/CMakeLists.txt → keep
                 return True
         return False

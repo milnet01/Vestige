@@ -244,8 +244,9 @@ rules surface and get tuned without a human hand-triaging every report.
   namespace prefix (`JPH::`) or library token (`tinygltf`) — and writes
   `.audit_propose_fixes.md` suggesting an `exclude_pattern` addition that drops
   the FP class while keeping the real hits. Advisory only: the file is for
-  review, the tool never edits config. `--propose-fixes-show` prints it; the
-  `propose_fixes:` config block tunes the gates.
+  review, the tool never edits config. A run with nothing to propose deletes
+  the file. `--propose-fixes-show` prints it; the `propose_fixes:` config block
+  tunes the gates.
 
 ### Exit Codes
 

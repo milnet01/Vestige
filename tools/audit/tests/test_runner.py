@@ -206,3 +206,25 @@ class TestAuditResults:
             results = runner.run()
 
         assert results.duration > 0
+
+
+# ---------------------------------------------------------------------------
+# Propose-fix report
+# ---------------------------------------------------------------------------
+
+class TestProposeFixesFile:
+    """.audit_propose_fixes.md describes the latest run only."""
+
+    def test_run_without_proposals_removes_an_older_report(self, tmp_path: Path):
+        cfg = _make_config(tmp_path, tiers=[2])
+        stale = tmp_path / ".audit_propose_fixes.md"
+        stale.write_text("# proposals from an earlier run\n")
+
+        with patch("lib.tier2_patterns.run", return_value=[]):
+            AuditRunner(cfg).run()
+
+        # The stats step ran (so the proposal step was reached)...
+        assert (tmp_path / ".audit_stats.json").exists()
+        # ...and found nothing to propose, so --propose-fixes-show must
+        # not be left an older run's report to print.
+        assert not stale.exists()

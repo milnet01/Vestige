@@ -4,6 +4,12 @@ All notable changes to the Audit Tool are documented in this file.
 
 ## [Unreleased]
 
+### 2026-11-19 Fixed — stale proposals file, TypeScript detection, projects below a `build` folder
+
+- **A run with nothing to propose deletes `.audit_propose_fixes.md`.** The file was only ever written, so `--propose-fixes-show` could print an older run's proposals as the latest. (3D_E-0874)
+- **A project with both `tsconfig.json` and `package.json` is detected as TypeScript.** `package.json` was checked first, so every TypeScript project came out as JavaScript. (3D_E-0874)
+- **The CMake dependency scan works for a project checked out below a folder named `build`, `out` or `external`.** Those names are now matched only inside the project, so such a project no longer has every `CMakeLists.txt` skipped. (3D_E-0874)
+
 ### 2026-11-04 Fixed — A capped build or test log keeps its last lines
 
 - **Output past the 64 MB cap now keeps its start and its end, with a line saying how much of the middle was cut.** The old cap kept only the start, so the test summary at the end, which tier 1 reads, was lost. `run_shell_cmd` is now capped as `run_cmd` was. (3D_E-0864)

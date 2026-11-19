@@ -210,14 +210,18 @@ class AuditRunner:
                 patterns=self.config.patterns,
                 policy=propose_cfg,
             )
+            out_name = propose_cfg.get("output_file", ".audit_propose_fixes.md")
+            out_path = self.config.root / out_name
             if proposals:
-                out_name = propose_cfg.get("output_file", ".audit_propose_fixes.md")
-                out_path = self.config.root / out_name
                 out_path.write_text(render_proposals_markdown(proposals) + "\n")
                 log.info(
                     "Phase 3: wrote %d exclude_pattern proposal(s) to %s",
                     len(proposals), out_path,
                 )
+            else:
+                # The file is this run's proposals; an older run's would
+                # be printed by --propose-fixes-show as if current.
+                out_path.unlink(missing_ok=True)
         except Exception as e:
             # Stats are a diagnostic sidecar; never break the run on
             # stats-layer failure.
