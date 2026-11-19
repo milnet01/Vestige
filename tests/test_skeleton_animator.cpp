@@ -197,6 +197,37 @@ TEST(SkeletonAnimatorTest, ScaleChannelScalesBoneMatrix_CV16)
     EXPECT_NEAR(bone[2][2], 4.0f, 1e-4f);
 }
 
+// 3D_E-0874: a channel with no keyframes sampled as (0, 0, 0), so an empty
+// scale channel shrank its joint to a point. A channel that says nothing
+// leaves the joint at its bind pose.
+TEST(SkeletonAnimatorTest, ChannelWithNoKeyframesLeavesTheJointAtItsBindPose)
+{
+    SkeletonAnimator animator;
+    animator.setSkeleton(makeSimpleSkeleton());
+
+    auto clip = makeSimpleClip();  // moves the root, so the clip has a duration
+    for (AnimTargetPath path : {AnimTargetPath::SCALE, AnimTargetPath::TRANSLATION})
+    {
+        AnimationChannel empty;
+        empty.jointIndex = 1;
+        empty.targetPath = path;
+        empty.interpolation = AnimInterpolation::LINEAR;
+        clip->m_channels.push_back(empty);
+    }
+
+    animator.addClip(clip);
+    animator.play("Walk");
+    animator.update(0.5f);
+
+    // The child's bind pose is one unit above the root, and its inverse bind
+    // undoes exactly that: its bone matrix is the root's motion alone.
+    const glm::mat4& child = animator.getBoneMatrices()[1];
+    EXPECT_NEAR(child[0][0], 1.0f, 1e-4f) << "the empty scale channel scaled the joint";
+    EXPECT_NEAR(child[1][1], 1.0f, 1e-4f);
+    EXPECT_NEAR(child[2][2], 1.0f, 1e-4f);
+    EXPECT_NEAR(child[3][1], 0.0f, 1e-4f) << "the empty translation channel moved the joint";
+}
+
 TEST(SkeletonAnimatorTest, LoopingWrapsTime)
 {
     SkeletonAnimator animator;

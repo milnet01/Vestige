@@ -133,6 +133,10 @@ void MotionDatabase::sampleClip(int clipIdx, const AnimClipEntry& entry,
         {
             if (channel.jointIndex < 0 || channel.jointIndex >= numJoints)
                 continue;
+            // No keyframes: the joint keeps its bind pose (see
+            // SkeletonAnimator's sampling loop).
+            if (channel.timestamps.empty())
+                continue;
 
             size_t ji = static_cast<size_t>(channel.jointIndex);
             switch (channel.targetPath)

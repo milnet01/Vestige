@@ -57,6 +57,13 @@ int SkeletonAnimator::advanceAndSample(
     // Sample all channels into the provided buffers
     for (const auto& channel : clip->m_channels)
     {
+        // A channel with no keyframes says nothing: the joint keeps its bind
+        // pose. Sampled, it would read as zero and collapse a scale.
+        if (channel.timestamps.empty())
+        {
+            continue;
+        }
+
         int ji = channel.jointIndex;
 
         // WEIGHTS channels have jointIndex = -1 (they target the mesh, not a joint).
