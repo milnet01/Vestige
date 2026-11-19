@@ -127,6 +127,7 @@ add_executable(vestige_tests
     test_ambient_system.cpp
     test_audio_bus_activity.cpp
     test_audio_source_reuse.cpp
+    test_audio_source_reuse.cpp
     test_terrain_render_no_shadows.cpp
     test_texture_upload.cpp
     test_texture_reload.cpp
@@ -298,8 +299,8 @@ add_executable(vestige_tests
     test_gltf_texcoord_origin.cpp
     test_gltf_vertex_color.cpp
     test_gltf_tangents.cpp
-    test_stream_read.cpp
     test_formula_glsl_snippet.cpp
+    test_stream_read.cpp
     test_gltf_fs_sandbox.cpp
     test_obj_mtl_warning.cpp
     test_cube_loader_hardening.cpp

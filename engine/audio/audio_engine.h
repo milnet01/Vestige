@@ -1004,6 +1004,12 @@ private:
     /// @brief Reclaims finished sources back to the pool.
     void reclaimFinishedSources();
 
+    /// @brief Marks the first free pooled source in use and clears what
+    ///        `applySourceState` may have left on it: pitch, the low-pass
+    ///        filter and the reverb send.
+    /// @return The source, or 0 when every source is in use.
+    unsigned int claimFreeSource();
+
     /// @brief Phase 10.9 Slice 8 W8 — pops LRU-tail entries from
     ///        `m_bufferCache` (with `alDeleteBuffers`) until size ≤
     ///        `m_bufferCacheLimit`, skipping a buffer a pooled source

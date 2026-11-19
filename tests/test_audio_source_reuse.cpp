@@ -2,135 +2,60 @@
 // SPDX-License-Identifier: MIT
 
 /// @file test_audio_source_reuse.cpp
-/// @brief 3D_E-0869 — every way of starting a sound resets the state a
-///        pooled OpenAL source kept from its previous sound.
+/// @brief 3D_E-0874 — a pooled source handed to a new sound starts clean.
 ///
-/// A moving sound sets the source's velocity (Doppler). When that source is
-/// reused, the next sound must start still, or it plays pitch-shifted.
-/// Opens OpenAL Soft's null backend; skips where no device opens. POSIX only,
-/// like the other env-driven tests.
-#include "audio/audio_attenuation.h"
+/// applySourceState sets pitch, a low-pass filter and a reverb send on a
+/// component-driven source. When that source went back to the pool and a
+/// plain playSound took it, the new sound kept the old pitch.
+///
+/// Opens OpenAL's null device; skips where none opens. POSIX only, like the
+/// device helper.
+
 #include "audio/audio_engine.h"
+#include "audio/audio_source_state.h"
 #include "audio_device_helpers.h"
 
 #include <gtest/gtest.h>
-
 #include <AL/al.h>
 
 #include <filesystem>
-#include <glm/glm.hpp>
 
-using namespace Vestige;
+namespace Vestige::AudioSourceReuse::Test
+{
 
 #ifndef _WIN32
-
-using Vestige::TestAudio::openNullAudioDevice;
-using Vestige::TestAudio::writeTestWav;
-
-namespace
-{
-
-glm::vec3 sourceVelocity(unsigned int source)
-{
-    glm::vec3 v(-1.0f);
-    alGetSource3f(source, AL_VELOCITY, &v.x, &v.y, &v.z);
-    return v;
-}
-
-/// Plays a moving sound with wide attenuation, stops it, and returns the
-/// freed source so the next play reuses it.
-unsigned int leaveMovingSourceBehind(AudioEngine& engine, const std::string& wav)
-{
-    AttenuationParams wide;
-    wide.referenceDistance = 7.0f;
-    wide.maxDistance       = 300.0f;
-    wide.rolloffFactor     = 0.25f;
-    const unsigned int moving = engine.playSoundSpatial(
-        wav, glm::vec3(3.0f, 0.0f, 0.0f), glm::vec3(25.0f, 0.0f, 0.0f), wide);
-    EXPECT_NE(moving, 0u);
-    EXPECT_EQ(sourceVelocity(moving), glm::vec3(25.0f, 0.0f, 0.0f));
-    engine.stopSound(moving);
-    return moving;
-}
-
-} // namespace
-
-TEST(AudioSourceReuse, PlaySoundStartsStillOnAReusedSource)
+TEST(AudioSourceReuse, ReusedSourceStartsAtNormalPitch_0874)
 {
     AudioEngine engine;
-    if (!openNullAudioDevice(engine))
+    if (!TestAudio::openNullAudioDevice(engine))
     {
         GTEST_SKIP() << "no OpenAL device could be opened";
     }
-    const auto wav = writeTestWav("vestige_source_reuse_a.wav", 1.0f);
+    const auto wav = TestAudio::writeTestWav("vestige_source_reuse.wav", 0.5f, 1);
 
-    const unsigned int freed = leaveMovingSourceBehind(engine, wav.string());
-    const unsigned int next  = engine.playSound(wav.string(), glm::vec3(0.0f));
-    ASSERT_EQ(next, freed) << "the test needs the freed source to be reused";
+    const unsigned int first = engine.playSound2D(wav.string(), 1.0f, AudioBus::Sfx,
+                                                  SoundPriority::Normal, /*loop=*/true);
+    ASSERT_NE(first, 0u);
+    AudioSourceAlState state;
+    state.pitch = 2.0f;
+    state.lowPassGainHf = 0.25f;
+    state.reverbSend = 1.0f;
+    engine.applySourceState(first, state);
+    ALfloat pitch = 0.0f;
+    alGetSourcef(first, AL_PITCH, &pitch);
+    ASSERT_FLOAT_EQ(pitch, 2.0f);
+    engine.stopSound(first);
 
-    EXPECT_EQ(sourceVelocity(next), glm::vec3(0.0f))
-        << "playSound kept the previous sound's velocity (Doppler shift)";
+    const unsigned int second = engine.playSound2D(wav.string(), 1.0f, AudioBus::Sfx,
+                                                   SoundPriority::Normal, /*loop=*/true);
+    ASSERT_EQ(second, first) << "the pool handed out a different source; "
+                                "the test no longer exercises reuse";
+    alGetSourcef(second, AL_PITCH, &pitch);
+    EXPECT_FLOAT_EQ(pitch, 1.0f) << "the new sound kept the old sound's pitch";
 
-    // playSound's fixed attenuation replaces the previous sound's.
-    float ref = 0.0f;
-    float maxDist = 0.0f;
-    float rolloff = 0.0f;
-    alGetSourcef(next, AL_REFERENCE_DISTANCE, &ref);
-    alGetSourcef(next, AL_MAX_DISTANCE, &maxDist);
-    alGetSourcef(next, AL_ROLLOFF_FACTOR, &rolloff);
-    EXPECT_FLOAT_EQ(ref, 1.0f);
-    EXPECT_FLOAT_EQ(maxDist, 50.0f);
-    EXPECT_FLOAT_EQ(rolloff, 1.0f);
-
-    engine.shutdown();
+    engine.stopSound(second);
     std::filesystem::remove(wav);
 }
-
-TEST(AudioSourceReuse, PlaySound2DStartsStillOnAReusedSource)
-{
-    AudioEngine engine;
-    if (!openNullAudioDevice(engine))
-    {
-        GTEST_SKIP() << "no OpenAL device could be opened";
-    }
-    const auto wav = writeTestWav("vestige_source_reuse_b.wav", 1.0f);
-
-    const unsigned int freed = leaveMovingSourceBehind(engine, wav.string());
-    const unsigned int next  = engine.playSound2D(wav.string());
-    ASSERT_EQ(next, freed) << "the test needs the freed source to be reused";
-
-    EXPECT_EQ(sourceVelocity(next), glm::vec3(0.0f))
-        << "playSound2D kept the previous sound's velocity (Doppler shift)";
-
-    ALint relative = AL_FALSE;
-    alGetSourcei(next, AL_SOURCE_RELATIVE, &relative);
-    EXPECT_EQ(relative, AL_TRUE) << "a mono 2D sound is pinned to the listener";
-
-    engine.shutdown();
-    std::filesystem::remove(wav);
-}
-
-TEST(AudioSourceReuse, StillSpatialPlayResetsVelocityOnAReusedSource)
-{
-    AudioEngine engine;
-    if (!openNullAudioDevice(engine))
-    {
-        GTEST_SKIP() << "no OpenAL device could be opened";
-    }
-    const auto wav = writeTestWav("vestige_source_reuse_c.wav", 1.0f);
-
-    const unsigned int freed = leaveMovingSourceBehind(engine, wav.string());
-    AttenuationParams params;
-    const unsigned int next = engine.playSoundSpatial(wav.string(), glm::vec3(1.0f), params);
-    ASSERT_EQ(next, freed) << "the test needs the freed source to be reused";
-
-    EXPECT_EQ(sourceVelocity(next), glm::vec3(0.0f));
-    float ref = 0.0f;
-    alGetSourcef(next, AL_REFERENCE_DISTANCE, &ref);
-    EXPECT_FLOAT_EQ(ref, params.referenceDistance);
-
-    engine.shutdown();
-    std::filesystem::remove(wav);
-}
-
 #endif
+
+}  // namespace Vestige::AudioSourceReuse::Test

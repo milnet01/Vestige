@@ -645,6 +645,33 @@ float AudioEngine::loudnessMakeupForPath(const std::string& path) const
     return loudnessMakeupGain(it->second, m_loudnessTargetLufs);
 }
 
+unsigned int AudioEngine::claimFreeSource()
+{
+    for (size_t i = 0; i < m_sourcePool.size(); ++i)
+    {
+        if (!m_sourceInUse[i])
+        {
+            m_sourceInUse[i] = true;
+            m_sourceTicket[i] = m_nextTicket++;
+            const ALuint source = m_sourcePool[i];
+            // applySourceState may have left the last owner's pitch, low-pass
+            // filter and reverb send on the source; only it sets them again.
+            alSourcef(source, AL_PITCH, 1.0f);
+            if (m_lowPassFilter != 0)
+            {
+                alSourcei(source, AL_DIRECT_FILTER, AL_FILTER_NULL);
+            }
+            if (m_reverbSlot != 0 && m_maxAuxSends > 0)
+            {
+                alSource3i(source, AL_AUXILIARY_SEND_FILTER,
+                           AL_EFFECTSLOT_NULL, 0, AL_FILTER_NULL);
+            }
+            return source;
+        }
+    }
+    return 0;
+}
+
 unsigned int AudioEngine::acquireSource(SoundPriority incomingPriority)
 {
     if (!m_available)
@@ -652,26 +679,16 @@ unsigned int AudioEngine::acquireSource(SoundPriority incomingPriority)
         return 0;
     }
 
-    for (size_t i = 0; i < m_sourcePool.size(); ++i)
+    if (const unsigned int source = claimFreeSource(); source != 0)
     {
-        if (!m_sourceInUse[i])
-        {
-            m_sourceInUse[i] = true;
-            m_sourceTicket[i] = m_nextTicket++;
-            return m_sourcePool[i];
-        }
+        return source;
     }
 
     // Pool exhausted — try reclaiming finished sources
     reclaimFinishedSources();
-    for (size_t i = 0; i < m_sourcePool.size(); ++i)
+    if (const unsigned int source = claimFreeSource(); source != 0)
     {
-        if (!m_sourceInUse[i])
-        {
-            m_sourceInUse[i] = true;
-            m_sourceTicket[i] = m_nextTicket++;
-            return m_sourcePool[i];
-        }
+        return source;
     }
 
     // Phase 10.9 P7 — still no slot. Build VoiceCandidates from live
@@ -700,14 +717,9 @@ unsigned int AudioEngine::acquireSource(SoundPriority incomingPriority)
     {
         const unsigned int victimSource = candidateSources[victimIdx];
         releaseSource(victimSource);  // stops the voice, frees pool slot
-        for (size_t i = 0; i < m_sourcePool.size(); ++i)
+        if (const unsigned int source = claimFreeSource(); source != 0)
         {
-            if (!m_sourceInUse[i])
-            {
-                m_sourceInUse[i] = true;
-                m_sourceTicket[i] = m_nextTicket++;
-                return m_sourcePool[i];
-            }
+            return source;
         }
         // Defensive: releaseSource must have freed a slot, so reaching
         // here means the pool vector and m_sourceInUse got out of sync.
