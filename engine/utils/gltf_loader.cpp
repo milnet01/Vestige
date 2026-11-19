@@ -589,7 +589,10 @@ static std::vector<MeshPrimRange> loadMeshes(const tinygltf::Model& gltfModel,
             }
 
             // --- Read TANGENT ---
+            // The bitangent needs the normal, which may not exist until flat
+            // normals are generated below, so only the handedness is kept here.
             bool hasTangents = false;
+            std::vector<float> tangentHandedness;
             {
                 auto it = primitive.attributes.find("TANGENT");
                 if (it != primitive.attributes.end())
@@ -604,13 +607,12 @@ static std::vector<MeshPrimRange> loadMeshes(const tinygltf::Model& gltfModel,
                         size_t stride = bufferView.byteStride > 0
                             ? bufferView.byteStride : sizeof(float) * 4;
 
-                        for (size_t i = 0; i < std::min(accessor.count, vertices.size()); i++)
+                        tangentHandedness.resize(std::min(accessor.count, vertices.size()));
+                        for (size_t i = 0; i < tangentHandedness.size(); i++)
                         {
                             glm::vec4 t = readVec4(base + stride * i);
                             vertices[i].tangent = glm::vec3(t.x, t.y, t.z);
-                            // bitangent = cross(N, T.xyz) * T.w
-                            vertices[i].bitangent = glm::cross(vertices[i].normal,
-                                vertices[i].tangent) * t.w;
+                            tangentHandedness[i] = t.w;
                         }
                         hasTangents = true;
                     }
@@ -972,6 +974,14 @@ static std::vector<MeshPrimRange> loadMeshes(const tinygltf::Model& gltfModel,
             if (!hasNormals)
             {
                 generateFlatNormals(vertices, indices);
+            }
+
+            // Bitangents of file-supplied tangents: cross(N, T.xyz) * T.w,
+            // now that every vertex has its normal.
+            for (size_t i = 0; i < tangentHandedness.size(); i++)
+            {
+                vertices[i].bitangent = glm::cross(vertices[i].normal,
+                    vertices[i].tangent) * tangentHandedness[i];
             }
 
             // Compute tangents if missing
