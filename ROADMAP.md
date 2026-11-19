@@ -1,6 +1,6 @@
 <!-- ants-roadmap-format: 1 -->
 <!-- Generated from the Ants Terminal roadmap store. Edit it with roadmap_log; hand edits are discarded by the next write. -->
-<!-- ants-roadmap-id-high-water: 3D_E=990 3D_E#S=989 -->
+<!-- ants-roadmap-id-high-water: 3D_E=991 3D_E#S=989 -->
 
 # Vestige Engine Roadmap
 
@@ -8206,6 +8206,16 @@ shipped that have no invocation path at all.
   **Layman:** Let the ExperiRays lab load a Vestige scene and replay its demo flythrough, so ray-tracing ideas can be tried on Vestige's own content.
   Kind: feature.
   Source: experirays-request-2026-11-17.
+
+- ✅ [3D_E-0991] **Move the vendored frameledger from v0.5.0 to v0.7.0.**
+  Header and frameledger.pyz copied from the release zip, whose SHA-256
+  matched GitHub's digest. The header differs only in FLED_VERSION and a
+  comment. Independent review (fresh agent, 2026-11-19): no command,
+  flag, exit code or file-format field Vestige uses changed in 0.6.0 or
+  0.7.0. PerfGate, FpsFloor and frameledger_header_check pass.
+  **Layman:** The frame-timing tool Vestige carries is now its newest release.
+  Kind: chore.
+  Source: frameledger release v0.7.0, 2026-11-19.
 
 ## 0.3.0 — An editor a builder can use
 

@@ -38,7 +38,7 @@
 #define FLED_SCHEMA     1
 /* The release this header shipped in, as `frameledger --version` prints
    it. The release bump keeps it equal to the analyser's (INV-96). */
-#define FLED_VERSION    "0.5.0"
+#define FLED_VERSION    "0.7.0"
 #define FLED_NAME_MAX   64 /* name */
 #define FLED_PART_MAX   32 /* category; segment kind; segment id */
 #define FLED_RUN_ID_MAX 64
@@ -306,7 +306,7 @@ static inline int fled_open(fled_writer *w, char *buf, size_t cap, const char *r
 
 /* Appends one row; segment may be NULL or "" for none. The value is
    rounded to thousandths: llround of value * 1000 as a double, so ties go
-   away from zero, but 8.2505 is 8250.4999... and writes 8.250.
+   away from zero, but 0.5005 * 1000 is 500.4999... and writes 0.500.
    Returns FLED_BAD_ARG, writing nothing, for a writer not open, a field
    breaking § 4.4, a negative frame or depth, or a value that is not
    finite or rounds to 1 000 000 000 or more in size. That is checked

@@ -25,6 +25,14 @@ may change any interface without notice.
 
 ## [Unreleased]
 
+### 2026-11-19 Changed — frameledger v0.7.0 (3D_E-0991)
+
+- **The vendored frameledger is now v0.7.0** (3D_E-0991)
+  `external/frameledger/` moved from v0.5.0: the header and
+  `frameledger.pyz`, both from the release zip. The checks Vestige runs
+  with it behave as before. New in the tool: `report FILE --html PAGE`
+  draws a run as a picture.
+
 ### 2026-11-19 Fixed — checkboxes, interaction prompt, formula export, empty animation tracks, model tangents, terrain loading, reused sounds (3D_E-0874)
 
 - **A checkbox shows when it has keyboard focus** (3D_E-0874)
