@@ -7622,6 +7622,14 @@ shipped that have no invocation path at all.
   first, then applies the new state's settings). Both proven red first.
   lane-06 particle_simulate 395 and 401 marked latent: nothing calls
   enableDepthCollision, so depth collision never runs.
+  2026-11-19: lane-21 ui_checkbox 44 and 59 fixed at 4cff6a4 (focus
+  ring on a focused checkbox; tick, and the click area, scale with
+  theme.checkboxSize), ui_interaction_prompt 60 at b19d3ee
+  (renderText2D takes an opacity; the text vertex colour is RGBA), and
+  lane-11 codegen_cpp 60 and lut_loader 31 at c497458 (both generators
+  throw on a node missing a child, the C++ one on an undefined
+  variable; the loader refuses an unknown value type or flag). Each
+  proven red first, but the null-child case, which crashed.
   **Layman:** About 290 lower-risk possible bugs and the medium findings are still unchecked.
   Kind: review-fix.
   Source: review-readability 2026-10-31 at 7b2a81d.

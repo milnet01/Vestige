@@ -25,6 +25,32 @@ may change any interface without notice.
 
 ## [Unreleased]
 
+### 2026-11-19 Fixed — checkboxes, interaction prompt, formula export (3D_E-0874)
+
+- **A checkbox shows when it has keyboard focus** (3D_E-0874)
+  Only buttons drew a focus ring, so a checkbox reached with Tab looked
+  no different. It now draws the same ring around its box.
+
+- **A checkbox's tick and click area grow with the UI scale** (3D_E-0874)
+  At a larger UI scale the box grew but the tick stayed small in one
+  corner, and most of the box did not respond to a click.
+
+- **A fading interaction prompt turns see-through instead of dark**
+  (3D_E-0874)
+  The prompt faded by darkening its colour, so over a bright scene it
+  showed as grey lettering. `TextRenderer::renderText2D` takes an
+  opacity, and the prompt uses it.
+
+- **Formula export refuses a broken formula** (3D_E-0874)
+  The C++ and GLSL generators wrote `0.0` in place of a node with a
+  missing child, and the C++ one wrote an undefined variable as a bare
+  name. Both now throw, as the evaluator does.
+
+- **The lookup-table loader checks the file's value type and flags**
+  (3D_E-0874)
+  It read every file as 32-bit floats whatever the header said. A value
+  type or flag it does not know is now refused.
+
 ### 2026-11-17 Fixed — animation crossfades (3D_E-0874)
 
 - **Faces blend into the next animation instead of jumping** (3D_E-0874)
