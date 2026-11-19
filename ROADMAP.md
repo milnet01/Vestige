@@ -7630,6 +7630,11 @@ shipped that have no invocation path at all.
   throw on a node missing a child, the C++ one on an undefined
   variable; the loader refuses an unknown value type or flag). Each
   proven red first, but the null-child case, which crashed.
+  2026-11-19 (later): lane-09 animation_sampler 99 fixed at 0e441ac
+  (the animator and the motion database skip a channel with no
+  keyframes; proven red first) and lane-11 physics_templates 671 at
+  3ebce79 (comment corrected, default unchanged). lane-09 ik_solver
+  295 and 320 marked latent: solveFootIK has no caller outside tests.
   **Layman:** About 290 lower-risk possible bugs and the medium findings are still unchecked.
   Kind: review-fix.
   Source: review-readability 2026-10-31 at 7b2a81d.

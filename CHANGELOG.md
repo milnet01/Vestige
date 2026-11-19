@@ -25,7 +25,7 @@ may change any interface without notice.
 
 ## [Unreleased]
 
-### 2026-11-19 Fixed — checkboxes, interaction prompt, formula export (3D_E-0874)
+### 2026-11-19 Fixed — checkboxes, interaction prompt, formula export, empty animation tracks (3D_E-0874)
 
 - **A checkbox shows when it has keyboard focus** (3D_E-0874)
   Only buttons drew a focus ring, so a checkbox reached with Tab looked
@@ -50,6 +50,12 @@ may change any interface without notice.
   (3D_E-0874)
   It read every file as 32-bit floats whatever the header said. A value
   type or flag it does not know is now refused.
+
+- **An animation track with no keyframes no longer shrinks its bone**
+  (3D_E-0874)
+  A scale track with no keyframes read as zero and collapsed the joint
+  to a point. Such a track now leaves the joint at its bind pose. Only a
+  hand-built clip could reach this; the glTF loader drops empty tracks.
 
 ### 2026-11-17 Fixed — animation crossfades (3D_E-0874)
 
