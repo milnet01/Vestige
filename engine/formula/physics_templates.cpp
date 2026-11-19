@@ -672,7 +672,7 @@ FormulaDefinition PhysicsTemplates::createSchlickGeometry()
         {"NdotV", VT::FLOAT, "", 1.0f}
     };
     def.output = {VT::FLOAT, ""};
-    def.coefficients = {{"k", 0.125f}};  // roughness=0.5 => k=(1.5)^2/8=0.28
+    def.coefficients = {{"k", 0.125f}};  // the IBL form at roughness 0.5: 0.5^2/2
 
     // NdotV / (NdotV * (1 - k) + k)
     def.expressions[QT::FULL] =
