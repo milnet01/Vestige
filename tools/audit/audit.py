@@ -513,6 +513,7 @@ def main() -> int:
         else:
             log.info("No previous results found — skipping differential report")
 
+    ci_exit_code = None
     if args.json_output:
         # JSON output to stdout
         output_data = results.to_dict()
@@ -520,7 +521,8 @@ def main() -> int:
             output_data["diff"] = diff.to_dict()
         print(json.dumps(output_data, indent=2))
     elif args.ci:
-        # CI mode: emit annotations
+        # CI mode: emit annotations. The exit code is CI's own (HIGH fails
+        # too); --html and --sarif below still run.
         from lib.ci_output import format_github_annotations, write_step_summary, get_exit_code
         annotations = format_github_annotations(results.findings)
         if annotations:
@@ -528,7 +530,7 @@ def main() -> int:
         write_step_summary(results.to_dict())
         # Still generate the markdown report
         runner.build_report(results, diff=diff)
-        return get_exit_code(results.findings)
+        ci_exit_code = get_exit_code(results.findings)
     else:
         # Build markdown report
         runner.build_report(results, diff=diff)
@@ -561,6 +563,8 @@ def main() -> int:
         log.info("SARIF report written to %s", sarif_path)
 
     # Exit code
+    if ci_exit_code is not None:
+        return ci_exit_code
     if results.has_critical:
         return 2
     return 0

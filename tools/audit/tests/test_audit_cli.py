@@ -174,3 +174,40 @@ class TestNvdTestCli:
         )
         assert result.returncode == 2
         assert "rejected" in result.stderr.lower() or "fails" in result.stderr.lower()
+
+
+class TestCiModeStillWritesRequestedReports:
+    """3D_E-0874: ``--ci`` returned before the ``--html`` and ``--sarif``
+    blocks, so neither file was written and nothing said so."""
+
+    def test_ci_with_sarif_and_html_writes_both(self, tmp_path):
+        cfg = tmp_path / "audit_config.yaml"
+        cfg.write_text(
+            "project:\n"
+            "  name: TestProject\n"
+            f"  root: {tmp_path}\n"
+            "  source_dirs: [src/]\n"
+            "  source_extensions: ['.cpp', '.h']\n"
+            "tiers: [2]\n"
+            "patterns:\n"
+            "  memory: []\n"
+            "report:\n"
+            "  output_path: out.md\n"
+        )
+        (tmp_path / "src").mkdir()
+        (tmp_path / "src" / "a.cpp").write_text("int main() { return 0; }\n")
+
+        result = subprocess.run(
+            [
+                sys.executable, str(SCRIPT_DIR / "audit.py"),
+                "-c", str(cfg),
+                "--ci", "--sarif", "--html",
+            ],
+            capture_output=True,
+            text=True,
+            timeout=120,
+            cwd=tmp_path,
+        )
+        assert result.returncode == 0, result.stderr
+        assert list(tmp_path.rglob("*.sarif")), result.stderr
+        assert list(tmp_path.rglob("*.html")), result.stderr
