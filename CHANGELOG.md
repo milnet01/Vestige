@@ -25,7 +25,7 @@ may change any interface without notice.
 
 ## [Unreleased]
 
-### 2026-11-19 Fixed — checkboxes, interaction prompt, formula export, empty animation tracks (3D_E-0874)
+### 2026-11-19 Fixed — checkboxes, interaction prompt, formula export, empty animation tracks, model tangents, terrain loading, reused sounds (3D_E-0874)
 
 - **A checkbox shows when it has keyboard focus** (3D_E-0874)
   Only buttons drew a focus ring, so a checkbox reached with Tab looked
@@ -56,6 +56,31 @@ may change any interface without notice.
   A scale track with no keyframes read as zero and collapsed the joint
   to a point. Such a track now leaves the joint at its bind pose. Only a
   hand-built clip could reach this; the glTF loader drops empty tracks.
+
+- **A model with tangents but no normals is lit correctly** (3D_E-0874)
+  The glTF loader worked out each bitangent before it had generated the
+  missing normals, so all of them were zero and normal maps on such a
+  model shaded wrongly. It now works them out afterwards.
+
+- **A terrain file that fails part-way leaves the terrain as it was**
+  (3D_E-0874)
+  A heightmap or splatmap read that stopped early left the terrain half
+  new and half old. The file is now read in full before any of it
+  replaces the terrain. Loading briefly holds two copies of the map.
+
+- **Formula Workbench: "Copy as GLSL" pastes into a shader and compiles**
+  (3D_E-0874)
+  A formula with a division copied a call to `safeDiv` without its
+  definition. The copied text now includes the safe-math helpers.
+
+- **A reused sound slot no longer keeps the last sound's pitch**
+  (3D_E-0874)
+  A sound could start at the pitch, muffling and reverb of whichever
+  sound used its slot before. A slot is now reset when it is handed out.
+
+- **Audit tool: `--ci` still writes the `--html` and `--sarif` reports**
+  (3D_E-0874)
+  With `--ci` the tool exited before writing either file.
 
 ### 2026-11-17 Fixed — animation crossfades (3D_E-0874)
 

@@ -7635,6 +7635,15 @@ shipped that have no invocation path at all.
   keyframes; proven red first) and lane-11 physics_templates 671 at
   3ebce79 (comment corrected, default unchanged). lane-09 ik_solver
   295 and 320 marked latent: solveFootIK has no caller outside tests.
+  2026-11-19 (session 2), each proven red first: lane-22 gltf_loader
+  605 fixed at e22e570 (bitangents worked out after the normals are
+  final), lane-18 terrain 837 and 923 at e236715 (loads read through
+  readWholeOrKeep, so a short read keeps the old terrain), lane-12
+  workbench 884 at 790d2b6 ("Copy as GLSL" carries the safe-math
+  helpers; text built by CodegenGlsl::generateSnippet), lane-10
+  audio_engine 704-718 at 98d0a24 (a reused pooled source has its
+  pitch, low-pass filter and reverb send reset), lane-24 audit.py 524
+  at 9ccc0b7 (--ci no longer returns before --html and --sarif).
   **Layman:** About 290 lower-risk possible bugs and the medium findings are still unchecked.
   Kind: review-fix.
   Source: review-readability 2026-10-31 at 7b2a81d.
