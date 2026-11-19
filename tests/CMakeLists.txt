@@ -299,6 +299,7 @@ add_executable(vestige_tests
     test_gltf_vertex_color.cpp
     test_gltf_tangents.cpp
     test_stream_read.cpp
+    test_formula_glsl_snippet.cpp
     test_gltf_fs_sandbox.cpp
     test_obj_mtl_warning.cpp
     test_cube_loader_hardening.cpp

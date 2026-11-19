@@ -887,31 +887,11 @@ void Workbench::renderValidation()
                 ? m_fitResult.coefficients
                 : m_coefficients;
 
-            const ExprNode* expr = m_selectedFormula->getExpression(QualityTier::FULL);
-            if (expr)
+            const std::string snippet =
+                CodegenGlsl::generateSnippet(*m_selectedFormula, coeffsToUse);
+            if (!snippet.empty())
             {
-                std::string glslExpr = CodegenGlsl::emitExpression(*expr, coeffsToUse);
-
-                std::ostringstream out;
-                out << "// " << m_selectedFormula->description << "\n";
-                out << "// Coefficients:";
-                for (const auto& [cname, cval] : coeffsToUse)
-                    out << " " << cname << "=" << cval;
-                out << "\n";
-
-                std::string funcName = CodegenGlsl::toGlslFunctionName(m_selectedFormula->name);
-                std::string retType = CodegenGlsl::toGlslType(m_selectedFormula->output.type);
-                out << retType << " " << funcName << "(";
-                bool first = true;
-                for (const auto& input : m_selectedFormula->inputs)
-                {
-                    if (!first) out << ", ";
-                    out << CodegenGlsl::toGlslType(input.type) << " " << input.name;
-                    first = false;
-                }
-                out << ")\n{\n    return " << glslExpr << ";\n}\n";
-
-                ImGui::SetClipboardText(out.str().c_str());
+                ImGui::SetClipboardText(snippet.c_str());
                 m_statusMessage = "GLSL code copied to clipboard.";
                 m_statusTimer = 2.0f;
             }

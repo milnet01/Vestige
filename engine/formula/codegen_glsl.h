@@ -46,6 +46,19 @@ public:
                                      QualityTier tier = QualityTier::FULL,
                                      const std::string& fileBanner = "");
 
+    /// @brief Generate one formula as text that compiles when pasted into a
+    ///        shader on its own: the safe-math prelude (guarded, so two
+    ///        pasted snippets do not redefine it), then the function.
+    /// @param formula The formula definition.
+    /// @param coefficients Coefficient values to inline, in place of the
+    ///        formula's own (the Workbench passes its fitted ones).
+    /// @param tier Quality tier to generate.
+    /// @return The snippet, or an empty string when the formula has no
+    ///         expression for @a tier.
+    static std::string generateSnippet(const FormulaDefinition& formula,
+                                       const std::map<std::string, float>& coefficients,
+                                       QualityTier tier = QualityTier::FULL);
+
     /// @brief Emit a GLSL expression string from an expression node.
     /// @param node The expression tree root.
     /// @param coefficients Named coefficients to inline.

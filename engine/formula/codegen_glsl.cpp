@@ -251,6 +251,40 @@ std::string CodegenGlsl::generateFile(const std::vector<const FormulaDefinition*
     return out.str();
 }
 
+std::string CodegenGlsl::generateSnippet(const FormulaDefinition& formula,
+                                         const std::map<std::string, float>& coefficients,
+                                         QualityTier tier)
+{
+    const ExprNode* expr = formula.getExpression(tier);
+    if (!expr)
+        return {};
+
+    std::ostringstream out;
+    out << "// " << sanitizeComment(formula.description) << "\n";
+    out << "// Coefficients:";
+    for (const auto& [name, value] : coefficients)
+        out << " " << name << "=" << value;
+    out << "\n";
+
+    // '/', sqrt, log and pow are emitted as the safe-math helpers, so the
+    // snippet carries their definitions, under the guard generateFile uses.
+    out << "#ifndef VESTIGE_FORMULA_PRELUDE\n#define VESTIGE_FORMULA_PRELUDE\n"
+        << SafeMath::glslPrelude() << "#endif\n";
+
+    out << toGlslType(formula.output.type) << " "
+        << toGlslFunctionName(formula.name) << "(";
+    bool first = true;
+    for (const auto& input : formula.inputs)
+    {
+        if (!first)
+            out << ", ";
+        out << toGlslType(input.type) << " " << input.name;
+        first = false;
+    }
+    out << ")\n{\n    return " << emitExpression(*expr, coefficients) << ";\n}\n";
+    return out.str();
+}
+
 std::string CodegenGlsl::safeMathPrelude()
 {
     return SafeMath::glslPrelude();
