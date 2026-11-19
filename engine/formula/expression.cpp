@@ -189,6 +189,21 @@ bool ExprNode::usesVariable(const std::string& varName) const
     return false;
 }
 
+void ExprNode::requireChildren(std::size_t count, const char* what) const
+{
+    bool complete = children.size() >= count;
+    for (std::size_t i = 0; complete && i < count; ++i)
+    {
+        complete = (children[i] != nullptr);
+    }
+    if (!complete)
+    {
+        throw std::runtime_error(std::string(what) + " requires "
+                                 + std::to_string(count)
+                                 + (count == 1 ? " child" : " children"));
+    }
+}
+
 void ExprNode::collectVariables(std::vector<std::string>& out) const
 {
     if (type == ExprNodeType::VARIABLE)

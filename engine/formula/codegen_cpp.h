@@ -29,6 +29,8 @@ public:
     /// @param formula The formula definition.
     /// @param tier Quality tier to generate (falls back to FULL).
     /// @return C++ function source code as a string.
+    /// @throws std::runtime_error if the expression is malformed or uses a
+    ///         variable that is neither an input nor a coefficient.
     static std::string generateFunction(const FormulaDefinition& formula,
                                          QualityTier tier = QualityTier::FULL);
 

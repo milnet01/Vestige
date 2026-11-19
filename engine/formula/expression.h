@@ -75,6 +75,11 @@ struct ExprNode
     /// @brief Collects all variable names referenced in this subtree.
     void collectVariables(std::vector<std::string>& out) const;
 
+    /// @brief Throws std::runtime_error unless this node has at least
+    ///        @a count children and none of the first @a count is null.
+    ///        @a what names the node kind in the message ("BINARY_OP").
+    void requireChildren(std::size_t count, const char* what) const;
+
     // -- JSON serialization -------------------------------------------------
     // Format:
     //   LITERAL:     bare number (e.g. 3.14)

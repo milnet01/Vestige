@@ -74,8 +74,9 @@ std::string CodegenGlsl::emitExpression(const ExprNode& node,
 
     case ExprNodeType::BINARY_OP:
     {
-        if (node.children.size() < 2)
-            return "0.0";
+        // A malformed node throws, as the evaluator does: writing a zero in
+        // its place would export a broken formula as code that compiles.
+        node.requireChildren(2, "BINARY_OP");
         const auto& left = *node.children[0];
         const auto& right = *node.children[1];
 
@@ -120,8 +121,7 @@ std::string CodegenGlsl::emitExpression(const ExprNode& node,
 
     case ExprNodeType::UNARY_OP:
     {
-        if (node.children.empty())
-            return "0.0";
+        node.requireChildren(1, "UNARY_OP");
         std::string arg = emitExpression(*node.children[0], coefficients);
 
         if (node.op == "negate")
@@ -153,8 +153,7 @@ std::string CodegenGlsl::emitExpression(const ExprNode& node,
 
     case ExprNodeType::CONDITIONAL:
     {
-        if (node.children.size() < 3)
-            return "0.0";
+        node.requireChildren(3, "CONDITIONAL");
         std::string cond = emitExpression(*node.children[0], coefficients);
         std::string thenExpr = emitExpression(*node.children[1], coefficients);
         std::string elseExpr = emitExpression(*node.children[2], coefficients);

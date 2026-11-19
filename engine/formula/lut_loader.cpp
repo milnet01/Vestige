@@ -68,6 +68,23 @@ bool LutLoader::loadFromFile(const std::string& path)
         return false;
     }
 
+    // The samples are read as float32 and sampled linearly. A file that
+    // says otherwise is refused, not read as if it had not said it.
+    constexpr uint32_t VALUE_TYPE_FLOAT32 = 0;
+    constexpr uint32_t KNOWN_FLAGS = static_cast<uint32_t>(LutFlags::INTERPOLATE_LINEAR);
+    if (header.valueType != VALUE_TYPE_FLOAT32)
+    {
+        Logger::warning("LutLoader: unsupported value type "
+                        + std::to_string(header.valueType) + " in: " + path);
+        return false;
+    }
+    if ((header.flags & ~KNOWN_FLAGS) != 0)
+    {
+        Logger::warning("LutLoader: unknown flags " + std::to_string(header.flags)
+                        + " in: " + path);
+        return false;
+    }
+
     // Read into locals and commit only on success: a failed load leaves the
     // table that was loaded before it untouched.
     std::vector<LutAxis> axes(header.dimensions);

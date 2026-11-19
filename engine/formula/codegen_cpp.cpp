@@ -6,11 +6,13 @@
 #include "formula/codegen_cpp.h"
 #include "formula/codegen_glsl.h"
 
+#include <algorithm>
 #include <cmath>
 #include <sstream>
 #include <stdexcept>
 #include <string>
 #include <unordered_set>
+#include <vector>
 
 namespace
 {
@@ -60,8 +62,9 @@ std::string CodegenCpp::emitExpression(const ExprNode& node,
 
     case ExprNodeType::BINARY_OP:
     {
-        if (node.children.size() < 2)
-            return "0.0f";
+        // A malformed node throws, as the evaluator does: writing a zero in
+        // its place would export a broken formula as code that compiles.
+        node.requireChildren(2, "BINARY_OP");
         const auto& left = *node.children[0];
         const auto& right = *node.children[1];
 
@@ -109,8 +112,7 @@ std::string CodegenCpp::emitExpression(const ExprNode& node,
 
     case ExprNodeType::UNARY_OP:
     {
-        if (node.children.empty())
-            return "0.0f";
+        node.requireChildren(1, "UNARY_OP");
         std::string arg = emitExpression(*node.children[0], coefficients);
 
         if (node.op == "negate")
@@ -144,8 +146,7 @@ std::string CodegenCpp::emitExpression(const ExprNode& node,
 
     case ExprNodeType::CONDITIONAL:
     {
-        if (node.children.size() < 3)
-            return "0.0f";
+        node.requireChildren(3, "CONDITIONAL");
         std::string cond = emitExpression(*node.children[0], coefficients);
         std::string thenExpr = emitExpression(*node.children[1], coefficients);
         std::string elseExpr = emitExpression(*node.children[2], coefficients);
@@ -166,6 +167,22 @@ std::string CodegenCpp::generateFunction(const FormulaDefinition& formula,
     const ExprNode* expr = formula.getExpression(tier);
     if (!expr)
         return "// No expression for formula: " + formula.name + "\n";
+
+    // A variable that is neither an input nor a coefficient would be written
+    // as a bare name and fail to compile in the generated header, far from
+    // the formula at fault. The evaluator throws for it; so does this.
+    std::vector<std::string> used;
+    expr->collectVariables(used);
+    for (const std::string& name : used)
+    {
+        const bool isInput = std::any_of(formula.inputs.begin(), formula.inputs.end(),
+            [&name](const FormulaInput& input) { return input.name == name; });
+        if (!isInput && formula.coefficients.count(name) == 0)
+        {
+            throw std::runtime_error("CodegenCpp: undefined variable '" + name
+                                     + "' in formula '" + formula.name + "'");
+        }
+    }
 
     std::ostringstream out;
 

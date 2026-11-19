@@ -295,6 +295,49 @@ TEST(CodegenGlsl, GenerateFunction)
     EXPECT_EQ(code.find("glm::"), std::string::npos);
 }
 
+// 3D_E-0874: a node with too few children made the generators write "0.0"
+// in its place, where the evaluator throws: a broken formula exported as
+// code that compiles and quietly returns the wrong number.
+TEST(CodegenBoth, ANodeMissingAChildThrowsAsTheEvaluatorDoes)
+{
+    auto binary = ExprNode::binaryOp("+", ExprNode::variable("a"), ExprNode::variable("b"));
+    binary->children.pop_back();
+    auto unary = ExprNode::unaryOp("sin", ExprNode::variable("a"));
+    unary->children.clear();
+    auto conditional = ExprNode::conditional(ExprNode::variable("a"), ExprNode::variable("b"),
+                                             ExprNode::variable("c"));
+    conditional->children.pop_back();
+
+    for (const ExprNode* node : {binary.get(), unary.get(), conditional.get()})
+    {
+        EXPECT_THROW(CodegenCpp::emitExpression(*node, {}), std::runtime_error);
+        EXPECT_THROW(CodegenGlsl::emitExpression(*node, {}), std::runtime_error);
+    }
+}
+
+// Not run red: before the fix a null child was dereferenced, which is a
+// crash and not a failing assertion.
+TEST(CodegenBoth, ANullChildThrowsAsTheEvaluatorDoes)
+{
+    auto binary = ExprNode::binaryOp("+", ExprNode::variable("a"), ExprNode::variable("b"));
+    binary->children[1].reset();
+    EXPECT_THROW(CodegenCpp::emitExpression(*binary, {}), std::runtime_error);
+    EXPECT_THROW(CodegenGlsl::emitExpression(*binary, {}), std::runtime_error);
+}
+
+// 3D_E-0874: a variable that is neither an input nor a coefficient was
+// written as a bare name, so the generated header failed to compile far from
+// the formula that caused it. The evaluator throws "Undefined variable".
+TEST(CodegenCpp, FunctionUsingAnUndefinedVariableThrows)
+{
+    auto formula = PhysicsTemplates::createFresnelSchlick();
+    ASSERT_NO_THROW(CodegenCpp::generateFunction(formula));
+
+    formula.expressions[QualityTier::FULL] =
+        ExprNode::binaryOp("*", ExprNode::variable("cosTheta"), ExprNode::variable("typo"));
+    EXPECT_THROW(CodegenCpp::generateFunction(formula), std::runtime_error);
+}
+
 // 3D_E-0813: roughness and F0 are inputs, so the exports take them as
 // parameters, and the metallic Fresnel takes and returns a vec3.
 TEST(CodegenGlsl, SpecularLobeExportsTakeRoughnessAndF0)
@@ -1002,6 +1045,45 @@ TEST(LutLoader, RejectInvalidFile)
 {
     LutLoader loader;
     EXPECT_FALSE(loader.loadFromFile("/nonexistent/path.vlut"));
+}
+
+// 3D_E-0874: the header's value type and flags were never read, so a table
+// stored in some other number format would load as garbage floats.
+TEST_F(LutFileTest, RejectsAValueTypeOrFlagItCannotRead)
+{
+    auto formula = PhysicsTemplates::createExponentialFog();
+    LutAxisDef axis{"distance", 0.0f, 100.0f, 16};
+    auto result = LutGenerator::generate(formula, {axis});
+    ASSERT_TRUE(result.success);
+    ASSERT_TRUE(LutGenerator::writeToFile(result, tmpPath));
+
+    std::string bytes;
+    {
+        std::ifstream in(tmpPath, std::ios::binary);
+        std::ostringstream buffer;
+        buffer << in.rdbuf();
+        bytes = buffer.str();
+    }
+    // Header: magic, version, dimensions, three axis sizes, value type, flags.
+    const std::size_t valueTypeAt = 24;
+    const std::size_t flagsAt = 28;
+    ASSERT_GT(bytes.size(), flagsAt + 4);
+
+    const auto loadsWith = [&](std::size_t at, uint32_t value)
+    {
+        std::string patched = bytes;
+        std::memcpy(&patched[at], &value, sizeof(value));
+        {
+            std::ofstream out(tmpPath, std::ios::binary | std::ios::trunc);
+            out.write(patched.data(), static_cast<std::streamsize>(patched.size()));
+        }
+        LutLoader loader;
+        return loader.loadFromFile(tmpPath);
+    };
+
+    EXPECT_TRUE(loadsWith(valueTypeAt, 0u)) << "the unpatched value type must load";
+    EXPECT_FALSE(loadsWith(valueTypeAt, 1u)) << "a value type other than float32 loaded";
+    EXPECT_FALSE(loadsWith(flagsAt, 0x80u)) << "an unknown flag loaded";
 }
 
 TEST_F(LutFileTest, RejectCorruptedMagic)
