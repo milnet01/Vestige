@@ -15,6 +15,7 @@
 #pragma once
 
 #include "async_driver.h"
+#include "fit_diagnostics.h"
 #include "formula_node_editor_panel.h"
 #include "markdown_render.h"
 #include "formula/curve_fitter.h"
@@ -135,12 +136,6 @@ private:
     void reseedFromHistoryForCurrentData();
 
     // -- Coefficient bounds (improvement #4) ----------------------------------
-    struct CoeffBound
-    {
-        float lower = -1e6f;
-        float upper =  1e6f;
-        bool  enabled = false;
-    };
     std::map<std::string, CoeffBound> m_coeffBounds;
 
     // -- Fit state ------------------------------------------------------------
@@ -170,10 +165,7 @@ private:
     std::vector<float> m_residuals;
 
     // -- Statistical diagnostics -----------------------------------------------
-    float m_adjustedRSquared = 0.0f;
-    float m_aic = 0.0f;
-    float m_bic = 0.0f;
-    int m_paramCount = 0;
+    FitDiagnostics m_fitDiagnostics;
     bool m_showResidualPlot = true;
 
     std::string m_plotVariable;

@@ -364,6 +364,7 @@ if(NOT WIN32)
         test_formula_tools.cpp
         test_fit_history.cpp
         test_benchmark.cpp
+        test_fit_diagnostics.cpp
         test_reference_harness.cpp
         test_async_driver.cpp
         test_pysr_parser.cpp
@@ -371,6 +372,7 @@ if(NOT WIN32)
         test_formula_node_editor_panel.cpp
         ${CMAKE_SOURCE_DIR}/tools/formula_workbench/fit_history.cpp
         ${CMAKE_SOURCE_DIR}/tools/formula_workbench/benchmark.cpp
+        ${CMAKE_SOURCE_DIR}/tools/formula_workbench/fit_diagnostics.cpp
         ${CMAKE_SOURCE_DIR}/tools/formula_workbench/reference_harness.cpp
         ${CMAKE_SOURCE_DIR}/tools/formula_workbench/async_driver.cpp
         ${CMAKE_SOURCE_DIR}/tools/formula_workbench/pysr_parser.cpp

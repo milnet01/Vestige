@@ -31,7 +31,6 @@ namespace Vestige
 InformationCriteria computeAicBic(float rmse, int nPoints, int paramCount)
 {
     InformationCriteria ic;
-    // Same degeneracy guard as workbench.cpp's in-line AIC calc:
     // n must exceed k+1 (otherwise adjusted R² is also undefined),
     // and SSE must be strictly positive so ln(SSE/n) is finite.
     if (nPoints <= paramCount + 1)

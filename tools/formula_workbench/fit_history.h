@@ -72,8 +72,8 @@ struct FitHistoryEntry
     std::map<std::string, float> coefficients;  ///< Fitted coefficient values.
     float r_squared = 0.0f;                     ///< Coefficient of determination.
     float rmse = 0.0f;                          ///< Root mean square error.
-    float aic = 0.0f;                           ///< Akaike information criterion.
-    float bic = 0.0f;                           ///< Bayesian information criterion.
+    float aic = 0.0f;                           ///< Akaike information criterion; 0 when the fit has none (FitDiagnostics).
+    float bic = 0.0f;                           ///< Bayesian information criterion; 0 when the fit has none.
     int iterations = 0;                         ///< LM iterations performed.
     bool converged = false;                     ///< True if the LM algorithm converged.
     std::string user_action;                    ///< "exported" | "discarded" | "iterated".

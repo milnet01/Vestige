@@ -177,6 +177,73 @@ bool CurveFitter::solveLinearSystem(std::vector<float> A, std::vector<float> b,
     return true;
 }
 
+double CurveFitter::computeStatistics(const ExprNode& expr,
+                                      const std::vector<DataPoint>& data,
+                                      const std::vector<std::string>& coeffNames,
+                                      const std::vector<float>& coeffValues,
+                                      FitResult& result)
+{
+    std::vector<float> residuals;
+    computeResiduals(expr, data, coeffNames, coeffValues, residuals);
+    const size_t M = data.size();
+
+    // RMSE, max error, and r² accumulators use double precision — matches
+    // the workbench v1.3.0 fix; single-precision accumulation over large
+    // datasets loses low-order bits (AUDIT.md §L3).
+    double sumSqResid = 0.0;
+    float maxErr = 0.0f;
+    for (size_t i = 0; i < M; ++i)
+    {
+        sumSqResid += static_cast<double>(residuals[i])
+                    * static_cast<double>(residuals[i]);
+        maxErr = std::max(maxErr, std::abs(residuals[i]));
+    }
+    result.rmse = static_cast<float>(
+        std::sqrt(sumSqResid / static_cast<double>(M)));
+    result.maxError = maxErr;
+
+    // R-squared: 1 - SS_res / SS_tot
+    double mean = 0.0;
+    for (const auto& dp : data)
+        mean += static_cast<double>(dp.observed);
+    mean /= static_cast<double>(M);
+
+    double ssTot = 0.0;
+    for (const auto& dp : data)
+    {
+        double diff = static_cast<double>(dp.observed) - mean;
+        ssTot += diff * diff;
+    }
+
+    if (ssTot > 1e-15)
+        result.rSquared = static_cast<float>(1.0 - sumSqResid / ssTot);
+    else
+        result.rSquared = (sumSqResid < 1e-15) ? 1.0f : 0.0f;
+
+    return sumSqResid;
+}
+
+bool CurveFitter::rescore(const FormulaDefinition& formula,
+                          const std::vector<DataPoint>& data,
+                          FitResult& result,
+                          QualityTier tier)
+{
+    const ExprNode* expr = formula.getExpression(tier);
+    if (!expr || data.empty())
+        return false;
+
+    std::vector<std::string> coeffNames;
+    std::vector<float> coeffValues;
+    for (const auto& [name, val] : result.coefficients)
+    {
+        coeffNames.push_back(name);
+        coeffValues.push_back(val);
+    }
+    result.finalError = static_cast<float>(
+        computeStatistics(*expr, data, coeffNames, coeffValues, result));
+    return true;
+}
+
 // ---------------------------------------------------------------------------
 // Main fit routine
 // ---------------------------------------------------------------------------
@@ -435,42 +502,7 @@ FitResult CurveFitter::fitWeighted(const FormulaDefinition& formula,
     for (size_t j = 0; j < N; ++j)
         result.coefficients[coeffNames[j]] = coeffValues[j];
 
-    // Compute statistics
-    // Recompute residuals with final coefficients
-    computeResiduals(*expr, data, coeffNames, coeffValues, residuals);
-
-    // RMSE, max error, and r² accumulators use double precision — matches
-    // the workbench v1.3.0 fix; single-precision accumulation over large
-    // datasets loses low-order bits (AUDIT.md §L3).
-    double sumSqResid = 0.0;
-    float maxErr = 0.0f;
-    for (size_t i = 0; i < M; ++i)
-    {
-        sumSqResid += static_cast<double>(residuals[i])
-                    * static_cast<double>(residuals[i]);
-        maxErr = std::max(maxErr, std::abs(residuals[i]));
-    }
-    result.rmse = static_cast<float>(
-        std::sqrt(sumSqResid / static_cast<double>(M)));
-    result.maxError = maxErr;
-
-    // R-squared: 1 - SS_res / SS_tot
-    double mean = 0.0;
-    for (const auto& dp : data)
-        mean += static_cast<double>(dp.observed);
-    mean /= static_cast<double>(M);
-
-    double ssTot = 0.0;
-    for (const auto& dp : data)
-    {
-        double diff = static_cast<double>(dp.observed) - mean;
-        ssTot += diff * diff;
-    }
-
-    if (ssTot > 1e-15)
-        result.rSquared = static_cast<float>(1.0 - sumSqResid / ssTot);
-    else
-        result.rSquared = (sumSqResid < 1e-15) ? 1.0f : 0.0f;
+    computeStatistics(*expr, data, coeffNames, coeffValues, result);
 
     return result;
 }

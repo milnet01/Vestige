@@ -97,7 +97,31 @@ public:
                                  QualityTier tier = QualityTier::FULL,
                                  const FitConfig& config = {});
 
+    /// @brief Recomputes `rmse`, `maxError`, `rSquared` and `finalError`
+    /// for `result.coefficients` as they now stand.
+    ///
+    /// For a caller that changed the coefficients after a fit (clamped
+    /// them to bounds, say): the statistics `fit` left describe the
+    /// coefficients it found, not the changed ones. Residuals are
+    /// unweighted. Leaves `converged`, `iterations` and `statusMessage`
+    /// alone.
+    /// @return False, with `result` untouched, when the formula has no
+    /// expression for `tier` or `data` is empty.
+    static bool rescore(const FormulaDefinition& formula,
+                        const std::vector<DataPoint>& data,
+                        FitResult& result,
+                        QualityTier tier = QualityTier::FULL);
+
 private:
+    /// @brief Fills `result.rmse`, `maxError` and `rSquared` from the
+    /// unweighted residuals of the given coefficients.
+    /// @return The unweighted sum of squared residuals.
+    static double computeStatistics(const ExprNode& expr,
+                                    const std::vector<DataPoint>& data,
+                                    const std::vector<std::string>& coeffNames,
+                                    const std::vector<float>& coeffValues,
+                                    FitResult& result);
+
     /// @brief Evaluates residuals (predicted - observed) for all data points.
     static void computeResiduals(const ExprNode& expr,
                                  const std::vector<DataPoint>& data,

@@ -795,10 +795,24 @@ void Workbench::renderValidation()
     if (m_hasFitResult)
     {
         ImGui::Separator();
-        ImGui::Text("Adjusted R²: %.4f", static_cast<double>(m_adjustedRSquared));
-        ImGui::Text("AIC: %.1f", static_cast<double>(m_aic));
-        ImGui::Text("BIC: %.1f", static_cast<double>(m_bic));
-        ImGui::Text("Parameters: %d", m_paramCount);
+        if (m_fitDiagnostics.adjustedRSquaredDefined)
+            ImGui::Text("Adjusted R²: %.4f", static_cast<double>(m_fitDiagnostics.adjustedRSquared));
+        else
+            ImGui::TextUnformatted("Adjusted R²: n/a (too few points)");
+        if (m_fitDiagnostics.aicBicDefined)
+        {
+            ImGui::Text("AIC: %.1f", static_cast<double>(m_fitDiagnostics.aic));
+            ImGui::Text("BIC: %.1f", static_cast<double>(m_fitDiagnostics.bic));
+        }
+        else
+        {
+            // Too few points also leaves adjusted R² undefined; otherwise
+            // the fit is exact (SSE 0).
+            ImGui::TextUnformatted(m_fitDiagnostics.adjustedRSquaredDefined
+                ? "AIC, BIC: n/a (exact fit)"
+                : "AIC, BIC: n/a (too few points)");
+        }
+        ImGui::Text("Parameters: %d", m_fitDiagnostics.paramCount);
     }
 
     ImGui::Checkbox("Show Residual Plot", &m_showResidualPlot);
@@ -1193,44 +1207,27 @@ void Workbench::runFit()
                                    m_coefficients, QualityTier::FULL,
                                    m_fitConfig);
 
-    // Clamp coefficients to bounds if enabled (Improvement #4)
-    for (auto& [name, val] : m_fitResult.coefficients)
-    {
-        auto boundIt = m_coeffBounds.find(name);
-        if (boundIt != m_coeffBounds.end() && boundIt->second.enabled)
-        {
-            val = std::max(boundIt->second.lower, std::min(val, boundIt->second.upper));
-        }
-    }
+    // Clamp coefficients to bounds if enabled (Improvement #4). A clamp
+    // that moves a value re-scores the fit, so everything below reads
+    // the statistics of the coefficients that will be exported.
+    const bool clamped = clampFitToBounds(*m_selectedFormula, m_dataPoints,
+                                          m_coeffBounds, m_fitResult);
 
     m_hasFitResult = true;
 
     m_statusMessage = m_fitResult.converged
         ? "Fit converged! R2=" + std::to_string(m_fitResult.rSquared)
         : "Fit did not converge: " + m_fitResult.statusMessage;
+    if (clamped)
+        m_statusMessage += " (clamped to bounds)";
     m_statusTimer = 3.0f;
 
     // Check numeric stability (Improvement #10)
     checkStability();
 
-    // Compute adjusted R², AIC, BIC
-    {
-        int n = static_cast<int>(m_dataPoints.size());
-        m_paramCount = static_cast<int>(m_fitResult.coefficients.size());
-        if (n > m_paramCount + 1)
-        {
-            m_adjustedRSquared = 1.0f - (1.0f - m_fitResult.rSquared)
-                                 * static_cast<float>(n - 1) / static_cast<float>(n - m_paramCount - 1);
-
-            // AIC = n * ln(SSE/n) + 2k
-            double sse = static_cast<double>(m_fitResult.rmse) * m_fitResult.rmse * n;
-            if (sse > 0.0)
-            {
-                m_aic = static_cast<float>(n * std::log(sse / n) + 2.0 * m_paramCount);
-                m_bic = static_cast<float>(n * std::log(sse / n) + m_paramCount * std::log(static_cast<double>(n)));
-            }
-        }
-    }
+    // Adjusted R², AIC, BIC
+    m_fitDiagnostics = computeFitDiagnostics(
+        m_fitResult, static_cast<int>(m_dataPoints.size()));
 
     rebuildVisualizationCache();
 }
@@ -1588,8 +1585,8 @@ void Workbench::exportFormula(const std::string& path)
         entry.coefficients = m_fitResult.coefficients;
         entry.r_squared    = m_fitResult.rSquared;
         entry.rmse         = m_fitResult.rmse;
-        entry.aic          = m_aic;
-        entry.bic          = m_bic;
+        entry.aic          = m_fitDiagnostics.aic;
+        entry.bic          = m_fitDiagnostics.bic;
         entry.iterations   = m_fitResult.iterations;
         entry.converged    = m_fitResult.converged;
         // W4 — only "exported" entries feed §3.2 seeding. A user
