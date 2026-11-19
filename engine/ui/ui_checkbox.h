@@ -2,7 +2,7 @@
 // SPDX-License-Identifier: MIT
 
 /// @file ui_checkbox.h
-/// @brief 20×20 checkbox widget — accent-filled when checked.
+/// @brief Checkbox widget — accent-filled when checked.
 #pragma once
 
 #include "ui/ui_element.h"
@@ -17,7 +17,7 @@ class TextRenderer;
 
 /// @brief Settings checkbox matching the design's `.check` component.
 ///
-/// 20×20 box with a 1.5 px stroke; accent-filled with a checkmark in
+/// A `UITheme::checkboxSize` box with a stroke; accent-filled with a checkmark in
 /// `accentInk` when checked. Inline label drawn to the right.
 class UICheckbox : public UIElement
 {

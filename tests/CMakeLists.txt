@@ -210,6 +210,7 @@ add_executable(vestige_tests
     test_ui_overlay_gl_state.cpp
     test_text_centering.cpp
     test_ui_canvas_layers.cpp
+    test_ui_checkbox_render.cpp
     test_graphics_settings_page.cpp
     test_settings_pages.cpp
     test_ui_world_projection.cpp
