@@ -9,6 +9,7 @@
 #include "environment/terrain_material_blend.h"
 #include "core/logger.h"
 #include "utils/atomic_write.h"
+#include "utils/stream_read.h"
 
 #include <nlohmann/json.hpp>
 
@@ -836,15 +837,14 @@ bool Terrain::loadHeightmap(const std::filesystem::path& path)
     }
 
     file.seekg(0);
-    const auto wantBytes = static_cast<std::streamsize>(m_heightData.size() * sizeof(float));
-    file.read(reinterpret_cast<char*>(m_heightData.data()), wantBytes);
-    // AUDIT M25: short reads (mid-read I/O error, file truncated between
-    // tellg() and read()) would leave m_heightData half-fresh / half-stale.
-    if (file.gcount() != wantBytes)
+    // AUDIT M25: a short read (mid-read I/O error, file truncated between
+    // tellg() and read()) must not leave m_heightData half new, half old.
+    std::streamsize gotBytes = 0;
+    if (!readWholeOrKeep(file, m_heightData, &gotBytes))
     {
         Logger::error("Terrain: heightmap read short: got "
-                     + std::to_string(file.gcount()) + " / "
-                     + std::to_string(wantBytes) + " bytes");
+                     + std::to_string(gotBytes) + " / "
+                     + std::to_string(expectedSize) + " bytes");
         return false;
     }
 
@@ -922,16 +922,14 @@ bool Terrain::loadSplatmap(const std::filesystem::path& path)
     }
 
     file.seekg(0);
-    const auto wantSplatBytes =
-        static_cast<std::streamsize>(m_splatData.size() * sizeof(glm::vec4));
-    file.read(reinterpret_cast<char*>(m_splatData.data()), wantSplatBytes);
-    // AUDIT M25: check gcount so a truncated splatmap doesn't leak stale
-    // bytes into the freshly-sized buffer.
-    if (file.gcount() != wantSplatBytes)
+    // AUDIT M25: a truncated splatmap must not leave m_splatData half new,
+    // half old.
+    std::streamsize gotSplatBytes = 0;
+    if (!readWholeOrKeep(file, m_splatData, &gotSplatBytes))
     {
         Logger::error("Terrain: splatmap read short: got "
-                     + std::to_string(file.gcount()) + " / "
-                     + std::to_string(wantSplatBytes) + " bytes");
+                     + std::to_string(gotSplatBytes) + " / "
+                     + std::to_string(expectedSize) + " bytes");
         return false;
     }
 
