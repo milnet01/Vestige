@@ -85,6 +85,8 @@ public:
     /// @param color Text color.
     /// @param screenWidth Viewport width for ortho projection.
     /// @param screenHeight Viewport height for ortho projection.
+    /// @param alpha Opacity: 1 is solid, 0 is invisible. The text blends
+    ///        with what is already drawn behind it.
     ///
     /// Phase 10.9 Pe1 — when a frame batch is open
     /// (`beginBatch2D` ↔ `endBatch2D`), this call accumulates glyphs into the
@@ -92,7 +94,8 @@ public:
     /// HUD pass collapses ~18 per-string draws into one. Outside of a batch
     /// the call retains pre-Pe1 single-string behaviour.
     void renderText2D(const std::string& text, float x, float y, float scale,
-                      const glm::vec3& color, int screenWidth, int screenHeight);
+                      const glm::vec3& color, int screenWidth, int screenHeight,
+                      float alpha = 1.0f);
 
     /// @brief Renders text with italic-oblique shear (Phase 10.9 P6).
     ///
@@ -186,7 +189,7 @@ private:
     ///        `renderText2DOblique`. `shearFactor == 0.0f` produces
     ///        upright text; non-zero applies the italic shear.
     void renderText2DImpl(const std::string& text, float x, float y, float scale,
-                          const glm::vec3& color, int screenWidth, int screenHeight,
+                          const glm::vec4& color, int screenWidth, int screenHeight,
                           float shearFactor);
 
     /// @brief Resolve a codepoint to its (font, glyph) via the stack, with a
@@ -237,10 +240,10 @@ private:
     /// with comfortable headroom (~1.3 MB VBO at 7 floats/vert × 6 verts).
     static constexpr int  MAX_GLYPHS_PER_BATCH = 8192;
     static constexpr int  VERTS_PER_GLYPH      = 6;
-    /// @brief Per-vertex layout: xy position, uv texcoord, rgb color.
+    /// @brief Per-vertex layout: xy position, uv texcoord, rgba color.
     /// Pe1 added the per-vertex color so a single batch can mix HUD
     /// element colors without splitting the draw.
-    static constexpr int  FLOATS_PER_VERT      = 7;
+    static constexpr int  FLOATS_PER_VERT      = 8;
     static constexpr std::size_t VBO_BYTES     =
         sizeof(float) * VERTS_PER_GLYPH * FLOATS_PER_VERT * MAX_GLYPHS_PER_BATCH;
 

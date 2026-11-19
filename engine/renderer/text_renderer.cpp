@@ -103,7 +103,7 @@ void TextRenderer::setupQuadBuffers()
 
     // AUDIT M29: batch the whole string into one upload + one draw. Pe1
     // grew the VBO to hold a frame's worth of HUD strings (8192 glyphs)
-    // and the per-vertex layout to xy + uv + rgb (7 floats per vert).
+    // and the per-vertex layout to xy + uv + rgba (FLOATS_PER_VERT).
     glNamedBufferStorage(m_vbo, VBO_BYTES, nullptr, GL_DYNAMIC_STORAGE_BIT);
 
     constexpr GLsizei kStride = FLOATS_PER_VERT * sizeof(float);
@@ -114,9 +114,9 @@ void TextRenderer::setupQuadBuffers()
     glVertexArrayAttribFormat(m_vao, 0, 4, GL_FLOAT, GL_FALSE, 0);
     glVertexArrayAttribBinding(m_vao, 0, 0);
 
-    // Attribute 1: vec3 (r, g, b) at offset 16 (Pe1).
+    // Attribute 1: vec4 (r, g, b, a) at offset 16 (Pe1).
     glEnableVertexArrayAttrib(m_vao, 1);
-    glVertexArrayAttribFormat(m_vao, 1, 3, GL_FLOAT, GL_FALSE, 4 * sizeof(float));
+    glVertexArrayAttribFormat(m_vao, 1, 4, GL_FLOAT, GL_FALSE, 4 * sizeof(float));
     glVertexArrayAttribBinding(m_vao, 1, 0);
 }
 
@@ -135,28 +135,30 @@ float applyShear(float x, float y, float baselineY, float factor)
 } // namespace text_oblique
 
 void TextRenderer::renderText2D(const std::string& text, float x, float y, float scale,
-                                  const glm::vec3& color, int screenWidth, int screenHeight)
+                                  const glm::vec3& color, int screenWidth, int screenHeight,
+                                  float alpha)
 {
-    renderText2DImpl(text, x, y, scale, color, screenWidth, screenHeight, 0.0f);
+    renderText2DImpl(text, x, y, scale, glm::vec4(color, alpha), screenWidth, screenHeight, 0.0f);
 }
 
 void TextRenderer::renderText2DOblique(const std::string& text, float x, float y, float scale,
                                          const glm::vec3& color, int screenWidth, int screenHeight,
                                          float shearFactor)
 {
-    renderText2DImpl(text, x, y, scale, color, screenWidth, screenHeight, shearFactor);
+    renderText2DImpl(text, x, y, scale, glm::vec4(color, 1.0f), screenWidth, screenHeight,
+                     shearFactor);
 }
 
 namespace
 {
 // Helper: append the vertex data for one glyph quad into `verts` with
-// position + UV + rgb (7 floats per vert × 6 verts). Pulled out so the
+// position + UV + rgba (FLOATS_PER_VERT × 6 verts). Pulled out so the
 // batched and immediate paths share one source of truth (CLAUDE.md Rule 3).
 void appendGlyphVerts(std::vector<float>& verts,
                       float xpos, float ypos, float w, float h,
                       float u0, float v0, float u1, float v1,
                       float baselineY, float shearFactor,
-                      const glm::vec3& color)
+                      const glm::vec4& color)
 {
     const float topY    = ypos;
     const float bottomY = ypos + h;
@@ -166,12 +168,12 @@ void appendGlyphVerts(std::vector<float>& verts,
     const float xBottomR = text_oblique::applyShear(xpos + w, bottomY, baselineY, shearFactor);
 
     verts.insert(verts.end(), {
-        xTopL,    topY,    u0, v0, color.r, color.g, color.b,
-        xTopR,    topY,    u1, v0, color.r, color.g, color.b,
-        xBottomL, bottomY, u0, v1, color.r, color.g, color.b,
-        xTopR,    topY,    u1, v0, color.r, color.g, color.b,
-        xBottomR, bottomY, u1, v1, color.r, color.g, color.b,
-        xBottomL, bottomY, u0, v1, color.r, color.g, color.b,
+        xTopL,    topY,    u0, v0, color.r, color.g, color.b, color.a,
+        xTopR,    topY,    u1, v0, color.r, color.g, color.b, color.a,
+        xBottomL, bottomY, u0, v1, color.r, color.g, color.b, color.a,
+        xTopR,    topY,    u1, v0, color.r, color.g, color.b, color.a,
+        xBottomR, bottomY, u1, v1, color.r, color.g, color.b, color.a,
+        xBottomL, bottomY, u0, v1, color.r, color.g, color.b, color.a,
     });
 }
 } // namespace
@@ -342,7 +344,7 @@ void TextRenderer::endBatch2D()
 }
 
 void TextRenderer::renderText2DImpl(const std::string& text, float x, float y, float scale,
-                                      const glm::vec3& color, int screenWidth, int screenHeight,
+                                      const glm::vec4& color, int screenWidth, int screenHeight,
                                       float shearFactor)
 {
     if (!m_initialized || text.empty())
@@ -492,7 +494,7 @@ void TextRenderer::renderText3D(const std::string& text, const glm::mat4& modelM
 
         // 3D path — no italic shear, baseline = ypos so applyShear is identity.
         appendGlyphVerts(runVertsFor(runs, hit.font), xpos, ypos, w, h,
-                         u0, v0, u1, v1, ypos, 0.0f, color);
+                         u0, v0, u1, v1, ypos, 0.0f, glm::vec4(color, 1.0f));
         ++emitted;
 
         cursorX += static_cast<float>(glyph.advance) / 64.0f * pixelScale;
@@ -604,7 +606,7 @@ std::shared_ptr<Texture> TextRenderer::generateTextHeightMap(const std::string& 
         float v1 = v0 + glyph.atlasSize.y;
 
         appendGlyphVerts(runVertsFor(runs, hit.font), xpos, ypos, w, h,
-                         u0, v0, u1, v1, cursorY, 0.0f, textColor);
+                         u0, v0, u1, v1, cursorY, 0.0f, glm::vec4(textColor, 1.0f));
 
         cursorX += static_cast<float>(glyph.advance) / 64.0f * scale;
     }

@@ -57,9 +57,8 @@ void UIInteractionPrompt::render(SpriteBatchRenderer& /*batch*/,
     if (!proj.visible) return;
 
     const glm::vec2 finalPos = proj.screenPos + screenOffset;
-    const glm::vec3 fadedColor = color * alpha;
     textRenderer->renderText2D(composedText(), finalPos.x, finalPos.y,
-                                scale, fadedColor, screenWidth, screenHeight);
+                                scale, color, screenWidth, screenHeight, alpha);
 }
 
 } // namespace Vestige

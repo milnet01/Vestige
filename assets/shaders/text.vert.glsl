@@ -3,17 +3,17 @@
 
 /// @file text.vert.glsl
 /// @brief Text rendering vertex shader — transforms glyph quads with packed
-///        position, UV and per-vertex RGB color (Phase 10.9 Pe1 batched path).
+///        position, UV and per-vertex RGBA color (Phase 10.9 Pe1 batched path).
 #version 450 core
 
 layout(location = 0) in vec4 vertex;  // xy = position, zw = texcoord
-layout(location = 1) in vec3 a_color; // per-vertex RGB so a single batch can mix HUD colors
+layout(location = 1) in vec4 a_color; // per-vertex RGBA so a single batch can mix HUD colors
 
 uniform mat4 u_projection;
 uniform mat4 u_model;
 
 out vec2 v_texCoord;
-out vec3 v_color;
+out vec4 v_color;
 
 void main()
 {
