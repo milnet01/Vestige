@@ -25,6 +25,57 @@ may change any interface without notice.
 
 ## [Unreleased]
 
+### 2026-11-20 Fixed — sound memory between scenes, cloth size limit, wind, path clearing, Workbench cancel, audit tool memory (3D_E-0874)
+
+- **Closing a scene stops its sounds and frees them** (3D_E-0874)
+  Sounds loaded for a scene stayed in memory after the scene closed, and
+  its automatically played sounds were never stopped. Unloading a scene
+  now stops those sounds and frees every sound nothing is playing. A
+  sound that is still playing is kept until it stops.
+
+- **Cloth is limited to 256 by 256 points on the GPU too, and reports
+  its real size** (3D_E-0874)
+  Only the CPU cloth had the limit, and it still reported the size that
+  was asked for. Both now cut a larger request to 256 a side and report
+  the grid they built.
+
+- **Wind varies smoothly from place to place** (3D_E-0874)
+  The wind's place-to-place variation was random at every point, so two
+  spots a centimetre apart could differ by almost the full wind speed.
+  It now changes gradually over the turbulence scale.
+
+- **Clearing plants along a path leaves no gaps on a long stretch**
+  (3D_E-0874)
+  A path with many close waypoints and one long stretch was cleared in
+  widely spaced circles along the long part. Clearing now steps by
+  distance along the path, for the density map and for placed foliage.
+
+- **Scripting shutdown removes its event handlers** (3D_E-0874)
+  Shutting the scripting system down left its handlers registered, each
+  pointing at the system that was going away.
+
+- **Formula Workbench: Cancel works on a helper that closed its output**
+  (3D_E-0874)
+  A helper script that closed its output and kept running could not be
+  cancelled; the run ended only when the script did.
+
+- **Formula Workbench: a PySR failure with code 2 names both causes**
+  (3D_E-0874)
+  The panel said only "PySR not installed", but the script also exits
+  with that code when it refuses its arguments.
+
+- **Audit tool: a command's output no longer fills memory** (3D_E-0874)
+  Output was held whole in memory and cut afterwards. It now goes to
+  temporary files and only its start and end are read back. Loading the
+  tool with no config file no longer changes its built-in defaults.
+
+### 2026-11-20 Removed — unused uphill damping setting (3D_E-0874)
+
+- **`terrainDampingUp` is gone from the first-person controller**
+  (3D_E-0874)
+  The setting had no effect: the camera already follows rising ground
+  at once. Walking feels the same.
+
 ### 2026-11-20 Fixed — Workbench helper messages, audit web UI, Cursor bridge, asset scripts (3D_E-0874)
 
 - **Formula Workbench: a helper killed from outside is not "cancelled by

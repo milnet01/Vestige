@@ -1,6 +1,6 @@
 <!-- ants-roadmap-format: 1 -->
 <!-- Generated from the Ants Terminal roadmap store. Edit it with roadmap_log; hand edits are discarded by the next write. -->
-<!-- ants-roadmap-id-high-water: 3D_E=992 3D_E#S=989 -->
+<!-- ants-roadmap-id-high-water: 3D_E=993 3D_E#S=989 -->
 
 # Vestige Engine Roadmap
 
@@ -7667,6 +7667,17 @@ shipped that have no invocation path at all.
   folder is refused before any work). Left open: lane-12 workbench.cpp
   675 (plot cache). workbench.cpp is in no test binary, so its red run
   needs a way to drive the Workbench window from a test first.
+  2026-11-20 (second batch): ten more REAL rows fixed, red tests first.
+  Decision rows, settled by the user 2026-11-20: terrainDampingUp
+  removed, cloth grid cap on both backends with getConfig() reporting
+  the built grid, flushBufferCache made safe and called from
+  AudioSystem::onSceneUnload (43e85e2). Workbench: cancel reaches a
+  child that closed stdout, PySR exit 2 names both causes (e046b8b).
+  Audit tool: output cap bounds memory, DEFAULTS no longer mutated
+  (5ae45a4). ScriptingSystem::shutdown unsubscribes (aaa3b86). Smooth
+  spatial wind, path clearing stepped by distance (d9d2a4b). Still
+  open: workbench.cpp 675 (needs a headless Workbench test target)
+  and the rows the lane files still list as REAL.
   **Layman:** About 290 lower-risk possible bugs and the medium findings are still unchecked.
   Kind: review-fix.
   Source: review-readability 2026-10-31 at 7b2a81d.
@@ -8250,6 +8261,17 @@ shipped that have no invocation path at all.
   **Layman:** Check whether a full disk can leave a half-written last line in the frame log, which the analyser would then refuse.
   Kind: investigate.
   Source: frameledger FLED-0040 code review, 2026-11-20.
+
+- 📋 [3D_E-0993] **A deleted entity's auto-played looping sound is never stopped.**
+  Read, not run (2026-11-20): AudioSystem::update reaps a tracked
+  source whose entity is gone (AudioSourceTracker::reap) but nothing
+  calls stopSound for it, so a looping source would keep playing.
+  Scene unload now stops tracked sounds (43e85e2); deleting one
+  entity mid-scene does not. First step: a test with a null audio
+  device that removes an entity and reads the source state back.
+  **Layman:** Deleting an object that plays a looping sound may leave the sound playing until the scene closes.
+  Kind: fix.
+  Source: 3D_E-0874 sound-cache work, 2026-11-20.
 
 ## 0.3.0 — An editor a builder can use
 
