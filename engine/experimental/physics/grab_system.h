@@ -56,10 +56,10 @@ public:
     bool isHolding() const { return m_holding; }
 
     /// @brief Returns the entity currently being held, or nullptr.
-    Entity* getHeldEntity() const { return m_heldEntity; }
+    Entity* getHeldEntity() const { return findEntity(m_heldEntityId); }
 
     /// @brief Returns the entity currently being looked at, or nullptr.
-    Entity* getLookedAtEntity() const { return m_lookedAtEntity; }
+    Entity* getLookedAtEntity() const { return findEntity(m_lookedAtEntityId); }
 
     /// @brief Returns the distance to the looked-at entity.
     float getLookAtDistance() const { return m_lookAtDistance; }
@@ -83,12 +83,20 @@ private:
     /// @brief Cleans up grab state (constraint, holder body).
     void cleanupGrab(PhysicsWorld& world);
 
-    // Cached world reference for destructor cleanup
-    PhysicsWorld* m_world = nullptr;
+    /// @brief The entity with this id in the scene last passed in, or null:
+    /// the id of an entity deleted since then finds nothing.
+    Entity* findEntity(uint32_t id) const;
 
+    // The world and scene last passed in: the world for destructor cleanup,
+    // the scene to turn the ids below back into entities.
+    PhysicsWorld* m_world = nullptr;
+    Scene* m_scene = nullptr;
+
+    // Entities are remembered by id, never by pointer: the scene may delete
+    // one between two updates. 0 is no entity (ids start at 1).
     // Held object state
     bool m_holding = false;
-    Entity* m_heldEntity = nullptr;
+    uint32_t m_heldEntityId = 0;
     JPH::BodyID m_heldBodyId;
     JPH::BodyID m_holderBodyId;        ///< Invisible kinematic body at hold position
     ConstraintHandle m_holdConstraint;
@@ -96,7 +104,7 @@ private:
     float m_throwForce = 10.0f;        ///< Cached from InteractableComponent
 
     // Look-at state
-    Entity* m_lookedAtEntity = nullptr;
+    uint32_t m_lookedAtEntityId = 0;
     float m_lookAtDistance = 0.0f;
 };
 

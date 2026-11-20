@@ -15,6 +15,10 @@
 #include "experimental/physics/dismemberment_zones.h"
 #include "experimental/physics/dismemberment.h"
 #include "scene/interactable_component.h"
+#include "physics/physics_world.h"
+#include "physics/rigid_body.h"
+#include "renderer/camera.h"
+#include "scene/scene.h"
 #include "animation/skeleton.h"
 #include "renderer/mesh.h"
 #include "utils/aabb.h"
@@ -346,6 +350,62 @@ TEST_F(GrabSystemTest, DefaultState)
     GrabSystem system;
     EXPECT_FALSE(system.isHolding());
     EXPECT_EQ(system.getHeldEntity(), nullptr);
+    EXPECT_EQ(system.getLookedAtEntity(), nullptr);
+}
+
+namespace
+{
+
+// A grabbable box two metres in front of a camera at the origin.
+struct GrabScene
+{
+    PhysicsWorld world;
+    Scene scene;
+    Camera camera{glm::vec3(0.0f)};
+    Entity* box = nullptr;
+
+    GrabScene()
+    {
+        EXPECT_TRUE(world.initialize());
+        box = scene.createEntity("Box");
+        box->transform.position = camera.getPosition() + camera.getFront() * 2.0f;
+        auto* body = box->addComponent<RigidBody>();
+        body->motionType = BodyMotionType::DYNAMIC;
+        body->shapeType = CollisionShapeType::BOX;
+        body->shapeSize = glm::vec3(0.5f);
+        box->addComponent<InteractableComponent>();
+        scene.update(0.0f);
+        body->createBody(world);
+    }
+};
+
+} // namespace
+
+// 3D_E-0874 (lane-08 grab_system.cpp 22): the destructor cleans up through a
+// world pointer that only update() used to set.
+TEST_F(GrabSystemTest, GrabBeforeAnyUpdateIsCleanedUpOnDestruction_0874)
+{
+    GrabScene s;
+    {
+        GrabSystem system;
+        ASSERT_TRUE(system.tryGrab(s.world, s.camera, s.scene));
+        EXPECT_EQ(s.world.getConstraintHandles().size(), 1u);
+    }
+    EXPECT_EQ(s.world.getConstraintHandles().size(), 0u);
+}
+
+// 3D_E-0874 (lane-08 grab_system.h 91): the looked-at entity was kept as a
+// pointer and read on the next update, after the scene may have deleted it.
+TEST_F(GrabSystemTest, DeletedLookedAtEntityIsForgotten_0874)
+{
+    GrabScene s;
+    GrabSystem system;
+    system.update(s.world, s.camera, s.scene, 1.0f / 60.0f);
+    ASSERT_EQ(system.getLookedAtEntity(), s.box);
+
+    ASSERT_TRUE(s.scene.removeEntity(s.box->getId()));
+    EXPECT_EQ(system.getLookedAtEntity(), nullptr);
+    system.update(s.world, s.camera, s.scene, 1.0f / 60.0f);  // must not touch the deleted box
     EXPECT_EQ(system.getLookedAtEntity(), nullptr);
 }
 

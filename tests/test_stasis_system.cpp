@@ -7,6 +7,10 @@
 
 #include "experimental/physics/stasis_system.h"
 
+#include "physics/physics_world.h"
+
+#include <Jolt/Physics/Collision/Shape/SphereShape.h>
+
 #include <gtest/gtest.h>
 
 using namespace Vestige;
@@ -93,4 +97,33 @@ TEST(StasisSystemTest, MultipleOperationsSequenceDoesNotCrash)
     system.releaseAll();
 
     EXPECT_EQ(system.getActiveCount(), 0u);
+}
+
+// 3D_E-0874 (lane-08 stasis_system 47): a full freeze put the body to sleep
+// once. Anything that woke it (a contact, an impulse) left it moving for the
+// rest of the stasis.
+TEST(StasisSystemTest, FrozenBodyWokenByAPushIsFrozenAgain_0874)
+{
+    PhysicsWorld world;
+    ASSERT_TRUE(world.initialize());
+    const JPH::BodyID id =
+        world.createDynamicBody(new JPH::SphereShape(0.5f), glm::vec3(0.0f, 10.0f, 0.0f));
+    ASSERT_FALSE(id.IsInvalid());
+
+    StasisSystem system;
+    system.setPhysicsWorld(&world);
+    system.applyStasis(id.GetIndexAndSequenceNumber(), 0.0f, 0.0f);  // no end, full freeze
+    JPH::BodyInterface& bodies = world.getBodyInterface();
+    ASSERT_FALSE(bodies.IsActive(id));
+
+    bodies.AddImpulse(id, JPH::Vec3(5.0f, 0.0f, 0.0f));  // wakes the body
+    ASSERT_TRUE(bodies.IsActive(id));
+
+    system.update(1.0f / 60.0f);
+    EXPECT_FALSE(bodies.IsActive(id));
+    EXPECT_EQ(bodies.GetLinearVelocity(id), JPH::Vec3::sZero());
+
+    system.releaseAll();
+    world.destroyBody(id);
+    world.shutdown();
 }

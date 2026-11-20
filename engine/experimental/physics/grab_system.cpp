@@ -23,14 +23,18 @@ GrabSystem::~GrabSystem()
     {
         cleanupGrab(*m_world);
     }
-    m_heldEntity = nullptr;
-    m_lookedAtEntity = nullptr;
+}
+
+Entity* GrabSystem::findEntity(uint32_t id) const
+{
+    return (m_scene != nullptr && id != 0) ? m_scene->findEntityById(id) : nullptr;
 }
 
 void GrabSystem::update(PhysicsWorld& world, const Camera& camera,
                         Scene& scene, float deltaTime)
 {
     m_world = &world;
+    m_scene = &scene;
 
     updateLookAt(world, camera, scene);
 
@@ -44,6 +48,11 @@ bool GrabSystem::tryGrab(PhysicsWorld& world, const Camera& camera, Scene& scene
 {
     if (m_holding)
         return false;
+
+    // A grab can come before the first update; the destructor needs the
+    // world to take the holder body and constraint back out.
+    m_world = &world;
+    m_scene = &scene;
 
     // Raycast from camera
     glm::vec3 origin = camera.getPosition();
@@ -114,7 +123,7 @@ bool GrabSystem::tryGrab(PhysicsWorld& world, const Camera& camera, Scene& scene
     }
 
     m_holding = true;
-    m_heldEntity = hitEntity;
+    m_heldEntityId = hitEntity->getId();
     m_heldBodyId = hitBody;
 
     Logger::info("Grabbed entity '" + hitEntity->getName() + "'");
@@ -160,13 +169,13 @@ void GrabSystem::throwObject(PhysicsWorld& world, const glm::vec3& direction,
 void GrabSystem::updateLookAt(PhysicsWorld& world, const Camera& camera, Scene& scene)
 {
     // Clear previous highlight
-    if (m_lookedAtEntity)
+    if (Entity* lookedAt = findEntity(m_lookedAtEntityId))
     {
-        auto* interactable = m_lookedAtEntity->getComponent<InteractableComponent>();
+        auto* interactable = lookedAt->getComponent<InteractableComponent>();
         if (interactable)
             interactable->highlighted = false;
-        m_lookedAtEntity = nullptr;
     }
+    m_lookedAtEntityId = 0;
 
     // Don't update look-at while holding
     if (m_holding)
@@ -203,7 +212,7 @@ void GrabSystem::updateLookAt(PhysicsWorld& world, const Camera& camera, Scene& 
     if (!canGrab(*interactable, distance))
         return;
 
-    m_lookedAtEntity = hitEntity;
+    m_lookedAtEntityId = hitEntity->getId();
     m_lookAtDistance = distance;
     interactable->highlighted = true;
 }
@@ -236,7 +245,7 @@ void GrabSystem::cleanupGrab(PhysicsWorld& world)
     }
 
     m_holding = false;
-    m_heldEntity = nullptr;
+    m_heldEntityId = 0;
     m_heldBodyId = JPH::BodyID();
 }
 

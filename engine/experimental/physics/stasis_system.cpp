@@ -169,6 +169,18 @@ void StasisSystem::update(float deltaTime)
                 bodyInterface.SetAngularVelocity(joltId, targetAngVel);
             }
         }
+        else
+        {
+            // A fully frozen body was put to sleep when stasis began. A
+            // contact or an impulse wakes it; put it back.
+            JPH::BodyID joltId(bodyId);
+            if (bodyInterface.IsAdded(joltId) && bodyInterface.IsActive(joltId))
+            {
+                bodyInterface.SetLinearVelocity(joltId, JPH::Vec3::sZero());
+                bodyInterface.SetAngularVelocity(joltId, JPH::Vec3::sZero());
+                bodyInterface.DeactivateBody(joltId);
+            }
+        }
     }
 
     // Release expired stasis effects
