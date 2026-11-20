@@ -7656,6 +7656,17 @@ shipped that have no invocation path at all.
   showed dr_wav already cuts the frame count to the audio in the file)
   and lane-22 gltf_loader 1213 (no effect: buildUpdateOrder appends the
   skipped joint).
+  2026-11-20, each proven red first: lane-12 async_driver.cpp 170 at
+  97f78c9 (only a cancel we signalled reads "cancelled by user"),
+  workbench.cpp 2254 at 87f5fff (llmRankFailureMessage in benchmark.h
+  picks the text from the exit code), lane-24 audit_bridge.py 34 and
+  app.py 173 and 263 at 8448f45 (queue puts never block; /api/init keeps
+  a .bak; /api/report serves .md only), lane-27 extension.ts 126 and 176
+  and index.ts 79 at 1f44b90 (own-key command lookup, honest status,
+  close handler), lane-26 asset_prep link sites at 59beecd (a real
+  folder is refused before any work). Left open: lane-12 workbench.cpp
+  675 (plot cache). workbench.cpp is in no test binary, so its red run
+  needs a way to drive the Workbench window from a test first.
   **Layman:** About 290 lower-risk possible bugs and the medium findings are still unchecked.
   Kind: review-fix.
   Source: review-readability 2026-10-31 at 7b2a81d.

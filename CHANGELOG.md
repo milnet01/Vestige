@@ -25,6 +25,47 @@ may change any interface without notice.
 
 ## [Unreleased]
 
+### 2026-11-20 Fixed — Workbench helper messages, audit web UI, Cursor bridge, asset scripts (3D_E-0874)
+
+- **Formula Workbench: a helper killed from outside is not "cancelled by
+  user"** (3D_E-0874)
+  A helper script that the system killed, for example when memory ran
+  out, was reported as if Cancel had been pressed. Only a real cancel
+  says so now; anything else reads "terminated by signal N".
+
+- **Formula Workbench: the Suggestions panel names the real reason a run
+  failed** (3D_E-0874)
+  Every failure blamed a missing API key. A dataset with fewer than
+  three points, or a failed request, now gets its own message.
+
+- **Audit tool web UI: a run no longer sticks with no browser tab
+  open** (3D_E-0874)
+  The run stopped for ever once its log filled the event queue and
+  nothing was reading it. Log lines are now dropped when the queue is
+  full, and the final result always gets through.
+
+- **Audit tool web UI: "Save Config" keeps the file it replaces**
+  (3D_E-0874)
+  The button rebuilds the config and overwrote hand edits. The replaced
+  text is now kept beside it with `.bak` added to the name.
+
+- **Audit tool web UI: the report viewer reads reports only**
+  (3D_E-0874)
+  `/api/report?path=` served any file under the project. It now serves
+  `.md` files only.
+
+- **Cursor bridge: three smaller fixes** (3D_E-0874)
+  A command named after a built-in object member, such as `toString`,
+  crashed the request and is now answered "unknown command". The status
+  command says when the port is held by another window instead of
+  always saying "listening". A dropped connection is reported at once
+  instead of after the five-second timeout.
+
+- **Asset scripts stop early at a real folder where their link
+  belongs** (3D_E-0874)
+  The three tree scripts failed with a raw error after downloading.
+  They now stop before any work, name the folder, and never delete it.
+
 ### 2026-11-19 Changed — frameledger v0.7.0 (3D_E-0991)
 
 - **The vendored frameledger is now v0.7.0** (3D_E-0991)
