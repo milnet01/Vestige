@@ -191,6 +191,14 @@ struct CapturedDriverOutput
 /// `anthropic` SDK; 1 is a dataset the driver refused or a failed request.
 std::string llmRankFailureMessage(const CapturedDriverOutput& result);
 
+/// @brief The "Discover via PySR" panel's error text for a finished
+/// ``pysr_driver.py`` run, or an empty string when the run succeeded.
+///
+/// Exit code 2 has two causes the panel cannot tell apart: the driver
+/// returns it when `pysr` cannot be imported, and Python's argparse exits
+/// with it when it refuses the arguments.
+std::string pysrFailureMessage(const CapturedDriverOutput& result);
+
 /// @brief Handle to a running Python driver child process.
 ///
 /// Returned by ``spawnDriverProcess`` so streaming consumers

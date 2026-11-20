@@ -2560,22 +2560,9 @@ void Workbench::renderPySRPanel()
         if (result.stdout_text.size() > m_pysrStreamingOutput.size())
             m_pysrStreamingOutput = result.stdout_text;
 
-        if (!result.error.empty())
+        if (const std::string failure = pysrFailureMessage(result); !failure.empty())
         {
-            m_pysrError = "Driver: " + result.error;
-        }
-        else if (result.exit_code == 2)
-        {
-            m_pysrError =
-                "PySR not installed. Install with `pip install pysr` "
-                "(also pulls Julia ~300 MB on first install).";
-        }
-        else if (result.exit_code != 0)
-        {
-            m_pysrError =
-                "Driver exited with code "
-                + std::to_string(result.exit_code)
-                + " — check the terminal for details.";
+            m_pysrError = failure;
         }
 
         if (auto parsed = parsePySRJsonTail(m_pysrStreamingOutput))

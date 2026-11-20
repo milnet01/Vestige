@@ -7,6 +7,7 @@
 
 #include "async_driver.h"
 
+#include <cerrno>
 #include <csignal>
 #include <sys/wait.h>
 #include <unistd.h>
@@ -145,13 +146,21 @@ void AsyncDriverJob::workerMain(DriverProcess proc, std::string stdinContents)
     }
     ::close(proc.stdout_fd);
 
-    // AUDIT M1/M2: zero m_childPid BEFORE waitpid so cancel()/poll()
-    // can no longer read a stale pid and signal a recycled process.
-    // Linux only frees a PID on waitpid; clearing the atomic just
-    // before the reap call closes the TOCTOU window (the pid is still
-    // reserved to this zombie). pidfd_open + pidfd_send_signal would
-    // be the fully race-free fix (glibc 2.36+); this is the minimal
-    // portable narrowing until that migration lands.
+    // End-of-file on stdout does not mean the child has ended: it may have
+    // closed the pipe and carried on. Wait for it to end WITHOUT reaping it
+    // (WNOWAIT), with m_childPid still set, so cancel() and poll() can still
+    // signal it. Interrupted waits are retried.
+    siginfo_t ended{};
+    while (::waitid(P_PID, static_cast<id_t>(proc.pid), &ended,
+                    WEXITED | WNOWAIT) != 0 && errno == EINTR)
+    {
+    }
+
+    // AUDIT M1/M2: zero m_childPid BEFORE the reap so cancel()/poll() can
+    // no longer read a stale pid and signal a recycled process. The child
+    // is now a zombie and Linux frees a PID only on the reap, so the pid is
+    // still reserved here. pidfd_open + pidfd_send_signal would be the
+    // fully race-free fix (glibc 2.36+).
     m_childPid.store(-1, std::memory_order_release);
 
     int status = 0;

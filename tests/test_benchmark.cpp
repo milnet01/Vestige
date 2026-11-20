@@ -551,6 +551,34 @@ TEST(WorkbenchCliArgs, NoVerbStillOpensTheGui)
 }
 
 // ---------------------------------------------------------------------------
+// 3D_E-0874 — pysr_driver.py returns 2 when `pysr` cannot be imported, and
+// argparse exits 2 when it refuses the arguments. The panel said only "PySR
+// not installed", which sends a user with PySR installed to reinstall it.
+// ---------------------------------------------------------------------------
+
+TEST(PysrFailureMessage, ExitTwoNamesBothCauses_0874)
+{
+    CapturedDriverOutput result;
+    result.exit_code = 2;
+    const std::string message = pysrFailureMessage(result);
+    EXPECT_NE(message.find("pip install pysr"), std::string::npos) << message;
+    EXPECT_NE(message.find("arguments"), std::string::npos) << message;
+    EXPECT_NE(message.find("code 2"), std::string::npos) << message;
+}
+
+TEST(PysrFailureMessage, OtherOutcomes_0874)
+{
+    CapturedDriverOutput result;
+    result.exit_code = 0;
+    EXPECT_TRUE(pysrFailureMessage(result).empty());
+    result.exit_code = 1;
+    EXPECT_NE(pysrFailureMessage(result).find("code 1"), std::string::npos);
+    EXPECT_EQ(pysrFailureMessage(result).find("pysr"), std::string::npos);
+    result.error = "cancelled by user";
+    EXPECT_EQ(pysrFailureMessage(result), "Driver: cancelled by user");
+}
+
+// ---------------------------------------------------------------------------
 // The Suggestions panel's text for a failed llm_rank.py run. The driver exits
 // 2 for a missing key or SDK and 1 for a dataset it refuses (fewer than three
 // rows) or a failed request; the panel must not blame the key for the latter.

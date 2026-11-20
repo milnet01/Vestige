@@ -341,6 +341,41 @@ TEST(AsyncDriverJob, CancelSIGTERMsTheChildProcess)
 }
 
 // ---------------------------------------------------------------------------
+// 3D_E-0874 — a child that closes its stdout and keeps running. The worker
+// saw end-of-file, forgot the child's pid and then waited for it, so
+// cancel() had nobody to signal and the job ran until the child chose to end.
+// ---------------------------------------------------------------------------
+
+TEST(AsyncDriverJob, CancelReachesAChildThatClosedStdout_0874)
+{
+    const auto script = writeTempScript("closed_stdout",
+        "import os, sys, time\n"
+        "sys.stdout.write('ready\\n')\nsys.stdout.flush()\n"
+        "os.close(1)\nos.close(2)\n"
+        "time.sleep(20)\n");
+
+    AsyncDriverJob job;
+    ASSERT_TRUE(job.start(script.string(), {}, {}));
+    ASSERT_TRUE(pollUntilStdoutContains(job, "ready", kHangGuard));
+    // Let the worker reach end-of-file on the closed pipe.
+    std::this_thread::sleep_for(std::chrono::milliseconds(300));
+    ASSERT_TRUE(job.isRunning());
+
+    const auto t0 = std::chrono::steady_clock::now();
+    EXPECT_TRUE(job.cancel());
+    const auto state = pollUntilDone(job, std::chrono::seconds(5));
+    const auto elapsed = std::chrono::duration_cast<std::chrono::milliseconds>(
+        std::chrono::steady_clock::now() - t0).count();
+
+    EXPECT_EQ(state, AsyncDriverJob::State::Done);
+    EXPECT_LT(elapsed, 5000) << "cancel() did not reach the child";
+    if (state == AsyncDriverJob::State::Done)
+    {
+        EXPECT_EQ(job.takeResult().error, "cancelled by user");
+    }
+}
+
+// ---------------------------------------------------------------------------
 // W2a — cancel rejected when idle. Matches the UI contract: the
 // Cancel button is disabled outside a run, so a stray click must not
 // crash or mutate state.

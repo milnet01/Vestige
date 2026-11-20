@@ -1025,6 +1025,29 @@ std::string llmRankFailureMessage(const CapturedDriverOutput& result)
     return head + "." + tail;
 }
 
+std::string pysrFailureMessage(const CapturedDriverOutput& result)
+{
+    if (!result.error.empty())
+    {
+        return "Driver: " + result.error;
+    }
+    if (result.exit_code == 0)
+    {
+        return {};
+    }
+    const std::string head =
+        "Driver exited with code " + std::to_string(result.exit_code);
+    const char* const tail = " Check the terminal for a detailed message.";
+    if (result.exit_code == 2)
+    {
+        return head + ": PySR is not installed (install with `pip install "
+                      "pysr`, which also pulls Julia, about 300 MB, the "
+                      "first time), or the driver refused its arguments."
+                    + tail;
+    }
+    return head + "." + tail;
+}
+
 std::string libraryToJsonString(const FormulaLibrary& library)
 {
     nlohmann::json arr = nlohmann::json::array();
