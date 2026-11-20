@@ -14,6 +14,7 @@
 
 #include <array>
 #include <cstdint>
+#include <functional>
 #include <string>
 #include <unordered_map>
 #include <vector>
@@ -70,6 +71,17 @@ public:
     ///        auto-play + source-tracking pipeline without touching AL.
     const std::unordered_map<std::uint32_t, AudioSourceTracker::TrackedSource>&
     activeSources() const { return m_sourceTracker.active(); }
+
+    /// @brief The auto-play bookkeeping behind `activeSources`. Tests seed it.
+    AudioSourceTracker& sourceTracker() { return m_sourceTracker; }
+
+    /// @brief Stops and forgets the auto-played sound of every entity
+    ///        `isGone` names, and forgets playbacks that have ended.
+    ///
+    /// A looping sound never ends on its own, so an entity deleted
+    /// mid-scene must have its sound stopped here (3D_E-0993). A source
+    /// that eviction handed to another sound is left playing.
+    void releaseSources(const std::function<bool(std::uint32_t)>& isGone);
 
     /// @brief Per-entity Mute and Solo, applied to each auto-played source's
     ///        output gain every frame. The Audio panel writes to it.

@@ -126,7 +126,7 @@ add_executable(vestige_tests
     test_audio_playback_ticket.cpp
     test_ambient_system.cpp
     test_audio_bus_activity.cpp
-    test_audio_source_reuse.cpp
+    test_audio_source_gone.cpp
     test_audio_source_reuse.cpp
     test_terrain_render_no_shadows.cpp
     test_texture_upload.cpp

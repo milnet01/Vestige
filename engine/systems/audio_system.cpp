@@ -14,6 +14,7 @@
 #include <nlohmann/json.hpp>
 
 #include <fstream>
+#include <iterator>
 #include "scene/entity.h"
 #include "scene/scene.h"
 #include "scene/scene_manager.h"
@@ -70,23 +71,45 @@ void AudioSystem::shutdown()
 
 void AudioSystem::onSceneUnload(Scene& /*scene*/)
 {
-    // Stop the sounds this scene's entities started, where the source still
-    // carries our playback (an evicted one now belongs to another sound).
+    // Every entity is leaving: stop what they started, so the next scene's
+    // auto-play starts afresh.
+    releaseSources([](std::uint32_t) { return true; });
+
+    m_audioEngine.flushBufferCache();
+}
+
+void AudioSystem::releaseSources(const std::function<bool(std::uint32_t)>& isGone)
+{
+    // 3D_E-0739 — a tracked playback is ours only while its source still
+    // carries the ticket we stored: eviction hands the victim's source name
+    // to the new sound.
+    auto carriesOurPlayback = [this](const AudioSourceTracker::TrackedSource& t)
+    {
+        return t.ticket != 0
+            && m_audioEngine.playbackTicket(t.source) == t.ticket;
+    };
+
     for (const auto& [entityId, tracked] : m_sourceTracker.active())
     {
-        if (tracked.ticket != 0
-            && m_audioEngine.playbackTicket(tracked.source) == tracked.ticket)
+        if (isGone(entityId) && carriesOurPlayback(tracked))
         {
             m_audioEngine.stopSound(tracked.source);
         }
     }
-    // Forget every entity, so the next scene's auto-play starts afresh.
     m_sourceTracker.reap(
-        [](std::uint32_t) { return true; },
-        [](const AudioSourceTracker::TrackedSource&) { return false; });
-    m_lodTiers.clear();
+        isGone,
+        [this, &carriesOurPlayback](const AudioSourceTracker::TrackedSource& t)
+        {
+            return carriesOurPlayback(t)
+                && m_audioEngine.isSourcePlaying(t.source);
+        });
 
-    m_audioEngine.flushBufferCache();
+    // AX5 — keep the tier map in step with the tracked sources.
+    for (auto it = m_lodTiers.begin(); it != m_lodTiers.end(); )
+    {
+        it = (m_sourceTracker.find(it->first) != nullptr)
+            ? std::next(it) : m_lodTiers.erase(it);
+    }
 }
 
 void AudioSystem::update(float deltaTime)
@@ -307,28 +330,14 @@ void AudioSystem::update(float deltaTime)
         m_audioEngine.applySourceState(source, composeState());
     });
 
-    // Reap entries whose source has stopped or whose entity has
-    // disappeared. Snapshot-safe iteration: the scene traversal
-    // above doesn't mutate the map, so a simple forward walk
-    // suffices.
-    m_sourceTracker.reap(
-        [scene](std::uint32_t id) { return scene->findEntityById(id) == nullptr; },
-        ownsPlayback);
-    m_sourceMuteSolo.forgetGone(
-        [scene](std::uint32_t id) { return scene->findEntityById(id) == nullptr; });
-    for (auto it = m_lodTiers.begin(); it != m_lodTiers.end(); )
+    // Stop and forget the sounds of entities that have left the scene, and
+    // forget playbacks that have ended.
+    const auto isGone = [scene](std::uint32_t id)
     {
-        // AX5 — keep the tier map in step with the tracked sources.
-        const bool tracked = m_sourceTracker.find(it->first) != nullptr;
-        if (tracked)
-        {
-            ++it;
-        }
-        else
-        {
-            it = m_lodTiers.erase(it);
-        }
-    }
+        return scene->findEntityById(id) == nullptr;
+    };
+    releaseSources(isGone);
+    m_sourceMuteSolo.forgetGone(isGone);
 
     // AX13 — hand this frame's activity to next frame's router pass.
     m_busActivePrev = m_audioEngine.busesWithLivePlayback(kBusActiveVolume);
