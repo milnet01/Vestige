@@ -66,6 +66,7 @@ bool AsyncDriverJob::start(const std::string& script,
     m_childPid.store(proc.pid, std::memory_order_release);
     m_cancelRequested = false;
     m_sigkillSent     = false;
+    m_cancelSignalled.store(false, std::memory_order_release);
     {
         std::lock_guard<std::mutex> lock(m_streamMutex);
         m_pendingStdout.clear();
@@ -164,10 +165,13 @@ void AsyncDriverJob::workerMain(DriverProcess proc, std::string stdinContents)
         const int sig = WTERMSIG(status);
         m_result.exit_code = -1;
         // Distinguish user-cancel (SIGTERM/SIGKILL we sent) from a
-        // driver crash. Either way the string is human-readable for
-        // the UI; the exit_code stays -1 so programmatic callers
-        // know it didn't exit cleanly.
-        if (sig == SIGTERM || sig == SIGKILL)
+        // driver crash or a kill from outside (the kernel's
+        // out-of-memory killer sends SIGKILL too). Either way the
+        // string is human-readable for the UI; the exit_code stays -1
+        // so programmatic callers know it didn't exit cleanly.
+        const bool weSignalled =
+            m_cancelSignalled.load(std::memory_order_acquire);
+        if (weSignalled && (sig == SIGTERM || sig == SIGKILL))
             m_result.error = "cancelled by user";
         else
             m_result.error = "terminated by signal " + std::to_string(sig);
@@ -228,8 +232,16 @@ bool AsyncDriverJob::cancel()
     if (pid <= 0)
         return false;
 
+    // Set before the signal goes out: the worker may reap the child and
+    // read the flag before kill() returns here.
+    const bool alreadySignalled =
+        m_cancelSignalled.exchange(true, std::memory_order_acq_rel);
     if (::kill(static_cast<pid_t>(pid), SIGTERM) != 0)
+    {
+        if (!alreadySignalled)
+            m_cancelSignalled.store(false, std::memory_order_release);
         return false;
+    }
 
     // Record the cancellation time so poll() can escalate. Written
     // only from the main thread (cancel / poll / takeResult), so no

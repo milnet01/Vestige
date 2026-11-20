@@ -111,7 +111,8 @@ public:
     /// worker thread needs to reap the child) and ``takeResult()``
     /// must still be called to recycle the instance. The result's
     /// ``error`` field is populated with a "cancelled by user"
-    /// marker for UI display.
+    /// marker for UI display. A child killed without cancel() reads
+    /// "terminated by signal N" instead.
     bool cancel();
 
     /// @brief Retrieve the captured output. Only valid once ``poll()``
@@ -187,6 +188,11 @@ private:
     std::chrono::steady_clock::time_point m_cancelRequestedAt{};
     bool m_cancelRequested = false;
     bool m_sigkillSent     = false;
+
+    // True once cancel() has signalled the child of the current run.
+    // The worker thread reads it to tell a cancel from a kill that
+    // came from somewhere else, so it is atomic.
+    std::atomic<bool> m_cancelSignalled{false};
 
     // Grace window between SIGTERM and SIGKILL. Mutable via the
     // public setter so tests can shorten it; production leaves the

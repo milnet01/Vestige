@@ -392,3 +392,24 @@ TEST(AsyncDriverJob, PollEscalatesToSIGKILLAfterGrace)
     EXPECT_NE(result.exit_code, 0);
     EXPECT_EQ(result.error, "cancelled by user");
 }
+
+// ---------------------------------------------------------------------------
+// A child killed by someone else (the kernel's out-of-memory killer sends
+// SIGKILL) is not a cancel: nobody pressed Cancel, so the result must not
+// say the user did.
+// ---------------------------------------------------------------------------
+
+TEST(AsyncDriverJob, KillWithoutCancelIsNotLabelledCancelled)
+{
+    const auto script = writeTempScript("selfkill",
+        "import os, signal\n"
+        "os.kill(os.getpid(), signal.SIGKILL)\n");
+
+    AsyncDriverJob job;
+    ASSERT_TRUE(job.start(script.string(), {}, {}));
+    ASSERT_EQ(pollUntilDone(job, kHangGuard), AsyncDriverJob::State::Done);
+
+    const auto result = job.takeResult();
+    EXPECT_EQ(result.exit_code, -1);
+    EXPECT_EQ(result.error, "terminated by signal 9");
+}
