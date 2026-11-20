@@ -5,6 +5,8 @@
 
 from __future__ import annotations
 
+import io
+import sys
 import tempfile
 from pathlib import Path
 
@@ -81,10 +83,10 @@ def test_capped_output_keeps_the_end(monkeypatch):
     summary is, and says what it cut."""
     monkeypatch.setattr(utils, "MAX_CAPTURED_OUTPUT_BYTES", 100)
     text = "x" * 500 + "\n100% tests passed, 0 tests failed out of 20\n"
-    out = utils._capped(text, "stdout", "ctest")
+    out = utils._read_capped(io.BytesIO(text.encode()), "stdout", "ctest")
     assert out.endswith("100% tests passed, 0 tests failed out of 20\n")
     assert out.startswith("x" * 50)
-    assert "characters cut" in out
+    assert "bytes cut" in out
     assert len(out) < 200
 
 
@@ -95,3 +97,23 @@ def test_run_shell_cmd_output_is_capped(monkeypatch):
     assert rc == 0
     assert len(out) < 200
     assert out.endswith("END\n")
+
+
+def test_run_cmd_memory_stays_near_the_cap(monkeypatch):
+    """3D_E-0874: the output was captured whole and cut afterwards, so the
+    cap bounded what was returned, not what was held in memory."""
+    import tracemalloc
+
+    monkeypatch.setattr(utils, "MAX_CAPTURED_OUTPUT_BYTES", 1024 * 1024)
+    child = "import sys\nfor _ in range(40):\n    sys.stdout.write('x' * 1048576)\nsys.stdout.write('END')\n"
+    tracemalloc.start()
+    try:
+        rc, out, _ = utils.run_cmd([sys.executable, "-c", child])
+        _, peak = tracemalloc.get_traced_memory()
+    finally:
+        tracemalloc.stop()
+    assert rc == 0
+    assert out.endswith("END")
+    assert out.startswith("xxxx")
+    assert "cut" in out
+    assert peak < 8 * 1024 * 1024, f"peak {peak} bytes for a 1 MiB cap"

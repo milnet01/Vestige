@@ -368,7 +368,8 @@ class Config:
 
 def load_config(path: str | Path | None, project_root: str | Path | None = None) -> Config:
     """Load YAML config, merge with defaults, resolve paths."""
-    raw = dict(DEFAULTS)
+    # A deep copy: tool detection below writes into the nested tables.
+    raw = copy.deepcopy(DEFAULTS)
 
     if path is not None:
         config_path = Path(path)

@@ -21,33 +21,59 @@ from __future__ import annotations
 
 import logging
 import subprocess
+import tempfile
 import time
 from pathlib import Path
 
 log = logging.getLogger("audit")
 
 # AUDIT.md §M19 / FIXPLAN J5: cap subprocess captured output. cppcheck on
-# large codebases can emit 100+ MB of XML into stderr, blowing past
-# process memory when captured via capture_output=True. Each stream is
-# cut to 64 MB, keeping its start and its end (3D_E-0864): build and test
-# runs put their summary last (ctest's "tests passed" line), so a cut that
-# kept only the start would lose the one line tier 1 reads.
+# large codebases can emit 100+ MB of XML into stderr. Each stream goes to
+# a temporary file and only its start and its end are read back, up to
+# 64 MB, so the cap bounds memory as well as the returned text. Both ends
+# are kept (3D_E-0864): build and test runs put their summary last (ctest's
+# "tests passed" line), so a cut that kept only the start would lose the
+# one line tier 1 reads.
 MAX_CAPTURED_OUTPUT_BYTES = 64 * 1024 * 1024
 
 
-def _capped(text: str, stream_name: str, cmd_desc: str) -> str:
-    """The stream, or its first and last halves of the cap when longer,
-    joined by a line saying how much was cut from the middle."""
-    if len(text) > MAX_CAPTURED_OUTPUT_BYTES:
-        log.warning(
-            "%s output from %s exceeded %d bytes — the middle was cut "
-            "(findings there may be missed)",
-            stream_name, cmd_desc, MAX_CAPTURED_OUTPUT_BYTES,
+def _read_capped(stream, stream_name: str, cmd_desc: str) -> str:
+    """The text of a finished command's output file: all of it, or the
+    first and last halves of the cap when it is longer. Reads no more than
+    the cap, whatever the file's size."""
+    size = stream.seek(0, 2)
+    stream.seek(0)
+    if size <= MAX_CAPTURED_OUTPUT_BYTES:
+        return stream.read().decode("utf-8", errors="replace")
+    log.warning(
+        "%s output from %s exceeded %d bytes — the middle was cut "
+        "(findings there may be missed)",
+        stream_name, cmd_desc, MAX_CAPTURED_OUTPUT_BYTES,
+    )
+    half = MAX_CAPTURED_OUTPUT_BYTES // 2
+    head = stream.read(half).decode("utf-8", errors="replace")
+    stream.seek(size - half)
+    tail = stream.read(half).decode("utf-8", errors="replace")
+    return f"{head}\n[... {size - 2 * half} bytes cut ...]\n{tail}"
+
+
+def _run_captured(cmd, shell: bool, cwd, timeout: int, cmd_desc) -> tuple[int, str, str]:
+    """Run ``cmd`` with stdout and stderr sent to temporary files, and
+    return (returncode, stdout, stderr) with each stream capped."""
+    with tempfile.TemporaryFile() as out, tempfile.TemporaryFile() as err:
+        result = subprocess.run(
+            cmd,
+            cwd=cwd,
+            shell=shell,
+            stdout=out,
+            stderr=err,
+            timeout=timeout,
         )
-        half = MAX_CAPTURED_OUTPUT_BYTES // 2
-        cut = len(text) - 2 * half
-        return f"{text[:half]}\n[... {cut} characters cut ...]\n{text[-half:]}"
-    return text
+        return (
+            result.returncode,
+            _read_capped(out, "stdout", cmd_desc),
+            _read_capped(err, "stderr", cmd_desc),
+        )
 
 
 def run_cmd(
@@ -69,22 +95,11 @@ def run_cmd(
     log.debug("Running (no shell): %s", cmd)
     start = time.monotonic()
     try:
-        result = subprocess.run(
-            cmd,
-            cwd=cwd,
-            shell=False,
-            capture_output=True,
-            text=True,
-            timeout=timeout,
-        )
-        elapsed = time.monotonic() - start
-        log.debug("  -> %d in %.1fs", result.returncode, elapsed)
         desc = " ".join(cmd[:3]) if cmd else "<empty>"
-        return (
-            result.returncode,
-            _capped(result.stdout, "stdout", desc),
-            _capped(result.stderr, "stderr", desc),
-        )
+        captured = _run_captured(cmd, False, cwd, timeout, desc)
+        elapsed = time.monotonic() - start
+        log.debug("  -> %d in %.1fs", captured[0], elapsed)
+        return captured
     except subprocess.TimeoutExpired:
         elapsed = time.monotonic() - start
         log.warning("Command timed out after %.1fs: %s", elapsed, cmd)
@@ -113,21 +128,10 @@ def run_shell_cmd(
     log.debug("Running (shell=True): %s", cmd)
     start = time.monotonic()
     try:
-        result = subprocess.run(
-            cmd,
-            cwd=cwd,
-            shell=True,
-            capture_output=True,
-            text=True,
-            timeout=timeout,
-        )
+        captured = _run_captured(cmd, True, cwd, timeout, cmd)
         elapsed = time.monotonic() - start
-        log.debug("  -> %d in %.1fs", result.returncode, elapsed)
-        return (
-            result.returncode,
-            _capped(result.stdout, "stdout", cmd),
-            _capped(result.stderr, "stderr", cmd),
-        )
+        log.debug("  -> %d in %.1fs", captured[0], elapsed)
+        return captured
     except subprocess.TimeoutExpired:
         elapsed = time.monotonic() - start
         log.warning("Command timed out after %.1fs: %s", elapsed, cmd)

@@ -249,3 +249,18 @@ class TestDeepMerge:
         base = {"a": 1}
         _deep_merge(base, {"a": 2})
         assert base["a"] == 1
+
+
+def test_load_config_without_a_file_leaves_defaults_alone():
+    """3D_E-0874: with no config file the defaults were copied one level
+    deep, so tool detection switched cppcheck off in DEFAULTS itself and
+    every later load in the same process inherited that."""
+    import copy
+
+    cppcheck = DEFAULTS["static_analysis"]["cppcheck"]
+    with patch.dict(cppcheck, {"enabled": True, "binary": None}):
+        before = copy.deepcopy(DEFAULTS)
+        with patch("lib.config.shutil.which", return_value=None):
+            config = load_config(None, project_root=".")
+        assert config.raw["static_analysis"]["cppcheck"]["enabled"] is False
+        assert DEFAULTS == before
