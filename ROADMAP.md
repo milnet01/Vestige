@@ -1,6 +1,6 @@
 <!-- ants-roadmap-format: 1 -->
 <!-- Generated from the Ants Terminal roadmap store. Edit it with roadmap_log; hand edits are discarded by the next write. -->
-<!-- ants-roadmap-id-high-water: 3D_E=991 3D_E#S=989 -->
+<!-- ants-roadmap-id-high-water: 3D_E=992 3D_E#S=989 -->
 
 # Vestige Engine Roadmap
 
@@ -8239,6 +8239,17 @@ shipped that have no invocation path at all.
   **Layman:** The frame-timing tool Vestige carries is now its newest release.
   Kind: chore.
   Source: frameledger release v0.7.0, 2026-11-19.
+
+- 📋 [3D_E-0992] **Frame log: can a short write leave a torn last row.**
+  Raised by a reviewer reading engine/profiler/frame_ledger_log.cpp
+  (writePending), not reproduced: if the buffered fwrite is cut short
+  (disk full), the file may end in a partial row, which frameledger
+  reads as a breach. First step: a test that makes the write fail part
+  way and reads the file back. A kill mid-write cannot be prevented;
+  a short write the engine sees can be.
+  **Layman:** Check whether a full disk can leave a half-written last line in the frame log, which the analyser would then refuse.
+  Kind: investigate.
+  Source: frameledger FLED-0040 code review, 2026-11-20.
 
 ## 0.3.0 — An editor a builder can use
 
