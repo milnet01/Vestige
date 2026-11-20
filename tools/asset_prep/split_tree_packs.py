@@ -171,13 +171,18 @@ def process_pack(species, folder, classify):
 
 
 def main():
+    # A real folder where the link belongs may hold someone's work: stop
+    # before any pack is processed and never delete it.
+    link = NATURE_LOCAL / "gameready"
+    if link.is_dir() and not link.is_symlink():
+        raise SystemExit(
+            f"{link} is a real folder, not a link. Move it away, then run again.")
     OUT.mkdir(parents=True, exist_ok=True)
     for species, (folder, classify) in PACKS.items():
         process_pack(species, folder, classify)
     downscale_written()
     # Symlink gameready/ into the engine's nature_local/.
     NATURE_LOCAL.mkdir(parents=True, exist_ok=True)
-    link = NATURE_LOCAL / "gameready"
     if link.is_symlink() or link.exists():
         link.unlink()
     link.symlink_to(OUT)

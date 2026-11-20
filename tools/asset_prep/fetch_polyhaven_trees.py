@@ -47,11 +47,23 @@ def _get(url: str) -> bytes:
         return r.read()
 
 
+def _refuse_real_folder(link: pathlib.Path) -> None:
+    """Stop, before any work, when a real folder sits where the link belongs.
+
+    The link step replaces a link or a file. A real folder may hold someone's
+    work, so it is never deleted here: the user moves it.
+    """
+    if link.is_dir() and not link.is_symlink():
+        raise SystemExit(
+            f"{link} is a real folder, not a link. Move it away, then run again.")
+
+
 def fetch_asset(name: str, res: str) -> dict:
     """Download one asset's glTF + all referenced files; return a SOURCES record."""
+    folder = f"{name}_{res}_gltf"
+    _refuse_real_folder(NATURE_LOCAL / folder)
     meta = json.loads(_get(API.format(name)))
     node = meta["gltf"][res]["gltf"]
-    folder = f"{name}_{res}_gltf"
     out_dir = LIB_TREES / folder
     (out_dir / "textures").mkdir(parents=True, exist_ok=True)
 

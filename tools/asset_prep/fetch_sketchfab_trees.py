@@ -59,12 +59,24 @@ def _get(url: str, token: str | None = None) -> bytes:
         return r.read()
 
 
+def _refuse_real_folder(link: pathlib.Path) -> None:
+    """Stop, before any work, when a real folder sits where the link belongs.
+
+    The link step replaces a link or a file. A real folder may hold someone's
+    work, so it is never deleted here: the user moves it.
+    """
+    if link.is_dir() and not link.is_symlink():
+        raise SystemExit(
+            f"{link} is a real folder, not a link. Move it away, then run again.")
+
+
 def fetch_pack(folder: str, uid: str, page: str, token: str,
                out_root: pathlib.Path = LIB_TREES) -> dict:
     """Resolve the temporary glTF download URL, fetch the zip, extract into the library.
 
     out_root selects the library category directory — Trees/ by default.
     """
+    _refuse_real_folder(NATURE_LOCAL / f"{folder}_sketchfab_gltf")
     info = json.loads(_get(DOWNLOAD_API.format(uid), token))
     if "gltf" not in info:
         raise RuntimeError(f"{folder}: no glTF download offered (keys: {list(info)})")
