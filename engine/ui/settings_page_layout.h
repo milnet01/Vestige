@@ -22,7 +22,7 @@ class TextRenderer;
 class UICheckbox;
 class UIDropdown;
 class UIElement;
-class UIPanel;
+class UIScrollRows;
 class UISlider;
 struct UITheme;
 
@@ -34,14 +34,23 @@ namespace SettingsPageLayout
 constexpr float kLabelX   = 468.0f;
 constexpr float kControlX = 1000.0f;
 constexpr float kFirstRow = 236.0f;
-constexpr float kRowStep  = 52.0f;
+// The footer rule (menu_prefabs.cpp: modalY + modalH - 70 - 16). Rows end above it.
+constexpr float kRowsBottom = 914.0f;
+// Right of the widest control (a slider and its value text), inside the modal.
+constexpr float kScrollBarX = 1720.0f;
 
-/// @brief The top of row @a row.
-float rowY(int row);
+/// @brief Top of one row to the top of the next. It grows with the theme's
+///        dropdown height, the tallest control a row holds, so rows never
+///        overlap at a larger interface scale.
+float rowStep(const UITheme& theme);
 
-/// @brief The page's container: transparent, not interactive, at the canvas
-///        origin, so a child's position is the same as on the canvas itself.
-std::unique_ptr<UIPanel> makePageRoot();
+/// @brief The top of row @a row with every row showing.
+float rowY(int row, const UITheme& theme);
+
+/// @brief The page's container, at the canvas origin, so a child's position
+///        is the same as on the canvas itself. Not interactive. It shows the
+///        rows that fit above the footer rule and scrolls to the rest.
+std::unique_ptr<UIScrollRows> makePageRoot(const UITheme& theme, std::size_t rowCount);
 
 /// @brief Adds one label per row, in order, to @a root.
 void addRowLabels(UIElement& root, const char* const* keys, std::size_t count,

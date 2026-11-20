@@ -138,9 +138,10 @@ public:
     /// @brief The topmost visible, interactive element under @a point in this
     ///        subtree, or null. Later children draw over earlier ones, so they
     ///        are tried first. @a outAbsPos receives the hit element's top-left.
-    UIElement* findInteractiveAt(const glm::vec2& point, const glm::vec2& parentOffset,
-                                 int screenWidth, int screenHeight,
-                                 glm::vec2& outAbsPos);
+    virtual UIElement* findInteractiveAt(const glm::vec2& point,
+                                         const glm::vec2& parentOffset,
+                                         int screenWidth, int screenHeight,
+                                         glm::vec2& outAbsPos);
 
     // -- Properties --
     glm::vec2 position = {0.0f, 0.0f};  ///< Position relative to anchor

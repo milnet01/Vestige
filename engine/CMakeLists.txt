@@ -348,6 +348,7 @@ set(ENGINE_SOURCES
     ui/ui_label.cpp
     ui/ui_image.cpp
     ui/ui_panel.cpp
+    ui/ui_scroll_rows.cpp
     ui/ui_crosshair.cpp
     ui/ui_progress_bar.cpp
     ui/ui_fps_counter.cpp

@@ -9,7 +9,7 @@
 #include "ui/ui_canvas.h"
 #include "ui/ui_checkbox.h"
 #include "ui/ui_frame_hook.h"
-#include "ui/ui_panel.h"
+#include "ui/ui_scroll_rows.h"
 #include "ui/ui_slider.h"
 
 #include <algorithm>
@@ -52,7 +52,7 @@ ControlsSettingsPage buildControlsSettingsPage(UICanvas& canvas, const UITheme& 
 {
     ControlsSettingsPage page;
 
-    auto root = makePageRoot();
+    auto root = makePageRoot(theme, std::size(kRowLabels));
     page.root = root.get();
     addRowLabels(*root, kRowLabels, std::size(kRowLabels), theme, text);
 

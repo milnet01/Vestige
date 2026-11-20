@@ -1294,10 +1294,15 @@ bool Engine::initialize(const EngineConfig& config)
         }
     });
 
-    // Subscribe to scroll for FOV zoom (gated by ImGui in edit mode)
+    // Subscribe to scroll for FOV zoom (gated by ImGui in edit mode). On a
+    // menu screen with rows to scroll, the wheel scrolls them instead.
     m_eventBus.subscribe<MouseScrollEvent>([this](const MouseScrollEvent& event)
     {
         if (m_editor && m_editor->wantCaptureMouse())
+        {
+            return;
+        }
+        if (isMenuScreenActive() && m_uiSystem->handleMouseScroll(event.yOffset))
         {
             return;
         }

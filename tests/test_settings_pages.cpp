@@ -294,6 +294,137 @@ TEST(AccessibilitySettingsPage, LastRowStaysAboveTheFooterRule)
     EXPECT_LT(last->position.y + last->size.y, kFooterRuleY);
 }
 
+// -- Large interface scales (3D_E-0874, lane-21 settings_page_layout.h) --------
+
+// A dropdown draws theme.dropdownHeight tall, which grows with the interface
+// scale. The row below must start under it.
+TEST(SettingsPageLayout, RowsDoNotOverlapAtDoubleScale)
+{
+    UICanvas canvas;
+    const UITheme theme = UITheme::defaultTheme().withScale(2.0f);
+    SettingsEditor editor{Settings{}, {}};
+    const AccessibilitySettingsPage page =
+        buildAccessibilitySettingsPage(canvas, theme, nullptr, editor);
+
+    // Two dropdowns on neighbouring rows.
+    const float upperBottom = page.subtitleSize->position.y + theme.dropdownHeight;
+    EXPECT_GE(page.colourVisionFilter->position.y, upperBottom);
+}
+
+// The y at which a press in the control column lands on @a control, or a
+// negative number when no press reaches it.
+float pressableTop(UISystem& ui, const UIElement* control)
+{
+    for (float y = 0.0f; y < 1080.0f; y += 2.0f)
+    {
+        glm::vec2 absPos{0.0f};
+        if (ui.getModalCanvas().findInteractiveAt({control->position.x + 4.0f, y},
+                                                  1920, 1080, absPos) == control)
+        {
+            return absPos.y;
+        }
+    }
+    return -1.0f;
+}
+
+// More rows than fit: walking down with the keyboard brings each control
+// into the page, above the footer rule.
+TEST(SettingsScreen, EveryAccessibilityRowIsReachableAtDoubleScale)
+{
+    ScreenFixture f;
+    f.ui.setScalePreset(UIScalePreset::X2_0);
+    f.ui.update(0.0f);  // a scale change rebuilds the open screens
+    f.select("ui.settings.category.accessibility");
+
+    // menu_prefabs.cpp: footer rule at modalY + modalH - 70 - 16.
+    constexpr float kFooterRuleY = 80.0f + 920.0f - 70.0f - 16.0f;
+    const float controlHeight = f.ui.getTheme().dropdownHeight;
+
+    std::vector<UIElement*> controls;
+    for (UIElement* el : tabOrder(f.ui))
+    {
+        if (dynamic_cast<UIButton*>(el) == nullptr)  // skip sidebar and footer
+        {
+            controls.push_back(el);
+        }
+    }
+    ASSERT_EQ(controls.size(), 13u);
+
+    f.ui.setFocusedElement(nullptr);
+    for (int i = 0; i < 500 && f.ui.getFocusedElement() != controls.front(); ++i)
+    {
+        f.ui.handleKey(GLFW_KEY_TAB, 0);
+    }
+    for (std::size_t i = 0; i < controls.size(); ++i)
+    {
+        ASSERT_EQ(f.ui.getFocusedElement(), controls[i]);
+        const float top = pressableTop(f.ui, controls[i]);
+        EXPECT_GE(top, 0.0f) << "control " << i << " cannot be pressed";
+        EXPECT_LE(top + controlHeight, kFooterRuleY) << "control " << i;
+        f.ui.handleKey(GLFW_KEY_TAB, 0);
+    }
+}
+
+TEST(SettingsScreen, WheelScrollsRowsThatDoNotFit)
+{
+    ScreenFixture f;
+    f.ui.setScalePreset(UIScalePreset::X2_0);
+    f.ui.update(0.0f);
+    f.select("ui.settings.category.accessibility");
+
+    std::vector<UIElement*> controls;
+    for (UIElement* el : tabOrder(f.ui))
+    {
+        if (dynamic_cast<UIButton*>(el) == nullptr)
+        {
+            controls.push_back(el);
+        }
+    }
+    ASSERT_EQ(controls.size(), 13u);
+    f.ui.setFocusedElement(nullptr);
+    f.ui.handleMouseScroll(100.0);  // walking the tab order left the last row showing
+
+    const float firstTop = pressableTop(f.ui, controls.front());
+    EXPECT_GE(firstTop, 0.0f);
+    EXPECT_LT(pressableTop(f.ui, controls.back()), 0.0f);  // below the view
+    const float secondTop = pressableTop(f.ui, controls[1]);
+    // Two dropdowns on neighbouring rows give the distance between rows.
+    const float rowStep = controls[5]->position.y - controls[4]->position.y;
+
+    // One notch towards the user: the first row leaves, the second moves up a row.
+    EXPECT_TRUE(f.ui.handleMouseScroll(-1.0));
+    EXPECT_LT(pressableTop(f.ui, controls.front()), 0.0f);
+    EXPECT_FLOAT_EQ(pressableTop(f.ui, controls[1]), secondTop - rowStep);
+
+    // Far past the end stops with the last row showing; back up restores the top.
+    f.ui.handleMouseScroll(-100.0);
+    EXPECT_GE(pressableTop(f.ui, controls.back()), 0.0f);
+    f.ui.handleMouseScroll(100.0);
+    EXPECT_FLOAT_EQ(pressableTop(f.ui, controls.front()), firstTop);
+}
+
+// At the default scale every page fits, so nothing moves.
+TEST(SettingsScreen, WheelMovesNothingWhenEveryRowFits)
+{
+    ScreenFixture f;
+    f.select("ui.settings.category.accessibility");
+    const std::vector<UIElement*> order = tabOrder(f.ui);
+    f.ui.setFocusedElement(nullptr);
+    UIElement* lastControl = nullptr;
+    for (UIElement* el : order)
+    {
+        if (dynamic_cast<UIButton*>(el) == nullptr)
+        {
+            lastControl = el;
+        }
+    }
+    ASSERT_NE(lastControl, nullptr);
+    const float before = pressableTop(f.ui, lastControl);
+    EXPECT_GE(before, 0.0f);
+    f.ui.handleMouseScroll(-3.0);
+    EXPECT_FLOAT_EQ(pressableTop(f.ui, lastControl), before);
+}
+
 // -- The sidebar ---------------------------------------------------------------
 
 TEST(SettingsScreen, OpensOnDisplay)

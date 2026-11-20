@@ -288,6 +288,12 @@ public:
     /// else. Returns true iff the UI consumed the press.
     bool handleMousePress(const glm::vec2& cursor, int screenWidth, int screenHeight);
 
+    /// @brief The mouse wheel turned by @a yOffset notches (positive: away
+    ///        from the user). Scrolls the rows of the open screen, one row a
+    ///        notch, wheel-up towards the first row. Returns true iff a
+    ///        scrolling element is showing, so the wheel is the UI's.
+    bool handleMouseScroll(double yOffset);
+
     /// @brief The mouse moved: continues a drag on the pressed element.
     void handleMouseMove(const glm::vec2& cursor);
 
@@ -369,7 +375,21 @@ private:
     /// @brief Forgets every pointer into the canvases; called before a clear.
     void dropInputTargets();
 
-    // 3D_E-0024 — set by markTextStale(), consumed by update().
+    /// @brief Closes the open dropdown list, if any. Its list is drawn where
+    ///        the dropdown was when it opened, so it cannot follow a scroll.
+    void closeOpenDropdown();
+
+    /// @brief Scrolls the focused element's row into view, if it sits in a
+    ///        scrolled-out row.
+    void revealFocusedElement();
+
+    /// @brief Stores the scale. When it changed with a screen open, the next
+    ///        `update` rebuilds the open screens: a screen's layout is fixed
+    ///        from the theme when built. The caller rebuilds the theme.
+    void changeScalePreset(UIScalePreset preset);
+
+    // 3D_E-0024 — set by markTextStale() and by a scale change; update()
+    // then rebuilds the open screens.
     bool          m_textStale   = false;
     std::uint32_t m_languageSub = 0;  ///< LanguageChangedEvent subscription (0 = none).
 };

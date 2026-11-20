@@ -13,11 +13,13 @@
 #include "ui/subtitle_renderer.h"
 #include "ui/ui_dropdown.h"
 #include "ui/ui_overlay_gl_state.h"
+#include "ui/ui_scroll_rows.h"
 
 #include <GLFW/glfw3.h>
 #include <glad/gl.h>
 
 #include <algorithm>
+#include <cmath>
 #include <utility>
 #include <vector>
 
@@ -45,6 +47,22 @@ void collectTabOrderRecursive(const UIElement* el,
     {
         collectTabOrderRecursive(el->getChildAt(i), out);
     }
+}
+
+// The showing UIScrollRows of @a canvas. Only top-level ones: that is where
+// the Settings pages put theirs, and a hidden page's is left out.
+std::vector<UIScrollRows*> collectScrollRows(UICanvas& canvas)
+{
+    std::vector<UIScrollRows*> out;
+    for (size_t i = 0; i < canvas.getElementCount(); ++i)
+    {
+        auto* rows = dynamic_cast<UIScrollRows*>(canvas.getElementAt(i));
+        if (rows != nullptr && rows->visible)
+        {
+            out.push_back(rows);
+        }
+    }
+    return out;
 }
 
 std::vector<UIElement*> collectTabOrderFromCanvas(const UICanvas& canvas)
@@ -138,9 +156,19 @@ void UISystem::setBaseTheme(const UITheme& base)
     rebuildTheme();
 }
 
+void UISystem::changeScalePreset(UIScalePreset preset)
+{
+    const bool screenOpen = m_rootScreen != GameScreen::None || !m_modalStack.empty();
+    if (preset != m_scalePreset && screenOpen)
+    {
+        m_textStale = true;
+    }
+    m_scalePreset = preset;
+}
+
 void UISystem::setScalePreset(UIScalePreset preset)
 {
-    m_scalePreset = preset;
+    changeScalePreset(preset);
     rebuildTheme();
 }
 
@@ -160,7 +188,7 @@ void UISystem::applyAccessibilityBatch(UIScalePreset scale,
                                         bool highContrast,
                                         bool reducedMotion)
 {
-    m_scalePreset   = scale;
+    changeScalePreset(scale);
     m_highContrast  = highContrast;
     m_reducedMotion = reducedMotion;
     rebuildTheme();
@@ -507,6 +535,7 @@ bool UISystem::handleKey(int key, int mods)
             }
         }
         setFocusedElement(order[next]);
+        revealFocusedElement();
     };
 
     const bool shift = (mods & GLFW_MOD_SHIFT) != 0;
@@ -614,6 +643,42 @@ bool UISystem::handleMousePress(const glm::vec2& cursor, int screenWidth, int sc
         m_openDropdownAbsPos = absPos;
     }
     return true;
+}
+
+void UISystem::closeOpenDropdown()
+{
+    if (m_openDropdown != nullptr)
+    {
+        m_openDropdown->open = false;
+        m_openDropdown = nullptr;
+    }
+}
+
+void UISystem::revealFocusedElement()
+{
+    UICanvas& active = (m_modalCanvas.getElementCount() > 0) ? m_modalCanvas : m_canvas;
+    for (UIScrollRows* rows : collectScrollRows(active))
+    {
+        if (rows->reveal(m_focusedElement))
+        {
+            closeOpenDropdown();
+        }
+    }
+}
+
+bool UISystem::handleMouseScroll(double yOffset)
+{
+    UICanvas& active = (m_modalCanvas.getElementCount() > 0) ? m_modalCanvas : m_canvas;
+    const std::vector<UIScrollRows*> scrollers = collectScrollRows(active);
+    const int rows = -static_cast<int>(std::lround(yOffset));
+    for (UIScrollRows* scroller : scrollers)
+    {
+        if (scroller->scrollRows(rows))
+        {
+            closeOpenDropdown();
+        }
+    }
+    return !scrollers.empty();
 }
 
 void UISystem::handleMouseMove(const glm::vec2& cursor)

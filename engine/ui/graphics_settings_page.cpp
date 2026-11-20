@@ -17,7 +17,7 @@
 #include "ui/ui_checkbox.h"
 #include "ui/ui_dropdown.h"
 #include "ui/ui_frame_hook.h"
-#include "ui/ui_panel.h"
+#include "ui/ui_scroll_rows.h"
 #include "ui/ui_slider.h"
 #include "ui/ui_theme.h"
 
@@ -111,7 +111,7 @@ GraphicsSettingsPage buildGraphicsSettingsPage(UICanvas& canvas, const UITheme& 
 {
     GraphicsSettingsPage page;
 
-    auto root = makePageRoot();
+    auto root = makePageRoot(theme, std::size(kRowLabels));
     addRowLabels(*root, kRowLabels, std::size(kRowLabels), theme, text);
 
     auto preset = makeDropdown(kPresetOptions, theme, text, 0, kRowLabels[0]);
