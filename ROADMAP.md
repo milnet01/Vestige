@@ -1,6 +1,6 @@
 <!-- ants-roadmap-format: 1 -->
 <!-- Generated from the Ants Terminal roadmap store. Edit it with roadmap_log; hand edits are discarded by the next write. -->
-<!-- ants-roadmap-id-high-water: 3D_E=993 3D_E#S=989 -->
+<!-- ants-roadmap-id-high-water: 3D_E=994 3D_E#S=989 -->
 
 # Vestige Engine Roadmap
 
@@ -7684,6 +7684,15 @@ shipped that have no invocation path at all.
   settings row step (rows must grow with the UI scale and may outgrow the
   modal), lane-20 audio_system m_busActivePrev (AudioSystem::update
   cannot run in a test without a full Engine).
+  2026-11-20 session 4: ddd281a (lane-21 settings rows grow with the interface
+  scale and scroll; user chose scrolling), ea366af (lane-26 split_tree_packs
+  103), 43f3345 (lane-08 motion_database 247), f53f24f (lane-08 grab_system
+  22 and 91, stasis_system 47). Four motion matcher rows moved to 3D_E-S0594.
+  Filed 3D_E-0994 (interface scale does not grow menu text). Still open, each
+  for want of a test that can fail: lane-20 audio_system 129 (needs an Engine
+  in a test), lane-10 audio_clip 172 (nothing observable but memory), lane-06
+  shader rows (need a full-pass GL harness), lane-02 main.cpp 41 (process
+  level), lane-12 workbench.cpp 675 (no headless Workbench target).
   **Layman:** About 290 lower-risk possible bugs and the medium findings are still unchecked.
   Kind: review-fix.
   Source: review-readability 2026-10-31 at 7b2a81d.
@@ -8282,6 +8291,20 @@ shipped that have no invocation path at all.
   **Layman:** Deleting an object that plays a looping sound may leave the sound playing until the scene closes.
   Kind: fix.
   Source: 3D_E-0874 sound-cache work, 2026-11-20.
+
+- 📋 [3D_E-0994] **Interface scale grows the menu's boxes but not its text.**
+  Read, not run (2026-11-20). The text scale is a literal in each
+  widget: `label->scale = 0.34f` in settings_page_layout.cpp
+  (addRowLabels), `scale = 0.30f` in ui_dropdown.cpp, `textScale = 0.4f`
+  in ui_button.cpp, `scale = 0.32f` in ui_slider.cpp. UITheme::withScale
+  multiplies typeBody / typeButton, but only the toast and the prompt
+  slot read them. Done when: at X2_0 a settings row label, a dropdown's
+  text and a button's text draw at twice their X1_0 size, proven by a
+  test that fails first. Check the modal's fixed columns (kLabelX,
+  kControlX) still fit the longer labels in every shipped language.
+  **Layman:** Choosing 1.5x or 2x interface size makes buttons and dropdowns bigger, but the words inside them stay the same small size.
+  Kind: accessibility.
+  Source: 3D_E-0874 lane-21 follow-up, 2026-11-20.
 
 ## 0.3.0 — An editor a builder can use
 
@@ -10256,6 +10279,21 @@ Sourced from a 2026-05-26 sweep following Epic's Unreal Engine 6 reveal at RLCS 
   Kind: implement.
 
 - 📋 [3D_E-S0594] **★★★★ Motion matching for animation. Current animation system blends authored clips on a state machine. Motion matching searches a tagged motion database every frame for the best-fit pose given (current state, desired velocity, terrain) and snaps to it — the open algorithm underlying Naughty Dog's Uncharted 4 + Ubisoft's For Honor + UE5's "Motion Matching Sample". Removes the per-state-transition authoring burden. Reference: "Motion Matching for Responsive Animation" GDC 2016 / 2018 talks (public slides) + the algorithmic core (no proprietary code). Pairs with existing Phase 7 animation foundation.**
+  Layman: Characters pick their next movement from a library of recorded motion, so walking, turning and stopping flow into each other without hand-built transitions.
+  2026-11-20, from 3D_E-0874 (readability review lane-08; read, not run). The
+  experimental matcher (engine/experimental/animation/motion_matcher.cpp) has
+  no caller outside its tests and is unfinished in four ways this item must
+  settle, each with a test that fails first:
+  (1) buildQueryVector reads the animator's skinning matrices (global times
+  inverse bind) while the database stores global transforms: different spaces.
+  (2) Inertialization is started and updated but its offsets are never applied
+  to a pose, so a transition snaps.
+  (3) MotionSearchResult::mirrored is never used: a mirrored match plays the
+  plain clip. Needs mirrored playback in SkeletonAnimator.
+  (4) performSearch's frame advance compares clipIndex only, so it can step from
+  a clip's plain frames into its mirrored ones; and past the database's last
+  frame neither the frame nor m_currentFrameTime moves, so the time grows until
+  the next transition. The database half (look-ahead) was fixed in 43f3345.
   Kind: implement.
 
 - 📋 [3D_E-S0595] **★★★ OpenVDB volumetric asset loader. Smoke, fire, fog, clouds authored as VDB grids (Academy-Award open standard, MPL-2.0 reference impl). Loader hands grids to the existing volumetric-fog froxel pipeline + Phase 15 cloud renderer. Lets artists drop a Houdini / Embergen export into the scene and have it rendered with zero per-asset code. Pairs with AX-stack atmospheric audio if VDB grids carry density-derived acoustic absorption metadata.**

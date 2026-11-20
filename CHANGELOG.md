@@ -25,6 +25,32 @@ may change any interface without notice.
 
 ## [Unreleased]
 
+### 2026-11-20 Fixed — Settings at large interface sizes, grabbing and freezing objects, tree texture prep, motion library (3D_E-0874)
+
+- **Settings rows no longer overlap at 1.5x and 2x interface size, and long pages scroll** (3D_E-0874)
+  Rows on the Settings pages kept their height while the controls grew,
+  so they overlapped. Rows now grow with the interface size. A page with
+  more rows than fit scrolls: with the mouse wheel, or by moving the
+  highlight with the keyboard or controller. A bar at the right shows
+  where you are. Changing the interface size while a menu is open now
+  redraws that menu at the new size.
+
+- **Grabbing: a deleted object is no longer read, and an early grab is cleaned up** (3D_E-0874)
+  The grab system remembered the object being looked at and read it on
+  the next frame, even if the scene had deleted it. It also left a hidden
+  helper body behind when a grab happened before its first update.
+
+- **A fully frozen object stays frozen when something bumps it** (3D_E-0874)
+  A bump woke a frozen object and it moved for the rest of the freeze.
+
+- **Tree texture preparation no longer shrinks other props' textures** (3D_E-0874)
+  tools/asset_prep/split_tree_packs.py shrank every texture under the
+  shared game-ready folder, including the rocks and plants another script
+  writes there. It now shrinks only the tree folders it wrote.
+
+- **Motion library: a clip's last frames no longer look ahead into its mirrored copy** (3D_E-0874)
+  Experimental motion matching only; no shipped feature uses it yet.
+
 ### 2026-11-20 Fixed — deleted object's looping sound, music ducking, lip-sync speed (3D_E-0993, 3D_E-0874)
 
 - **Deleting an object stops its looping sound** (3D_E-0993)
