@@ -549,3 +549,54 @@ TEST(WorkbenchCliArgs, NoVerbStillOpensTheGui)
     EXPECT_FALSE(runCli(runSymbolicRegressionCli, {"formula_workbench"}).has_value());
     EXPECT_FALSE(runCli(runSuggestFormulasCli, {"formula_workbench"}).has_value());
 }
+
+// ---------------------------------------------------------------------------
+// The Suggestions panel's text for a failed llm_rank.py run. The driver exits
+// 2 for a missing key or SDK and 1 for a dataset it refuses (fewer than three
+// rows) or a failed request; the panel must not blame the key for the latter.
+// ---------------------------------------------------------------------------
+
+TEST(LlmRankFailureMessage, ExitOneDoesNotBlameTheApiKey)
+{
+    CapturedDriverOutput result;
+    result.exit_code = 1;
+    const std::string message = llmRankFailureMessage(result);
+    EXPECT_EQ(message.find("ANTHROPIC_API_KEY"), std::string::npos) << message;
+    EXPECT_NE(message.find("3 data points"), std::string::npos) << message;
+    EXPECT_NE(message.find("code 1"), std::string::npos) << message;
+}
+
+TEST(LlmRankFailureMessage, ExitTwoNamesTheKeyAndTheSdk)
+{
+    CapturedDriverOutput result;
+    result.exit_code = 2;
+    const std::string message = llmRankFailureMessage(result);
+    EXPECT_NE(message.find("ANTHROPIC_API_KEY"), std::string::npos) << message;
+    EXPECT_NE(message.find("anthropic"), std::string::npos) << message;
+}
+
+TEST(LlmRankFailureMessage, OtherExitCodesGiveTheCodeOnly)
+{
+    CapturedDriverOutput result;
+    result.exit_code = 7;
+    const std::string message = llmRankFailureMessage(result);
+    EXPECT_NE(message.find("code 7"), std::string::npos) << message;
+    EXPECT_EQ(message.find("ANTHROPIC_API_KEY"), std::string::npos) << message;
+}
+
+TEST(LlmRankFailureMessage, ASignalOrCancelIsNotCalledASpawnFailure)
+{
+    CapturedDriverOutput result;
+    result.exit_code = -1;
+    result.error = "cancelled by user";
+    const std::string message = llmRankFailureMessage(result);
+    EXPECT_EQ(message.find("spawn failed"), std::string::npos) << message;
+    EXPECT_NE(message.find("cancelled by user"), std::string::npos) << message;
+}
+
+TEST(LlmRankFailureMessage, SuccessIsEmpty)
+{
+    CapturedDriverOutput result;
+    result.exit_code = 0;
+    EXPECT_TRUE(llmRankFailureMessage(result).empty());
+}

@@ -997,6 +997,34 @@ std::string findDriverScriptPath(const char* name)
     return findDriverScript(name);
 }
 
+std::string llmRankFailureMessage(const CapturedDriverOutput& result)
+{
+    // `error` covers a failed spawn, a cancel and a death by signal alike.
+    if (!result.error.empty())
+    {
+        return "Driver: " + result.error;
+    }
+    if (result.exit_code == 0)
+    {
+        return {};
+    }
+    const std::string head =
+        "Driver exited with code " + std::to_string(result.exit_code);
+    const char* const tail = " Check the terminal for a detailed message.";
+    if (result.exit_code == 2)
+    {
+        return head + ": ANTHROPIC_API_KEY is not set, or the `anthropic` "
+                      "Python SDK is not installed." + tail;
+    }
+    if (result.exit_code == 1)
+    {
+        return head + ": it refused the dataset (it needs at least 3 data "
+                      "points and one input variable), or the request "
+                      "failed." + tail;
+    }
+    return head + "." + tail;
+}
+
 std::string libraryToJsonString(const FormulaLibrary& library)
 {
     nlohmann::json arr = nlohmann::json::array();

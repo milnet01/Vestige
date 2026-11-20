@@ -2224,19 +2224,8 @@ void Workbench::renderSuggestionsPanel()
     if (m_suggestionsJob.poll() == AsyncDriverJob::State::Done)
     {
         const auto result = m_suggestionsJob.takeResult();
-        if (!result.error.empty())
-        {
-            m_suggestionsError = "Driver spawn failed: " + result.error;
-        }
-        else if (result.exit_code != 0)
-        {
-            m_suggestionsError =
-                "Driver exited with code "
-                + std::to_string(result.exit_code)
-                + " — missing ANTHROPIC_API_KEY or `anthropic` SDK? "
-                  "Check the terminal for a detailed message.";
-        }
-        else
+        m_suggestionsError = llmRankFailureMessage(result);
+        if (m_suggestionsError.empty())
         {
             m_suggestionsOutput       = result.stdout_text;
             m_suggestionsBlocks.clear();   // force re-parse on next frame

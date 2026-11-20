@@ -183,6 +183,14 @@ struct CapturedDriverOutput
     std::string error;
 };
 
+/// @brief The Suggestions panel's error text for a finished
+/// ``llm_rank.py`` run, or an empty string when the run succeeded.
+///
+/// The driver's own message goes to the terminal, not to us, so the text
+/// is chosen from the exit code: 2 is a missing ANTHROPIC_API_KEY or
+/// `anthropic` SDK; 1 is a dataset the driver refused or a failed request.
+std::string llmRankFailureMessage(const CapturedDriverOutput& result);
+
 /// @brief Handle to a running Python driver child process.
 ///
 /// Returned by ``spawnDriverProcess`` so streaming consumers
