@@ -7678,6 +7678,12 @@ shipped that have no invocation path at all.
   spatial wind, path clearing stepped by distance (d9d2a4b). Still
   open: workbench.cpp 675 (needs a headless Workbench test target)
   and the rows the lane files still list as REAL.
+  2026-11-20 session 3 (4aed65c): lane-10 audio_music_player 375 (music
+  ducks with no mixer snapshot), lane-08 lip_sync 542 (smoothing per unit
+  of time). Not started, each needs more than a small fix: lane-21
+  settings row step (rows must grow with the UI scale and may outgrow the
+  modal), lane-20 audio_system m_busActivePrev (AudioSystem::update
+  cannot run in a test without a full Engine).
   **Layman:** About 290 lower-risk possible bugs and the medium findings are still unchecked.
   Kind: review-fix.
   Source: review-readability 2026-10-31 at 7b2a81d.
@@ -8262,13 +8268,17 @@ shipped that have no invocation path at all.
   Kind: investigate.
   Source: frameledger FLED-0040 code review, 2026-11-20.
 
-- 📋 [3D_E-0993] **A deleted entity's auto-played looping sound is never stopped.**
+- ✅ [3D_E-0993] **A deleted entity's auto-played looping sound is never stopped.**
   Read, not run (2026-11-20): AudioSystem::update reaps a tracked
   source whose entity is gone (AudioSourceTracker::reap) but nothing
   calls stopSound for it, so a looping source would keep playing.
   Scene unload now stops tracked sounds (43e85e2); deleting one
   entity mid-scene does not. First step: a test with a null audio
   device that removes an entity and reads the source state back.
+  Fixed 2026-11-20 at e2140b2: AudioSystem::releaseSources stops and
+  forgets the sounds of entities gone from the scene; update and
+  onSceneUnload both use it. Test: tests/test_audio_source_gone.cpp
+  (null audio device), seen failing with the stop removed.
   **Layman:** Deleting an object that plays a looping sound may leave the sound playing until the scene closes.
   Kind: fix.
   Source: 3D_E-0874 sound-cache work, 2026-11-20.

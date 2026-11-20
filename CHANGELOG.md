@@ -25,6 +25,22 @@ may change any interface without notice.
 
 ## [Unreleased]
 
+### 2026-11-20 Fixed — deleted object's looping sound, music ducking, lip-sync speed (3D_E-0993, 3D_E-0874)
+
+- **Deleting an object stops its looping sound** (3D_E-0993)
+  An object set to play a looping sound automatically kept playing after
+  the object was deleted, until the scene closed. The sound now stops when
+  the object leaves the scene.
+
+- **Music ducks before the mixer has published its settings** (3D_E-0874)
+  Streaming music ignored the ducking gain (the dip under dialogue) when
+  no mixer settings had been published yet. It now applies it.
+
+- **Lip-sync mouth speed no longer depends on frame rate** (3D_E-0874)
+  The mouth moved toward each shape by a fixed share per frame, so it
+  moved half as fast at 30 FPS as at 60. The share is now per unit of
+  time; at 60 FPS it is unchanged.
+
 ### 2026-11-20 Fixed — sound memory between scenes, cloth size limit, wind, path clearing, Workbench cancel, audit tool memory (3D_E-0874)
 
 - **Closing a scene stops its sounds and frees them** (3D_E-0874)
