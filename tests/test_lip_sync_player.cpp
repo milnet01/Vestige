@@ -444,3 +444,33 @@ TEST(LipSyncCloneTest, ClonePreservesTrack)
     // Playback state should NOT be cloned
     EXPECT_EQ(clonedPlayer->getState(), LipSyncState::STOPPED);
 }
+
+// 3D_E-0874 — the mouth closes the same share of the gap to its target in
+// the same time at 30 FPS as at 60 FPS. It used to close a fixed share per
+// update, so a slow frame rate gave a slow mouth.
+TEST(LipSyncSmoothingRate, SameMouthAfterSameTimeAtAnyFrameRate_0874)
+{
+    const auto jawAfter = [](int updates, float deltaTime)
+    {
+        LipSyncPlayer player;
+        FacialAnimator animator;
+        SkeletonAnimator skelAnimator;
+        setupLipSyncPipeline(animator, skelAnimator);
+        player.setFacialAnimator(&animator);
+        player.loadTrackFromString(R"({
+            "mouthCues": [ {"start": 0.0, "end": 2.0, "value": "D"} ]
+        })");
+        player.play();
+        for (int i = 0; i < updates; ++i)
+        {
+            player.update(deltaTime);
+        }
+        animator.update(deltaTime);
+        return skelAnimator.getMorphWeights()[0];  // jawOpen
+    };
+
+    const float at60 = jawAfter(6, 1.0f / 60.0f);
+    const float at30 = jawAfter(3, 1.0f / 30.0f);
+    ASSERT_GT(at60, 0.05f) << "the D mouth shape did not open the jaw";
+    EXPECT_NEAR(at30, at60, 0.002f);
+}

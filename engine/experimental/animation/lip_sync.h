@@ -151,6 +151,8 @@ public:
 
     /// @brief Sets the exponential smoothing factor [0, 1]. Default 0.15.
     /// Lower = smoother (more lag), higher = snappier (more jitter).
+    /// It is the share of the gap to the target closed in one frame at
+    /// 60 FPS; other frame rates close the same share per unit of time.
     void setSmoothing(float factor);
 
     /// @brief Gets the smoothing factor.
@@ -181,13 +183,14 @@ private:
     int findCueAtTime(float time) const;
 
     /// @brief Applies viseme weights from track playback to the FacialAnimator.
-    void applyTrackWeights();
+    void applyTrackWeights(float deltaTime);
 
     /// @brief Applies viseme weights from amplitude analysis to the FacialAnimator.
-    void applyAmplitudeWeights();
+    void applyAmplitudeWeights(float deltaTime);
 
-    /// @brief Smooths the output weights using exponential filtering.
-    void smoothWeights(const std::unordered_map<std::string, float>& target);
+    /// @brief Moves the output weights toward @a target over @a deltaTime.
+    void smoothWeights(const std::unordered_map<std::string, float>& target,
+                       float deltaTime);
 
     FacialAnimator* m_facialAnimator = nullptr;
     LipSyncTrack m_track;

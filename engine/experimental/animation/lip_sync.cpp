@@ -63,7 +63,7 @@ void LipSyncPlayer::update(float deltaTime)
 
     if (m_amplitudeMode)
     {
-        applyAmplitudeWeights();
+        applyAmplitudeWeights(deltaTime);
         return;
     }
 
@@ -91,7 +91,7 @@ void LipSyncPlayer::update(float deltaTime)
         }
     }
 
-    applyTrackWeights();
+    applyTrackWeights(deltaTime);
 }
 
 std::unique_ptr<Component> LipSyncPlayer::clone() const
@@ -458,7 +458,7 @@ int LipSyncPlayer::findCueAtTime(float time) const
     return -1;
 }
 
-void LipSyncPlayer::applyTrackWeights()
+void LipSyncPlayer::applyTrackWeights(float deltaTime)
 {
     int idx = findCueAtTime(m_time);
     if (idx < 0)
@@ -468,7 +468,7 @@ void LipSyncPlayer::applyTrackWeights()
         // toward zero and eventually erases them, then applies the cleared
         // state to the FacialAnimator.
         std::unordered_map<std::string, float> restWeights;
-        smoothWeights(restWeights);
+        smoothWeights(restWeights, deltaTime);
 
         // Force-clear any residual sub-threshold weights that smoothing
         // has not yet erased, so the face fully returns to rest pose.
@@ -505,14 +505,14 @@ void LipSyncPlayer::applyTrackWeights()
         VisemeMap::blendWeights(currentViseme, currentViseme, 0.0f, targetWeights);
     }
 
-    smoothWeights(targetWeights);
+    smoothWeights(targetWeights, deltaTime);
 }
 
 // ---------------------------------------------------------------------------
 // Amplitude weight application
 // ---------------------------------------------------------------------------
 
-void LipSyncPlayer::applyAmplitudeWeights()
+void LipSyncPlayer::applyAmplitudeWeights(float deltaTime)
 {
     Viseme estimated = m_analyzer.getEstimatedViseme();
 
@@ -525,21 +525,29 @@ void LipSyncPlayer::applyAmplitudeWeights()
         targetWeights[entry.shapeName] = entry.weight * amplitudeScale;
     }
 
-    smoothWeights(targetWeights);
+    smoothWeights(targetWeights, deltaTime);
 }
 
 // ---------------------------------------------------------------------------
 // Exponential smoothing
 // ---------------------------------------------------------------------------
 
-void LipSyncPlayer::smoothWeights(const std::unordered_map<std::string, float>& target)
+void LipSyncPlayer::smoothWeights(const std::unordered_map<std::string, float>& target,
+                                  float deltaTime)
 {
+    // m_smoothing is the share of the gap closed in one 60 FPS frame. Raising
+    // what is left to the number of such frames in deltaTime closes the same
+    // share per unit of time at any frame rate.
+    constexpr float kReferenceFps = 60.0f;
+    const float alpha = 1.0f - std::pow(1.0f - m_smoothing,
+                                        std::max(deltaTime, 0.0f) * kReferenceFps);
+
     // Decay existing weights toward zero for shapes not in target
     for (auto it = m_currentWeights.begin(); it != m_currentWeights.end();)
     {
         if (target.find(it->first) == target.end())
         {
-            it->second += m_smoothing * (0.0f - it->second);
+            it->second += alpha * (0.0f - it->second);
             if (it->second < 0.001f)
             {
                 it = m_currentWeights.erase(it);
@@ -558,7 +566,7 @@ void LipSyncPlayer::smoothWeights(const std::unordered_map<std::string, float>& 
         {
             current = it->second;
         }
-        m_currentWeights[name] = current + m_smoothing * (weight - current);
+        m_currentWeights[name] = current + alpha * (weight - current);
     }
 
     // Apply to FacialAnimator

@@ -25,8 +25,10 @@
 #include "resource/resource_manager.h"
 #include "scene/scene.h"
 
+#include "audio_device_helpers.h"
 #include "test_helpers.h"
 
+#include <AL/al.h>
 #include <nlohmann/json.hpp>
 
 #include <chrono>
@@ -391,3 +393,40 @@ TEST_F(AudioMusicPlayerTest, MusicSystemPlayStingerQueuesOnThePlayer)
     music.playStinger(stinger);
     EXPECT_EQ(player.getPendingStingerCount(), 1u);
 }
+
+#ifndef _WIN32
+// 3D_E-0874 — with no mixer snapshot published yet, the music gain still
+// carries the ducking gain. Opens OpenAL's null device; skips where none
+// opens.
+TEST(AudioMusicPlayerDevice, DuckingReachesMusicWithNoMixerSnapshot_0874)
+{
+    AudioEngine engine;
+    if (!TestAudio::openNullAudioDevice(engine))
+    {
+        GTEST_SKIP() << "no OpenAL device could be opened";
+    }
+    // The pool hands a released source out again, so this is the name the
+    // layer will play on; the AL_PLAYING check below confirms it.
+    const unsigned int probe = engine.acquireSource(SoundPriority::Normal);
+    ASSERT_NE(probe, 0u);
+    engine.releaseSource(probe);
+
+    AudioMusicPlayer player{engine};
+    ASSERT_TRUE(player.loadLayer(MusicLayer::Ambient, kFixture));
+    player.playLayer(MusicLayer::Ambient);
+    ALint state = 0;
+    alGetSourcei(probe, AL_SOURCE_STATE, &state);
+    ASSERT_EQ(state, AL_PLAYING) << "the layer took a different source; "
+                                    "the gain read below would be the wrong one";
+
+    engine.setMixerSnapshot(nullptr);
+    engine.setDuckingSnapshot(0.5f);
+    player.update(0.1f);
+
+    const float layerGain = player.getLayerGain(MusicLayer::Ambient);
+    ASSERT_GT(layerGain, 0.0f);
+    ALfloat gain = -1.0f;
+    alGetSourcef(probe, AL_GAIN, &gain);
+    EXPECT_NEAR(gain, layerGain * 0.5f, kEps) << "the ducking gain was dropped";
+}
+#endif

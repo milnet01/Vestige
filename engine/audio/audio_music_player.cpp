@@ -378,7 +378,7 @@ void AudioMusicPlayer::update(float deltaSeconds)
                 mixer != nullptr
                     ? resolveSourceGain(*mixer, AudioBus::Music,
                                         layer.gain.currentGain, duckGain)
-                    : layer.gain.currentGain;
+                    : layer.gain.currentGain * duckGain;  // no snapshot yet: all buses at 1
             layer.analysisGain = contentGain;  // AX12: pre-solo content gain (§3.4)
             float effective = contentGain;
             // AX12: editor solo gate on the live music output (output-only).
