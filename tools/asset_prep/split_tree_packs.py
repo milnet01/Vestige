@@ -91,8 +91,10 @@ def clear_scene():
     bpy.ops.wm.read_factory_settings(use_empty=True)
 
 
-def downscale_written():
-    """Downscale the exported textures on disk (mesh <=MESH_CAP longest edge, billboard <=BILLBOARD_CAP).
+def downscale_written(species_dirs):
+    """Downscale the exported textures in @a species_dirs (mesh <=MESH_CAP longest edge, billboard
+    <=BILLBOARD_CAP). Only the folders this run wrote: OUT also holds the prop groups
+    prep_polyhaven_props.py writes, which keep their own sizes.
 
     Done as a post-export pass with ImageMagick rather than in-Blender: `bpy.types.Image.scale()` on the
     freshly-imported *packed* glTF images silently does not carry through the glTF-separate export, so the
@@ -100,7 +102,7 @@ def downscale_written():
     aspect (longest edge <= cap). Required for the §9 VRAM budget (~145 MiB); without it a birch bark map
     alone is 4096^2 = ~85 MiB uncompressed."""
     mogrify = shutil.which("mogrify") or "/usr/bin/mogrify"
-    for species_dir in OUT.iterdir():
+    for species_dir in species_dirs:
         if not species_dir.is_dir():
             continue
         pngs = list(species_dir.glob("*.png"))
@@ -180,7 +182,7 @@ def main():
     OUT.mkdir(parents=True, exist_ok=True)
     for species, (folder, classify) in PACKS.items():
         process_pack(species, folder, classify)
-    downscale_written()
+    downscale_written([OUT / species for species in PACKS])
     # Symlink gameready/ into the engine's nature_local/.
     NATURE_LOCAL.mkdir(parents=True, exist_ok=True)
     if link.is_symlink() or link.exists():
@@ -189,4 +191,5 @@ def main():
     print(f"DONE -> {OUT} (symlinked into nature_local/gameready/)")
 
 
-main()
+if __name__ == "__main__":  # true under `blender --python`
+    main()
