@@ -25,6 +25,16 @@ may change any interface without notice.
 
 ## [Unreleased]
 
+### 2026-11-20 Fixed — Menu text follows the interface size (3D_E-0994)
+
+- **The interface size setting now grows the words in menus, not only the boxes** (3D_E-0994)
+  At 1.25x, 1.5x and 2x the buttons, dropdowns and sliders grew but
+  their text stayed small. The text on buttons, dropdowns and their
+  lists, checkboxes, sliders, key-binding rows and Settings row labels
+  now grows with the setting. A text too wide for its box is drawn a
+  little smaller so it still fits. Not yet covered: menu headings,
+  small captions and the Settings category list (3D_E-0996).
+
 ### 2026-11-20 Fixed — Settings at large interface sizes, grabbing and freezing objects, tree texture prep, motion library (3D_E-0874)
 
 - **Settings rows no longer overlap at 1.5x and 2x interface size, and long pages scroll** (3D_E-0874)

@@ -1,6 +1,6 @@
 <!-- ants-roadmap-format: 1 -->
 <!-- Generated from the Ants Terminal roadmap store. Edit it with roadmap_log; hand edits are discarded by the next write. -->
-<!-- ants-roadmap-id-high-water: 3D_E=994 3D_E#S=989 -->
+<!-- ants-roadmap-id-high-water: 3D_E=996 3D_E#S=989 -->
 
 # Vestige Engine Roadmap
 
@@ -8292,7 +8292,7 @@ shipped that have no invocation path at all.
   Kind: fix.
   Source: 3D_E-0874 sound-cache work, 2026-11-20.
 
-- 📋 [3D_E-0994] **Interface scale grows the menu's boxes but not its text.**
+- ✅ [3D_E-0994] **Interface scale grows the menu's boxes but not its text.**
   Read, not run (2026-11-20). The text scale is a literal in each
   widget: `label->scale = 0.34f` in settings_page_layout.cpp
   (addRowLabels), `scale = 0.30f` in ui_dropdown.cpp, `textScale = 0.4f`
@@ -8302,9 +8302,54 @@ shipped that have no invocation path at all.
   text and a button's text draw at twice their X1_0 size, proven by a
   test that fails first. Check the modal's fixed columns (kLabelX,
   kControlX) still fit the longer labels in every shipped language.
+  Shipped 2026-11-20. Buttons (label and key-cap), dropdowns (box, caret
+  and the open list's rows), checkbox labels, slider values, key-binding
+  rows and Settings row labels multiply their text scale by
+  UITheme::defaultTextScale. A text too wide for its box is drawn smaller
+  (TextRenderer::scaleToFit; user chose shrinking 2026-11-20), so a long
+  label in any language stays inside the fixed columns. Tests:
+  tests/test_ui_text_scale.cpp, ten cases seen failing on the old code.
+  Not covered, filed as the next item: the menus' fixed captions, titles
+  and Settings sidebar categories in menu_prefabs.cpp.
   **Layman:** Choosing 1.5x or 2x interface size makes buttons and dropdowns bigger, but the words inside them stay the same small size.
   Kind: accessibility.
   Source: 3D_E-0874 lane-21 follow-up, 2026-11-20.
+
+- 📋 [3D_E-0995] **Formula Workbench --dump-library output cannot be loaded by --export-glsl.**
+  Reported by ExperiRays (run 2026-11-20): `--dump-library > lib.json`
+  exits 0, then `--export-glsl lib.json --out d` exits 1, "no formulas
+  loaded". Read, not run by us: dumpLibraryJson in
+  tools/formula_workbench/benchmark.cpp writes formulaMetaToJson (name,
+  category, description, inputs, default_coefficients, source) and no
+  expression, while --export-glsl reads through
+  FormulaLibrary::loadFromFile. tools/formula_workbench/README.md
+  "Pin a library" tells a project to do this round trip.
+  Done when: a dumped library exports, proven by a test that fails
+  first; the dump holds each formula's expression (FormulaLibrary::toJson
+  is the likely form); anything that reads today's dump still works
+  (check the drivers before changing its shape); the provenance hash of
+  an export of the built-in library is unchanged or the change is named.
+  Blocks ExperiRays EXRAY-0005 with 3D_E-0979; do them together.
+  **Layman:** The Workbench's "save the formula list" command leaves out the formulas themselves, so the file it writes cannot be used to generate shader code, although the README tells other projects to do exactly that.
+  Kind: fix.
+  Source: experirays-report-2026-11-20.
+  Lanes: formula.
+
+- 📋 [3D_E-0996] **Interface scale does not grow the menus' captions, titles and sidebar categories.**
+  Read, not run (2026-11-20). engine/ui/menu_prefabs.cpp passes literal
+  scales to makeLabel (captions 0.20 to 0.28, Settings title 0.95,
+  sidebar categories 0.34) at fixed positions on the 1920x1080 canvas.
+  Growing them needs the positions around them to move too, so it is a
+  layout change, not a multiply. Also open: the key name inside a
+  key-binding row's key-cap is centred by a guessed width and is not
+  shrunk to fit at 2x (engine/ui/ui_keybind_row.cpp); ui_slider.cpp
+  right-aligns its value by a guessed width although
+  TextRenderer::measureTextWidth now exists.
+  Done when: at X2_0 those texts draw at twice their X1_0 size without
+  overlapping their neighbours, proven by a test that fails first.
+  **Layman:** At 1.5x or 2x interface size the buttons and settings now have bigger words, but the menu headings, small captions and the Settings category list stay the old size.
+  Kind: accessibility.
+  Source: 3D_E-0994 follow-up, 2026-11-20.
 
 ## 0.3.0 — An editor a builder can use
 
