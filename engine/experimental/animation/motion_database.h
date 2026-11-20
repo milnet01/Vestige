@@ -98,6 +98,10 @@ public:
     /// @brief Gets the skeleton pose data for a frame.
     const SkeletonPose& getPose(int frameIndex) const;
 
+    /// @brief The frame's feature row as searched: normalised and weighted,
+    ///        getFeatureCount() floats. Null when @a frameIndex is out of range.
+    const float* getFeatures(int frameIndex) const;
+
     /// @brief Gets the feature schema.
     const FeatureSchema& getSchema() const;
 

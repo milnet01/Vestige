@@ -711,6 +711,36 @@ TEST_F(MotionDatabaseFixtureTest, MirroringDoublesFrames)
     EXPECT_EQ(db.getFrameCount(), originalCount * 2);
 }
 
+// 3D_E-0874 (lane-08 motion_database 247): a clip's mirrored frames follow
+// its plain ones and share its clipIndex. The look-ahead from the last plain
+// frame must not read the first mirrored frame as its future: that is the
+// clip's start, a whole clip's travel behind it.
+TEST_F(MotionDatabaseFixtureTest, LookAheadStopsAtTheMirroredFrames_0874)
+{
+    FeatureSchema schema;
+    schema.addTrajectorySample({0.33f, 1.0f, 1.0f});
+    std::vector<AnimClipEntry> clips(1);
+    clips[0].clip = createWalkClip(1.0f);
+    db.build(schema, clips, *skeleton, 30.0f);
+    const int plainCount = db.getFrameCount();
+    ASSERT_GT(plainCount, 1);
+
+    db.addMirroredFrames({{1, 2}});
+    ASSERT_EQ(db.getFrameCount(), plainCount * 2);
+    ASSERT_EQ(db.getFeatureCount(), 4);  // future position XZ, future facing XZ
+
+    // The walk goes straight ahead, so the last mirrored frame's trajectory
+    // equals the last plain frame's: both have no future left in their run.
+    const float* lastPlain = db.getFeatures(plainCount - 1);
+    const float* lastMirrored = db.getFeatures(plainCount * 2 - 1);
+    ASSERT_NE(lastPlain, nullptr);
+    ASSERT_NE(lastMirrored, nullptr);
+    for (int d = 0; d < 4; ++d)
+    {
+        EXPECT_NEAR(lastPlain[d], lastMirrored[d], 1e-4f) << "feature " << d;
+    }
+}
+
 // ---------------------------------------------------------------------------
 // MirrorGenerator Tests
 // ---------------------------------------------------------------------------

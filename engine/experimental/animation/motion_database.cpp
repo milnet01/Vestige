@@ -247,9 +247,12 @@ void MotionDatabase::extractFeatures()
             int clampedFrame = futureFrame;
             if (clampedFrame >= numFrames)
                 clampedFrame = numFrames - 1;
-            // Ensure we stay within the same clip
+            // Ensure we stay within the same clip, and on the same side of
+            // it: a clip's mirrored frames share its clipIndex.
+            const auto& futureInfo = m_frameInfo[static_cast<size_t>(std::max(clampedFrame, 0))];
             if (clampedFrame >= 0 &&
-                m_frameInfo[static_cast<size_t>(clampedFrame)].clipIndex != thisInfo.clipIndex)
+                (futureInfo.clipIndex != thisInfo.clipIndex ||
+                 futureInfo.mirrored != thisInfo.mirrored))
             {
                 clampedFrame = f; // Fallback to current
             }
@@ -393,6 +396,15 @@ int MotionDatabase::getFrameCount() const
 int MotionDatabase::getFeatureCount() const
 {
     return m_numFeatures;
+}
+
+const float* MotionDatabase::getFeatures(int frameIndex) const
+{
+    if (frameIndex < 0 || frameIndex >= getFrameCount())
+    {
+        return nullptr;
+    }
+    return &m_features[static_cast<size_t>(frameIndex) * static_cast<size_t>(m_numFeatures)];
 }
 
 const FrameInfo& MotionDatabase::getFrameInfo(int frameIndex) const
