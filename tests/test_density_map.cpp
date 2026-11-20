@@ -13,6 +13,8 @@
 
 #include <gtest/gtest.h>
 
+#include <algorithm>
+
 using namespace Vestige;
 
 // =============================================================================
@@ -220,6 +222,32 @@ TEST(DensityMapTest, ClearAlongPath)
     // Far from the path, density should be 1.0
     EXPECT_FLOAT_EQ(map.sample(15.0f, 0.0f), 1.0f);
     EXPECT_FLOAT_EQ(map.sample(15.0f, 29.0f), 1.0f);
+}
+
+// 3D_E-0874 — samples were spread evenly over the waypoints, not over the
+// distance, so one long stretch after many short ones got too few and was
+// left with uncleared gaps wider than the brush.
+TEST(DensityMapTest, ClearAlongPathLeavesNoGapOnALongStretch_0874)
+{
+    DensityMap map;
+    map.initialize(0.0f, 0.0f, 420.0f, 10.0f, 1.0f);
+
+    SplinePath path;
+    path.width = 2.0f;
+    for (int i = 0; i < 20; ++i)
+    {
+        path.addWaypoint(glm::vec3(5.0f + 0.05f * static_cast<float>(i), 0.0f, 5.0f));
+    }
+    path.addWaypoint(glm::vec3(405.0f, 0.0f, 5.0f));
+
+    map.clearAlongPath(path, 0.5f);
+
+    float worst = 0.0f;
+    for (float x = 10.0f; x <= 400.0f; x += 1.0f)
+    {
+        worst = std::max(worst, map.sample(x, 5.0f));
+    }
+    EXPECT_NEAR(worst, 0.0f, 0.01f) << "part of the path centre was not cleared";
 }
 
 TEST(DensityMapTest, ClearAlongPathTooFewWaypoints)

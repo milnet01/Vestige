@@ -7,6 +7,7 @@
 
 #include <gtest/gtest.h>
 
+#include <algorithm>
 #include <cmath>
 
 using namespace Vestige;
@@ -536,4 +537,33 @@ TEST(EnvironmentForces, GustsOffEasesDirectionSkewAway)
     glm::vec3 velocity = env.getWindVelocity(glm::vec3(0.0f));
     EXPECT_NEAR(velocity.y, 0.0f, 1e-3f);
     EXPECT_NEAR(velocity.z, 0.0f, 1e-3f);
+}
+
+// 3D_E-0874 — the spatial factor hashed the raw float bits of the position,
+// so two points a centimetre apart got unrelated wind: white noise, where a
+// field that varies over `turbulenceScale` metres was meant.
+TEST(EnvironmentForces, WindVariesSmoothlyAcrossSpace_0874)
+{
+    EnvironmentForces env;
+    env.setWindDirection(glm::vec3(1.0f, 0.0f, 0.0f));
+    env.setWindStrength(5.0f);
+    env.setGustsEnabled(false);
+    env.update(1.0f);
+
+    float largestStep = 0.0f;
+    float lowest = 1e9f;
+    float highest = 0.0f;
+    for (int i = 0; i < 400; ++i)
+    {
+        const glm::vec3 pos(static_cast<float>(i) * 0.37f, 0.0f,
+                            static_cast<float>(i) * 0.23f);
+        const float here = env.getWindSpeed(pos);
+        const float near = env.getWindSpeed(pos + glm::vec3(0.01f, 0.0f, 0.01f));
+        largestStep = std::max(largestStep, std::abs(here - near));
+        lowest = std::min(lowest, here);
+        highest = std::max(highest, here);
+    }
+    EXPECT_LT(largestStep, 0.1f)
+        << "wind speed jumped between points one centimetre apart";
+    EXPECT_GT(highest - lowest, 0.5f) << "the field no longer varies";
 }

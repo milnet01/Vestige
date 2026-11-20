@@ -175,7 +175,8 @@ private:
     /// @brief Moves m_windDirOffset toward m_windDirTarget at a fixed rate.
     void easeWindDirOffset(float dt);
 
-    /// @brief Hash noise for spatial wind variation. Returns [0, 1).
+    /// @brief Smooth value noise for spatial wind variation; one cell per
+    ///        unit of input. Returns [0, 1).
     static float hashNoise(float x, float y);
 
     /// @brief Computes spatial wind multiplier at a world position.

@@ -7,7 +7,6 @@
 
 #include <algorithm>
 #include <cmath>
-#include <cstring>
 
 namespace Vestige
 {
@@ -49,17 +48,33 @@ void EnvironmentForces::reset()
 
 float EnvironmentForces::hashNoise(float x, float y)
 {
-    // Integer bit-mixing hash — same quality as sin-based but ~6x faster on CPU
-    uint32_t ix, iy;
-    std::memcpy(&ix, &x, sizeof(uint32_t));
-    std::memcpy(&iy, &y, sizeof(uint32_t));
+    // Value noise: a random value at each whole-number grid point, blended
+    // smoothly across the cell between them, so nearby inputs give nearby
+    // results. Hashing the float's own bits gave unrelated values instead.
+    const auto latticeValue = [](int32_t cellX, int32_t cellY)
+    {
+        uint32_t h = static_cast<uint32_t>(cellX) * 0x45d9f3bu
+                   + static_cast<uint32_t>(cellY) * 0x119de1f3u;
+        h ^= h >> 16;
+        h *= 0x45d9f3bu;
+        h ^= h >> 16;
+        return static_cast<float>(h & 0x00FFFFFFu) / 16777216.0f;  // [0, 1)
+    };
 
-    uint32_t h = ix * 0x45d9f3bu + iy * 0x119de1f3u;
-    h ^= h >> 16;
-    h *= 0x45d9f3bu;
-    h ^= h >> 16;
+    const float floorX = std::floor(x);
+    const float floorY = std::floor(y);
+    const auto cellX = static_cast<int32_t>(floorX);
+    const auto cellY = static_cast<int32_t>(floorY);
+    const float fx = x - floorX;
+    const float fy = y - floorY;
+    const float ux = fx * fx * (3.0f - 2.0f * fx);  // smoothstep weights
+    const float uy = fy * fy * (3.0f - 2.0f * fy);
 
-    return static_cast<float>(h & 0x00FFFFFFu) / 16777216.0f;  // [0, 1)
+    const float bottom = glm::mix(latticeValue(cellX, cellY),
+                                  latticeValue(cellX + 1, cellY), ux);
+    const float top = glm::mix(latticeValue(cellX, cellY + 1),
+                               latticeValue(cellX + 1, cellY + 1), ux);
+    return glm::mix(bottom, top, uy);
 }
 
 float EnvironmentForces::spatialWindFactor(const glm::vec3& worldPos) const

@@ -138,6 +138,13 @@ void DensityMap::paint(const glm::vec3& center, float radius,
     }
 }
 
+namespace
+{
+// The sample count SplinePath::evaluateByArcLength walks, so the length
+// measured here matches the distances it resolves.
+constexpr int kArcLengthSamples = 256;
+}  // namespace
+
 void DensityMap::clearAlongPath(const SplinePath& path, float margin)
 {
     if (!m_initialized || path.getWaypointCount() < 2)
@@ -145,7 +152,7 @@ void DensityMap::clearAlongPath(const SplinePath& path, float margin)
         return;
     }
 
-    float totalLength = path.getLength();
+    float totalLength = path.getLength(kArcLengthSamples);
     if (totalLength < 0.001f)
     {
         return;
@@ -153,15 +160,16 @@ void DensityMap::clearAlongPath(const SplinePath& path, float margin)
 
     float clearRadius = path.width + margin;
 
-    // Sample the spline densely enough that no texel is missed
-    // Use half-texel spacing for good coverage
+    // Half-texel spacing so no texel is missed, stepped by DISTANCE along
+    // the path. path.evaluate(t) gives every stretch between two waypoints
+    // the same share of t whatever its length, which left gaps on a long one.
     float stepSize = 0.5f / m_texelsPerMeter;
     int sampleCount = std::max(2, static_cast<int>(totalLength / stepSize) + 1);
 
     for (int i = 0; i < sampleCount; ++i)
     {
         float t = static_cast<float>(i) / static_cast<float>(sampleCount - 1);
-        glm::vec3 pos = path.evaluate(t);
+        glm::vec3 pos = path.evaluateByArcLength(t * totalLength);
 
         // Paint zero density in a circle around this sample point
         paint(pos, clearRadius, 0.0f, 1.0f, 0.0f);

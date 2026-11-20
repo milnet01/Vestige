@@ -479,15 +479,16 @@ int FoliageManager::clearAlongPath(const SplinePath& path, float margin)
 
     float clearRadius = path.width + margin;
 
-    // Sample the spline at intervals smaller than the clear radius
-    // to ensure complete coverage
+    // Sample at intervals smaller than the clear radius, stepped by
+    // DISTANCE along the path so a long stretch gets its share of samples
+    // (path.evaluate(t) splits t evenly between waypoints instead).
     float stepSize = clearRadius * 0.5f;
     int sampleCount = std::max(2, static_cast<int>(totalLength / stepSize) + 1);
 
     for (int i = 0; i < sampleCount; ++i)
     {
         float t = static_cast<float>(i) / static_cast<float>(sampleCount - 1);
-        glm::vec3 pos = path.evaluate(t);
+        glm::vec3 pos = path.evaluateByArcLength(t * totalLength);
 
         auto removedFoliage = eraseAllFoliage(pos, clearRadius);
         totalRemoved += static_cast<int>(removedFoliage.size());
