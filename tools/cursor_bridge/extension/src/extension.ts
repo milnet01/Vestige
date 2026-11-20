@@ -131,7 +131,9 @@ function handleLine(line: string, socket: net.Socket): void {
 
   const id: string = req?.id ?? '';
   const cmd: string = req?.command ?? '';
-  const handler = commands[cmd];
+  // Own keys only: a plain object also answers to inherited names such as
+  // `toString`, which are not command handlers.
+  const handler = Object.prototype.hasOwnProperty.call(commands, cmd) ? commands[cmd] : undefined;
   if (!handler) {
     socket.write(JSON.stringify({ id, ok: false, error: `unknown command: ${cmd}` }) + '\n');
     return;
@@ -144,6 +146,8 @@ function handleLine(line: string, socket: net.Socket): void {
 }
 
 let server: net.Server | undefined;
+/** True only while this window's server holds the port. */
+let listening = false;
 
 export function activate(context: vscode.ExtensionContext): void {
   server = net.createServer((socket) => {
@@ -166,7 +170,12 @@ export function activate(context: vscode.ExtensionContext): void {
 
   // Bind to loopback only — no remote exposure.
   server.listen(PORT, '127.0.0.1', () => {
+    listening = true;
     console.log(`[vestige-cursor-bridge] listening on 127.0.0.1:${PORT}`);
+  });
+
+  server.on('close', () => {
+    listening = false;
   });
 
   server.on('error', (err: any) => {
@@ -181,7 +190,9 @@ export function activate(context: vscode.ExtensionContext): void {
 
   const statusCmd = vscode.commands.registerCommand('vestigeCursorBridge.status', () => {
     vscode.window.showInformationMessage(
-      `Vestige Cursor Bridge listening on 127.0.0.1:${PORT}. Use the MCP server to drive it.`
+      listening
+        ? `Vestige Cursor Bridge listening on 127.0.0.1:${PORT}. Use the MCP server to drive it.`
+        : `Vestige Cursor Bridge is not listening in this window: port ${PORT} is unavailable, most likely held by another Cursor window's bridge.`
     );
   });
   context.subscriptions.push(statusCmd);
@@ -192,4 +203,5 @@ export function deactivate(): void {
     server.close();
     server = undefined;
   }
+  listening = false;
 }

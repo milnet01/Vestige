@@ -76,6 +76,17 @@ function callBridge(command: string, args: Record<string, unknown>): Promise<unk
       }
     });
 
+    // The bridge went away before answering (Cursor closed, extension
+    // reloaded): say so now instead of waiting for the timeout.
+    socket.on('close', () => {
+      if (settled) {
+        return;
+      }
+      settled = true;
+      clearTimeout(timer);
+      reject(new Error(`cursor-bridge: connection closed before a response to '${command}'`));
+    });
+
     socket.on('error', (err) => {
       if (settled) {
         return;
