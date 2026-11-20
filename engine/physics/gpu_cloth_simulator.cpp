@@ -429,19 +429,8 @@ void GpuClothSimulator::initialize(const ClothConfig& asked, uint32_t seed)
         return;
     }
 
-    // OVERFLOW, and this is the memory-safety half. `width * height` in
-    // uint32 wraps for a large grid -- 65536 x 65537 wraps to 65536 -- so the
-    // buffers would be sized for the wrapped count while `buildInitialGrid`
-    // indexes `z * W + x` across the REAL extents, writing far past the end.
-    // Computed in 64 bits and rejected before anything is allocated.
-    const uint64_t requested =
-        static_cast<uint64_t>(config.width) * static_cast<uint64_t>(config.height);
-    if (requested > static_cast<uint64_t>(UINT32_MAX))
-    {
-        Logger::warning("[GpuClothSimulator] Refusing a grid whose particle "
-                        "count overflows 32 bits");
-        return;
-    }
+    // Cannot overflow 32 bits: each side is at most kMaxClothGridSide.
+    const uint32_t particleCount = config.width * config.height;
 
     // Non-positive mass would invert gravity; NaN passes every `<=` test
     // (a comparison with NaN is false) and would poison each particle's
@@ -468,7 +457,7 @@ void GpuClothSimulator::initialize(const ClothConfig& asked, uint32_t seed)
     m_config        = config;  // Cached for live-tuning mutators + getConfig().
     m_gridW = config.width;
     m_gridH = config.height;
-    m_particleCount = static_cast<uint32_t>(requested);
+    m_particleCount = particleCount;
     m_gravity       = config.gravity;
     m_damping       = config.damping;
     m_substeps      = (config.substeps < 1) ? 1 : config.substeps;

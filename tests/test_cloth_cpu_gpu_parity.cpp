@@ -762,28 +762,29 @@ TEST_F(ClothCpuGpuParityTest, Cl8_GpuRejectsTheConfigsTheCpuRejects)
     }
 }
 
-// A grid whose particle count overflows uint32 wraps to a small number, so the
-// buffers are sized for the wrapped count while `buildInitialGrid` indexes
-// `z * W + x` over the real extents — a very large out-of-bounds write.
-//
-// DELIBERATELY NOT PROVEN RED, and this is the one place in this change where
-// the red run was skipped on purpose: proving it red means EXECUTING that
-// out-of-bounds write. `testing.md` asks for a failing run first; here the
-// failing run is the defect going off inside the test process, which is not a
-// thing to do to find out what we already know from reading the arithmetic.
-// The safe half above was proven red normally.
-TEST_F(ClothCpuGpuParityTest, Cl8_GpuRejectsAGridWhoseParticleCountOverflows)
+// A grid whose particle count overflows uint32 (65536 * 65537 wraps to
+// 65536) once sized the GPU buffers for the wrapped count. Both backends now
+// cut each side to kMaxClothGridSide before anything is sized (3D_E-0874),
+// so the request builds the same capped grid on each.
+TEST_F(ClothCpuGpuParityTest, Cl8_OverflowingGridIsCutToTheCapOnBothBackends)
 {
     ClothConfig cfg = parityConfig();
     cfg.width  = 65536;
-    cfg.height = 65537;  // 65536 * 65537 wraps to 65536 in uint32.
+    cfg.height = 65537;
+
+    ClothSimulator cpu;
+    cpu.initialize(cfg, /*seed=*/0);
+    ASSERT_TRUE(cpu.isInitialized());
+    EXPECT_EQ(cpu.getParticleCount(), kMaxClothGridSide * kMaxClothGridSide);
 
     GpuClothSimulator gpu;
     gpu.setShaderPath(VESTIGE_SHADER_DIR);
     gpu.initialize(cfg, /*seed=*/0);
-
-    EXPECT_FALSE(gpu.isInitialized())
-        << "GPU accepted a grid whose particle count overflows uint32: "
-           "width * height wrapped, so the buffers are sized for the wrapped "
-           "count while the grid build indexes the real extents. 3D_E-0630.";
+    if (!gpu.isInitialized())
+    {
+        GTEST_SKIP() << "GPU cloth compute pipeline not available";
+    }
+    EXPECT_EQ(gpu.getGridWidth(), cpu.getGridWidth());
+    EXPECT_EQ(gpu.getGridHeight(), cpu.getGridHeight());
+    EXPECT_EQ(gpu.getParticleCount(), cpu.getParticleCount());
 }
