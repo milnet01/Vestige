@@ -106,6 +106,10 @@ private:
     /// EventBus. Handled by eventTypeName string dispatch.
     void subscribeEventNodes(ScriptInstance& instance);
 
+    /// @brief Unsubscribes and deactivates every registered instance, then
+    ///        forgets them. Shared by shutdown() and onSceneUnload().
+    void deactivateAllInstances();
+
     /// @brief Tick all pending latent actions (timers, conditions).
     void tickLatentActions(float deltaTime);
 

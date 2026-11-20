@@ -510,3 +510,29 @@ TEST(ScriptingSystemBridge, OnTickThatSchedulesActionsDoesNotInvalidateTheRunnin
     sys.unregisterInstance(instance);
     sys.shutdown();
 }
+
+// 3D_E-0874 — shutdown() dropped the instances but left their handlers on
+// the EventBus, each holding a pointer to the system. Only onSceneUnload
+// removed them, so a publish after the system was destroyed called into it.
+TEST(ScriptingSystemBridge, ShutdownRemovesEventBusHandlers_0874)
+{
+    Engine engine;
+    const size_t before = engine.getEventBus().getListenerCount();
+    {
+        ScriptingSystem sys;
+        ASSERT_TRUE(sys.initialize(engine));
+
+        ScriptGraph graph;
+        graph.name = "ShutdownTest";
+        graph.addNode("OnKeyPressed");
+        ScriptInstance instance;
+        instance.initialize(graph, 1);
+        sys.registerInstance(instance);
+        ASSERT_GT(engine.getEventBus().getListenerCount(), before);
+
+        sys.shutdown();
+        EXPECT_TRUE(instance.subscriptions().empty());
+    }
+    EXPECT_EQ(engine.getEventBus().getListenerCount(), before)
+        << "a handler outlived the system it points at";
+}

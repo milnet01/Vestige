@@ -160,13 +160,33 @@ bool ScriptingSystem::initialize(Engine& engine)
 
 void ScriptingSystem::shutdown()
 {
-    m_activeInstances.clear();
+    deactivateAllInstances();
     m_sceneBlackboard.clear();
     // Note: appBlackboard persists across scenes but is cleared on shutdown
     m_appBlackboard.clear();
     m_engine = nullptr;
 
     Logger::info("[ScriptingSystem] Shut down");
+}
+
+void ScriptingSystem::deactivateAllInstances()
+{
+    // Take each instance's handlers off the EventBus: every handler holds a
+    // pointer to this system, and the bus outlives it.
+    if (m_engine)
+    {
+        for (auto* instance : m_activeInstances)
+        {
+            for (uint32_t subId : instance->subscriptions())
+            {
+                m_engine->getEventBus().unsubscribe(subId);
+            }
+            instance->clearSubscriptions();
+            instance->pendingActions().clear();
+            instance->setActive(false);
+        }
+    }
+    m_activeInstances.clear();
 }
 
 void ScriptingSystem::update(float deltaTime)
@@ -195,22 +215,7 @@ void ScriptingSystem::onSceneLoad(Scene& /*scene*/)
 
 void ScriptingSystem::onSceneUnload(Scene& /*scene*/)
 {
-    // Unsubscribe all event nodes from EventBus
-    if (m_engine)
-    {
-        for (auto* instance : m_activeInstances)
-        {
-            for (uint32_t subId : instance->subscriptions())
-            {
-                m_engine->getEventBus().unsubscribe(subId);
-            }
-            instance->clearSubscriptions();
-            instance->pendingActions().clear();
-            instance->setActive(false);
-        }
-    }
-
-    m_activeInstances.clear();
+    deactivateAllInstances();
     m_sceneBlackboard.clear();
 
     Logger::info("[ScriptingSystem] Scene unloaded — all scripts deactivated");
