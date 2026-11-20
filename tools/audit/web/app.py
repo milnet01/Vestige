@@ -193,7 +193,13 @@ def api_init():
 
     try:
         from lib.auto_config import generate_config
+        # The builder's "Save Config" lands here and regenerates the file, so
+        # keep what it replaces. Only when the text changed: saving twice
+        # must not overwrite the backup with the generated copy.
+        previous = out_p.read_text() if out_p.is_file() else None
         generate_config(root_p, out_p)
+        if previous is not None and previous != out_p.read_text():
+            out_p.with_name(out_p.name + ".bak").write_text(previous)
         return jsonify({"status": "ok", "config_path": output_path})
     except Exception as e:
         return jsonify({"error": str(e)}), 500
@@ -269,6 +275,10 @@ def api_report():
         report_path = Path(custom)
         if not _is_safe_path(report_path):
             return jsonify({"error": "path outside allowed roots"}), 403
+        # Reports are markdown; without this any file under the allowed
+        # roots could be read through the report viewer.
+        if report_path.suffix != ".md":
+            return jsonify({"error": "Only .md reports can be read"}), 400
 
     if not report_path.exists():
         return jsonify({"error": "Report not generated yet"}), 404

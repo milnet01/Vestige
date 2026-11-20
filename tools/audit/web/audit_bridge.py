@@ -22,6 +22,32 @@ from lib.config import load_config
 from lib.runner import AuditRunner
 
 
+def _offer(event_queue: queue.Queue, event: dict[str, Any]) -> None:
+    """Queue a progress or log event; drop it when the queue is full.
+
+    Nothing may be reading (no browser on /api/events), and a blocking put
+    would then stop the audit thread for ever.
+    """
+    try:
+        event_queue.put_nowait(event)
+    except queue.Full:
+        pass
+
+
+def _deliver(event_queue: queue.Queue, event: dict[str, Any]) -> None:
+    """Queue a final event (complete, error), discarding the oldest queued
+    events to make room: a reader that connects late must still see the end."""
+    while True:
+        try:
+            event_queue.put_nowait(event)
+            return
+        except queue.Full:
+            try:
+                event_queue.get_nowait()
+            except queue.Empty:
+                pass
+
+
 class QueueLogHandler(logging.Handler):
     """Captures log records and pushes them to an event queue."""
 
@@ -31,7 +57,7 @@ class QueueLogHandler(logging.Handler):
 
     def emit(self, record: logging.LogRecord) -> None:
         try:
-            self._queue.put({
+            _offer(self._queue, {
                 "type": "log",
                 "level": record.levelname.lower(),
                 "message": self.format(record),
@@ -111,7 +137,7 @@ class AuditSession:
                 runner.build_report(result_obj)
 
                 self.results = result_obj.to_dict()
-                self.event_queue.put({
+                _deliver(self.event_queue, {
                     "type": "complete",
                     "results": self.results,
                     "timestamp": time.time(),
@@ -119,7 +145,7 @@ class AuditSession:
 
             except Exception as e:
                 self.error = str(e)
-                self.event_queue.put({
+                _deliver(self.event_queue, {
                     "type": "error",
                     "message": str(e),
                     "timestamp": time.time(),
@@ -140,10 +166,7 @@ class AuditSession:
         """Called by AuditRunner on each progress event."""
         data["type"] = event_type
         data["timestamp"] = time.time()
-        try:
-            self.event_queue.put_nowait(data)
-        except queue.Full:
-            pass
+        _offer(self.event_queue, data)
 
     def get_status(self) -> dict[str, Any]:
         """Return current session state."""

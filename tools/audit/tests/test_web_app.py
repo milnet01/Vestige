@@ -209,3 +209,91 @@ def test_report_endpoints_follow_configured_report_path(web_app, tmp_path, monke
 
     got = client.get("/api/reports/AUTOMATED_AUDIT_REPORT_2026-01-01_000000.md")
     assert got.get_data(as_text=True) == "stamped"
+
+
+# --- Readability review lane-24 (3D_E-0874) ---
+
+
+def test_api_report_rejects_a_non_report_file(web_app, tmp_path, monkeypatch):
+    """GET /api/report?path= serves markdown reports, not any file under the roots."""
+    monkeypatch.setattr(web_app, "DEFAULT_ROOT", str(tmp_path))
+    (tmp_path / "secret.cpp").write_text("int key = 42;")
+    (tmp_path / "old_report.md").write_text("an older report")
+
+    client = web_app.app.test_client()
+
+    refused = client.get(f"/api/report?path={tmp_path / 'secret.cpp'}")
+    assert refused.status_code == 400
+    assert "int key" not in refused.get_data(as_text=True)
+
+    served = client.get(f"/api/report?path={tmp_path / 'old_report.md'}")
+    assert served.status_code == 200
+    assert served.get_data(as_text=True) == "an older report"
+
+
+def test_api_init_keeps_the_config_it_replaces(web_app, tmp_path, monkeypatch):
+    """The builder's "Save Config" posts /api/init over an edited config: keep a .bak."""
+    monkeypatch.setattr(web_app, "DEFAULT_ROOT", str(tmp_path))
+    config = tmp_path / "audit_config.yaml"
+    config.write_text("# my hand edits\ntiers: [1]\n")
+
+    client = web_app.app.test_client()
+    response = client.post(
+        "/api/init",
+        json={"project_root": str(tmp_path), "output_path": str(config)},
+    )
+
+    assert response.status_code == 200, response.get_data(as_text=True)
+    assert "my hand edits" not in config.read_text()  # it was regenerated
+    backup = tmp_path / "audit_config.yaml.bak"
+    assert backup.exists()
+    assert backup.read_text() == "# my hand edits\ntiers: [1]\n"
+
+    # Saving again with nothing changed must not replace the backup with
+    # the generated text: the hand edits stay recoverable.
+    client.post(
+        "/api/init",
+        json={"project_root": str(tmp_path), "output_path": str(config)},
+    )
+    assert backup.read_text() == "# my hand edits\ntiers: [1]\n"
+
+
+def test_audit_session_finishes_with_no_event_reader(web_app, monkeypatch):
+    """A run that logs more than the event queue holds, with no browser
+    reading /api/events, must still finish and clear `running`."""
+    import logging
+
+    from web import audit_bridge
+
+    class _Result:
+        def to_dict(self):
+            return {"ok": True}
+
+    class _ChattyRunner:
+        def __init__(self, config, verbose=False, progress_callback=None):
+            pass
+
+        def run(self, cancel_event=None):
+            log = logging.getLogger("audit")
+            for i in range(1500):
+                log.warning("line %d", i)
+            return _Result()
+
+        def build_report(self, result):
+            pass
+
+    monkeypatch.setattr(audit_bridge, "load_config", lambda *a, **k: object())
+    monkeypatch.setattr(audit_bridge, "AuditRunner", _ChattyRunner)
+
+    session = audit_bridge.AuditSession()
+    session.start(config_path=None, project_root=None)
+    session._thread.join(timeout=10)
+
+    assert not session._thread.is_alive(), "audit thread is stuck on a full queue"
+    assert session.running is False
+    assert session.results == {"ok": True}
+
+    events = []
+    while not session.event_queue.empty():
+        events.append(session.event_queue.get_nowait())
+    assert events[-1]["type"] == "complete"
