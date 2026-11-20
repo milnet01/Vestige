@@ -68,6 +68,27 @@ void AudioSystem::shutdown()
     Logger::info("[AudioSystem] Shut down");
 }
 
+void AudioSystem::onSceneUnload(Scene& /*scene*/)
+{
+    // Stop the sounds this scene's entities started, where the source still
+    // carries our playback (an evicted one now belongs to another sound).
+    for (const auto& [entityId, tracked] : m_sourceTracker.active())
+    {
+        if (tracked.ticket != 0
+            && m_audioEngine.playbackTicket(tracked.source) == tracked.ticket)
+        {
+            m_audioEngine.stopSound(tracked.source);
+        }
+    }
+    // Forget every entity, so the next scene's auto-play starts afresh.
+    m_sourceTracker.reap(
+        [](std::uint32_t) { return true; },
+        [](const AudioSourceTracker::TrackedSource&) { return false; });
+    m_lodTiers.clear();
+
+    m_audioEngine.flushBufferCache();
+}
+
 void AudioSystem::update(float deltaTime)
 {
     if (!m_audioEngine.isAvailable() || !m_engine)

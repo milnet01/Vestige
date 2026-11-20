@@ -611,20 +611,29 @@ void AudioEngine::setBufferCacheLimit(size_t maxEntries)
 
 void AudioEngine::flushBufferCache()
 {
-    // Phase 10.9 Slice 8 W8: per-scene flush — release every cached
-    // buffer's OpenAL handle and clear the recency list. OpenAL refuses to
-    // delete a buffer still attached to a source, so buffers bound to active
-    // voices are not freed; stop those voices before flushing.
-    for (auto& [path, buffer] : m_bufferCache)
+    // Free every cached buffer no source holds. A buffer a source still
+    // plays stays cached, as in enforceBufferCacheLimit: OpenAL refuses to
+    // delete it, and dropping the entry would lose the only name it has.
+    for (auto it = m_bufferOrder.begin(); it != m_bufferOrder.end(); )
     {
-        if (m_available && buffer != 0)
+        auto cached = m_bufferCache.find(*it);
+        if (cached != m_bufferCache.end())
         {
-            alDeleteBuffers(1, &buffer);
+            ALuint buffer = cached->second;
+            if (m_available && buffer != 0)
+            {
+                if (isBufferAttached(buffer))
+                {
+                    ++it;
+                    continue;
+                }
+                alDeleteBuffers(1, &buffer);
+            }
+            m_bufferCache.erase(cached);
         }
+        m_loudnessLufs.erase(*it);  // AX9 — measurements are parallel to the cache
+        it = m_bufferOrder.erase(it);
     }
-    m_bufferCache.clear();
-    m_bufferOrder.clear();
-    m_loudnessLufs.clear();  // AX9 — measurements are parallel to the cache
 }
 
 float AudioEngine::loudnessMakeupForPath(const std::string& path) const

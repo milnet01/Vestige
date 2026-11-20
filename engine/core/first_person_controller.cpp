@@ -282,16 +282,18 @@ void FirstPersonController::applyTerrainCollision(glm::vec3& newPosition, float 
         targetY = terrainH + m_config.playerHeight;
     }
 
-    // Asymmetric exponential damping: fast up, smooth down
-    float lambda = (targetY > m_smoothedTerrainY)
-        ? m_config.terrainDampingUp    // Ascending — respond quickly
-        : m_config.terrainDampingDown; // Descending — ease down gently
-
-    m_smoothedTerrainY = glm::mix(m_smoothedTerrainY, targetY,
-                                   1.0f - std::exp(-lambda * deltaTime));
-
-    // Hard floor: never go below terrain surface
-    m_smoothedTerrainY = std::max(m_smoothedTerrainY, targetY);
+    // Going up, follow the ground exactly: the eye may never sink below
+    // its height above the terrain. Going down, ease towards it.
+    if (targetY >= m_smoothedTerrainY)
+    {
+        m_smoothedTerrainY = targetY;
+    }
+    else
+    {
+        m_smoothedTerrainY = glm::mix(
+            m_smoothedTerrainY, targetY,
+            1.0f - std::exp(-m_config.terrainDampingDown * deltaTime));
+    }
 
     newPosition.y = m_smoothedTerrainY;
 }

@@ -56,8 +56,9 @@ struct ControllerConfig
     float flyGroundClearance = 0.15f;
     float playerRadius = 0.3f;     // Collision radius
     float maxSlopeAngle = 50.0f;   // Maximum walkable slope in degrees
-    float terrainDampingUp = 20.0f;   // Damping rate when ascending terrain
-    float terrainDampingDown = 12.0f; // Damping rate when descending terrain
+    // How fast the eye eases down to falling ground. Rising ground is
+    // followed at once, so there is no matching rate for going up.
+    float terrainDampingDown = 12.0f;
 };
 
 /// @brief First-person controller — handles movement, looking, and collision.

@@ -19,11 +19,16 @@ namespace Vestige
 
 class ClothMeshCollider;  // Forward declaration
 
+/// @brief The most particles a cloth grid may have along one side. Both
+///        backends cut a larger request down to this, which bounds the
+///        memory one cloth can take.
+constexpr uint32_t kMaxClothGridSide = 256;
+
 /// @brief Configuration for cloth simulation.
 struct ClothConfig
 {
-    uint32_t width = 20;               ///< Particles along X axis
-    uint32_t height = 20;              ///< Particles along Z axis
+    uint32_t width = 20;               ///< Particles along X axis (capped at kMaxClothGridSide)
+    uint32_t height = 20;              ///< Particles along Z axis (capped at kMaxClothGridSide)
     float spacing = 0.1f;              ///< Meters between adjacent particles
     float particleMass = 0.1f;         ///< Mass per particle (kg)
     int substeps = 10;                 ///< XPBD substeps per frame

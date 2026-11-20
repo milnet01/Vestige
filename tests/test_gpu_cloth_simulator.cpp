@@ -1148,3 +1148,26 @@ TEST_F(GpuClothPinEditTest, UnpinAfterSimulateKeepsTheDrapedShape)
         << " m: it snapped back toward the flat start grid instead of keeping "
            "its ~0.18 m drape.";
 }
+
+// 3D_E-0874 — the GPU backend takes the CPU backend's grid cap (256 a
+// side) and reports the grid it built.
+class GpuClothGridCap : public ::Vestige::Test::GLTestFixture {};
+
+TEST_F(GpuClothGridCap, GridIsCappedLikeTheCpuBackend_0874)
+{
+    ClothConfig config;
+    config.width = 300;
+    config.height = 3;
+    config.spacing = 0.1f;
+
+    GpuClothSimulator sim;
+    sim.setShaderPath(VESTIGE_SHADER_DIR);
+    sim.initialize(config, /*seed=*/0);
+    if (!sim.isInitialized())
+    {
+        GTEST_SKIP() << "GPU cloth compute pipeline not available";
+    }
+    EXPECT_EQ(sim.getGridWidth(), 256u);
+    EXPECT_EQ(sim.getParticleCount(), 256u * 3u);
+    EXPECT_EQ(sim.getConfig().width, 256u);
+}

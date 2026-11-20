@@ -43,9 +43,12 @@ void ClothSimulator::initialize(const ClothConfig& config, uint32_t seed)
     m_gridW = config.width;
     m_gridH = config.height;
 
-    // H10: Cap grid dimensions to prevent excessive memory allocation
-    m_gridW = std::min(m_gridW, 256u);
-    m_gridH = std::min(m_gridH, 256u);
+    // Cap the grid so one cloth cannot take unbounded memory.
+    m_gridW = std::min(m_gridW, kMaxClothGridSide);
+    m_gridH = std::min(m_gridH, kMaxClothGridSide);
+    // getConfig() reports the grid that was built, not the one asked for.
+    m_config.width = m_gridW;
+    m_config.height = m_gridH;
 
     // Grid must be at least 2x2 to form triangles and avoid division by zero in UVs/wind
     if (m_gridW < 2 || m_gridH < 2)

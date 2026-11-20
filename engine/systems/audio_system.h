@@ -37,6 +37,10 @@ public:
     void shutdown() override;
     void update(float deltaTime) override;
 
+    /// @brief Stops the unloading scene's auto-played sounds and frees the
+    ///        cached sound buffers nothing is playing any more.
+    void onSceneUnload(Scene& scene) override;
+
     /// @brief Audio runs in the PostCamera phase so the listener-sync at
     ///        the top of `update()` reads the camera transform after the
     ///        camera has been stepped this frame (Phase 10.9 Slice 11 Sy1

@@ -1106,3 +1106,15 @@ TEST(ClothSimulator, SimulateOnUninitializedDoesNotCrash)
     EXPECT_EQ(sim.getParticleCount(), 0u);
     EXPECT_EQ(sim.getPositions(), nullptr);
 }
+
+// 3D_E-0874 — the grid is capped at 256 a side; the reported config said
+// the size asked for, so a caller sizing from getConfig() read past the grid.
+TEST(ClothSimulator, ConfigReportsTheCappedGrid_0874)
+{
+    ClothSimulator sim;
+    sim.initialize(clothSmallConfig(300, 3));
+    ASSERT_TRUE(sim.isInitialized());
+    EXPECT_EQ(sim.getGridWidth(), 256u);
+    EXPECT_EQ(sim.getConfig().width, sim.getGridWidth());
+    EXPECT_EQ(sim.getConfig().height, sim.getGridHeight());
+}

@@ -135,8 +135,8 @@ public:
     // in `m_bufferCache` for the lifetime of the AudioEngine. W8 adds an
     // LRU recency list + soft entry cap so streaming sound libraries
     // (footstep variants, ambient one-shots) don't grow VRAM/CPU memory
-    // forever. Per-scene flush lets a SceneManager drop everything on
-    // unload without tearing down the engine.
+    // forever. The per-scene flush drops what is no longer playing when a
+    // scene unloads, without tearing down the engine.
 
     /// @brief Sets the buffer-cache entry limit. Default
     ///        `kDefaultBufferCacheLimit`. Tightening retroactively
@@ -149,12 +149,11 @@ public:
     /// @brief Returns the current number of cached buffers.
     size_t getBufferCacheSize() const { return m_bufferCache.size(); }
 
-    /// @brief Releases every cached buffer (`alDeleteBuffers` per entry)
-    ///        and clears the recency list. Intended for per-scene
-    ///        unload. OpenAL refuses to delete a buffer still attached to a
-    ///        source (AL_INVALID_OPERATION), so a buffer bound to a playing
-    ///        voice is not freed here; stop those voices first. New
-    ///        `loadBuffer` calls re-decode from disk.
+    /// @brief Frees every cached buffer that no source is playing.
+    ///        `AudioSystem::onSceneUnload` calls it. A buffer still attached
+    ///        to a source stays cached, because OpenAL refuses to delete it;
+    ///        a later flush or eviction frees it. New `loadBuffer` calls
+    ///        re-decode from disk.
     void flushBufferCache();
 
     /// @brief Default buffer-cache cap. 256 entries comfortably covers

@@ -400,8 +400,14 @@ void GpuClothSimulator::uploadPinsIfDirty()
     m_pinsDirty = false;
 }
 
-void GpuClothSimulator::initialize(const ClothConfig& config, uint32_t seed)
+void GpuClothSimulator::initialize(const ClothConfig& asked, uint32_t seed)
 {
+    // The same cap as the CPU backend, taken before anything reads the grid
+    // size; getConfig() then reports the grid that was built.
+    ClothConfig config = asked;
+    config.width = std::min(config.width, kMaxClothGridSide);
+    config.height = std::min(config.height, kMaxClothGridSide);
+
     if (m_initialized) destroyBuffers();
     // Every reject below returns early, so clear this FIRST. Otherwise a
     // failed re-initialise leaves the previous run's `true` in place and the
