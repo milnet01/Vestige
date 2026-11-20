@@ -102,8 +102,9 @@ void UICheckbox::render(SpriteBatchRenderer& batch,
     // Label to the right (12 px gap per design).
     if (textRenderer != nullptr && !label.empty())
     {
-        const float scale = 0.36f;
-        const float labelX = absPos.x + box + 12.0f;
+        // The label and its gap grow with the interface scale (3D_E-0994).
+        const float scale = 0.36f * theme->defaultTextScale;
+        const float labelX = absPos.x + box + 12.0f * theme->defaultTextScale;
         const float labelY = textRenderer->topForCenteredCaps(absPos.y + box * 0.5f, scale);
         textRenderer->renderText2D(label, labelX, labelY, scale,
                                     theme->textPrimary,

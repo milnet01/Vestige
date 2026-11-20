@@ -20,13 +20,22 @@ UIDropdown::UIDropdown()
 
 namespace
 {
-constexpr float kItemHeight = 36.0f;  ///< Height of one row in the open list.
+constexpr float kItemHeight = 36.0f;  ///< Height of one row in the open list, at 1x.
 constexpr float kMenuGap    = 4.0f;   ///< Gap between the box and the list.
+constexpr float kTextScale  = 0.30f;  ///< Text scale at 1x.
+constexpr float kPadX       = 16.0f;  ///< Text inset from the box's sides, at 1x.
+constexpr float kCaretWidth = 8.0f;   ///< Room kept for the caret, at 1x.
+
+/// The interface scale the text and the list's rows grow with (3D_E-0994).
+float uiScale(const UITheme* theme)
+{
+    return theme != nullptr ? theme->defaultTextScale : 1.0f;
+}
 }
 
 float UIDropdown::visibleMenuHeight() const
 {
-    const float full = kItemHeight * static_cast<float>(options.size());
+    const float full = kItemHeight * uiScale(theme) * static_cast<float>(options.size());
     return theme != nullptr ? std::min(theme->dropdownMenuMaxHeight, full) : full;
 }
 
@@ -37,8 +46,9 @@ int UIDropdown::optionAt(const glm::vec2& local) const
     {
         return -1;
     }
-    const auto row = static_cast<std::size_t>((local.y - top) / kItemHeight);
-    const float rowBottom = static_cast<float>(row + 1) * kItemHeight;
+    const float itemH = kItemHeight * uiScale(theme);
+    const auto row = static_cast<std::size_t>((local.y - top) / itemH);
+    const float rowBottom = static_cast<float>(row + 1) * itemH;
     if (row >= options.size() || rowBottom > visibleMenuHeight())
     {
         return -1;
@@ -141,19 +151,25 @@ void UIDropdown::render(SpriteBatchRenderer& batch,
     // Label + caret.
     if (textRenderer != nullptr)
     {
-        const float scale = 0.30f;
-        const float pad   = 16.0f;
-        const float y     = textRenderer->topForCenteredCaps(absPos.y + size.y * 0.5f, scale);
+        const float ui     = uiScale(theme);
+        const float pad    = kPadX * ui;
+        const float caretX = absPos.x + size.x - pad - kCaretWidth * ui;
+        // A label too wide for the room left of the caret is drawn smaller.
+        const float scale  = textRenderer->scaleToFit(currentLabel(), kTextScale * ui,
+                                                      caretX - pad - (absPos.x + pad));
         textRenderer->renderText2D(currentLabel(),
-                                    absPos.x + pad, y, scale,
-                                    theme->textPrimary,
+                                    absPos.x + pad,
+                                    textRenderer->topForCenteredCaps(
+                                        absPos.y + size.y * 0.5f, scale),
+                                    scale, theme->textPrimary,
                                     screenWidth, screenHeight);
         // Caret on the right (mono ▼ / ▲ glyph). FreeType + the engine font
         // may not include arrow glyphs reliably; use a v / ^ ASCII approximation.
         const std::string caret = open ? "^" : "v";
-        textRenderer->renderText2D(caret,
-                                    absPos.x + size.x - pad - 8.0f, y,
-                                    scale, theme->textSecondary,
+        textRenderer->renderText2D(caret, caretX,
+                                    textRenderer->topForCenteredCaps(
+                                        absPos.y + size.y * 0.5f, kTextScale * ui),
+                                    kTextScale * ui, theme->textSecondary,
                                     screenWidth, screenHeight);
     }
 }
@@ -165,7 +181,9 @@ void UIDropdown::renderOpenList(SpriteBatchRenderer& batch, int screenWidth, int
     const glm::vec2 absPos = m_lastAbsPos;
     if (open && !options.empty() && textRenderer != nullptr && theme != nullptr)
     {
-        const float itemH       = kItemHeight;
+        const float ui          = uiScale(theme);
+        const float itemH       = kItemHeight * ui;
+        const float pad         = kPadX * ui;
         const float menuH       = visibleMenuHeight();
         const glm::vec2 menuPos{absPos.x, absPos.y + size.y + kMenuGap};
         const glm::vec2 menuSize{size.x, menuH};
@@ -181,11 +199,13 @@ void UIDropdown::renderOpenList(SpriteBatchRenderer& batch, int screenWidth, int
 
             const bool selected = (static_cast<int>(i) == selectedIndex);
             const glm::vec3 col = selected ? glm::vec3(theme->accent) : theme->textPrimary;
+            const float scale = textRenderer->scaleToFit(options[i].label, kTextScale * ui,
+                                                         size.x - 2.0f * pad);
             textRenderer->renderText2D(options[i].label,
-                                        menuPos.x + 16.0f,
+                                        menuPos.x + pad,
                                         textRenderer->topForCenteredCaps(
-                                            menuPos.y + yOff + itemH * 0.5f, 0.30f),
-                                        0.30f, col,
+                                            menuPos.y + yOff + itemH * 0.5f, scale),
+                                        scale, col,
                                         screenWidth, screenHeight);
         }
     }

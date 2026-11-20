@@ -686,4 +686,14 @@ float TextRenderer::measureTextWidth(const std::string& text) const
     return width;
 }
 
+float TextRenderer::scaleToFit(const std::string& text, float scale, float maxWidth) const
+{
+    const float width = measureTextWidth(text) * scale;
+    if (maxWidth <= 0.0f || width <= maxWidth)
+    {
+        return scale;
+    }
+    return scale * maxWidth / width;
+}
+
 } // namespace Vestige

@@ -145,6 +145,12 @@ public:
     /// @brief Measures the width of a text string in pixels (at scale 1.0).
     float measureTextWidth(const std::string& text) const;
 
+    /// @brief @a scale, or the smaller scale at which @a text is exactly
+    ///        @a maxWidth pixels wide when it would otherwise be wider.
+    ///        Returns @a scale when no font is loaded or @a maxWidth is not
+    ///        positive (3D_E-0994).
+    float scaleToFit(const std::string& text, float scale, float maxWidth) const;
+
     /// @brief The `y` to pass to `renderText2D` so a line of capitals at
     ///        @a scale is centred on @a centerY. `renderText2D`'s `y` is the
     ///        top of the line: the baseline sits one ascender below it

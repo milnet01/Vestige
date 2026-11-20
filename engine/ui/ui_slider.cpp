@@ -129,7 +129,7 @@ void UISlider::render(SpriteBatchRenderer& batch,
         }
         // Right-align by approximate string width — TextRenderer doesn't expose
         // measure-text yet; use a per-char heuristic (mono = ~9 px at scale 0.32).
-        const float scale = 0.32f;
+        const float scale = 0.32f * theme->defaultTextScale;  // grows with the interface scale
         const float approxWidth = static_cast<float>(formatted.size()) * 9.0f * scale * 2.5f;
         const float x = absPos.x + size.x - approxWidth;
         const float y = textRenderer->topForCenteredCaps(absPos.y + size.y * 0.5f, scale);

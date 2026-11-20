@@ -4,6 +4,7 @@
 #include "ui/settings_page_layout.h"
 
 #include "localization/localization_service.h"
+#include "renderer/text_renderer.h"
 #include "ui/ui_checkbox.h"
 #include "ui/ui_dropdown.h"
 #include "ui/ui_label.h"
@@ -72,7 +73,15 @@ void addRowLabels(UIElement& root, const char* const* keys, std::size_t count,
         auto label = std::make_unique<UILabel>();
         label->text = std::string(tr(keys[row]));
         label->position = {kLabelX, rowY(static_cast<int>(row), theme) + scaled(10.0f, theme)};
-        label->scale = 0.34f;
+        // Text grows with the interface scale; a label too wide for its
+        // column is drawn smaller, so it never runs under the control
+        // (3D_E-0994, user 2026-11-20).
+        label->scale = 0.34f * theme.defaultTextScale;
+        if (text != nullptr)
+        {
+            label->scale = text->scaleToFit(label->text, label->scale,
+                                            kControlX - kLabelX - scaled(16.0f, theme));
+        }
         label->color = theme.textPrimary;
         label->textRenderer = text;
         root.addChild(std::move(label));

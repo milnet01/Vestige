@@ -155,18 +155,27 @@ void UIButton::render(SpriteBatchRenderer& batch,
     if (textRenderer != nullptr && !label.empty())
     {
         const glm::vec3 col = textColor(style, renderState, *theme);
-        const float textScale = 0.4f;  // typeButton (20px) at ~50px font baseline.
+        // Text and the key-cap grow with the interface scale (3D_E-0994).
+        const float ui = theme->defaultTextScale;
         const float pad = theme->buttonPadX;
+        const bool hasShortcut = shortcut.present && !shortcut.text.empty();
+        const float kbdW = hasShortcut
+            ? (22.0f + static_cast<float>(shortcut.text.size()) * 7.0f) * ui
+            : 0.0f;
+        // The label has the box between the paddings, less the key-cap and
+        // one padding before it; a longer label is drawn smaller.
+        const float labelRoom = size.x - 2.0f * pad - (hasShortcut ? kbdW + pad : 0.0f);
+        // 0.4 is typeButton (20px) at ~50px font baseline.
+        const float textScale = textRenderer->scaleToFit(label, 0.4f * ui, labelRoom);
         const float y = textRenderer->topForCenteredCaps(absPos.y + size.y * 0.5f, textScale);
         textRenderer->renderText2D(label, absPos.x + pad, y, textScale, col,
                                     screenWidth, screenHeight);
 
         // Right-aligned shortcut key-cap.
-        if (shortcut.present && !shortcut.text.empty())
+        if (hasShortcut)
         {
-            const float kbdW = 22.0f
-                + static_cast<float>(shortcut.text.size()) * 7.0f;
-            const float kbdH = 22.0f;
+            const float kbdH = 22.0f * ui;
+            const float kbdScale = 0.22f * ui;
             const glm::vec2 kbdPos{absPos.x + size.x - pad - kbdW,
                                     absPos.y + (size.y - kbdH) * 0.5f};
             // On a filled PRIMARY button the dim key-cap colours vanish into
@@ -175,10 +184,10 @@ void UIButton::render(SpriteBatchRenderer& batch,
             drawBorder(batch, kbdPos, {kbdW, kbdH},
                        filled ? glm::vec4(col, 1.0f) : theme->panelStroke, 1.0f);
             textRenderer->renderText2D(shortcut.text,
-                                        kbdPos.x + 6.0f,
+                                        kbdPos.x + 6.0f * ui,
                                         textRenderer->topForCenteredCaps(
-                                            kbdPos.y + kbdH * 0.5f, 0.22f),
-                                        0.22f, filled ? col : theme->textSecondary,
+                                            kbdPos.y + kbdH * 0.5f, kbdScale),
+                                        kbdScale, filled ? col : theme->textSecondary,
                                         screenWidth, screenHeight);
         }
     }
