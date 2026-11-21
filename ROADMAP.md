@@ -1,6 +1,6 @@
 <!-- ants-roadmap-format: 1 -->
 <!-- Generated from the Ants Terminal roadmap store. Edit it with roadmap_log; hand edits are discarded by the next write. -->
-<!-- ants-roadmap-id-high-water: 3D_E=999 3D_E#S=989 -->
+<!-- ants-roadmap-id-high-water: 3D_E=1000 3D_E#S=989 -->
 
 # Vestige Engine Roadmap
 
@@ -8390,6 +8390,21 @@ shipped that have no invocation path at all.
   Kind: doc-fix.
   Source: exray-0005-part2-review-2026-11-21.
   Lanes: formula.
+
+- 📋 [3D_E-1000] **Vendor frameledger v0.8.0 in place of v0.7.0.**
+  frameledger announced 0.8.0 on 2026-11-21 (tag v0.8.0, commit c5f4cb2,
+  archive SHA256 3b7a03a350604cfef5e0d1339b00e88ed8fac72eac601237d005a8f264336228).
+  From it the run-file format is under the FLED-0040 stability promise and
+  the --json schemas are frozen; include/frameledger.h changed only in
+  FLED_VERSION (frameledger's word). New: compare's noisy_run warning
+  (FLED-0072). Same route as 3D_E-0991 (external/frameledger/, independent
+  review of the bump, DEPENDENCY_STANDARDS.md).
+  Done when: external/frameledger holds 0.8.0, the 60 FPS floor command in
+  CLAUDE.md still runs, and the review is done.
+  **Layman:** Update the frame-timing tool Vestige uses to its newest release.
+  Kind: chore.
+  Source: frameledger-release-2026-11-21.
+  Lanes: tooling.
 
 ## 0.3.0 — An editor a builder can use
 
