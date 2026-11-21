@@ -25,6 +25,25 @@ may change any interface without notice.
 
 ## [Unreleased]
 
+### 2026-11-21 Fixed — Formula Workbench shader export for other projects, build under CMake 4.5 (3D_E-0979, 3D_E-0995)
+
+- **The formula list the Workbench saves can now be turned into shader code** (3D_E-0995)
+  `formula_workbench --dump-library` left the formulas' maths out of the
+  file, so `--export-glsl` could not load it, though the Workbench README
+  tells other projects to do exactly that. The file now holds each
+  formula whole.
+
+- **Exported shader formulas can carry a project's own name prefix** (3D_E-0979)
+  `--export-glsl --prefix xr_` puts `xr_` in front of every exported
+  name, so two projects' copies of the formulas fit in one shader. A
+  mistyped option is now refused instead of ignored.
+
+- **Workaround: OpenAL Soft is built with CMake's `import std` module information hidden**
+  CMake 4.5 builds the compiler's standard-library module for OpenAL
+  Soft 1.25.2, which never uses it, and with GCC 16 that build fails on
+  OpenAL's own warning settings. Lift it when OpenAL or CMake stops
+  building that unused module under -Werror=undef.
+
 ### 2026-11-20 Fixed — Menu text follows the interface size (3D_E-0994)
 
 - **The interface size setting now grows the words in menus, not only the boxes** (3D_E-0994)

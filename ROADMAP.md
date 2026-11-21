@@ -1,6 +1,6 @@
 <!-- ants-roadmap-format: 1 -->
 <!-- Generated from the Ants Terminal roadmap store. Edit it with roadmap_log; hand edits are discarded by the next write. -->
-<!-- ants-roadmap-id-high-water: 3D_E=996 3D_E#S=989 -->
+<!-- ants-roadmap-id-high-water: 3D_E=997 3D_E#S=989 -->
 
 # Vestige Engine Roadmap
 
@@ -8192,7 +8192,7 @@ shipped that have no invocation path at all.
   Kind: fix.
   Source: frameledger-review-2026-11-14.
 
-- 📋 [3D_E-0979] **Formula Workbench --export-glsl takes a name prefix (--prefix xr_).**
+- ✅ [3D_E-0979] **Formula Workbench --export-glsl takes a name prefix (--prefix xr_).**
   Asked by ExperiRays for EXRAY-0005. engine/formula/codegen_glsl.cpp
   writes fixed names: each function as toGlslFunctionName(name), the
   safe-math prelude as safeDiv/safeSqrt/safeLog/safePow, guards
@@ -8210,6 +8210,12 @@ shipped that have no invocation path at all.
   both compile together in one shader on the GL test context.
   CPU / GPU placement: a build-time tool; the output runs on the GPU as
   it does today.
+  Shipped 2026-11-21 at 6a612a0: --prefix P on names, safe-math helpers
+  and calls, and both guard kinds (P before the guard:
+  xr_VESTIGE_FORMULA_PRELUDE, xr_VESTIGE_FORMULA_FN_linearToSrgb).
+  Unprefixed output byte-identical to the pre-change export, both tiers.
+  Unknown arguments and flags without a value are refused. Tests:
+  tests/test_formula_export_cli.cpp.
   **Layman:** Let a project stamp its own prefix on exported shader formulas, so two copies of the formula library in one shader no longer clash.
   Kind: feature.
   Source: experirays-request-2026-11-17.
@@ -8315,7 +8321,7 @@ shipped that have no invocation path at all.
   Kind: accessibility.
   Source: 3D_E-0874 lane-21 follow-up, 2026-11-20.
 
-- 📋 [3D_E-0995] **Formula Workbench --dump-library output cannot be loaded by --export-glsl.**
+- ✅ [3D_E-0995] **Formula Workbench --dump-library output cannot be loaded by --export-glsl.**
   Reported by ExperiRays (run 2026-11-20): `--dump-library > lib.json`
   exits 0, then `--export-glsl lib.json --out d` exits 1, "no formulas
   loaded". Read, not run by us: dumpLibraryJson in
@@ -8330,6 +8336,10 @@ shipped that have no invocation path at all.
   (check the drivers before changing its shape); the provenance hash of
   an export of the built-in library is unchanged or the change is named.
   Blocks ExperiRays EXRAY-0005 with 3D_E-0979; do them together.
+  Shipped 2026-11-21 at 6a612a0: the dump holds each formula whole plus
+  the old metadata fields; FormulaLibrary::loadFromJson reads the
+  {"formulas": [...]} form. Banner hash unchanged (metadata only). Test:
+  FormulaExportCli.DumpedLibraryExportsLikeTheBuiltIn_0995.
   **Layman:** The Workbench's "save the formula list" command leaves out the formulas themselves, so the file it writes cannot be used to generate shader code, although the README tells other projects to do exactly that.
   Kind: fix.
   Source: experirays-report-2026-11-20.
@@ -8350,6 +8360,22 @@ shipped that have no invocation path at all.
   **Layman:** At 1.5x or 2x interface size the buttons and settings now have bigger words, but the menu headings, small captions and the Settings category list stay the old size.
   Kind: accessibility.
   Source: 3D_E-0994 follow-up, 2026-11-20.
+
+- 📋 [3D_E-0997] **The --export-glsl banner's library hash does not change when only an expression changes.**
+  Read and run 2026-11-21. runExportGlslCli hashes libraryToJsonString,
+  which is formulaMetaToJson per formula: name, category, description,
+  inputs, default coefficients, source; no expression, tier or output
+  type. README "Gate on drift" says the hash spots an artifact made from
+  a different library; docs/research/pathtracer_formula_coverage_design.md
+  says it changes when a formula changes. Hashing the full dump form
+  would change every consumer's banner once, so tell DOOM Ants and
+  ExperiRays first.
+  Done when: a library differing only in one expression exports with a
+  different hash, proven by a test that fails first.
+  **Layman:** The fingerprint printed at the top of exported shader files ignores the formulas' maths, so two different libraries can carry the same fingerprint.
+  Kind: fix.
+  Source: 3D_E-0995 follow-up, 2026-11-21.
+  Lanes: formula.
 
 ## 0.3.0 — An editor a builder can use
 
@@ -9985,6 +10011,8 @@ Every Phase 11B gameplay hook that depends on rendering (hit decals, bullet-hole
   probe injection, G3 temporal multi-bounce + Chebyshev leak fix, G4 tier
   toggle + R4 reconciliation, G5 quality presets + accessibility. Budget
   ≤1.5 ms on the RX 6600. Awaiting user go-ahead to implement.
+  User decision 2026-11-21: parked until 0.4.0 work starts; ask again
+  then.
   **Layman:** Indirect lighting that bounces off all lights including ones off-screen, with a cheap "baked" mode for low-end machines and a live mode for games.
   Kind: implement.
   Source: design-of-record 2026-06-24 (cold-eyes converged, 6 loops).
