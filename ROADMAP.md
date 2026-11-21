@@ -1,6 +1,6 @@
 <!-- ants-roadmap-format: 1 -->
 <!-- Generated from the Ants Terminal roadmap store. Edit it with roadmap_log; hand edits are discarded by the next write. -->
-<!-- ants-roadmap-id-high-water: 3D_E=997 3D_E#S=989 -->
+<!-- ants-roadmap-id-high-water: 3D_E=999 3D_E#S=989 -->
 
 # Vestige Engine Roadmap
 
@@ -8377,6 +8377,20 @@ shipped that have no invocation path at all.
   Source: 3D_E-0995 follow-up, 2026-11-21.
   Lanes: formula.
 
+- 📋 [3D_E-0999] **Formula Workbench: inverse_square_falloff is named for a curve it is not, spot_cone_falloff lacks the shader's guard, the GLSL prelude cites a missing AUDIT.md.**
+  Found reviewing EXRAY-0005 part 2, 2026-11-21. inverse_square_falloff
+  (engine/formula/physics_templates.cpp) is the constant/linear/quadratic
+  polynomial; spot_cone_falloff has no 0.001 epsilon guard where
+  scene.frag.glsl has one; SafeMath::glslPrelude's comment cites
+  "AUDIT.md §H12 / FIXPLAN E4" and no AUDIT.md exists. Renaming a
+  template renames an export other projects include: tell DOOM Ants and
+  ExperiRays first.
+  Done when: each name and comment says what the code does.
+  **Layman:** Three formula names and notes describe something other than what they compute.
+  Kind: doc-fix.
+  Source: exray-0005-part2-review-2026-11-21.
+  Lanes: formula.
+
 ## 0.3.0 — An editor a builder can use
 
 Breaks: the scene format. Editor work changes what a scene stores.
@@ -11249,6 +11263,23 @@ Outdoor landscapes surrounding the Temple complex — hills, valleys, and the Ki
   **Layman:** Show the scene in spring or late summer with one button.
   Kind: feature.
   Source: research-engine-survey-2026-11-05.
+
+- 📋 [3D_E-0998] **Lights fade with distance as real light does: inverse square with glTF's range window, and glTF's spot cone.**
+  Read 2026-11-21. scene.frag.glsl lights points and spots with
+  1/(constant + linear*d + quadratic*d^2), defaults 1, 0.09, 0.032
+  (engine/renderer/light.h), and a linear spot ramp. KHR_lights_punctual
+  recommends max(min(1 - (d/range)^4, 1), 0) / d^2 and a squared
+  scale-and-offset cone. ExperiRays scores methods under the glTF form
+  (EXRAY-0001 § 4.5 names ours as a known difference), so a lab score on
+  a Vestige scene measures other light than Vestige draws.
+  User decision 2026-11-21: do it in 0.4.0, lights unchanged until then.
+  Done when: point and spot lights follow the glTF curves, the shipped
+  scenes' lamps are retuned with before/after captures, and the lab is told.
+  CPU / GPU placement: GPU, scene.frag.glsl light loop, as today.
+  **Layman:** Lamps light the room the way real lamps do, so lighting matches imported glTF files and the ExperiRays lab's scores.
+  Kind: enhancement.
+  Source: exray-0005-part2-review-2026-11-21.
+  Lanes: renderer.
 
 ## 0.5.0 — Interactivity
 
