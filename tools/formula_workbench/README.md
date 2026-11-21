@@ -45,8 +45,9 @@ The export model is **commit the generated GLSL; no runtime dependency on the to
 1. **Pin a library.** Author/fit your formulas, then `formula_workbench --dump-library > formulas.library.json` and commit that JSON in your project. (Or pin the built-in library by version — the provenance banner records which.)
 2. **Export in your build.** Run, ideally from a CMake custom command / CI step:
    ```
-   formula_workbench --export-glsl formulas.library.json --out shaders/generated/ [--tier full|approx]
+   formula_workbench --export-glsl formulas.library.json --out shaders/generated/ [--tier full|approx] [--prefix xr_]
    ```
+   `--prefix P` puts `P` before every function name, safe-math helper and include guard, so your export and another project's can be included in one shader. An argument the verb does not know is refused.
    This writes one self-contained `<formula_name>.glsl` per formula (safe-math prelude + provenance comment) plus a combined `formulas.glsl`. Output is **name-sorted and deterministic**, so regenerated artifacts diff cleanly — commit them.
 3. **Include + compile.** `#include "shaders/generated/formulas.glsl"` (or a single function file) in your shader and compile with `glslc` to SPIR-V. The functions are plain scalar GLSL with the safe-math guards inlined.
 4. **Gate on drift.** Wire the reference harness (the `reference_cases/*.json` regression) into your pre-commit / CI so a coefficient or expression change that drifts the look fails the build before it ships. The file banner's `library hash:` line lets you spot a regenerated-from-different-library artifact at a glance.

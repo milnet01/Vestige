@@ -6,6 +6,15 @@ All notable changes to the Formula Workbench are documented in this file.
 
 ### Fixed
 
+- **A dumped library exports (3D_E-0995).** `--dump-library` now writes
+  each formula whole, expressions included, and `--export-glsl` loads
+  that file. Each entry keeps the fields earlier dumps had
+  (`default_coefficients`, and `unit` and `source` even when empty). The
+  banner's library hash is unchanged: it is still taken over the
+  metadata alone, so it does not change when only an expression does.
+- **`--export-glsl` refuses an argument it does not know (3D_E-0979).**
+  A mistyped flag used to be ignored, and the export ran without it.
+
 - **Importing a CSV in the window and in benchmark mode give the same
   data (3D_E-0863).** Both now read files through `loadCsvDataset`. A
   row with a cell that is not a number is skipped and counted in the
@@ -14,6 +23,14 @@ All notable changes to the Formula Workbench are documented in this file.
   the row's last cell as the observed value.
 
 ### Added
+
+- **`--export-glsl --prefix P` (3D_E-0979).** `P` goes before every
+  function name, safe-math helper and call, and both kinds of include
+  guard (`xr_linearToSrgb`, `xr_safePow`,
+  `xr_VESTIGE_FORMULA_PRELUDE`, `xr_VESTIGE_FORMULA_FN_linearToSrgb`), so
+  two exports compile in one shader. With no prefix the output is
+  unchanged byte for byte. A prefix that is not an identifier start,
+  starts with `gl_` or makes a `__` is refused.
 
 - **Specular lobe with roughness and F0 as inputs (3D_E-0813).** Four
   templates for DOOM_Ants, all taking `alpha = roughness^2`:

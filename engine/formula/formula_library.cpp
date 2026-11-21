@@ -113,6 +113,11 @@ size_t FormulaLibrary::loadFromJson(const nlohmann::json& j)
             }
         }
     }
+    else if (j.is_object() && j.contains("formulas") && j["formulas"].is_array())
+    {
+        // The Workbench's --dump-library form.
+        return loadFromJson(j["formulas"]);
+    }
     else if (j.is_object())
     {
         // Single formula

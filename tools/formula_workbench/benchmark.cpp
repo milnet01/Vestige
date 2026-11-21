@@ -11,6 +11,7 @@
 #include <nlohmann/json.hpp>
 
 #include <algorithm>
+#include <cctype>
 #include <cmath>
 #include <cstdio>
 #include <cstdlib>
@@ -757,18 +758,56 @@ nlohmann::json formulaMetaToJson(const FormulaDefinition& f)
     return j;
 }
 
+// The --dump-library form: the whole definition, which
+// FormulaLibrary::loadFromFile reads back, plus the metadata fields earlier
+// dumps carried (default_coefficients, and unit and source even when empty).
+nlohmann::json formulaDumpToJson(const FormulaDefinition& f)
+{
+    nlohmann::json j = f.toJson();
+    const nlohmann::json meta = formulaMetaToJson(f);
+    j["default_coefficients"] = meta["default_coefficients"];
+    j["source"] = f.source;
+    for (auto& input : j["inputs"])
+    {
+        if (!input.contains("unit"))
+            input["unit"] = "";
+    }
+    return j;
+}
+
+// A GLSL name prefix: an identifier start, no reserved gl_ start and no '__'.
+bool isValidGlslPrefix(const std::string& prefix)
+{
+    if (prefix.empty() || prefix.rfind("gl_", 0) == 0
+        || prefix.find("__") != std::string::npos)
+        return false;
+    if (!(std::isalpha(static_cast<unsigned char>(prefix[0])) || prefix[0] == '_'))
+        return false;
+    for (char c : prefix)
+    {
+        if (!(std::isalnum(static_cast<unsigned char>(c)) || c == '_'))
+            return false;
+    }
+    return true;
+}
+
 } // namespace
 
-void dumpLibraryJson(const FormulaLibrary& library)
+std::string dumpLibraryJsonString(const FormulaLibrary& library)
 {
     nlohmann::json arr = nlohmann::json::array();
     for (const auto* f : library.getAll())
     {
-        if (f) arr.push_back(formulaMetaToJson(*f));
+        if (f) arr.push_back(formulaDumpToJson(*f));
     }
     nlohmann::json root;
     root["formulas"] = arr;
-    std::fputs(root.dump(2).c_str(), stdout);
+    return root.dump(2);
+}
+
+void dumpLibraryJson(const FormulaLibrary& library)
+{
+    std::fputs(dumpLibraryJsonString(library).c_str(), stdout);
     std::fputc('\n', stdout);
 }
 
@@ -791,24 +830,45 @@ std::optional<int> runExportGlslCli(int argc, char** argv)
 {
     std::string libraryPath;   // optional positional after the flag
     std::string outDir;
+    std::string prefix;
+    bool prefixGiven = false;
     QualityTier tier = QualityTier::FULL;
+
     bool requested = false;
+    for (int i = 1; i < argc && !requested; ++i)
+        requested = std::string(argv[i]) == "--export-glsl";
+    if (!requested)
+        return std::nullopt;
+
+    const char* const usage =
+        "Usage: formula_workbench --export-glsl [<library.json>] "
+        "--out <dir> [--tier full|approx] [--prefix <P>]\n";
 
     for (int i = 1; i < argc; ++i)
     {
         std::string a = argv[i];
+        const bool takesValue = a == "--out" || a == "--tier" || a == "--prefix";
+        if (takesValue && i + 1 >= argc)
+        {
+            std::fprintf(stderr, "error: %s needs a value\n%s", a.c_str(), usage);
+            return 1;
+        }
         if (a == "--export-glsl")
         {
-            requested = true;
             // Optional library path: the next token, unless it's another flag.
             if (i + 1 < argc && argv[i + 1][0] != '-')
                 libraryPath = argv[++i];
         }
-        else if (a == "--out" && i + 1 < argc)
+        else if (a == "--out")
         {
             outDir = argv[++i];
         }
-        else if (a == "--tier" && i + 1 < argc)
+        else if (a == "--prefix")
+        {
+            prefix = argv[++i];
+            prefixGiven = true;
+        }
+        else if (a == "--tier")
         {
             const std::string t = argv[++i];
             if (t == "approx" || t == "approximate")
@@ -822,17 +882,25 @@ std::optional<int> runExportGlslCli(int argc, char** argv)
                 return 1;
             }
         }
+        else
+        {
+            // A mistyped flag would otherwise export without it, silently.
+            std::fprintf(stderr, "error: unknown argument '%s'\n%s", a.c_str(), usage);
+            return 1;
+        }
     }
-
-    if (!requested)
-        return std::nullopt;
 
     if (outDir.empty())
     {
+        std::fprintf(stderr, "error: --export-glsl requires --out <dir>\n%s", usage);
+        return 1;
+    }
+    if (prefixGiven && !isValidGlslPrefix(prefix))
+    {
         std::fprintf(stderr,
-            "error: --export-glsl requires --out <dir>\n"
-            "Usage: formula_workbench --export-glsl [<library.json>] "
-            "--out <dir> [--tier full|approx]\n");
+            "error: --prefix '%s' must start with a letter or '_', hold only "
+            "letters, digits and '_', not start with gl_ and not contain '__'\n",
+            prefix.c_str());
         return 1;
     }
 
@@ -865,10 +933,25 @@ std::optional<int> runExportGlslCli(int argc, char** argv)
               [](const FormulaDefinition* a, const FormulaDefinition* b)
               { return a->name < b->name; });
 
+    // A prefix ending in '_' before a name starting with '_' makes a '__',
+    // which GLSL reserves.
+    for (const auto* f : formulas)
+    {
+        const std::string name = prefix + CodegenGlsl::toGlslFunctionName(f->name);
+        if (name.find("__") != std::string::npos)
+        {
+            std::fprintf(stderr,
+                "error: --prefix '%s' and formula '%s' make the reserved name %s\n",
+                prefix.c_str(), f->name.c_str(), name.c_str());
+            return 1;
+        }
+    }
+
     // Provenance banner (3D_E-0012): tool version + source-library hash.
     // Composed here in the tools layer and passed into the engine codegen,
-    // which cannot know either fact. The hash is FNV-1a over the canonical
-    // dumped-library JSON — provenance/diff only, never a trust decision.
+    // which cannot know either fact. The hash is FNV-1a over the library's
+    // metadata JSON (libraryToJsonString), so it ignores expressions; it is
+    // provenance/diff only, never a trust decision.
     const std::string libJson = libraryToJsonString(library);
     const std::string banner =
         std::string("// Generated by Vestige Formula Workbench v")
@@ -904,11 +987,11 @@ std::optional<int> runExportGlslCli(int argc, char** argv)
     for (const auto* f : formulas)
     {
         if (!f) continue;
-        const std::string code = CodegenGlsl::generateFile({f}, tier, banner);
+        const std::string code = CodegenGlsl::generateFile({f}, tier, banner, prefix);
         if (!writeFile(fs::path(outDir) / (f->name + ".glsl"), code))
             return 1;
     }
-    const std::string combined = CodegenGlsl::generateFile(formulas, tier, banner);
+    const std::string combined = CodegenGlsl::generateFile(formulas, tier, banner, prefix);
     if (!writeFile(fs::path(outDir) / "formulas.glsl", combined))
         return 1;
 

@@ -50,7 +50,9 @@ public:
 
     // -- Persistence --------------------------------------------------------
 
-    /// @brief Loads formulas from a JSON object (array of formula definitions).
+    /// @brief Loads formulas from an array of formula definitions, one
+    ///        definition, or an object whose "formulas" member is such an
+    ///        array (the Workbench's --dump-library output).
     /// @return Number of formulas loaded.
     size_t loadFromJson(const nlohmann::json& j);
 

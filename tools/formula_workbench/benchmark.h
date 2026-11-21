@@ -144,10 +144,13 @@ std::optional<int> runSymbolicRegressionCli(int argc, char** argv);
 /// anthropic SDK.
 std::optional<int> runSuggestFormulasCli(int argc, char** argv);
 
-/// @brief Emit the built-in FormulaLibrary as JSON to stdout.
-/// Used by ``--dump-library`` and by ``--suggest-formulas`` as the
-/// metadata piped into the LLM driver.
+/// @brief Emit dumpLibraryJsonString(library) to stdout (``--dump-library``).
 void dumpLibraryJson(const FormulaLibrary& library);
+
+/// @brief The text ``--dump-library`` writes: each formula whole, so
+/// ``--export-glsl`` loads it (3D_E-0995), plus the metadata fields earlier
+/// dumps carried.
+std::string dumpLibraryJsonString(const FormulaLibrary& library);
 std::optional<int> runDumpLibraryCli(int argc, char** argv);
 
 /// @brief 3D_E-0009 — headless GLSL export for an external Vulkan project.
@@ -156,6 +159,10 @@ std::optional<int> runDumpLibraryCli(int argc, char** argv);
 ///
 /// Usage:
 ///   formula_workbench --export-glsl [<library.json>] --out <dir> [--tier full|approx]
+///                     [--prefix <P>]
+///
+/// ``--prefix P`` goes before every emitted function name, safe-math function
+/// and include guard (3D_E-0979). Any other argument is refused.
 ///
 /// With no ``<library.json>`` the built-in library is exported; with a path it
 /// is loaded strictly (size-capped, parse errors surfaced, hostile names
@@ -164,8 +171,8 @@ std::optional<int> runDumpLibraryCli(int argc, char** argv);
 /// name-sorted for deterministic git diffs.
 std::optional<int> runExportGlslCli(int argc, char** argv);
 
-/// @brief Serialise a FormulaLibrary to a JSON string (same shape
-/// emitted by ``--dump-library``). Exposed so the GUI's Suggestions
+/// @brief Serialise a FormulaLibrary's metadata (no expressions) to a JSON
+/// string. The export banner's library hash is taken over it. Exposed so the GUI's Suggestions
 /// panel (§3.6 GUI) can pipe it through to ``llm_rank.py`` without
 /// writing to stdout.
 std::string libraryToJsonString(const FormulaLibrary& library);

@@ -55,7 +55,8 @@ std::string formatAccuracy(float accuracy)
 // ---------------------------------------------------------------------------
 
 std::string CodegenGlsl::emitExpression(const ExprNode& node,
-                                         const std::map<std::string, float>& coefficients)
+                                         const std::map<std::string, float>& coefficients,
+                                         const std::string& namePrefix)
 {
     switch (node.type)
     {
@@ -80,8 +81,8 @@ std::string CodegenGlsl::emitExpression(const ExprNode& node,
         const auto& left = *node.children[0];
         const auto& right = *node.children[1];
 
-        std::string l = emitExpression(left, coefficients);
-        std::string r = emitExpression(right, coefficients);
+        std::string l = emitExpression(left, coefficients, namePrefix);
+        std::string r = emitExpression(right, coefficients, namePrefix);
 
         if (node.op == "+" || node.op == "-" || node.op == "*")
         {
@@ -90,11 +91,11 @@ std::string CodegenGlsl::emitExpression(const ExprNode& node,
         // AUDIT.md §H12 / FIXPLAN E4: safe division to match evaluator.
         if (node.op == "/")
         {
-            return "safeDiv(" + l + ", " + r + ")";
+            return namePrefix + "safeDiv(" + l + ", " + r + ")";
         }
         if (node.op == "pow")
         {
-            return "safePow(" + l + ", " + r + ")";
+            return namePrefix + "safePow(" + l + ", " + r + ")";
         }
         if (node.op == "min")
         {
@@ -122,7 +123,7 @@ std::string CodegenGlsl::emitExpression(const ExprNode& node,
     case ExprNodeType::UNARY_OP:
     {
         node.requireChildren(1, "UNARY_OP");
-        std::string arg = emitExpression(*node.children[0], coefficients);
+        std::string arg = emitExpression(*node.children[0], coefficients, namePrefix);
 
         if (node.op == "negate")
             return "(-" + arg + ")";
@@ -134,9 +135,9 @@ std::string CodegenGlsl::emitExpression(const ExprNode& node,
         // AUDIT.md §H12 / FIXPLAN E4: safe-math wrappers prefixed from the
         // generated prelude (see CodegenGlsl::generateFile).
         if (node.op == "sqrt")
-            return "safeSqrt(" + arg + ")";
+            return namePrefix + "safeSqrt(" + arg + ")";
         if (node.op == "log")
-            return "safeLog(" + arg + ")";
+            return namePrefix + "safeLog(" + arg + ")";
 
         // Bare GLSL built-ins that need no domain guards.
         static const std::unordered_set<std::string> kBuiltins = {
@@ -154,9 +155,9 @@ std::string CodegenGlsl::emitExpression(const ExprNode& node,
     case ExprNodeType::CONDITIONAL:
     {
         node.requireChildren(3, "CONDITIONAL");
-        std::string cond = emitExpression(*node.children[0], coefficients);
-        std::string thenExpr = emitExpression(*node.children[1], coefficients);
-        std::string elseExpr = emitExpression(*node.children[2], coefficients);
+        std::string cond = emitExpression(*node.children[0], coefficients, namePrefix);
+        std::string thenExpr = emitExpression(*node.children[1], coefficients, namePrefix);
+        std::string elseExpr = emitExpression(*node.children[2], coefficients, namePrefix);
         return "(" + cond + " != 0.0 ? " + thenExpr + " : " + elseExpr + ")";
     }
     }
@@ -169,7 +170,8 @@ std::string CodegenGlsl::emitExpression(const ExprNode& node,
 // ---------------------------------------------------------------------------
 
 std::string CodegenGlsl::generateFunction(const FormulaDefinition& formula,
-                                            QualityTier tier)
+                                            QualityTier tier,
+                                            const std::string& namePrefix)
 {
     const ExprNode* expr = formula.getExpression(tier);
     if (!expr)
@@ -190,7 +192,7 @@ std::string CodegenGlsl::generateFunction(const FormulaDefinition& formula,
     }
 
     // Function signature
-    std::string funcName = toGlslFunctionName(formula.name);
+    std::string funcName = namePrefix + toGlslFunctionName(formula.name);
     std::string retType = toGlslType(formula.output.type);
     out << retType << " " << funcName << "(";
 
@@ -205,7 +207,7 @@ std::string CodegenGlsl::generateFunction(const FormulaDefinition& formula,
     out << ")\n{\n";
 
     // Function body
-    std::string body = emitExpression(*expr, formula.coefficients);
+    std::string body = emitExpression(*expr, formula.coefficients, namePrefix);
     out << "    return " << body << ";\n";
     out << "}\n";
 
@@ -214,7 +216,8 @@ std::string CodegenGlsl::generateFunction(const FormulaDefinition& formula,
 
 std::string CodegenGlsl::generateFile(const std::vector<const FormulaDefinition*>& formulas,
                                        QualityTier tier,
-                                       const std::string& fileBanner)
+                                       const std::string& fileBanner,
+                                       const std::string& namePrefix)
 {
     std::ostringstream out;
 
@@ -235,16 +238,20 @@ std::string CodegenGlsl::generateFile(const std::vector<const FormulaDefinition*
     // (or one file twice) without redefining anything. Per-function rather
     // than per-file guards, because the single-formula files repeat both.
     // Function names carry no '_', so a guard can never form a reserved '__'.
-    out << "#ifndef VESTIGE_FORMULA_PRELUDE\n#define VESTIGE_FORMULA_PRELUDE\n";
-    out << SafeMath::glslPrelude() << "#endif\n\n";
+    // The prefix goes in front of both guard kinds, so another export's
+    // guards (another prefix, or none) never hide this one's code.
+    const std::string preludeGuard = namePrefix + "VESTIGE_FORMULA_PRELUDE";
+    out << "#ifndef " << preludeGuard << "\n#define " << preludeGuard << "\n";
+    out << safeMathPrelude(namePrefix) << "#endif\n\n";
 
     for (const auto* formula : formulas)
     {
         if (!formula)
             continue;
-        const std::string guard = "VESTIGE_FORMULA_FN_" + toGlslFunctionName(formula->name);
+        const std::string guard =
+            namePrefix + "VESTIGE_FORMULA_FN_" + toGlslFunctionName(formula->name);
         out << "#ifndef " << guard << "\n#define " << guard << "\n";
-        out << generateFunction(*formula, tier);
+        out << generateFunction(*formula, tier, namePrefix);
         out << "#endif\n\n";
     }
 
@@ -288,6 +295,25 @@ std::string CodegenGlsl::generateSnippet(const FormulaDefinition& formula,
 std::string CodegenGlsl::safeMathPrelude()
 {
     return SafeMath::glslPrelude();
+}
+
+std::string CodegenGlsl::safeMathPrelude(const std::string& namePrefix)
+{
+    std::string text = SafeMath::glslPrelude();
+    if (namePrefix.empty())
+        return text;
+    // Each name is followed by '(' at its definition and at every call, and
+    // no name is a prefix of another, so this touches exactly those sites.
+    for (const char* name : {"safeDiv(", "safeSqrt(", "safeLog(", "safePow("})
+    {
+        const std::string needle = name;
+        for (size_t at = text.find(needle); at != std::string::npos;
+             at = text.find(needle, at + namePrefix.size() + needle.size()))
+        {
+            text.insert(at, namePrefix);
+        }
+    }
+    return text;
 }
 
 // ---------------------------------------------------------------------------

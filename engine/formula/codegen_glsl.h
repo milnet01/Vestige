@@ -28,9 +28,12 @@ public:
     /// @brief Generate a single GLSL function from a formula.
     /// @param formula The formula definition.
     /// @param tier Quality tier to generate (falls back to FULL).
+    /// @param namePrefix Written before the function's name and every
+    ///        safe-math call (see generateFile).
     /// @return GLSL function source code as a string.
     static std::string generateFunction(const FormulaDefinition& formula,
-                                         QualityTier tier = QualityTier::FULL);
+                                         QualityTier tier = QualityTier::FULL,
+                                         const std::string& namePrefix = "");
 
     /// @brief Generate a complete GLSL include file with all formulas.
     /// @param formulas Pointers to formula definitions.
@@ -41,10 +44,15 @@ public:
     ///        the Workbench tool version or the source-library hash — those are
     ///        tools-layer facts — so the `--export-glsl` verb composes the
     ///        provenance banner and passes it in here.
+    /// @param namePrefix Written before every function name, every safe-math
+    ///        function and call, and both kinds of include guard, so two
+    ///        exports with different prefixes compile in one shader. Empty
+    ///        gives the unprefixed text. The caller validates it.
     /// @return Complete GLSL file content.
     static std::string generateFile(const std::vector<const FormulaDefinition*>& formulas,
                                      QualityTier tier = QualityTier::FULL,
-                                     const std::string& fileBanner = "");
+                                     const std::string& fileBanner = "",
+                                     const std::string& namePrefix = "");
 
     /// @brief Generate one formula as text that compiles when pasted into a
     ///        shader on its own: the safe-math prelude (guarded, so two
@@ -62,9 +70,11 @@ public:
     /// @brief Emit a GLSL expression string from an expression node.
     /// @param node The expression tree root.
     /// @param coefficients Named coefficients to inline.
+    /// @param namePrefix Written before each safe-math call.
     /// @return GLSL expression string.
     static std::string emitExpression(const ExprNode& node,
-                                      const std::map<std::string, float>& coefficients);
+                                      const std::map<std::string, float>& coefficients,
+                                      const std::string& namePrefix = "");
 
     /// @brief Convert a snake_case formula name to a camelCase GLSL function name.
     static std::string toGlslFunctionName(const std::string& formulaName);
@@ -82,6 +92,9 @@ public:
     /// function into a larger shader can include the same prelude and
     /// keep evaluator/GLSL semantics aligned (AUDIT.md §H12).
     static std::string safeMathPrelude();
+
+    /// @brief safeMathPrelude() with @a namePrefix before each function name.
+    static std::string safeMathPrelude(const std::string& namePrefix);
 };
 
 } // namespace Vestige

@@ -365,6 +365,7 @@ if(NOT WIN32)
         test_formula_tools.cpp
         test_fit_history.cpp
         test_benchmark.cpp
+        test_formula_export_cli.cpp
         test_fit_diagnostics.cpp
         test_reference_harness.cpp
         test_async_driver.cpp
