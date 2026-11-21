@@ -376,7 +376,14 @@ set(ALSOFT_INSTALL_CONFIG OFF CACHE BOOL "" FORCE)
 set(ALSOFT_INSTALL_HRTF_DATA OFF CACHE BOOL "" FORCE)
 set(ALSOFT_INSTALL_AMBDEC_PRESETS OFF CACHE BOOL "" FORCE)
 set(ALSOFT_INSTALL_UTILS OFF CACHE BOOL "" FORCE)
+# CMake 4.5 builds the compiler's `import std` module for every target with
+# C++ modules, as OpenAL Soft 1.25.2 has, though OpenAL never imports std.
+# With GCC 16 that build fails on OpenAL's own -Werror=undef (std.cc tests
+# undefined feature macros). Hiding the std module metadata stops the build.
+set(_vestige_std_modules_json "${CMAKE_CXX_STDLIB_MODULES_JSON}")
+set(CMAKE_CXX_STDLIB_MODULES_JSON "")
 FetchContent_MakeAvailable(openal-soft)
+set(CMAKE_CXX_STDLIB_MODULES_JSON "${_vestige_std_modules_json}")
 # Clang 20+ only: OpenAL Soft turns -Wfunction-effects into an error even with
 # ALSOFT_WERROR OFF, and its own code trips it (alc/alu.cpp, 1.25.2 under Clang
 # 23). A warning in upstream code is upstream's to fix; keep it a warning so the
