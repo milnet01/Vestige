@@ -1,6 +1,6 @@
 <!-- ants-roadmap-format: 1 -->
 <!-- Generated from the Ants Terminal roadmap store. Edit it with roadmap_log; hand edits are discarded by the next write. -->
-<!-- ants-roadmap-id-high-water: 3D_E=1000 3D_E#S=989 -->
+<!-- ants-roadmap-id-high-water: 3D_E=1001 3D_E#S=989 -->
 
 # Vestige Engine Roadmap
 
@@ -8405,6 +8405,26 @@ shipped that have no invocation path at all.
   Kind: chore.
   Source: frameledger-release-2026-11-21.
   Lanes: tooling.
+
+- 📋 [3D_E-1001] **A mirrored one-sided mesh shows its back faces: the renderer never flips the front face for a negative-determinant model matrix.**
+  Read, not run, 2026-11-21 (while answering ExperiRays on
+  EXRAY-0006's cull). engine/renderer/renderer.cpp sets
+  glFrontFace(GL_CCW) once at start-up; no draw sets GL_CW, and nothing
+  in the renderer tests a model matrix's determinant. The editor makes
+  mirrored entities (engine/editor/entity_actions.cpp keeps a mirror's
+  sign on x scale), and glTF allows negative scale. A mirror reverses the
+  winding in clip space, so a one-sided mesh is culled on its glTF front
+  and drawn from behind. Shadow passes likely the same (not checked).
+  Done when: a mirrored one-sided mesh draws its glTF front in the scene
+  pass and casts the same shadow as its unmirrored twin, proven by an FBO
+  readback test that fails first (pattern: tests/test_ui_checkbox_render.cpp).
+  Tell ExperiRays when it ships.
+  CPU / GPU placement: CPU picks the front-face state per draw from the
+  model matrix's sign, as the cull state is picked per material today.
+  **Layman:** An object flipped like a mirror image in the editor shows its inside instead of its outside.
+  Kind: fix.
+  Source: exray-0006-cull-questions-2026-11-21.
+  Lanes: renderer.
 
 ## 0.3.0 — An editor a builder can use
 
