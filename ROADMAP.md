@@ -7701,6 +7701,13 @@ shipped that have no invocation path at all.
   (3D_E-1002). User decisions 2026-11-22: a real bad input first, a
   hidden test-only switch only if none exists; process tests run on
   every push.
+  2026-11-22: lane-20 audio_system 129 fixed: with no active scene,
+  AudioSystem::update still refreshes m_busActivePrev before returning.
+  Engine-in-a-test rig: Engine() now builds m_sceneManager and m_camera
+  (no window or GL needed), so a bare Engine serves AudioSystem in a
+  test on OpenAL's null device. tests/test_audio_no_scene_ducking.cpp,
+  seen red (music duck 1.0) then green. Rigs left: full-pass shader,
+  headless Workbench.
   **Layman:** About 290 lower-risk possible bugs and the medium findings are still unchecked.
   Kind: review-fix.
   Source: review-readability 2026-10-31 at 7b2a81d.

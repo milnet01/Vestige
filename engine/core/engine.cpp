@@ -111,8 +111,12 @@ void setBlocksMovementRecursive(Entity& entity, bool blocks)
 }
 } // namespace
 
+// The scene manager and camera need no window or GL context, so they exist
+// from construction: a test can hand a bare Engine to a system (3D_E-0874).
 Engine::Engine()
-    : m_isRunning(false)
+    : m_camera(std::make_unique<Camera>(glm::vec3(0.0f, 1.7f, 5.0f)))  // slightly above the ground
+    , m_sceneManager(std::make_unique<SceneManager>())
+    , m_isRunning(false)
     , m_isCursorCaptured(true)
 {
 }
@@ -229,12 +233,6 @@ bool Engine::initialize(const EngineConfig& config)
     // A relative asset path names a file under the asset root, sandbox or not
     // (docs/specs/3D_E-0874-asset-relative-paths.md).
     m_resourceManager->setAssetRoot(config.assetPath);
-
-    // Create scene manager
-    m_sceneManager = std::make_unique<SceneManager>();
-
-    // Create camera — start slightly above the ground
-    m_camera = std::make_unique<Camera>(glm::vec3(0.0f, 1.7f, 5.0f));
 
     // Create first-person controller
     ControllerConfig ctrlConfig;

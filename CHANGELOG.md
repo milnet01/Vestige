@@ -31,6 +31,10 @@ may change any interface without notice.
   Before, it was shown on the console only: the log file had closed
   before the error was written.
 
+- **Dialogue lowers the music even before a scene is loaded**
+  With no scene, a dialogue line or stinger did not trigger the
+  Voice → Music duck route, so the music stayed at full volume.
+
 ### 2026-11-21 Fixed — Formula Workbench shader export for other projects, build under CMake 4.5 (3D_E-0979, 3D_E-0995)
 
 - **The formula list the Workbench saves can now be turned into shader code** (3D_E-0995)

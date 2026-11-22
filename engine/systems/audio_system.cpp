@@ -171,9 +171,19 @@ void AudioSystem::update(float deltaTime)
     // in shipping code (pitch, velocity, attenuationModel, min/max/
     // rolloff, occlusionMaterial/Fraction, spatial, autoPlay) now
     // drive the playing source live.
+    // AX13 — a bus is "active" for next frame's router pass if a live
+    // playback on it is above a small volume floor (read pre-duck to avoid
+    // feedback). 3D_E-0742: read from the engine's live playbacks at the end
+    // of this update, so sounds played by script nodes, stingers and
+    // AmbientSystem count as well as scene audio sources.
+    constexpr float kBusActiveVolume = 0.01f;
+
     Scene* scene = m_engine->getSceneManager().getActiveScene();
     if (scene == nullptr)
     {
+        // Sounds play with no scene too (a menu's dialogue, a stinger), so
+        // their activity still feeds the router (3D_E-0874).
+        m_busActivePrev = m_audioEngine.busesWithLivePlayback(kBusActiveVolume);
         return;
     }
 
@@ -197,13 +207,6 @@ void AudioSystem::update(float deltaTime)
     // enable is user-facing, read from the engine).
     AudioLodConfig lod = m_lodConfig;
     lod.enabled        = m_audioEngine.isLodEnabled();
-
-    // AX13 — a bus is "active" for next frame's router pass if a live
-    // playback on it is above a small volume floor (read pre-duck to avoid
-    // feedback). 3D_E-0742: read from the engine's live playbacks at the end
-    // of this update, so sounds played by script nodes, stingers and
-    // AmbientSystem count as well as scene audio sources.
-    constexpr float kBusActiveVolume = 0.01f;
 
     // 3D_E-0739 — a tracked playback is ours only while it still plays and
     // its source still carries the ticket we stored: eviction hands the
