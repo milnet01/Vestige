@@ -374,6 +374,8 @@ if(NOT WIN32)
         test_pysr_parser.cpp
         test_markdown_render.cpp
         test_formula_node_editor_panel.cpp
+        test_plot_cache_guard.cpp
+        ${CMAKE_SOURCE_DIR}/tools/formula_workbench/plot_cache_guard.cpp
         ${CMAKE_SOURCE_DIR}/tools/formula_workbench/fit_history.cpp
         ${CMAKE_SOURCE_DIR}/tools/formula_workbench/benchmark.cpp
         ${CMAKE_SOURCE_DIR}/tools/formula_workbench/fit_diagnostics.cpp

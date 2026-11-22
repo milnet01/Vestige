@@ -18,6 +18,7 @@
 #include "fit_diagnostics.h"
 #include "formula_node_editor_panel.h"
 #include "markdown_render.h"
+#include "plot_cache_guard.h"
 #include "formula/curve_fitter.h"
 #include "formula/formula_library.h"
 #include "formula/formula_preset.h"
@@ -97,6 +98,7 @@ private:
 
     // -- Data -----------------------------------------------------------------
     std::vector<DataPoint> m_dataPoints;
+    PlotCacheGuard m_plotCacheGuard;  ///< When the plot cache is stale.
     static constexpr int MAX_VARIABLES = 8;
 
     // -- Coefficients (editable initial values) -------------------------------

@@ -16,6 +16,7 @@ add_executable(formula_workbench
     formula_workbench/async_driver.cpp
     formula_workbench/pysr_parser.cpp
     formula_workbench/markdown_render.cpp
+    formula_workbench/plot_cache_guard.cpp
     formula_workbench/formula_node_editor_core.cpp
     formula_workbench/formula_node_editor_panel.cpp
 )

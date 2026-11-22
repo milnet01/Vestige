@@ -6,6 +6,10 @@ All notable changes to the Formula Workbench are documented in this file.
 
 ### Fixed
 
+- **The plot follows an edited data point (3D_E-0874).** Changing a
+  value in the data editor now redraws the plot and its residuals. A
+  data set with a point that lacks the plotted input no longer rebuilds
+  the plot on every frame.
 - **A dumped library exports (3D_E-0995).** `--dump-library` now writes
   each formula whole, expressions included, and `--export-glsl` loads
   that file. Each entry keeps the fields earlier dumps had

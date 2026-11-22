@@ -672,7 +672,7 @@ void Workbench::renderVisualizer()
     }
 
     // Build data arrays for plotting
-    if (m_dataX.empty() || m_dataX.size() != m_dataPoints.size())
+    if (m_plotCacheGuard.needsRebuild(m_dataPoints, m_plotVariable, m_selectedFormulaName))
         rebuildVisualizationCache();
 
     // Main plot
@@ -2004,6 +2004,7 @@ void Workbench::rebuildVisualizationCache()
     m_curveY.clear();
     m_approxCurveY.clear();
     m_residuals.clear();
+    m_plotCacheGuard.markBuilt(m_dataPoints, m_plotVariable, m_selectedFormulaName);
 
     if (!m_selectedFormula || m_dataPoints.empty() || m_plotVariable.empty())
         return;

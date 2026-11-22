@@ -7717,6 +7717,13 @@ shipped that have no invocation path at all.
   taa_resolve 170 and bloom_downsample 89 (NaN guards; llvmpipe may not
   show NaN), particle 395/401 (latent, no caller), terrain 602 (NEEDS
   DECISION). Rig left: headless Workbench.
+  2026-11-22: lane-12 workbench.cpp 675 fixed. The rebuild decision
+  moved to tools/formula_workbench/plot_cache_guard.{h,cpp} (no ImGui;
+  user chose this split over a whole headless Workbench, 2026-11-22). It
+  keeps a copy of the points, plotted variable and formula name the
+  cache was built from. tests/test_plot_cache_guard.cpp: the old count
+  rule extracted unchanged went red on 3 of 5 tests, green after. All
+  four rigs now exist.
   **Layman:** About 290 lower-risk possible bugs and the medium findings are still unchecked.
   Kind: review-fix.
   Source: review-readability 2026-10-31 at 7b2a81d.
