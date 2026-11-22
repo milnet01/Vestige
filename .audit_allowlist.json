@@ -1,0 +1,17 @@
+{
+  "allowlist": [
+    {"rule": "env_files", "path_glob": "**.ci-tools/**", "line_regex": ".", "reason": ".ci-tools is gitignored: local CMake copies. Their Windows_TemporaryKey.pfx is CMake's public template key."},
+    {"rule": "header_guards", "path_glob": "**.ci-tools/**", "line_regex": ".", "reason": ".ci-tools is gitignored: CMake's own probe headers."},
+    {"rule": "cppcheck", "path_glob": "**.ci-tools/**", "line_regex": ".", "reason": ".ci-tools is gitignored: CMake's own probe sources."},
+    {"rule": "cppcheck_unused", "path_glob": "**.ci-tools/**", "line_regex": ".", "reason": ".ci-tools is gitignored: CMake's own probe sources."},
+    {"rule": "insecure_http", "path_glob": "**.ci-tools/**", "line_regex": ".", "reason": ".ci-tools is gitignored: CMake's MSBuild templates."},
+    {"rule": "memory_patterns", "path_glob": "**.ci-tools/**", "line_regex": ".", "reason": ".ci-tools is gitignored: CMake's bundled documentation JavaScript."},
+    {"rule": "silent_catch", "path_glob": "**.ci-tools/**", "line_regex": ".", "reason": ".ci-tools is gitignored: jQuery bundled with CMake's documentation."},
+    {"rule": "encoding_check", "path_glob": "**node_modules/**", "line_regex": ".", "reason": "Installed npm packages; not our source."},
+    {"rule": "unsafe_deser", "path_glob": "**tools/audit/lib/auto_config.py", "line_regex": ".", "reason": "The audit tool's own rule table: the matches are pattern descriptions, not calls."},
+    {"rule": "format_string", "path_glob": "**tools/audit/lib/auto_config.py", "line_regex": ".", "reason": "The audit tool's own rule table: the matches are pattern descriptions, not calls."},
+    {"rule": "unsafe_c_funcs", "path_glob": "**tools/audit/lib/auto_config.py", "line_regex": ".", "reason": "The audit tool's own rule table: the matches are pattern descriptions, not calls."},
+    {"rule": "git_sensitive", "path_glob": "**.github/workflows/secret-scan.yml", "line_regex": ".", "reason": "The workflow that scans for secrets; its name matched, it holds none."},
+    {"rule": "compiler_warnings", "path_glob": "**-src/**", "line_regex": ".", "reason": "FetchContent sources of third-party libraries (Recast, tinyexr, OpenAL Soft); upstream's warnings."}
+  ]
+}
