@@ -168,6 +168,7 @@ id_ed25519
 /DISCOVERY.md
 /FIXPLAN.md
 /audit_rule_quality.json
+/audit_rule_quality.json.lock
 # Audit artefacts — new canonical home after Phase G docs/ restructure.
 docs/archive/audits/AUDIT_[0-9]*.md
 docs/archive/audits/CODE_AUDIT_REPORT.md
