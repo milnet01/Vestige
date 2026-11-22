@@ -14,6 +14,8 @@
 #include <gtest/gtest.h>
 #include <algorithm>
 #include <cmath>
+#include <stdexcept>
+#include <string>
 #include <unordered_map>
 
 using namespace Vestige;
@@ -36,7 +38,11 @@ const FormulaDefinition& byName(const std::vector<FormulaDefinition>& all,
 {
     auto it = std::find_if(all.begin(), all.end(),
                            [&](const FormulaDefinition& d) { return d.name == name; });
-    EXPECT_NE(it, all.end()) << "missing audio template: " << name;
+    if (it == all.end())
+    {
+        // Thrown, not dereferenced: GTest fails this one test with the message.
+        throw std::runtime_error("missing audio template: " + name);
+    }
     return *it;
 }
 

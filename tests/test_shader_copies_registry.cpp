@@ -166,7 +166,9 @@ TEST(ShaderCopies, RegisteredCopiesMatch)
         ASSERT_NE(it, defs.end()) << c.name << " no longer exists: remove its entry";
         EXPECT_GE(it->second.size(), 2u) << c.name << " is no longer copied: remove its entry";
         if (!c.differ.empty())
+        {
             EXPECT_STRNE(c.reason, "") << c.name << ": say why the copies differ";
+        }
 
         const std::string* first = nullptr;
         std::string firstFile;

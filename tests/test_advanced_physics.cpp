@@ -1137,12 +1137,21 @@ TEST(DismembermentZonesCascade, SeveringParentSeverChildren)
     EXPECT_TRUE(severed);
 
     // Children should be cascaded
-    if (leftLowerArm >= 0) EXPECT_TRUE(zones.isZoneSevered(leftLowerArm));
-    if (leftHand >= 0) EXPECT_TRUE(zones.isZoneSevered(leftHand));
+    if (leftLowerArm >= 0)
+    {
+        EXPECT_TRUE(zones.isZoneSevered(leftLowerArm));
+    }
+    if (leftHand >= 0)
+    {
+        EXPECT_TRUE(zones.isZoneSevered(leftHand));
+    }
 
     // Right arm should be unaffected
     int rightUpperArm = zones.findZoneForBone(skeleton->findJoint("RightUpperArm"));
-    if (rightUpperArm >= 0) EXPECT_FALSE(zones.isZoneSevered(rightUpperArm));
+    if (rightUpperArm >= 0)
+    {
+        EXPECT_FALSE(zones.isZoneSevered(rightUpperArm));
+    }
 }
 
 TEST(DismembermentZonesCascade, ResetRestoresAllZones)
@@ -1162,7 +1171,10 @@ TEST(DismembermentZonesCascade, ResetRestoresAllZones)
     zones.reset();
 
     // All zones should be restored
-    if (head >= 0) EXPECT_FALSE(zones.isZoneSevered(head));
+    if (head >= 0)
+    {
+        EXPECT_FALSE(zones.isZoneSevered(head));
+    }
 }
 
 // --- DeformableMesh: impact deformation ---

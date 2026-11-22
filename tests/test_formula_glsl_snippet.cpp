@@ -52,8 +52,8 @@ FormulaDefinition ratioFormula()
     FormulaDefinition formula;
     formula.name = "scaled_ratio";
     formula.description = "k * a / b";
-    formula.inputs.push_back({"a", FormulaValueType::FLOAT});
-    formula.inputs.push_back({"b", FormulaValueType::FLOAT});
+    formula.inputs.push_back({"a", FormulaValueType::FLOAT, "", 0.0f});
+    formula.inputs.push_back({"b", FormulaValueType::FLOAT, "", 0.0f});
     formula.expressions[QualityTier::FULL] = ExprNode::binaryOp(
         "/",
         ExprNode::binaryOp("*", ExprNode::variable("k"), ExprNode::variable("a")),

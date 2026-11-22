@@ -127,7 +127,10 @@ TEST(Phisem, GrainCountApproximatesRateTimesDuration)
     {
         EXPECT_GE(onsets[i], 0);
         EXPECT_LT(onsets[i], maxSample);
-        if (i > 0) EXPECT_GE(onsets[i], onsets[i - 1]);
+        if (i > 0)
+        {
+            EXPECT_GE(onsets[i], onsets[i - 1]);
+        }
     }
 }
 

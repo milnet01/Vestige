@@ -139,9 +139,9 @@ TEST(ModelTest, CountsMatchAddedData)
     Model model;
 
     // Add some primitives (mesh is nullptr — that's fine for counting)
-    model.m_primitives.push_back({nullptr, 0, AABB{}});
-    model.m_primitives.push_back({nullptr, 1, AABB{}});
-    model.m_primitives.push_back({nullptr, 0, AABB{}});
+    model.m_primitives.push_back({nullptr, 0, AABB{}, {}});
+    model.m_primitives.push_back({nullptr, 1, AABB{}, {}});
+    model.m_primitives.push_back({nullptr, 0, AABB{}, {}});
 
     // Add materials
     model.m_materials.push_back(std::make_shared<Material>());

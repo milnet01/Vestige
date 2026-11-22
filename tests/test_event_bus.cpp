@@ -155,10 +155,9 @@ TEST(EventBusPe4, UnsubscribeDuringDispatchTombstonesNotErases_Pe4)
     int aCalls = 0;
     int bCalls = 0;
 
-    SubscriptionId aId = 0;
     SubscriptionId bId = 0;
 
-    aId = bus.subscribe<WindowResizeEvent>([&](const WindowResizeEvent&)
+    bus.subscribe<WindowResizeEvent>([&](const WindowResizeEvent&)
     {
         ++aCalls;
         // A unsubscribes B during dispatch. B must not fire this turn — the

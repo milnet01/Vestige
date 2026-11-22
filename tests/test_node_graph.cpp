@@ -1057,13 +1057,21 @@ TEST(NodeGraph_Json, PreservesNodeCategories)
     for (const auto& [id, node] : restored.getNodes())
     {
         if (node.operation == "+")
+        {
             EXPECT_EQ(node.category, NodeCategory::MATH_BASIC);
+        }
         else if (node.operation == "sin")
+        {
             EXPECT_EQ(node.category, NodeCategory::TRIGONOMETRY);
+        }
         else if (node.operation == "literal")
+        {
             EXPECT_EQ(node.category, NodeCategory::INPUT);
+        }
         else if (node.operation == "output")
+        {
             EXPECT_EQ(node.category, NodeCategory::OUTPUT);
+        }
     }
 }
 

@@ -172,7 +172,7 @@ TEST(TweenTest, PingPongReverses)
 
     // At exactly 1.0s, should be at the end (10.0)
     tween.update(1.0f);
-    float atEnd = value;
+    EXPECT_NEAR(value, 10.0f, 0.5f);
 
     // At 1.5s, should be 50% back → value = 5
     tween.update(0.5f);

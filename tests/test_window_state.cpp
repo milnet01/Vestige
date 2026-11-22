@@ -30,7 +30,10 @@ TEST(WindowState, MalformedFilesAreIgnoredNotThrown)
     {
         EXPECT_NO_THROW({
             const auto s = parseWindowState(text);
-            if (s) EXPECT_FALSE(s->maximized) << text;
+            if (s)
+            {
+                EXPECT_FALSE(s->maximized) << text;
+            }
         }) << text;
     }
     EXPECT_FALSE(parseWindowState(R"({"width":"x","height":900})").has_value());

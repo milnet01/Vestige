@@ -48,23 +48,6 @@ static std::shared_ptr<AnimationClip> makeConstantClip(
     return clip;
 }
 
-/// @brief Creates a clip that moves joint 0 linearly from posA to posB.
-static std::shared_ptr<AnimationClip> makeLinearClip(
-    const std::string& name, float duration, glm::vec3 posA, glm::vec3 posB)
-{
-    auto clip = std::make_shared<AnimationClip>();
-    clip->m_name = name;
-
-    AnimationChannel ch;
-    ch.jointIndex = 0;
-    ch.targetPath = AnimTargetPath::TRANSLATION;
-    ch.interpolation = AnimInterpolation::LINEAR;
-    ch.timestamps = {0.0f, duration};
-    ch.values = {posA.x, posA.y, posA.z, posB.x, posB.y, posB.z};
-    clip->m_channels.push_back(ch);
-    clip->computeDuration();
-    return clip;
-}
 
 // ---------------------------------------------------------------------------
 // Tests
