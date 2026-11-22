@@ -42,6 +42,7 @@ add_executable(vestige_tests
     test_framebuffer.cpp
     test_fxaa.cpp
     test_smaa.cpp
+    test_contact_shadow_steps.cpp
     test_motion_vectors_mrt.cpp
     test_shadow_map.cpp
     test_tangent_calc.cpp

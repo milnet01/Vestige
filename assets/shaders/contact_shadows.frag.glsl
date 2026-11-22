@@ -107,8 +107,10 @@ void main()
     // Thickness threshold — reject occluders that are too thick (behind the surface)
     float thicknessThreshold = scaledRayLength * 0.1;
 
-    // Start a few steps ahead to avoid self-intersection
-    vec3 currentPos = viewPos + rayStep * 2.0;
+    // The loop steps before it samples, so sample i sits i steps out: the
+    // first sample is two steps ahead, clear of the surface itself, and the
+    // last is at the full ray length.
+    vec3 currentPos = viewPos + rayStep;
 
     float shadow = 0.0;
 

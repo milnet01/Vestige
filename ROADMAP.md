@@ -7708,6 +7708,15 @@ shipped that have no invocation path at all.
   test on OpenAL's null device. tests/test_audio_no_scene_ducking.cpp,
   seen red (music duck 1.0) then green. Rigs left: full-pass shader,
   headless Workbench.
+  2026-11-22: lane-06 contact_shadows.frag.glsl 111 fixed: the march
+  starts one step out, so sample i sits i steps along the ray. Full-pass
+  shader rig: tests/gl_pass_helpers.h (FloatTexture input, real shader
+  drawn over an R32F image, every pixel read back).
+  tests/test_contact_shadow_steps.cpp seen red on llvmpipe (0.5375, the
+  t = 3/8 value) then green (0.5964, t = 1/2). Still open in lane-06:
+  taa_resolve 170 and bloom_downsample 89 (NaN guards; llvmpipe may not
+  show NaN), particle 395/401 (latent, no caller), terrain 602 (NEEDS
+  DECISION). Rig left: headless Workbench.
   **Layman:** About 290 lower-risk possible bugs and the medium findings are still unchecked.
   Kind: review-fix.
   Source: review-readability 2026-10-31 at 7b2a81d.

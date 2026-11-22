@@ -35,6 +35,10 @@ may change any interface without notice.
   With no scene, a dialogue line or stinger did not trigger the
   Voice → Music duck route, so the music stayed at full volume.
 
+- **Contact shadows fade with the true distance to what casts them**
+  Each hit was graded one step closer than it was, so contact shadows
+  were a little too dark, and the march ran one step past its length.
+
 ### 2026-11-21 Fixed — Formula Workbench shader export for other projects, build under CMake 4.5 (3D_E-0979, 3D_E-0995)
 
 - **The formula list the Workbench saves can now be turned into shader code** (3D_E-0995)
