@@ -25,6 +25,12 @@ may change any interface without notice.
 
 ## [Unreleased]
 
+### 2026-11-22 Fixed — a start-up error is written to the log file (3D_E-0874)
+
+- **An error that stops the engine after its window opens now reaches the log file**
+  Before, it was shown on the console only: the log file had closed
+  before the error was written.
+
 ### 2026-11-21 Fixed — Formula Workbench shader export for other projects, build under CMake 4.5 (3D_E-0979, 3D_E-0995)
 
 - **The formula list the Workbench saves can now be turned into shader code** (3D_E-0995)

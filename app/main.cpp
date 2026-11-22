@@ -103,23 +103,40 @@ static int runEngine(int argc, char* argv[])
 
     Vestige::Engine engine;
 
-    if (!engine.initialize(config))
+    // Caught here, not only in main: ~Engine closes the log file, so an error
+    // caught after the Engine is gone reaches the console but not the log.
+    try
     {
-        Vestige::Logger::fatal("Engine initialization failed — exiting");
+        if (!engine.initialize(config))
+        {
+            Vestige::Logger::fatal("Engine initialization failed — exiting");
+            return 1;
+        }
+    }
+    catch (const std::exception& e)
+    {
+        Vestige::Logger::fatal(std::string("Engine initialization failed — ") + e.what());
         return 1;
     }
 
-    // Offline acoustic bake (--bake-acoustics): initialize() has loaded the scene
-    // and built its static physics bodies; bake the sidecar and exit without ever
-    // entering the main loop.
-    if (config.bakeAcousticsAndExit)
+    try
     {
-        const bool ok = engine.bakeActiveSceneAcoustics();
-        engine.shutdown();
-        return ok ? 0 : 1;
+        // Offline acoustic bake (--bake-acoustics): initialize() has loaded the
+        // scene and built its static physics bodies; bake the sidecar and exit
+        // without ever entering the main loop.
+        if (config.bakeAcousticsAndExit)
+        {
+            const bool ok = engine.bakeActiveSceneAcoustics();
+            engine.shutdown();
+            return ok ? 0 : 1;
+        }
+        engine.run();
     }
-
-    engine.run();
+    catch (const std::exception& e)
+    {
+        Vestige::Logger::fatal(std::string("Engine stopped on an error — ") + e.what());
+        return 1;
+    }
     engine.shutdown();
 
     return 0;

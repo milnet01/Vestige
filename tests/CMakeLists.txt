@@ -781,6 +781,21 @@ if(Python3_FOUND)
                 ${CMAKE_SOURCE_DIR}/tools/fps_floor.py
                 ${CMAKE_CURRENT_SOURCE_DIR}/fixtures/fps_floor/truncated_row.csv
     )
+
+    # Whole-program tests: run the real vestige binary (3D_E-0874). POSIX only:
+    # they lock a folder with chmod, and the Windows build runs under Wine.
+    if(NOT WIN32)
+        add_test(
+            NAME ProcessFatalErrorReachesTheLogFile
+            COMMAND Python3::Interpreter -I
+                    ${CMAKE_CURRENT_SOURCE_DIR}/process/fatal_reaches_log.py
+                    $<TARGET_FILE:vestige>
+                    ${CMAKE_SOURCE_DIR}/assets
+                    ${CMAKE_CURRENT_BINARY_DIR}/process/fatal_reaches_log
+        )
+        set_tests_properties(ProcessFatalErrorReachesTheLogFile PROPERTIES
+                             SKIP_RETURN_CODE 77 LABELS process TIMEOUT 180)
+    endif()
 else()
     message(WARNING
         "Python3 not found — skipping localization_audit + shader_lint + "

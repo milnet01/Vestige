@@ -1,6 +1,6 @@
 <!-- ants-roadmap-format: 1 -->
 <!-- Generated from the Ants Terminal roadmap store. Edit it with roadmap_log; hand edits are discarded by the next write. -->
-<!-- ants-roadmap-id-high-water: 3D_E=1001 3D_E#S=989 -->
+<!-- ants-roadmap-id-high-water: 3D_E=1002 3D_E#S=989 -->
 
 # Vestige Engine Roadmap
 
@@ -7693,6 +7693,14 @@ shipped that have no invocation path at all.
   in a test), lane-10 audio_clip 172 (nothing observable but memory), lane-06
   shader rows (need a full-pass GL harness), lane-02 main.cpp 41 (process
   level), lane-12 workbench.cpp 675 (no headless Workbench target).
+  2026-11-22: lane-02 main.cpp 41 fixed. runEngine catches while the
+  Engine is alive (initialize, bake, run), so the fatal reaches the log.
+  Whole-program rig started: tests/process/fatal_reaches_log.py, ctest
+  ProcessFatalErrorReachesTheLogFile (label process, POSIX only), seen
+  red then green. Its trigger is a --scene path in a locked folder
+  (3D_E-1002). User decisions 2026-11-22: a real bad input first, a
+  hidden test-only switch only if none exists; process tests run on
+  every push.
   **Layman:** About 290 lower-risk possible bugs and the medium findings are still unchecked.
   Kind: review-fix.
   Source: review-readability 2026-10-31 at 7b2a81d.
@@ -8425,6 +8433,21 @@ shipped that have no invocation path at all.
   Kind: fix.
   Source: exray-0006-cull-questions-2026-11-21.
   Lanes: renderer.
+
+- 📋 [3D_E-1002] **A --scene path the engine may not read ends start-up instead of keeping the demo scene.**
+  Run 2026-11-22. Engine::initialize's --scene block calls the throwing
+  std::filesystem::exists; on a locked folder it throws "status:
+  Permission denied" and start-up ends with exit 1. A missing file logs
+  "--scene path not found" and keeps the demo. Fix with the error_code
+  overload. That removes the trigger tests/process/fatal_reaches_log.py
+  uses, so the same commit gives that test another trigger (user
+  2026-11-22: the hidden test-only switch is the fallback).
+  Done when: a locked --scene path logs an error and the demo scene
+  runs, proven by a process test that fails first.
+  **Layman:** Pointing the engine at a scene file in a folder it is not allowed to open makes it quit, when it should say so and show the demo scene.
+  Kind: fix.
+  Source: 3D_E-0874 main.cpp 41 rig, 2026-11-22.
+  Lanes: engine.
 
 ## 0.3.0 — An editor a builder can use
 
