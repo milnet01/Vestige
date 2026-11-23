@@ -300,9 +300,10 @@ void VolumetricFogPass::dispatch(const FrameParams& params)
     // unshadowed path and never samples, but the sampler still needs a
     // complete texture bound (Mesa) — fall back to the 1×1 lit array.
     m_scatter.setMat4("u_invView", params.invView);
-    m_scatter.setInt("u_csmCascadeCount", params.csmCascadeCount);
+    // The shader's cascade arrays hold four; it walks u_csmCascadeCount of them.
+    const int cascades = std::clamp(params.csmCascadeCount, 0, 4);
+    m_scatter.setInt("u_csmCascadeCount", cascades);
     m_scatter.setFloat("u_csmDepthBias", params.csmDepthBias);
-    const int cascades = std::min(params.csmCascadeCount, 4);
     for (int i = 0; i < cascades; ++i)
     {
         const std::string idx = std::to_string(i);

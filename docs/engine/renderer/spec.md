@@ -89,7 +89,6 @@ Key abstractions:
 | `Framebuffer` | class (RAII) | Configurable FBO (color + depth, optional MSAA, optional float HDR, optional sampleable depth). `engine/renderer/framebuffer.h:26` |
 | `FullscreenQuad` | class | Reusable 2-triangle screen quad VAO for post-process passes. `engine/renderer/fullscreen_quad.h` |
 | `CascadedShadowMap` | class | 4-cascade directional shadow with frustum-fitted ortho projections, SDSM near/far refinement, staggered per-cascade updates, foliage shadow-caster hook. `engine/renderer/cascaded_shadow_map.h:30` |
-| `ShadowMap` | class | Single-cascade directional shadow primitive (kept as a smaller building block + spot-light fallback). `engine/renderer/shadow_map.h:28` |
 | `PointShadowMap` | class (RAII) | Depth-cubemap shadow for one point light × 6 faces; max `MAX_POINT_SHADOW_LIGHTS = 2` simultaneous. `engine/renderer/point_shadow_map.h:23` |
 | `EnvironmentMap` | class | Split-sum IBL: 32×32 irradiance cubemap (diffuse) + 128² roughness-mip prefilter cubemap (5 mips, GGX importance-sampled per Karis 2013) + 512² BRDF integration LUT. `engine/renderer/environment_map.h:25` |
 | `LightProbe` / `LightProbeManager` | class | Local IBL cubemap probes with Axis-Aligned Bounding Box (AABB) influence + fade-distance blend. `engine/renderer/light_probe.h:24`, `engine/renderer/light_probe_manager.h:31` |
@@ -249,7 +248,6 @@ class  CascadedShadowMap { void update(const DirectionalLight&, const Camera&, f
                            void beginCascade(int idx); void endCascade();
                            const std::array<glm::mat4, 4>& getLightSpaceMatrices() const;
                            GLuint getDepthArrayTexture() const; };
-class  ShadowMap          { void update(const DirectionalLight&, const glm::vec3& sceneCenter); ... };
 constexpr int MAX_POINT_SHADOW_LIGHTS = 2;
 class  PointShadowMap     { void update(const glm::vec3& lightPos);
                             void beginFace(int face); void endFace();
@@ -478,7 +476,7 @@ Per CODING_STANDARDS §13. **OpenGL context affinity is single-thread** — ever
 
 | Caller thread | Allowed APIs | Locks held |
 |---------------|--------------|------------|
-| **Main thread** (the GL-context-owning thread; the only thread that runs `Engine::run`) | All public methods of `Renderer`, `Camera`, `Shader`, `Mesh`, `DynamicMesh`, `Texture`, `Material`, `Framebuffer`, `Skybox`, `EnvironmentMap`, `LightProbe(Manager)`, `SHProbeGrid`, `RadiosityBaker`, `Taa`, `Smaa`, `ColorGradingLut`, `CascadedShadowMap`, `ShadowMap`, `PointShadowMap`, `MeshPool`, `IndirectBuffer`, `InstanceBuffer`, `DepthReducer`, `GPUParticleSystem`, `ParticleRenderer`, `SpriteRenderer`, `TilemapRenderer`, `TextRenderer`, `Font`, `DebugDraw`, `WaterRenderer`, `WaterFbo`, `TerrainRenderer`, `FoliageRenderer`, `TreeRenderer`, `FrameDiagnostics`, `SamplerFallback`, every `Scoped*` RAII guard, every free function. | None — main thread is single-threaded by contract. |
+| **Main thread** (the GL-context-owning thread; the only thread that runs `Engine::run`) | All public methods of `Renderer`, `Camera`, `Shader`, `Mesh`, `DynamicMesh`, `Texture`, `Material`, `Framebuffer`, `Skybox`, `EnvironmentMap`, `LightProbe(Manager)`, `SHProbeGrid`, `RadiosityBaker`, `Taa`, `Smaa`, `ColorGradingLut`, `CascadedShadowMap`, `PointShadowMap`, `MeshPool`, `IndirectBuffer`, `InstanceBuffer`, `DepthReducer`, `GPUParticleSystem`, `ParticleRenderer`, `SpriteRenderer`, `TilemapRenderer`, `TextRenderer`, `Font`, `DebugDraw`, `WaterRenderer`, `WaterFbo`, `TerrainRenderer`, `FoliageRenderer`, `TreeRenderer`, `FrameDiagnostics`, `SamplerFallback`, every `Scoped*` RAII guard, every free function. | None — main thread is single-threaded by contract. |
 | **Worker threads** (`AsyncTextureLoader`, audio thread, job-system pool) | **Pure-data helpers only** — anything that doesn't touch GL state. In practice that is: the constexpr / inline functions in `bloom_downsample_karis.h`, `normal_matrix.h`, `light_utils.h`, the SH-projection math inside `SHProbeGrid` capture (called from the main thread, but mathematically pure), `colorVisionMatrix`, the `Vertex` + `Material` plain-data manipulations, the `SpriteAtlas::loadFromJson` parser (no GL), the FreeType glyph rasterisation in `Font::loadFromFile` (no GL until the final upload). The GL-resource-creation half of `Texture::loadFromFile`, `Mesh` upload, `Font` glyph atlas upload, `EnvironmentMap` capture, etc. **must** happen on the main thread. | None — purely-CPU helpers are free of locks. |
 
 `AsyncTextureLoader` (in `engine/resource/`) is the canonical pattern: it decodes pixel data on a worker, hands the decoded buffer back to the main thread, and the main thread runs `glTextureStorage2D` / `glTextureSubImage2D`.
@@ -573,7 +571,7 @@ Test files relevant to `engine/renderer/`:
 | Concern | Test file | Coverage |
 |---------|-----------|----------|
 | Camera projection (reverse-Z, culling-projection finite far) | `tests/test_camera.cpp`, `tests/test_camera_mode.cpp`, `tests/test_camera_2d.cpp`, `tests/test_camera_component.cpp` | Public API contract |
-| Shadow-map (`ShadowMap` + CSM lifecycle) | `tests/test_shadow_map.cpp` | Public API contract |
+| Shadow-map (CSM splits, cascade matrices, lifecycle) | `tests/test_cascaded_shadow_map.cpp` | Public API contract |
 | TAA jitter sequence (Halton) + motion-vector math + AntiAliasMode enum | `tests/test_taa.cpp` | Halton sequence determinism, motion-vector math, enum stability (jitterProjection / setFeedbackFactor instance methods covered by integration tests; they need a `Framebuffer` and therefore a GL context) |
 | Bloom (Karis combine, 13-tap downsample energy) | `tests/test_bloom_downsample_karis.cpp`, `tests/test_bloom.cpp` | CPU-mirror parity + smoke |
 | SSAO kernel determinism | `tests/test_ssao.cpp` | Deterministic kernel + noise tile |

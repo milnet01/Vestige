@@ -429,6 +429,48 @@ TEST_F(VolumetricFogGpuTest, CsmShadowGatesSunInscatter)
     glDeleteTextures(1, &darkMap);
 }
 
+// 3D_E-0874 lane-04: a cascade count past the shader's four slots must not
+// index past them. With no split reached, the shader falls back to the last
+// cascade, which must be slot 3, not slot count - 1.
+TEST_F(VolumetricFogGpuTest, CascadeCountPastFourUsesTheFourthSlot)
+{
+    const FroxelGridConfig g = smallGrid();
+
+    VolumetricFogPass pass;
+    ASSERT_TRUE(pass.init(VESTIGE_SHADER_DIR, g));
+
+    glm::mat4 collapse(0.0f);  // every point to clip (0,0,0,1); see above
+    collapse[3][3] = 1.0f;
+
+    VolumetricFogPass::FrameParams p;
+    p.scattering  = glm::vec3(0.5f, 0.4f, 0.3f);
+    p.extinction  = 0.05f;
+    p.anisotropy  = 0.0f;
+    p.sunRadiance = glm::vec3(2.0f);
+    p.ambient     = glm::vec3(0.0f);
+    p.csmCascadeCount = 8;
+    for (size_t i = 0; i < 4; ++i)
+    {
+        p.csmCascadeSplits[i]      = 0.0f;  // no froxel is nearer: last cascade
+        p.csmLightSpaceMatrices[i] = collapse;
+    }
+    p.invView      = glm::mat4(1.0f);
+    p.csmDepthBias = 0.0015f;
+
+    const GLuint darkMap = makeShadowArray(0.0f);
+    p.csmShadowTexture = darkMap;
+    pass.dispatch(p);
+    const auto px = readbackRGBA(pass.integratedTexture(), g);
+
+    for (int k = 0; k < g.resZ; ++k)
+    {
+        EXPECT_NEAR(px[idx(g, 2, 1, k) + 0], 0.0f, 1e-3f)
+            << "slab " << k << " was not shadowed by cascade 3";
+    }
+
+    glDeleteTextures(1, &darkMap);
+}
+
 // =============================================================================
 // Composite depth-slice texcoord — GLSL helper pinned to the CPU spec
 // =============================================================================

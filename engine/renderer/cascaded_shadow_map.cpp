@@ -240,12 +240,12 @@ glm::mat4 CascadedShadowMap::computeCascadeMatrix(
         float dist = glm::length(corner - center);
         radius = std::max(radius, dist);
     }
-    // Round radius up to texel grid for stable shadow edges
-    float worldUnitsPerTexel = (radius * 2.0f) / static_cast<float>(resolution);
-    if (worldUnitsPerTexel > 0.0f)
-    {
-        radius = std::ceil(radius / worldUnitsPerTexel) * worldUnitsPerTexel;
-    }
+    // Round the radius up to a fixed world step. A camera turning in place
+    // changes the radius by float noise only; without the step the texel
+    // size moves with it and the origin snap below no longer holds edges
+    // still. A step of 1/16 unit wastes at most that much of each side.
+    constexpr float RADIUS_STEP = 1.0f / 16.0f;
+    radius = std::ceil(radius / RADIUS_STEP) * RADIUS_STEP;
 
     float minX = -radius;
     float maxX =  radius;

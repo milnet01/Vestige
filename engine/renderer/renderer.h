@@ -12,7 +12,6 @@
 #include "renderer/light.h"
 #include "renderer/framebuffer.h"
 #include "renderer/fullscreen_quad.h"
-#include "renderer/shadow_map.h"
 #include "renderer/cascaded_shadow_map.h"
 #include "renderer/skybox.h"
 #include "renderer/point_shadow_map.h"

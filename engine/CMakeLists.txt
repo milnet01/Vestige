@@ -55,7 +55,6 @@ set(ENGINE_SOURCES
     renderer/material.cpp
     renderer/framebuffer.cpp
     renderer/fullscreen_quad.cpp
-    renderer/shadow_map.cpp
     renderer/cascaded_shadow_map.cpp
     renderer/skybox.cpp
     renderer/point_shadow_map.cpp

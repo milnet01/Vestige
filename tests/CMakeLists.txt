@@ -14,6 +14,7 @@ add_executable(vestige_tests
     test_bloom_parity.cpp
     test_skybox_hdr_range.cpp
     test_skybox_cubemap_load.cpp
+    test_skybox_equirect_size.cpp
     test_color_grading_parity.cpp
     test_subsurface_parity.cpp
     test_foliage_translucency.cpp
@@ -45,7 +46,6 @@ add_executable(vestige_tests
     test_contact_shadow_steps.cpp
     test_hdr_nan_guards.cpp
     test_motion_vectors_mrt.cpp
-    test_shadow_map.cpp
     test_tangent_calc.cpp
     test_point_shadow_map.cpp
     test_pom.cpp

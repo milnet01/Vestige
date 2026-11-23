@@ -121,7 +121,7 @@ Vestige/                              # repo root (the Vestige source tree)
 │   ├── core/       Engine, Window, Timer, Logger, InputManager, EventBus,
 │   │              ISystem, SystemRegistry, SystemEvents, FirstPersonController
 │   ├── renderer/   Renderer, Shader, Mesh, Texture, Camera, Material,
-│   │              Framebuffer, ShadowMap (CSM + point), Skybox, TAA, SMAA,
+│   │              Framebuffer, CascadedShadowMap, PointShadowMap, Skybox, TAA, SMAA,
 │   │              Bloom, SSAO, TonemapLUT, EnvironmentMap, LightProbe,
 │   │              SHProbeGrid, RadiosityBaker, InstanceBuffer, IndirectBuffer,
 │   │              ParticleRenderer, GpuParticleSystem, WaterRenderer,

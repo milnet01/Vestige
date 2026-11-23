@@ -270,6 +270,37 @@ TEST(CascadedShadowMapTest, CloserCascadeHasHigherTexelDensity)
     EXPECT_GT(nearScale, farScale);
 }
 
+// 3D_E-0874 lane-04: the texel-grid snap of the origin only holds still if
+// the texel size does too. A camera turning in place gives the same frustum
+// shape every frame, so the cascade's width must not move by float noise.
+TEST(CascadedShadowMapTest, TurningCameraKeepsTheCascadeWidthExactly)
+{
+    DirectionalLight light;
+    // Straight down: the light's rotation is then exact (0 and +-1 only), so
+    // the matrix scale below is the cascade width and nothing else.
+    light.direction = glm::vec3(0.0f, -1.0f, 0.0f);
+    glm::mat4 proj = glm::perspective(glm::radians(60.0f), 16.0f / 9.0f, 0.1f, 12.0f);
+    const glm::vec3 eye(3.0f, 1.7f, -4.0f);
+
+    float firstScale = 0.0f;
+    for (int step = 0; step < 36; ++step)
+    {
+        const float yaw = glm::radians(10.0f * static_cast<float>(step) + 0.37f);
+        const glm::vec3 forward(std::cos(yaw), -0.1f, std::sin(yaw));
+        glm::mat4 view = glm::lookAt(eye, eye + forward, glm::vec3(0.0f, 1.0f, 0.0f));
+        auto corners = CascadedShadowMap::computeFrustumCorners(proj * view);
+        glm::mat4 m = CascadedShadowMap::computeCascadeMatrix(light, corners, 2048);
+        // Row 0 of the 3x3 is the ortho x scale (1 / radius) times a row of
+        // the light's rotation, so its length is 1 / radius.
+        const float scale = glm::length(glm::vec3(m[0][0], m[1][0], m[2][0]));
+        if (step == 0)
+        {
+            firstScale = scale;
+        }
+        EXPECT_EQ(scale, firstScale) << "yaw step " << step;
+    }
+}
+
 TEST(CascadedShadowMapTest, VerticalLightDirectionDoesNotDegenerate)
 {
     DirectionalLight light;

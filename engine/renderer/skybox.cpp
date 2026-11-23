@@ -200,9 +200,7 @@ bool Skybox::loadEquirectangular(const std::string& path)
 {
     // AUDIT M26: cap on-disk equirect size before handing off to stb_image.
     // A hostile 10 GB HDR header would otherwise drive stbi into multi-GB
-    // allocations. 512 MB comfortably admits 16K²×3 floats (768 MB would
-    // exceed the cap, forcing a downscaled asset — consistent with the
-    // 1024² face-size ceiling below).
+    // allocations.
     {
         namespace fs = std::filesystem;
         std::error_code ec;
@@ -214,6 +212,30 @@ bool Skybox::loadEquirectangular(const std::string& path)
             Logger::error("Skybox equirect exceeds "
                 + std::to_string(MAX_EQUIRECT_BYTES) + "-byte cap: "
                 + path + " (" + std::to_string(sz) + " bytes)");
+            return false;
+        }
+    }
+
+    // The file cap does not bound the decoded size: a small compressed file
+    // can name any width and height. Read the header first and refuse what
+    // Texture also refuses. One row would give a face size of zero.
+    {
+        int headerW = 0;
+        int headerH = 0;
+        int headerCh = 0;
+        if (!stbi_info(path.c_str(), &headerW, &headerH, &headerCh))
+        {
+            Logger::error("Failed to load equirectangular map: " + path);
+            return false;
+        }
+        constexpr int MAX_EQUIRECT_SIDE = 16384;
+        if (headerW < 1 || headerH < 2
+            || headerW > MAX_EQUIRECT_SIDE || headerH > MAX_EQUIRECT_SIDE)
+        {
+            Logger::error("Skybox equirect size " + std::to_string(headerW) + "x"
+                + std::to_string(headerH) + " is outside 1x2 to "
+                + std::to_string(MAX_EQUIRECT_SIDE) + "x"
+                + std::to_string(MAX_EQUIRECT_SIDE) + ": " + path);
             return false;
         }
     }
