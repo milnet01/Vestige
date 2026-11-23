@@ -1,6 +1,6 @@
 <!-- ants-roadmap-format: 1 -->
 <!-- Generated from the Ants Terminal roadmap store. Edit it with roadmap_log; hand edits are discarded by the next write. -->
-<!-- ants-roadmap-id-high-water: 3D_E=1002 3D_E#S=989 -->
+<!-- ants-roadmap-id-high-water: 3D_E=1003 3D_E#S=989 -->
 
 # Vestige Engine Roadmap
 
@@ -14677,3 +14677,13 @@ record, and a real clearance before commercial release needs counsel.
   **Layman:** Draw where the water goes; the engine builds the surface and shore.
   Kind: feature.
   Source: research-engine-survey-2026-11-05.
+
+- 📋 [3D_E-1003] **Export the Tabernacle scene to ExperiRays for a reference lighting image.**
+  ExperiRays' heavy-tail case: the menorah lights the Holy Place while
+  the brighter sun is blocked by the roof. Vestige has no export to
+  ExperiRays today; the format is ExperiRays' scene input. User chose
+  2026-11-23: planned, after frameledger 0.9.0 and the 3D_E-0874 lanes.
+  **Layman:** Send a copy of the Tabernacle to the ray-tracing lab, so it can draw a reference picture of the lamp-lit tent interior to check Vestige's lighting against.
+  Kind: feature.
+  Source: user-request-2026-11-23 (asked by ExperiRays, EXRAY-0048).
+  Lanes: renderer.
