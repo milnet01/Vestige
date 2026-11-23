@@ -22,6 +22,7 @@ void BVH::build(const glm::vec3* vertices, size_t vertexCount,
     m_nodes.clear();
     m_sortedTriIndices.clear();
     m_triCount = indexCount / 3;
+    m_maxDepth = 0;
 
     if (m_triCount == 0 || vertices == nullptr || indices == nullptr || vertexCount == 0)
     {
@@ -45,7 +46,7 @@ void BVH::build(const glm::vec3* vertices, size_t vertexCount,
     // Reserve approximate node count (2N-1 for N leaves)
     m_nodes.reserve(m_triCount * 2);
 
-    buildRecursive(0, static_cast<int>(m_triCount), tris);
+    buildRecursive(0, static_cast<int>(m_triCount), 0, tris);
 
     // Build sorted triangle index array from final TriInfo order
     m_sortedTriIndices.resize(m_triCount);
@@ -55,8 +56,9 @@ void BVH::build(const glm::vec3* vertices, size_t vertexCount,
     }
 }
 
-int BVH::buildRecursive(int start, int end, std::vector<TriInfo>& tris)
+int BVH::buildRecursive(int start, int end, int depth, std::vector<TriInfo>& tris)
 {
+    m_maxDepth = std::max(m_maxDepth, depth);
     int nodeIdx = static_cast<int>(m_nodes.size());
     m_nodes.push_back({});
 
@@ -109,8 +111,8 @@ int BVH::buildRecursive(int start, int end, std::vector<TriInfo>& tris)
     }
 
     // Recurse — children are allocated after parent, so they have higher indices
-    int left = buildRecursive(start, splitIdx, tris);
-    int right = buildRecursive(splitIdx, end, tris);
+    int left = buildRecursive(start, splitIdx, depth + 1, tris);
+    int right = buildRecursive(splitIdx, end, depth + 1, tris);
 
     m_nodes[static_cast<size_t>(nodeIdx)].leftChild = left;
     m_nodes[static_cast<size_t>(nodeIdx)].rightChild = right;
@@ -264,8 +266,20 @@ bool BVH::queryClosest(const glm::vec3& point, float maxDist,
     result.distance = maxDist;
     bool found = false;
 
-    // Stack-based traversal (max depth ~64 is more than sufficient)
-    int stack[64];
+    // Stack-based traversal. A popped node at depth d leaves at most one
+    // waiting sibling per level above it and pushes two children, so the
+    // stack never holds more than m_maxDepth + 2. SAH splits on skewed
+    // geometry can go deeper than a balanced tree, so a deep tree gets a
+    // heap stack instead of the fixed one.
+    constexpr int FIXED_STACK = 64;
+    int fixedStack[FIXED_STACK];
+    std::vector<int> deepStack;
+    int* stack = fixedStack;
+    if (m_maxDepth + 2 > FIXED_STACK)
+    {
+        deepStack.resize(static_cast<size_t>(m_maxDepth) + 2);
+        stack = deepStack.data();
+    }
     int stackPtr = 0;
     stack[stackPtr++] = 0;  // root
 
@@ -335,22 +349,22 @@ bool BVH::queryClosest(const glm::vec3& point, float maxDist,
 
             if (distL < distR)
             {
-                if (distR <= result.distance && stackPtr < 64)
+                if (distR <= result.distance)
                 {
                     stack[stackPtr++] = node.rightChild;
                 }
-                if (distL <= result.distance && stackPtr < 64)
+                if (distL <= result.distance)
                 {
                     stack[stackPtr++] = node.leftChild;
                 }
             }
             else
             {
-                if (distL <= result.distance && stackPtr < 64)
+                if (distL <= result.distance)
                 {
                     stack[stackPtr++] = node.leftChild;
                 }
-                if (distR <= result.distance && stackPtr < 64)
+                if (distR <= result.distance)
                 {
                     stack[stackPtr++] = node.rightChild;
                 }

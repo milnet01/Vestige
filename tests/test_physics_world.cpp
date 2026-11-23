@@ -6,6 +6,7 @@
 #include "physics/physics_world.h"
 #include "physics/jolt_helpers.h"
 
+#include <Jolt/Core/Factory.h>
 #include <Jolt/Physics/Collision/Shape/BoxShape.h>
 #include <Jolt/Physics/Collision/Shape/SphereShape.h>
 
@@ -35,6 +36,23 @@ TEST(PhysicsWorld, DoubleInitializeIsSafe)
     EXPECT_TRUE(world.initialize());
     EXPECT_TRUE(world.initialize());  // Should warn but not crash
     world.shutdown();
+}
+
+// 3D_E-0874 lane-07: Jolt's factory is process-wide. Each world made its
+// own and deleted it on shutdown, so a second world leaked the first's and
+// shutting either down left the other with none.
+TEST(PhysicsWorld, ShuttingOneWorldDownKeepsTheOthersFactory)
+{
+    PhysicsWorld first;
+    PhysicsWorld second;
+    ASSERT_TRUE(first.initialize());
+    ASSERT_TRUE(second.initialize());
+
+    first.shutdown();
+    EXPECT_NE(JPH::Factory::sInstance, nullptr) << "the live world lost Jolt's factory";
+
+    second.shutdown();
+    EXPECT_EQ(JPH::Factory::sInstance, nullptr) << "the last world left the factory behind";
 }
 
 TEST(PhysicsWorld, ShutdownWithoutInitializeIsSafe)

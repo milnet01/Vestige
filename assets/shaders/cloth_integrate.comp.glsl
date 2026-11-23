@@ -4,9 +4,11 @@
 /// @file cloth_integrate.comp.glsl
 /// @brief Phase 9B Step 3 — position prediction from the current velocity.
 ///
-/// One thread per particle. Snapshots the current position into the
-/// PreviousPositions SSBO and advances position by `velocity * dt`.
-/// Velocity is not written here: damping and the velocity update happen
+/// One thread per particle. Caps the speed so no particle travels more than
+/// `u_maxTravel` this substep (the CPU's step 2, against tunnelling), then
+/// snapshots the current position into the PreviousPositions SSBO and
+/// advances position by `velocity * dt`. Beyond that cap, velocity is not
+/// written here: damping and the velocity update happen
 /// once per substep in `cloth_velocity.comp.glsl`, after the solve
 /// (Phase 10.9 Cl10, matching the CPU's step 7). Pinned particles
 /// (positions[i].w == 0) are skipped — that w channel doubles as inverse
@@ -26,6 +28,7 @@ layout(std430, binding = 2) buffer Velocities     { vec4 velocities[]; };
 
 uniform uint  u_particleCount;
 uniform float u_deltaTime;
+uniform float u_maxTravel;  // kClothMaxTravelPerSubstep
 
 void main()
 {
@@ -37,8 +40,17 @@ void main()
 
     vec3 p = positions[id].xyz;
 
+    vec3 v = velocities[id].xyz;
+    float maxSpeed = u_maxTravel / u_deltaTime;
+    float speed2 = dot(v, v);
+    if (speed2 > maxSpeed * maxSpeed)
+    {
+        v *= maxSpeed * inversesqrt(speed2);
+        velocities[id].xyz = v;
+    }
+
     prevPositions[id].xyz = p;
-    p += velocities[id].xyz * u_deltaTime;
+    p += v * u_deltaTime;
 
     positions[id].xyz = p;
 }

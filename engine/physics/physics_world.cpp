@@ -29,11 +29,42 @@
 #include <cmath>
 #include <cstdarg>
 #include <cstdio>
+#include <mutex>
 #include <string>
 #include <thread>
 
 namespace Vestige
 {
+
+// Jolt's allocator, factory and type registry are process-wide. Each
+// PhysicsWorld holds one use of them: the first sets them up, the last
+// tears them down, so two worlds never pull them from under each other.
+static std::mutex s_joltGlobalsMutex;
+static int s_joltGlobalsUsers = 0;
+
+static void acquireJoltGlobals()
+{
+    std::lock_guard<std::mutex> lock(s_joltGlobalsMutex);
+    if (s_joltGlobalsUsers++ > 0)
+    {
+        return;
+    }
+    JPH::RegisterDefaultAllocator();
+    JPH::Factory::sInstance = new JPH::Factory();
+    JPH::RegisterTypes();
+}
+
+static void releaseJoltGlobals()
+{
+    std::lock_guard<std::mutex> lock(s_joltGlobalsMutex);
+    if (--s_joltGlobalsUsers > 0)
+    {
+        return;
+    }
+    JPH::UnregisterTypes();
+    delete JPH::Factory::sInstance;
+    JPH::Factory::sInstance = nullptr;
+}
 
 // Jolt requires a trace function and an assertion failure handler.
 // Route both through our Logger.
@@ -86,9 +117,6 @@ bool PhysicsWorld::initialize(const PhysicsWorldConfig& config)
         return true;
     }
 
-    // Register default Jolt allocator (uses standard malloc/free)
-    JPH::RegisterDefaultAllocator();
-
     // Install trace and assert handlers
     JPH::Trace = joltTraceImpl;
 
@@ -96,11 +124,8 @@ bool PhysicsWorld::initialize(const PhysicsWorldConfig& config)
     JPH::AssertFailed = joltAssertFailed;
 #endif
 
-    // Create the Jolt factory (required for shape serialization/deserialization)
-    JPH::Factory::sInstance = new JPH::Factory();
-
-    // Register all built-in Jolt types
-    JPH::RegisterTypes();
+    // Default allocator, factory (shape serialisation) and built-in types.
+    acquireJoltGlobals();
 
     // Create temp allocator (10 MB — used for per-frame temporaries)
     m_tempAllocator = std::make_unique<JPH::TempAllocatorImpl>(10 * 1024 * 1024);
@@ -183,10 +208,7 @@ void PhysicsWorld::shutdown()
     m_jobSystem.reset();
     m_tempAllocator.reset();
 
-    // Unregister types and destroy factory
-    JPH::UnregisterTypes();
-    delete JPH::Factory::sInstance;
-    JPH::Factory::sInstance = nullptr;
+    releaseJoltGlobals();
 
     m_initialized = false;
     Logger::info("PhysicsWorld shut down");

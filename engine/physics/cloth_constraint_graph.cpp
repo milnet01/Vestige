@@ -7,6 +7,7 @@
 #include "physics/cloth_constraint_graph.h"
 
 #include <algorithm>
+#include <array>
 #include <cassert>
 #include <cmath>
 #include <limits>
@@ -27,6 +28,78 @@ inline GpuConstraint makeConstraint(uint32_t i0, uint32_t i1,
     c.compliance = compliance;
     return c;
 }
+
+/// The colours each particle already touches, for greedy graph colouring:
+/// one bit per colour, 64 to a word. The words grow when a colour past the
+/// last word is added, so a particle of any degree is coloured.
+class ParticleColourSets
+{
+public:
+    explicit ParticleColourSets(uint32_t particleCount)
+        : m_particleCount(particleCount), m_bits(particleCount, 0ULL)
+    {
+    }
+
+    /// The lowest colour none of @a particles has yet.
+    template <size_t N>
+    uint32_t lowestFree(const std::array<uint32_t, N>& particles) const
+    {
+        for (uint32_t word = 0; word < m_words; ++word)
+        {
+            uint64_t forbidden = 0;
+            for (uint32_t p : particles)
+            {
+                forbidden |= m_bits[index(p, word)];
+            }
+            for (uint32_t bit = 0; bit < 64; ++bit)
+            {
+                if ((forbidden & (1ULL << bit)) == 0)
+                {
+                    return word * 64 + bit;
+                }
+            }
+        }
+        return m_words * 64;
+    }
+
+    template <size_t N>
+    void add(const std::array<uint32_t, N>& particles, uint32_t colour)
+    {
+        const uint32_t word = colour / 64;
+        if (word >= m_words)
+        {
+            grow(word + 1);
+        }
+        for (uint32_t p : particles)
+        {
+            m_bits[index(p, word)] |= 1ULL << (colour % 64);
+        }
+    }
+
+private:
+    size_t index(uint32_t particle, uint32_t word) const
+    {
+        return static_cast<size_t>(particle) * m_words + word;
+    }
+
+    void grow(uint32_t words)
+    {
+        std::vector<uint64_t> bits(static_cast<size_t>(m_particleCount) * words, 0ULL);
+        for (uint32_t p = 0; p < m_particleCount; ++p)
+        {
+            for (uint32_t w = 0; w < m_words; ++w)
+            {
+                bits[static_cast<size_t>(p) * words + w] = m_bits[index(p, w)];
+            }
+        }
+        m_bits = std::move(bits);
+        m_words = words;
+    }
+
+    uint32_t m_particleCount;
+    uint32_t m_words = 1;
+    std::vector<uint64_t> m_bits;
+};
 } // namespace
 
 void generateGridConstraints(
@@ -101,30 +174,18 @@ std::vector<ColourRange> colourConstraints(
     if (constraints.empty()) return {};
     assert(particleCount > 0);
 
-    // Per-particle "colours seen so far" bitset. 64 colours is far more than
-    // a regular grid needs (4 typical) but cheap and handles irregular topology.
-    std::vector<uint64_t> particleColours(particleCount, 0ULL);
+    ParticleColourSets particleColours(particleCount);
     std::vector<uint32_t> assignedColour(constraints.size(), 0);
     uint32_t maxColour = 0;
 
     for (size_t i = 0; i < constraints.size(); ++i)
     {
         const auto& c = constraints[i];
-        const uint64_t forbidden = particleColours[c.i0] | particleColours[c.i1];
-
-        // Find the lowest bit not set in `forbidden`. ~forbidden flips the bits;
-        // ffsll gives the lowest set bit (1-indexed). 0 means "all 64 used",
-        // which would only happen on absurdly degenerate topologies.
-        uint32_t colour = 0;
-        for (; colour < 64; ++colour)
-        {
-            if ((forbidden & (1ULL << colour)) == 0) break;
-        }
-        assert(colour < 64 && "Constraint graph has a particle of degree >= 64");
+        const std::array<uint32_t, 2> particles{c.i0, c.i1};
+        const uint32_t colour = particleColours.lowestFree(particles);
+        particleColours.add(particles, colour);
 
         assignedColour[i] = colour;
-        particleColours[c.i0] |= (1ULL << colour);
-        particleColours[c.i1] |= (1ULL << colour);
         if (colour + 1 > maxColour) maxColour = colour + 1;
     }
 
@@ -282,29 +343,18 @@ std::vector<ColourRange> colourDihedralConstraints(
     if (constraints.empty()) return {};
     assert(particleCount > 0);
 
-    std::vector<uint64_t> particleColours(particleCount, 0ULL);
+    ParticleColourSets particleColours(particleCount);
     std::vector<uint32_t> assignedColour(constraints.size(), 0);
     uint32_t maxColour = 0;
 
     for (size_t i = 0; i < constraints.size(); ++i)
     {
         const auto& c = constraints[i];
-        const uint64_t forbidden = particleColours[c.p0] | particleColours[c.p1]
-                                  | particleColours[c.p2] | particleColours[c.p3];
-
-        uint32_t colour = 0;
-        for (; colour < 64; ++colour)
-        {
-            if ((forbidden & (1ULL << colour)) == 0) break;
-        }
-        assert(colour < 64 && "Dihedral graph has a particle of degree >= 64");
+        const std::array<uint32_t, 4> particles{c.p0, c.p1, c.p2, c.p3};
+        const uint32_t colour = particleColours.lowestFree(particles);
+        particleColours.add(particles, colour);
 
         assignedColour[i] = colour;
-        const uint64_t bit = 1ULL << colour;
-        particleColours[c.p0] |= bit;
-        particleColours[c.p1] |= bit;
-        particleColours[c.p2] |= bit;
-        particleColours[c.p3] |= bit;
         if (colour + 1 > maxColour) maxColour = colour + 1;
     }
 
@@ -366,31 +416,20 @@ std::vector<ColourRange> colourTriangleConstraints(
     if (outTriangles.empty()) return {};
 
     // Greedy colouring over the {triangle, vertex} incidence graph: two
-    // triangles conflict when they share any vertex. Same per-particle
-    // 64-bit colour-bitmask walk as colourConstraints / colourDihedralConstraints,
-    // generalised to three vertices.
-    std::vector<uint64_t> particleColours(particleCount, 0ULL);
+    // triangles conflict when they share any vertex. Same walk as
+    // colourConstraints / colourDihedralConstraints, over three vertices.
+    ParticleColourSets particleColours(particleCount);
     std::vector<uint32_t> assignedColour(outTriangles.size(), 0);
     uint32_t maxColour = 0;
 
     for (size_t i = 0; i < outTriangles.size(); ++i)
     {
         const auto& tri = outTriangles[i];
-        const uint64_t forbidden = particleColours[tri.i0] | particleColours[tri.i1]
-                                  | particleColours[tri.i2];
-
-        uint32_t colour = 0;
-        for (; colour < 64; ++colour)
-        {
-            if ((forbidden & (1ULL << colour)) == 0) break;
-        }
-        assert(colour < 64 && "Triangle graph has a vertex of degree >= 64");
+        const std::array<uint32_t, 3> particles{tri.i0, tri.i1, tri.i2};
+        const uint32_t colour = particleColours.lowestFree(particles);
+        particleColours.add(particles, colour);
 
         assignedColour[i] = colour;
-        const uint64_t bit = 1ULL << colour;
-        particleColours[tri.i0] |= bit;
-        particleColours[tri.i1] |= bit;
-        particleColours[tri.i2] |= bit;
         if (colour + 1 > maxColour) maxColour = colour + 1;
     }
 

@@ -306,8 +306,7 @@ void ClothSimulator::simulate(float deltaTime)
         // than the collision margin in one substep. Prevents tunneling through
         // thin colliders at high velocities. (Bridson et al., Stanford)
         {
-            static constexpr float MAX_TRAVEL = 0.015f;  // Match COLLISION_MARGIN
-            float maxSpeed = MAX_TRAVEL / dtSub;
+            float maxSpeed = kClothMaxTravelPerSubstep / dtSub;
             float maxSpeed2 = maxSpeed * maxSpeed;
             for (uint32_t i = 0; i < count; ++i)
             {
@@ -839,7 +838,7 @@ void ClothSimulator::buildLRAConstraints()
         // the query (the closest possible point in a cell at Chebyshev
         // distance r+1 is `r * cellSize` away when the query sits at the
         // boundary of its own cell). Stop once that lower bound exceeds the
-        // current best.
+        // current best; a pin exactly at it may tie, so equal keeps going.
         //
         // The hard cap on ring index defends against pathological inputs
         // (huge cell spread); the early-exit triggers within a few rings on
@@ -869,7 +868,9 @@ void ClothSimulator::buildLRAConstraints()
                         {
                             const glm::vec3 diff = queryPos - m_positions[pinIdx];
                             const float    d2   = glm::dot(diff, diff);
-                            if (d2 < bestDist2)
+                            // An exact tie goes to the lower pin index, as
+                            // brute force over pins in index order picks.
+                            if (d2 < bestDist2 || (d2 == bestDist2 && pinIdx < bestPin))
                             {
                                 bestDist2 = d2;
                                 bestPin   = pinIdx;
@@ -884,7 +885,7 @@ void ClothSimulator::buildLRAConstraints()
             {
                 // Lower bound on any pin in ring (r+1) or further.
                 const float outerLower = static_cast<float>(r) * cellSize;
-                if (outerLower * outerLower >= bestDist2)
+                if (outerLower * outerLower > bestDist2)
                 {
                     break;
                 }

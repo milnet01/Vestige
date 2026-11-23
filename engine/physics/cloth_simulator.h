@@ -24,6 +24,11 @@ class ClothMeshCollider;  // Forward declaration
 ///        memory one cloth can take.
 constexpr uint32_t kMaxClothGridSide = 256;
 
+/// @brief The furthest a particle may travel in one substep, in metres:
+///        the collision margin, so it cannot tunnel through a thin
+///        collider (Bridson et al.). Both backends cap speed to it.
+constexpr float kClothMaxTravelPerSubstep = 0.015f;
+
 /// @brief Configuration for cloth simulation.
 struct ClothConfig
 {

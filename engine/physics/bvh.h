@@ -99,11 +99,12 @@ private:
     std::vector<Node> m_nodes;
     std::vector<uint32_t> m_sortedTriIndices;  ///< Triangle indices in leaf order
     size_t m_triCount = 0;
+    int m_maxDepth = 0;  ///< Deepest node level; sizes the query stack
 
     static constexpr int MAX_LEAF_TRIS = 4;
     static constexpr int NUM_BINS = 8;
 
-    int buildRecursive(int start, int end, std::vector<TriInfo>& tris);
+    int buildRecursive(int start, int end, int depth, std::vector<TriInfo>& tris);
     static void findBestSplit(int start, int end, const std::vector<TriInfo>& tris,
                               const glm::vec3& nodeMin, const glm::vec3& nodeMax,
                               int& bestAxis, float& bestPos, float& bestCost);

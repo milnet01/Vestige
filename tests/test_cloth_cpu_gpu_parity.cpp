@@ -181,6 +181,28 @@ TEST_F(ClothCpuGpuParityTest, Cl1_FreeFallCoreSolverParityWithinHausdorffBound)
         << "parity has regressed";
 }
 
+// 3D_E-0874 lane-07: the CPU caps a particle's speed to the collision margin
+// per substep, against tunnelling; the GPU did not. Under strong gravity the
+// cap holds the CPU back while an uncapped GPU falls metres further.
+TEST_F(ClothCpuGpuParityTest, SpeedCapParityUnderStrongGravity)
+{
+    ClothConfig cfg = parityConfig();
+    cfg.gravity = glm::vec3(0.0f, -200.0f, 0.0f);  // past the cap within a frame or two
+    ClothSimulator cpu;
+    GpuClothSimulator gpu;
+    bool gpuReady = false;
+    buildPair(cfg, cpu, gpu, gpuReady);
+    if (!gpuReady)
+        GTEST_SKIP() << "GPU cloth compute pipeline not available in this environment";
+
+    run(cpu, 30);
+    run(gpu, 30);
+
+    const float haus = hausdorff(cpu.getPositions(), gpu.getPositions(), cpu.getParticleCount());
+    EXPECT_LT(haus, 0.05f * clothDiagonal())
+        << "fall under the speed cap differs by " << haus << " m between backends";
+}
+
 // =============================================================================
 // Cl1 — stiff drape parity, both backends on their default solver settings
 // =============================================================================

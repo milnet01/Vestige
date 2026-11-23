@@ -910,6 +910,7 @@ void GpuClothSimulator::simulate(float deltaTime)
         glBindBufferBase(GL_SHADER_STORAGE_BUFFER, BIND_VELOCITIES,     m_velocitiesSSBO);
         m_integrateShader.setUInt("u_particleCount", m_particleCount);
         m_integrateShader.setFloat("u_deltaTime",    dtSub);
+        m_integrateShader.setFloat("u_maxTravel",    kClothMaxTravelPerSubstep);
         glDispatchCompute(particleGroups, 1, 1);
         glMemoryBarrier(GL_SHADER_STORAGE_BARRIER_BIT);
 
@@ -982,7 +983,9 @@ void GpuClothSimulator::simulate(float deltaTime)
         //    and velocity entries so no atomics are needed even though
         //    multiple colliders may all act on the same particle within
         //    one shader invocation (the loops are serial inside the thread).
-        if (m_collidersUBO != 0)
+        //    Two passes, as the CPU runs (its pin re-solve between them is a
+        //    no-op here: pinned particles have w == 0 and are never moved).
+        for (int collisionPass = 0; collisionPass < 2 && m_collidersUBO != 0; ++collisionPass)
         {
             m_collisionShader.use();
             glBindBufferBase(GL_SHADER_STORAGE_BUFFER, BIND_POSITIONS,  m_positionsSSBO);

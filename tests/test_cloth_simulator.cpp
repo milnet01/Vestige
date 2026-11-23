@@ -1032,6 +1032,52 @@ TEST(ClothSimulator, BuildLRAMatchesBruteForceOnDenseScatteredPins_Pe8)
     }
 }
 
+// 3D_E-0874 lane-07: a particle exactly between two pins. The bucket search
+// kept the first pin it met, so it could tether to a different pin than
+// brute force, which takes the lower index on a tie.
+TEST(ClothSimulator, BuildLRATiesGoToTheLowerPinLikeBruteForce)
+{
+    ClothSimulator sim;
+    auto cfg = clothSmallConfig(16, 16);
+    cfg.spacing = 0.5f;  // exact in binary, so mirrored distances tie exactly
+    sim.initialize(cfg);
+
+    const glm::vec3* pos = sim.getPositions();
+    const uint32_t total = cfg.width * cfg.height;
+
+    // Columns 3, 7, 11 and 15 of every row: columns 5, 9 and 13 sit exactly
+    // between two pins, and with 2 m buckets the higher pin shares the
+    // tied particle's bucket, so the search meets it first.
+    std::vector<uint32_t> pinIndices;
+    for (uint32_t i = 0; i < total; ++i)
+    {
+        if (i % 4 == 3)
+        {
+            sim.pinParticle(i, pos[i]);
+            pinIndices.push_back(i);
+        }
+    }
+    sim.captureRestPositions();
+    sim.rebuildLRA();
+
+    for (const auto& c : sim.getLraConstraints())
+    {
+        float    bestD2  = std::numeric_limits<float>::max();
+        uint32_t bestPin = 0;
+        for (uint32_t p : pinIndices)
+        {
+            const glm::vec3 d  = pos[c.particleIndex] - pos[p];
+            const float    d2 = glm::dot(d, d);
+            if (d2 < bestD2)
+            {
+                bestD2  = d2;
+                bestPin = p;
+            }
+        }
+        EXPECT_EQ(c.pinIndex, bestPin) << "particle " << c.particleIndex;
+    }
+}
+
 TEST(ClothSimulator, BuildLRASinglePinTethersEverythingToIt_Pe8)
 {
     ClothSimulator sim;

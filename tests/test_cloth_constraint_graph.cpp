@@ -207,6 +207,29 @@ TEST(ClothConstraintGraph, RangesPartitionTheConstraintArray)
     EXPECT_EQ(totalCount, static_cast<uint32_t>(cs.size()));
 }
 
+// 3D_E-0874 lane-07: a particle in more than 64 constraints. The colour
+// sets were one 64-bit word, so the 65th colour shifted 1 by 64 (undefined
+// in Release) and could share a colour with a neighbour.
+TEST(ClothConstraintGraph, HubParticlePastSixtyFourConstraintsGetsAColourEach)
+{
+    constexpr uint32_t kSpokes = 70;
+    std::vector<GpuConstraint> cs;
+    for (uint32_t s = 1; s <= kSpokes; ++s)
+    {
+        GpuConstraint c{};
+        c.i0 = 0;  // the hub
+        c.i1 = s;
+        cs.push_back(c);
+    }
+    auto ranges = colourConstraints(cs, kSpokes + 1);
+
+    EXPECT_EQ(ranges.size(), static_cast<size_t>(kSpokes));
+    for (const auto& r : ranges)
+    {
+        EXPECT_EQ(r.count, 1u) << "two spokes share a colour, so they share the hub";
+    }
+}
+
 TEST(ClothConstraintGraph, EmptyConstraintsYieldEmptyRanges)
 {
     std::vector<GpuConstraint> cs;
