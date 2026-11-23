@@ -106,7 +106,7 @@ jobs:
         # other). 500 MB ceiling fits within the per-repo cache quota
         # with headroom for the cmake-deps cache. Cache key includes
         # the job name so each job has its own namespace.
-        uses: hendrikmuhs/ccache-action@dbeefd73e8e2ffc1bbc412570072735eb4db3607  # v1.2.25
+        uses: hendrikmuhs/ccache-action@e91f31892a1d1b8c44424b1a94c0b7f52d337168  # v1.2.26
         with:
           key: ${{ github.job }}-${{ matrix.config }}
           # A full Debug build's objects are about 12x a Release build's (debug
@@ -285,7 +285,7 @@ jobs:
         # caches are job-scoped to avoid race-on-save. Per-job key is
         # the safe form; the apt + FetchContent caches already cover
         # the cross-job sharing where it's safe.
-        uses: hendrikmuhs/ccache-action@dbeefd73e8e2ffc1bbc412570072735eb4db3607  # v1.2.25
+        uses: hendrikmuhs/ccache-action@e91f31892a1d1b8c44424b1a94c0b7f52d337168  # v1.2.26
         with:
           key: ${{ github.job }}-Debug
           # Debug-sized, as in linux-build-test: at 500M this job hit 19%.
@@ -428,7 +428,7 @@ jobs:
         # FetchContent semantics can produce subtly different compile
         # commands (e.g. -isystem vs -I include flags) and we don't
         # want one to evict the other's hits.
-        uses: hendrikmuhs/ccache-action@dbeefd73e8e2ffc1bbc412570072735eb4db3607  # v1.2.25
+        uses: hendrikmuhs/ccache-action@e91f31892a1d1b8c44424b1a94c0b7f52d337168  # v1.2.26
         with:
           key: ${{ github.job }}-${{ matrix.cmake }}
           max-size: 500M
