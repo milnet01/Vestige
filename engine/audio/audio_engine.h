@@ -767,7 +767,8 @@ public:
         m_hrtfStatusListener = std::move(listener);
     }
 
-    /// @brief Stops all playing sources.
+    /// @brief Stops all playing sources. Frees the engine's own playbacks;
+    ///        a source a caller holds from acquireSource stays held.
     void stopAll();
 
     /// @brief Checks if audio is available (device opened successfully).

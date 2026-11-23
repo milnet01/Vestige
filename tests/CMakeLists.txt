@@ -147,6 +147,7 @@ add_executable(vestige_tests
     test_asset_browser_unreadable.cpp
     test_script_editor_open.cpp
     test_audio_channel_formats.cpp
+    test_audio_clip_decode.cpp
     test_localization_format.cpp
     test_localization_tables.cpp
     test_physics_character_controller.cpp

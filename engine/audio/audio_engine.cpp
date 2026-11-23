@@ -1097,16 +1097,22 @@ void AudioEngine::stopAll()
         return;
     }
 
+    // Every source stops, but only the engine's own playbacks are freed: a
+    // source a caller took with acquireSource and kept (a music layer's)
+    // stays its caller's, as in reclaimFinishedSources (3D_E-0740).
     for (size_t i = 0; i < m_sourcePool.size(); ++i)
     {
-        if (m_sourceInUse[i])
+        if (!m_sourceInUse[i])
         {
-            alSourceStop(m_sourcePool[i]);
+            continue;
+        }
+        alSourceStop(m_sourcePool[i]);
+        if (m_livePlaybacks.erase(m_sourcePool[i]) != 0)
+        {
             alSourcei(m_sourcePool[i], AL_BUFFER, 0);
             m_sourceInUse[i] = false;
             m_sourceTicket[i] = 0;
         }
-        m_livePlaybacks.erase(m_sourcePool[i]);
     }
 }
 
@@ -1144,7 +1150,9 @@ void AudioEngine::setOutputLayout(AudioOutputLayout layout)
 
 bool AudioEngine::isSurroundOutputSupported() const
 {
-    return m_available && m_device != nullptr
+    // A layout change applies through alcResetDeviceSOFT (applyHrtfSettings),
+    // so the mode extension alone cannot change anything.
+    return m_available && m_device != nullptr && m_alcResetDeviceSOFT != nullptr
         && alcIsExtensionPresent(m_device, "ALC_SOFT_output_mode") == ALC_TRUE;
 }
 

@@ -79,4 +79,28 @@ TEST(AudioEnginePlaybackTicket, HeldSourceIsNotReclaimedWhenItStops)
     engine.shutdown();
 }
 
+// 3D_E-0874 lane-10: stopAll freed every source in use, a held one too, so
+// the next sound could take a music layer's source from under it.
+TEST(AudioEnginePlaybackTicket, StopAllKeepsAHeldSourceHeld)
+{
+    AudioEngine engine;
+    if (!openNullAudioDevice(engine))
+    {
+        GTEST_SKIP() << "no OpenAL device could be opened";
+    }
+
+    const unsigned int held = engine.acquireSource(SoundPriority::Normal);
+    ASSERT_NE(held, 0u);
+    const std::uint64_t ticket = engine.playbackTicket(held);
+
+    engine.stopAll();
+
+    EXPECT_EQ(engine.playbackTicket(held), ticket)
+        << "stopAll freed a source its caller still holds";
+    const unsigned int next = engine.acquireSource(SoundPriority::Normal);
+    EXPECT_NE(next, held) << "a held source was handed to another caller";
+
+    engine.shutdown();
+}
+
 #endif
