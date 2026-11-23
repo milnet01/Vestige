@@ -14700,7 +14700,20 @@ record, and a real clearance before commercial release needs counsel.
   the brighter sun is blocked by the roof. Vestige has no export to
   ExperiRays today; the format is ExperiRays' scene input. User chose
   2026-11-23: planned, after frameledger 0.9.0 and the 3D_E-0874 lanes.
+  User chose 2026-11-23 (second ask): build after 3D_E-0998. Even one
+  view needs the whole exporter (Vestige writes no glTF), and until
+  3D_E-0998 our point lights fade as 1/(1+0.45d+0.5d^2), so a reference
+  could not check our lighting. ExperiRays times its own few-light scene
+  instead. Reader facts (ExperiRays src/scene/gltf.cpp,
+  camera_path.cpp): .glb with one bin chunk; asset.extras.xr {version 1,
+  engine "vestige", scene_key} required; triangles, POSITION required;
+  baseColorFactor and emissive read, textures not; KHR_lights_punctual
+  intensity = largest diffuse channel, color = diffuse / it; no shear or
+  zero scale; .xrpath.json lists scene_keys, camera yfov/xfov + znear,
+  frames[0] is the view. Route: a hidden CLI flag that walks the live
+  Scene after setupTabernacleScene; cloth as static baked meshes.
   **Layman:** Send a copy of the Tabernacle to the ray-tracing lab, so it can draw a reference picture of the lamp-lit tent interior to check Vestige's lighting against.
   Kind: feature.
   Source: user-request-2026-11-23 (asked by ExperiRays, EXRAY-0048).
   Lanes: renderer.
+  Blocked-by: 3D_E-0998.
