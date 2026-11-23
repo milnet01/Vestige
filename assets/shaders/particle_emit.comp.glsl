@@ -67,7 +67,8 @@ uint pcgHash(uint value)
     return (word >> 22u) ^ word;
 }
 
-// Returns [0, 1)
+// Returns [0, 1]: float rounding maps the top 128 seeds to exactly 1.0, so
+// never index or branch on it as if 1.0 were excluded.
 float randomFloat(inout uint seed)
 {
     seed = pcgHash(seed);

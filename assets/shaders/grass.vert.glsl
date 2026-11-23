@@ -78,6 +78,7 @@ uint grassCellHash(int cellX, int cellZ, uint salt)
     return grassHashU32(h);
 }
 
+// [0, 1], not [0, 1): float rounding maps the top 128 hashes to exactly 1.0.
 float grassU32ToUnit(uint h) { return float(h) * (1.0 / 4294967296.0); }
 
 struct ClumpResult { float height; vec2 leanDir; float tint; float bend; float phase; };
@@ -98,7 +99,7 @@ ClumpCell clumpCell(int cx, int cz, float cellSize, float jitterRadius)
     c.leanDir = vec2(cos(la), sin(la));
     c.tint    = grassU32ToUnit(grassCellHash(cx, cz, SALT_TINT)) * 2.0 - 1.0;     // [-1,1]
     c.bend    = grassU32ToUnit(grassCellHash(cx, cz, SALT_BEND));                 // [0,1]
-    c.phase   = grassU32ToUnit(grassCellHash(cx, cz, SALT_PHASE)) * TAU;          // [0,2π)
+    c.phase   = grassU32ToUnit(grassCellHash(cx, cz, SALT_PHASE)) * TAU;          // [0,2π]
     c.id      = grassCellHash(cx, cz, 0u);
     return c;
 }

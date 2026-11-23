@@ -599,6 +599,10 @@ void main()
         float depthFade = 1.0 - smoothstep(0.0, 5.0, depthBelowWater);
         caustics *= depthFade;
 
+        // Half the objects' 0.5 in scene.frag.glsl, on purpose: a block on the
+        // meadow pond bed rendered both ways (2026-11-23) showed no seam at
+        // 0.25, and 0.5 widened the step where object meets bed. Darker
+        // ground shows the same added light more strongly.
         float lightScale = length(u_lightColor) * 0.25 / PI;
         color += caustics * lightScale;
     }

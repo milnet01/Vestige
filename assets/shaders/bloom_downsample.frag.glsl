@@ -84,9 +84,10 @@ void main()
     float x = u_srcTexelSize.x;
     float y = u_srcTexelSize.y;
 
-    // Sanitize: clamp NaN/Inf from scene shader to prevent propagation through bloom chain.
-    // NaN spreads through the 13-tap filter and upsample, creating black square artifacts.
-    #define SANITIZE(s) s = clamp(s, vec3(0.0), vec3(65504.0))
+    // Sanitize: remove NaN/Inf from the scene shader before it spreads through the
+    // 13-tap filter and upsample as black squares. isnan() replaces NaN explicitly,
+    // because GLSL leaves clamp() of a NaN undefined; the clamp then caps Inf.
+    #define SANITIZE(s) s = clamp(mix(s, vec3(0.0), isnan(s)), vec3(0.0), vec3(65504.0))
 
     // 4 corner samples (2 texels away, bilinear gives 2x2 average each)
     vec3 a = texture(u_sourceTexture, v_texCoord + vec2(-2.0*x,  2.0*y)).rgb;

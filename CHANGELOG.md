@@ -25,6 +25,13 @@ may change any interface without notice.
 
 ## [Unreleased]
 
+### 2026-11-23 Fixed — Anti-aliasing and bloom remove bad pixel values on every graphics driver (3D_E-0874)
+
+- **A NaN pixel can no longer stick in the anti-aliasing history or spread through bloom**
+  Both passes relied on max() or clamp() to drop NaN, which GLSL does
+  not promise; they now replace it explicitly. No visible change on the
+  drivers tested (RX 6600 and llvmpipe), where the old guards held.
+
 ### 2026-11-23 Fixed — A --scene path the engine may not read keeps the demo scene (3D_E-1002)
 
 A --scene file in a folder the engine may not open used to end start-up

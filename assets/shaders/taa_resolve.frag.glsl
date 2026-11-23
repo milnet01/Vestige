@@ -163,10 +163,12 @@ void main()
     // Blend
     vec3 result = mix(currentColor, historyColor, feedback);
 
-    // AUDIT.md §L5 / FIXPLAN: cheap NaN safety on the final result. A
-    // single NaN accumulated into history would poison neighbouring
-    // samples forever under the reprojection loop; clamping floor to
-    // 0.0 replaces negatives/NaNs without touching valid HDR highlights.
-    result = max(result, vec3(0.0));
+    // NaN and Inf safety on the final result: one accumulated into history
+    // would poison neighbouring samples forever under the reprojection loop.
+    // isnan() replaces NaN explicitly, because GLSL leaves max() and clamp()
+    // of a NaN undefined; the clamp then takes Inf to the half-float maximum
+    // and negatives to 0, leaving valid HDR highlights alone.
+    result = mix(result, vec3(0.0), isnan(result));
+    result = clamp(result, vec3(0.0), vec3(65504.0));
     fragColor = vec4(result, 1.0);
 }

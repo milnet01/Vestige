@@ -7724,6 +7724,16 @@ shipped that have no invocation path at all.
   cache was built from. tests/test_plot_cache_guard.cpp: the old count
   rule extracted unchanged went red on 3 of 5 tests, green after. All
   four rigs now exist.
+  2026-11-23: lane-06 terrain.frag.glsl 602 settled, kept at 0.25 (user
+  chose after a render): a 1 m block on the meadow pond bed, rendered
+  headless on the RX 6600 at 0.25, 0.5 and caustics off, gave an
+  object-to-bed step of 0.3 levels of 255 at 0.25 and 2.3 at 0.5; under 1
+  level at 0.9 m deep. Comment at the line says why. lane-06
+  taa_resolve 170 and bloom_downsample 89 fixed: isnan() replace before
+  the clamp; tests/test_hdr_nan_guards.cpp. Old guards already held on
+  RX 6600 and llvmpipe, so the test is unproven red; with the guards
+  removed it fails on both. Lane-06 has no open rows left but particle
+  395/401 (latent, no caller).
   **Layman:** About 290 lower-risk possible bugs and the medium findings are still unchecked.
   Kind: review-fix.
   Source: review-readability 2026-10-31 at 7b2a81d.
