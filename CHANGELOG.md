@@ -25,6 +25,15 @@ may change any interface without notice.
 
 ## [Unreleased]
 
+### 2026-11-23 Changed — frameledger v0.9.0 (3D_E-1000)
+
+- **The vendored frameledger is now v0.9.0** (3D_E-1000)
+  `external/frameledger/` moved from v0.7.0 (v0.8.0 was skipped): the
+  header and `frameledger.pyz`, both from the release zip. The checks
+  Vestige runs with it behave as before. New in the tool: a promise
+  that a run file it reads today is read the same by every later
+  release, and `compare` warns when a run's own frame times scatter.
+
 ### 2026-11-23 Fixed — Anti-aliasing and bloom remove bad pixel values on every graphics driver (3D_E-0874)
 
 - **A NaN pixel can no longer stick in the anti-aliasing history or spread through bloom**

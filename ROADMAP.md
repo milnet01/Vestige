@@ -8432,7 +8432,7 @@ shipped that have no invocation path at all.
   Source: exray-0005-part2-review-2026-11-21.
   Lanes: formula.
 
-- 📋 [3D_E-1000] **Vendor frameledger v0.8.0 in place of v0.7.0.**
+- ✅ [3D_E-1000] **Vendor frameledger v0.9.0 in place of v0.7.0.**
   frameledger announced 0.8.0 on 2026-11-21 (tag v0.8.0, commit c5f4cb2,
   archive SHA256 3b7a03a350604cfef5e0d1339b00e88ed8fac72eac601237d005a8f264336228).
   From it the run-file format is under the FLED-0040 stability promise and
@@ -8440,8 +8440,17 @@ shipped that have no invocation path at all.
   FLED_VERSION (frameledger's word). New: compare's noisy_run warning
   (FLED-0072). Same route as 3D_E-0991 (external/frameledger/, independent
   review of the bump, DEPENDENCY_STANDARDS.md).
-  Done when: external/frameledger holds 0.8.0, the 60 FPS floor command in
+  0.9.0 followed on 2026-11-23 (archive SHA256
+  e3fde3fa1f356b049534afbc08e53189049e07ee9769c2b267345468f72beee4;
+  header again changed only in FLED_VERSION), so the bump goes straight
+  to it.
+  Done when: external/frameledger holds 0.9.0, the 60 FPS floor command in
   CLAUDE.md still runs, and the review is done.
+  2026-11-23: external/frameledger holds 0.9.0 (header and
+  frameledger.pyz byte-identical to the release zip, digest checked).
+  Independent review by a fresh agent: nothing Vestige uses changed in
+  0.8.0 or 0.9.0. floor --fps 60 runs; ctest
+  frameledger/PerfGate/FpsFloor 9 of 9 passed.
   **Layman:** Update the frame-timing tool Vestige uses to its newest release.
   Kind: chore.
   Source: frameledger-release-2026-11-21.
