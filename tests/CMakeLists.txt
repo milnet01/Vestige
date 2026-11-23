@@ -342,6 +342,7 @@ add_executable(vestige_tests
     test_script_context.cpp
     test_node_library.cpp
     test_scripting_system_bridge.cpp
+    test_script_component.cpp
     test_script_templates.cpp
     test_script_compiler.cpp
     test_sprite_atlas.cpp

@@ -14,8 +14,9 @@ form this reader does not evaluate. A wrong answer then costs a full gate run,
 never a skipped check.
 
 Pattern semantics follow GitHub's filter syntax for the forms used: `*` matches
-within one path segment, `**` across segments, `**/` also matches no directory,
-`?` one character. Negation (`!`), character classes (`[`) and `+` are refused.
+within one path segment, `**` across segments, `**/` also matches no directory.
+Negation (`!`), character classes (`[`), `+` and `?` are refused; in GitHub's
+syntax `?` means zero or one of the character before it.
 """
 from __future__ import annotations
 
@@ -29,7 +30,7 @@ WORKFLOW = Path(__file__).resolve().parent.parent / ".github/workflows/ci.yml"
 
 
 def pattern_to_regex(pattern: str) -> re.Pattern[str]:
-    if pattern.startswith("!") or any(c in pattern for c in "[]+"):
+    if pattern.startswith("!") or any(c in pattern for c in "[]+?"):
         raise ValueError(f"unsupported paths-ignore pattern: {pattern!r}")
     out = []
     i = 0
@@ -42,9 +43,6 @@ def pattern_to_regex(pattern: str) -> re.Pattern[str]:
             i += 2
         elif pattern[i] == "*":
             out.append("[^/]*")
-            i += 1
-        elif pattern[i] == "?":
-            out.append("[^/]")
             i += 1
         else:
             out.append(re.escape(pattern[i]))

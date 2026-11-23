@@ -35,10 +35,12 @@ void main()
         0.0);
 
     // Write the sort-key-derived depth so the 3D depth buffer orders sprites
-    // correctly against it. The depth range is remapped CPU-side into
-    // [0.99, 0.999] so sprites always sit in front of cleared depth.
+    // correctly against it. a_depth arrives in [0.99, 0.999]. Under the
+    // engine's GL_ZERO_TO_ONE clip control clip z is stored as depth
+    // directly, so this stores [0.98, 0.998]: in front of reverse-Z's
+    // cleared depth of 0, in the same order.
     gl_Position = u_viewProj * vec4(world.xy, 0.0, 1.0);
-    gl_Position.z = a_depth * 2.0 - 1.0;  // [0,1] → [-1,1] clip-space z
+    gl_Position.z = a_depth * 2.0 - 1.0;
 
     v_uv = mix(a_uvRect.xy, a_uvRect.zw, a_corner);
     v_tint = a_tint;

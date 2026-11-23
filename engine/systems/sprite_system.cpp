@@ -235,9 +235,9 @@ void SpriteSystem::buildBatches(const std::vector<SpriteDrawEntry>& entries,
         const float t = denom > 0.0f
                             ? static_cast<float>(i) / denom
                             : 0.5f;
-        // Invert so earlier (back) sprites get the smaller GL depth value
-        // and later (front) sprites get the larger — standard back-to-front
-        // order with LEQUAL depth test.
+        // Earlier (back) sprites get the smaller depth and later (front)
+        // ones the larger: under the engine's reverse-Z GEQUAL depth test
+        // a larger depth is nearer, so a later sprite draws over an earlier.
         inst.depth = kSpriteDepthMin + t * (kSpriteDepthMax - kSpriteDepthMin);
 
         outBatches.back().instances.push_back(inst);

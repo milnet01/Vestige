@@ -8,6 +8,7 @@
 #include "scripting/blackboard.h"
 #include "scripting/script_instance.h"
 
+#include <memory>
 #include <string>
 #include <vector>
 
@@ -34,8 +35,10 @@ public:
     const std::vector<std::string>& scriptPaths() const { return m_scriptPaths; }
 
     /// @brief Get the runtime instances (not populated yet: ScriptingSystem does not fill it).
-    std::vector<ScriptInstance>& instances() { return m_instances; }
-    const std::vector<ScriptInstance>& instances() const { return m_instances; }
+    /// Each lives on the heap, so the address ScriptingSystem::registerInstance
+    /// keeps survives this list growing or a script being removed.
+    std::vector<std::unique_ptr<ScriptInstance>>& instances() { return m_instances; }
+    const std::vector<std::unique_ptr<ScriptInstance>>& instances() const { return m_instances; }
 
     /// @brief Per-entity shared blackboard (Entity scope variables).
     Blackboard& entityBlackboard() { return m_entityBlackboard; }
@@ -43,7 +46,7 @@ public:
 
 private:
     std::vector<std::string> m_scriptPaths;
-    std::vector<ScriptInstance> m_instances;
+    std::vector<std::unique_ptr<ScriptInstance>> m_instances;
     Blackboard m_entityBlackboard;
 };
 

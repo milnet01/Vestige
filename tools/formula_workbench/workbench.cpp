@@ -1317,9 +1317,15 @@ void Workbench::importCsv(const std::string& path)
         m_statusTimer = 3.0f;
         return;
     }
+    // Import adds to the points already loaded, so several files can be
+    // fitted together; the message says so, since synthetic data replaces.
+    const size_t before = m_dataPoints.size();
     m_dataPoints.insert(m_dataPoints.end(), points->begin(), points->end());
 
-    m_statusMessage = "Imported " + std::to_string(points->size()) + " data points from CSV.";
+    m_statusMessage = "Imported " + std::to_string(points->size()) + " data points from CSV";
+    m_statusMessage += before > 0
+        ? ", added to " + std::to_string(before) + " already loaded."
+        : ".";
     if (skippedRows > 0)
         m_statusMessage = "Warning: skipped " + std::to_string(skippedRows)
                         + " rows with a cell that is not a number or too few cells. "
