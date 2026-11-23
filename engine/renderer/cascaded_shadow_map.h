@@ -131,6 +131,16 @@ public:
     /// @brief Gets the configuration (read-only).
     const CascadedShadowConfig& getConfig() const;
 
+    /// @brief Whether cascade @p c re-rasterises on shadow frame @p frame
+    ///        (counted from 1; a bake restarts the count at 0). The renderer's
+    ///        shadow pass follows this schedule (3D_E-0029).
+    static bool rebuildsOnFrame(int c, int cascadeCount, uint32_t frame, bool isBake);
+
+    /// @brief Shadow casters drawn per cascade on @p frame: @p totalCasters
+    ///        (summed over the cascades drawn) over the cascades that rebuilt.
+    static int castersPerRebuiltCascade(int totalCasters, int cascadeCount,
+                                        uint32_t frame, bool isBake);
+
     // --- Static helpers (called only by tests; update() computes the
     //     same split formula inline, so change both together) ---
 

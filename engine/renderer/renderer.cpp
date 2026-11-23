@@ -3922,10 +3922,7 @@ void Renderer::renderShadowPass(const std::vector<SceneRenderData::RenderItem>& 
     // only, the one every receiver then samples (fitAllCascadesToBounds).
     const bool isBake = (bakeBounds != nullptr);
     const auto cascadeRebuildsThisFrame = [this, cascadeCount, isBake](int c) {
-        if (isBake) return c == 0;
-        if (c < 2 || m_shadowFrameCount <= static_cast<uint32_t>(cascadeCount)) return true;
-        return (c == 2) ? (m_shadowFrameCount % 4) == 0
-                        : (m_shadowFrameCount % 4) == 2;
+        return CascadedShadowMap::rebuildsOnFrame(c, cascadeCount, m_shadowFrameCount, isBake);
     };
 
     // Recompute light-space matrices for exactly the cascades being rebuilt, so a
@@ -4106,9 +4103,8 @@ void Renderer::renderShadowPass(const std::vector<SceneRenderData::RenderItem>& 
         m_cascadedShadowMap->endCascade();
     }
 
-    // Average shadow casters across cascades for stats
-    m_cullingStats.shadowCastersCulled = (cascadeCount > 0)
-        ? totalCascadeCulled / cascadeCount : 0;
+    m_cullingStats.shadowCastersCulled = CascadedShadowMap::castersPerRebuiltCascade(
+        totalCascadeCulled, cascadeCount, m_shadowFrameCount, isBake);
 
     // GL state restored by ScopedShadowDepthState + ScopedForwardZ on
     // function exit (R3 + R1 — was previously a manual `glDisable(GL_DEPTH_CLAMP)`

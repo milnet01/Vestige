@@ -7734,6 +7734,14 @@ shipped that have no invocation path at all.
   RX 6600 and llvmpipe, so the test is unproven red; with the guards
   removed it fails on both. Lane-06 has no open rows left but particle
   395/401 (latent, no caller).
+  2026-11-23: lane-03 closed. renderer.cpp shadow-caster average divided
+  by all cascades on frames where 2 and 3 skip; the schedule moved to
+  CascadedShadowMap::rebuildsOnFrame and the average to
+  castersPerRebuiltCascade (old divisor extracted unchanged went red, 7
+  for 15). normal_matrix.h: a shear with equal column lengths took the
+  uniform-scale fast path; now the columns must also be orthogonal (test
+  red on the old code). tests in test_cascaded_shadow_map.cpp and
+  test_normal_matrix.cpp.
   **Layman:** About 290 lower-risk possible bugs and the medium findings are still unchecked.
   Kind: review-fix.
   Source: review-readability 2026-10-31 at 7b2a81d.

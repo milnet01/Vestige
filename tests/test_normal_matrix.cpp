@@ -112,3 +112,15 @@ TEST(NormalMatrix, TranslationOnlyKeepsIdentity_Pe6)
     EXPECT_FLOAT_EQ(n[0][1], 0.0f);
     EXPECT_FLOAT_EQ(n[1][2], 0.0f);
 }
+
+// 3D_E-0874 lane-03: a sheared transform whose columns are all one length
+// is not a uniform scale. The floor plane y = 0 maps to itself here (x and z
+// are untouched), so its normal must stay straight up.
+TEST(NormalMatrix, ShearWithEqualColumnLengthsTakesInverseTransposePath)
+{
+    glm::mat4 model(1.0f);
+    model[1] = glm::vec4(0.6f, 0.8f, 0.0f, 0.0f);   // length 1, leans toward +x
+
+    const glm::vec3 floorNormal = computeNormalMatrix(model) * glm::vec3(0.0f, 1.0f, 0.0f);
+    EXPECT_TRUE(nearlyParallel(floorNormal, glm::vec3(0.0f, 1.0f, 0.0f)));
+}

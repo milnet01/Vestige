@@ -25,6 +25,20 @@ may change any interface without notice.
 
 ## [Unreleased]
 
+### 2026-11-23 Fixed — shadow caster count, normals on sheared objects (3D_E-0874)
+
+- **The shadow-caster count per cascade is right on every frame** (3D_E-0874)
+  The far two shadow cascades redraw only every few frames, but the
+  count shown in the performance panel and the F11 report divided by
+  all four. It read low on most frames; it now divides by the cascades
+  drawn that frame.
+
+- **A sheared object is lit correctly** (3D_E-0874)
+  An object can be sheared when it is rotated under a parent scaled
+  unevenly. Where its three axes stayed the same length, the engine
+  treated it as evenly scaled and tilted its surface normals, so light
+  fell on it at the wrong angle.
+
 ### 2026-11-23 Changed — frameledger v0.9.0 (3D_E-1000)
 
 - **The vendored frameledger is now v0.9.0** (3D_E-1000)

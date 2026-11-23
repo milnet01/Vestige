@@ -349,3 +349,53 @@ TEST(CascadedShadowMapTest, BoundsMatrixContainsEveryCornerOfTheBox)
     const glm::vec4 far = m * glm::vec4(0.0f, 0.0f, 250.0f, 1.0f);
     EXPECT_TRUE(std::abs(far.x) > 1.0f || std::abs(far.y) > 1.0f || std::abs(far.z) > 1.0f);
 }
+
+// =============================================================================
+// Staggered cascade rebuilds (3D_E-0029) and the casters-per-cascade statistic
+// =============================================================================
+
+TEST(CascadedShadowMapTest, NearCascadesRebuildEveryFrameFarOnesInTurn)
+{
+    // After the first four frames, cascade 2 rebuilds on frames 0 mod 4 and
+    // cascade 3 on frames 2 mod 4; cascades 0 and 1 rebuild every frame.
+    for (uint32_t frame = 5; frame <= 12; ++frame)
+    {
+        EXPECT_TRUE(CascadedShadowMap::rebuildsOnFrame(0, 4, frame, false));
+        EXPECT_TRUE(CascadedShadowMap::rebuildsOnFrame(1, 4, frame, false));
+        EXPECT_EQ(CascadedShadowMap::rebuildsOnFrame(2, 4, frame, false), frame % 4 == 0);
+        EXPECT_EQ(CascadedShadowMap::rebuildsOnFrame(3, 4, frame, false), frame % 4 == 2);
+    }
+}
+
+TEST(CascadedShadowMapTest, EveryCascadeRebuildsOnTheFirstFrames)
+{
+    for (uint32_t frame = 1; frame <= 4; ++frame)
+    {
+        for (int c = 0; c < 4; ++c)
+        {
+            EXPECT_TRUE(CascadedShadowMap::rebuildsOnFrame(c, 4, frame, false));
+        }
+    }
+}
+
+TEST(CascadedShadowMapTest, BakeRebuildsCascadeZeroOnly)
+{
+    EXPECT_TRUE(CascadedShadowMap::rebuildsOnFrame(0, 4, 8, true));
+    for (int c = 1; c < 4; ++c)
+    {
+        EXPECT_FALSE(CascadedShadowMap::rebuildsOnFrame(c, 4, 8, true));
+    }
+}
+
+TEST(CascadedShadowMapTest, CastersPerCascadeCountsOnlyRebuiltCascades)
+{
+    // Frame 6: cascades 0, 1 and 3 drew 30 casters between them; 2 skipped.
+    EXPECT_EQ(CascadedShadowMap::castersPerRebuiltCascade(30, 4, 6, false), 10);
+    // Frame 7: only cascades 0 and 1 drew.
+    EXPECT_EQ(CascadedShadowMap::castersPerRebuiltCascade(30, 4, 7, false), 15);
+    // First frames: all four drew.
+    EXPECT_EQ(CascadedShadowMap::castersPerRebuiltCascade(40, 4, 1, false), 10);
+    // A bake draws cascade 0 only.
+    EXPECT_EQ(CascadedShadowMap::castersPerRebuiltCascade(12, 4, 0, true), 12);
+    EXPECT_EQ(CascadedShadowMap::castersPerRebuiltCascade(12, 0, 6, false), 0);
+}

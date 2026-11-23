@@ -144,6 +144,25 @@ CascadedShadowMap& CascadedShadowMap::operator=(CascadedShadowMap&& other) noexc
     return *this;
 }
 
+bool CascadedShadowMap::rebuildsOnFrame(int c, int cascadeCount, uint32_t frame, bool isBake)
+{
+    if (isBake) return c == 0;
+    if (c < 2 || frame <= static_cast<uint32_t>(cascadeCount)) return true;
+    return (c == 2) ? (frame % 4) == 0
+                    : (frame % 4) == 2;
+}
+
+int CascadedShadowMap::castersPerRebuiltCascade(int totalCasters, int cascadeCount,
+                                                uint32_t frame, bool isBake)
+{
+    int rebuilt = 0;
+    for (int c = 0; c < cascadeCount; ++c)
+    {
+        if (rebuildsOnFrame(c, cascadeCount, frame, isBake)) ++rebuilt;
+    }
+    return (rebuilt > 0) ? totalCasters / rebuilt : 0;
+}
+
 std::vector<float> CascadedShadowMap::computeSplitDistances(
     float nearPlane, float farPlane, int cascadeCount, float lambda)
 {

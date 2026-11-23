@@ -17,9 +17,10 @@
 /// transforms the inverse-transpose collapses to `(1/s) * m3`, which
 /// after `normalize(...)` in the vertex shader is bit-identical to the
 /// upper-left 3×3 of the model matrix. We return that directly and
-/// avoid the 4×4 inverse + 3×3 transpose entirely. Only a non-uniform
-/// scale (squash-and-stretch animations, anisotropic billboards) falls
-/// through to the full inverse-transpose path.
+/// avoid the 4×4 inverse + 3×3 transpose entirely. A non-uniform scale
+/// (squash-and-stretch animations, anisotropic billboards) or a shear
+/// (a rotated child under a non-uniformly scaled parent) falls through
+/// to the full inverse-transpose path.
 #pragma once
 
 #include <glm/glm.hpp>
@@ -46,7 +47,12 @@ inline glm::mat3 computeNormalMatrix(const glm::mat4& modelMatrix)
     // difference.
     const float lmax = std::max(l0, std::max(l1, l2));
     const float tol  = 1e-4f * lmax;
-    if (std::abs(l0 - l1) < tol && std::abs(l1 - l2) < tol)
+    // Equal lengths alone do not make a uniform scale: a shear can keep them
+    // equal, so the columns must also be at right angles.
+    if (std::abs(l0 - l1) < tol && std::abs(l1 - l2) < tol
+        && std::abs(glm::dot(m3[0], m3[1])) < tol
+        && std::abs(glm::dot(m3[1], m3[2])) < tol
+        && std::abs(glm::dot(m3[0], m3[2])) < tol)
     {
         return m3;
     }
