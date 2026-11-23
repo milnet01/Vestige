@@ -540,6 +540,20 @@ std::shared_ptr<Texture> TextRenderer::generateTextHeightMap(const std::string& 
         return nullptr;
     }
 
+    // Save what this draw changes, so the caller's frame carries on as it was.
+    GLint prevFbo = 0;
+    GLint prevViewport[4] = {0, 0, 0, 0};
+    GLfloat prevClear[4] = {0.0f, 0.0f, 0.0f, 0.0f};
+    glGetIntegerv(GL_FRAMEBUFFER_BINDING, &prevFbo);
+    glGetIntegerv(GL_VIEWPORT, prevViewport);
+    glGetFloatv(GL_COLOR_CLEAR_VALUE, prevClear);
+    const GLboolean prevBlend = glIsEnabled(GL_BLEND);
+    const GLboolean prevDepthTest = glIsEnabled(GL_DEPTH_TEST);
+    GLint prevBlendSrc = GL_ONE;
+    GLint prevBlendDst = GL_ZERO;
+    glGetIntegerv(GL_BLEND_SRC_RGB, &prevBlendSrc);
+    glGetIntegerv(GL_BLEND_DST_RGB, &prevBlendDst);
+
     // Bind FBO for rendering (need bind for draw operations)
     glBindFramebuffer(GL_FRAMEBUFFER, fbo);
 
@@ -613,11 +627,12 @@ std::shared_ptr<Texture> TextRenderer::generateTextHeightMap(const std::string& 
 
     drawRuns(runs);
 
-    glEnable(GL_DEPTH_TEST);
-    glDisable(GL_BLEND);
-
-    // Unbind FBO and clean up
-    glBindFramebuffer(GL_FRAMEBUFFER, 0);
+    if (prevDepthTest) glEnable(GL_DEPTH_TEST); else glDisable(GL_DEPTH_TEST);
+    if (prevBlend) glEnable(GL_BLEND); else glDisable(GL_BLEND);
+    glBlendFunc(static_cast<GLenum>(prevBlendSrc), static_cast<GLenum>(prevBlendDst));
+    glClearColor(prevClear[0], prevClear[1], prevClear[2], prevClear[3]);
+    glViewport(prevViewport[0], prevViewport[1], prevViewport[2], prevViewport[3]);
+    glBindFramebuffer(GL_FRAMEBUFFER, static_cast<GLuint>(prevFbo));
     glDeleteFramebuffers(1, &fbo);
 
     // Wrap the GL texture in a Texture object

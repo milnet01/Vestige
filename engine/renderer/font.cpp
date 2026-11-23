@@ -209,6 +209,15 @@ bool Font::loadFromFile(const std::string& filePath, int pixelSize,
     std::vector<unsigned char> atlasData(
         static_cast<size_t>(atlasWidth) * static_cast<size_t>(atlasHeight), 0);
 
+    // A reload replaces the last load: drop its glyphs and its atlas.
+    m_glyphs.clear();
+    m_fallbackGlyph = GlyphInfo{};
+    if (m_atlasTexture != 0)
+    {
+        glDeleteTextures(1, &m_atlasTexture);
+        m_atlasTexture = 0;
+    }
+
     // Second pass: blit glyphs into atlas and record GlyphInfo
     curX = 0;
     curY = 0;

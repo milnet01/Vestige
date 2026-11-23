@@ -303,6 +303,21 @@ TEST_F(FontGLTest, AsciiLoadExcludesNonAsciiCodepoints)
     EXPECT_FALSE(font.hasGlyph(0x0391));  // Greek capital alpha — not requested
 }
 
+// 3D_E-0874 lane-05: loading a Font again replaces the first load. Its glyphs
+// must go, and its atlas texture must be freed, not leaked.
+TEST_F(FontGLTest, ReloadReplacesGlyphsAndFreesTheOldAtlas)
+{
+    Font font;
+    ASSERT_TRUE(font.loadFromFile(arimoPath(), 48, ASCII_RANGE));
+    const GLuint firstAtlas = font.getAtlasTextureId();
+    ASSERT_TRUE(font.loadFromFile(arimoPath(), 48, GREEK_RANGES));
+    EXPECT_FALSE(font.hasGlyph(static_cast<uint32_t>('A'))) << "ASCII glyph kept from the first load";
+    EXPECT_TRUE(font.hasGlyph(0x0391));
+    // The driver may hand the freed name straight to the new atlas.
+    EXPECT_TRUE(font.getAtlasTextureId() == firstAtlas || !glIsTexture(firstAtlas))
+        << "the first atlas was leaked";
+}
+
 // The new `ranges` parameter loads beyond ASCII — Greek from Arimo.
 // (Full per-script coverage counts are pinned by the L2 test 6/7 once the
 // dedicated Hebrew face is in tree; here we only prove the L1 API works.)
@@ -428,4 +443,57 @@ TEST_F(FontGLTest, HeightMapOfOverlongTextRaisesNoGlError)
     }
     EXPECT_NE(tex, nullptr);
     EXPECT_EQ(glGetError(), static_cast<GLenum>(GL_NO_ERROR));
+}
+
+// 3D_E-0874 lane-05: the height map draws into its own framebuffer, then must
+// hand back the caller's framebuffer, viewport, clear colour, depth test and
+// blending as they were.
+TEST_F(FontGLTest, HeightMapLeavesTheCallersGlStateAsItWas)
+{
+    TextRenderer tr;
+    ASSERT_TRUE(tr.initialize(arimoPath(), assetRoot(), 48));
+
+    GLuint callerFbo = 0;
+    glCreateFramebuffers(1, &callerFbo);
+    glBindFramebuffer(GL_FRAMEBUFFER, callerFbo);
+    glViewport(7, 9, 33, 21);
+    glClearColor(0.25f, 0.5f, 0.75f, 1.0f);
+    glDisable(GL_DEPTH_TEST);
+    glEnable(GL_BLEND);
+    glBlendFunc(GL_ONE, GL_ONE);
+
+    std::shared_ptr<Texture> tex;
+    {
+        Vestige::Test::ScopedLeakCheckDisable noLeakTracking;
+        tex = tr.generateTextHeightMap("HOLY", 64, 32, true);
+    }
+    ASSERT_NE(tex, nullptr);
+
+    GLint fbo = 0;
+    GLint viewport[4] = {0, 0, 0, 0};
+    GLfloat clear[4] = {0.0f, 0.0f, 0.0f, 0.0f};
+    GLint blendSrc = 0;
+    GLint blendDst = 0;
+    glGetIntegerv(GL_FRAMEBUFFER_BINDING, &fbo);
+    glGetIntegerv(GL_VIEWPORT, viewport);
+    glGetFloatv(GL_COLOR_CLEAR_VALUE, clear);
+    glGetIntegerv(GL_BLEND_SRC_RGB, &blendSrc);
+    glGetIntegerv(GL_BLEND_DST_RGB, &blendDst);
+    EXPECT_EQ(static_cast<GLuint>(fbo), callerFbo);
+    EXPECT_EQ(viewport[0], 7);
+    EXPECT_EQ(viewport[1], 9);
+    EXPECT_EQ(viewport[2], 33);
+    EXPECT_EQ(viewport[3], 21);
+    EXPECT_FLOAT_EQ(clear[0], 0.25f);
+    EXPECT_FLOAT_EQ(clear[2], 0.75f);
+    EXPECT_FALSE(glIsEnabled(GL_DEPTH_TEST));
+    EXPECT_TRUE(glIsEnabled(GL_BLEND));
+    EXPECT_EQ(blendSrc, GL_ONE);
+    EXPECT_EQ(blendDst, GL_ONE);
+
+    glBindFramebuffer(GL_FRAMEBUFFER, 0);
+    glDeleteFramebuffers(1, &callerFbo);
+    glBlendFunc(GL_SRC_ALPHA, GL_ONE_MINUS_SRC_ALPHA);
+    glDisable(GL_BLEND);
+    glEnable(GL_DEPTH_TEST);
 }
