@@ -25,6 +25,16 @@ may change any interface without notice.
 
 ## [Unreleased]
 
+### 2026-11-23 Fixed — A --scene path the engine may not read keeps the demo scene (3D_E-1002)
+
+A --scene file in a folder the engine may not open used to end start-up
+with exit 1. The engine now logs "--scene path cannot be read" and runs
+the built-in demo, as it already did for a missing file.
+
+- **Proven by the process test ProcessLockedScenePathKeepsTheDemo, red before the fix.**
+
+- **ProcessFatalErrorReachesTheLogFile now triggers through a hidden test-only flag, --test-fail-after-window, which --help does not list.**
+
 ### 2026-11-22 Fixed — a start-up error is written to the log file (3D_E-0874)
 
 - **An error that stops the engine after its window opens now reaches the log file**

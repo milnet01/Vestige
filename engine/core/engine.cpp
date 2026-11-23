@@ -85,6 +85,7 @@
 #include <cstdlib>
 #include <cstdio>
 #include <filesystem>
+#include <stdexcept>
 
 namespace Vestige
 {
@@ -426,6 +427,11 @@ bool Engine::initialize(const EngineConfig& config)
         setupDemoScene();
     }
 
+    if (config.testFailAfterWindow)
+    {
+        throw std::runtime_error("--test-fail-after-window: failing on purpose, for a test");
+    }
+
     // Optional CLI-driven scene replacement (`--scene PATH`). Resolves the
     // path against the CWD first, then `<assetPath>/scenes/`. Loading
     // replaces the built-in demo entities; terrain and foliage managers
@@ -433,18 +439,28 @@ bool Engine::initialize(const EngineConfig& config)
     if (!config.startupScene.empty())
     {
         namespace fs = std::filesystem;
+        // The error_code overload: a path in a folder we may not read must
+        // keep the demo scene, not throw out of initialize() (3D_E-1002).
+        std::error_code unreadable;
         fs::path resolved = config.startupScene;
-        if (!fs::exists(resolved))
+        bool found = fs::exists(resolved, unreadable);
+        if (!found && !unreadable)
         {
-            fs::path alt = fs::path(config.assetPath) / "scenes" / config.startupScene;
-            if (fs::exists(alt))
+            const fs::path alt = fs::path(config.assetPath) / "scenes" / config.startupScene;
+            found = fs::exists(alt, unreadable);
+            if (found || unreadable)
             {
                 resolved = alt;
             }
         }
 
         Scene* activeScene = m_sceneManager->getActiveScene();
-        if (activeScene && fs::exists(resolved))
+        if (unreadable)
+        {
+            Logger::error("--scene path cannot be read: " + resolved.string()
+                + " (" + unreadable.message() + ") — keeping built-in demo");
+        }
+        else if (activeScene && found)
         {
             MusicSceneSettings music;
             auto result = SceneSerializer::loadScene(

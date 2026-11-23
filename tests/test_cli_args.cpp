@@ -157,6 +157,14 @@ TEST(CliArgs, SceneFlagTakesPathValue)
     EXPECT_EQ(r.config.startupScene, "my.scene");
 }
 
+TEST(CliArgs, TestFailAfterWindowIsOffUnlessGiven)
+{
+    EXPECT_FALSE(run({}).config.testFailAfterWindow);
+    auto r = run({"--test-fail-after-window"});
+    EXPECT_TRUE(r.ok);
+    EXPECT_TRUE(r.config.testFailAfterWindow);
+}
+
 TEST(CliArgs, OptionMissingItsValueIsAnError)
 {
     for (const char* option : {"--scene", "--assets", "--bake-acoustics", "--demo-capture", "--stills"})

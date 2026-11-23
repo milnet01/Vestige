@@ -92,6 +92,11 @@ struct EngineConfig
     /// then `assetPath` + "scenes/". Empty string = use built-in demo.
     std::string startupScene;
 
+    /// @brief Test-only: initialize() throws once the window is open, so a
+    /// process test can prove a fatal error reaches the log file
+    /// (CLI: --test-fail-after-window, left out of --help).
+    bool testFailAfterWindow = false;
+
     /// @brief If true, start directly in first-person PLAY mode with the
     /// editor UI hidden (CLI: --play). Default is EDIT mode with the
     /// editor visible.

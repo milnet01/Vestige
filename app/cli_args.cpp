@@ -236,6 +236,11 @@ bool parseArgs(int argc, char* argv[], EngineConfig& config, int& exitCode)
             }
             config.startupScene = path;
         }
+        else if (std::strcmp(arg, "--test-fail-after-window") == 0)
+        {
+            // Test-only, so not in printUsage (tests/process/fatal_reaches_log.py).
+            config.testFailAfterWindow = true;
+        }
         else if (std::strcmp(arg, "--assets") == 0)
         {
             const char* path = takeValue(argc, argv, i, "a path argument", exitCode);

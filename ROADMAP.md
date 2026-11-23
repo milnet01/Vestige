@@ -8457,7 +8457,7 @@ shipped that have no invocation path at all.
   Source: exray-0006-cull-questions-2026-11-21.
   Lanes: renderer.
 
-- 📋 [3D_E-1002] **A --scene path the engine may not read ends start-up instead of keeping the demo scene.**
+- ✅ [3D_E-1002] **A --scene path the engine may not read ends start-up instead of keeping the demo scene.**
   Run 2026-11-22. Engine::initialize's --scene block calls the throwing
   std::filesystem::exists; on a locked folder it throws "status:
   Permission denied" and start-up ends with exit 1. A missing file logs
@@ -8467,6 +8467,20 @@ shipped that have no invocation path at all.
   2026-11-22: the hidden test-only switch is the fallback).
   Done when: a locked --scene path logs an error and the demo scene
   runs, proven by a process test that fails first.
+  2026-11-23: fixed. Engine::initialize checks the --scene path with the
+  error_code overload of std::filesystem::exists, so a path in a locked
+  folder logs "--scene path cannot be read: PATH (Permission denied) —
+  keeping built-in demo" and start-up goes on. Proven by
+  tests/process/locked_scene_keeps_demo.py (ctest
+  ProcessLockedScenePathKeepsTheDemo): red on the old code (exit 1,
+  "filesystem error: status: Permission denied"), green after. It runs
+  --material-demo with a one-spot --stills file, so it exits by itself
+  (about 90 s in the Debug ASan build). It sets detect_leaks=0, because
+  LeakSanitizer fails the exit code on the GL driver's process-lifetime
+  allocations (tests/lsan_guard.h). Same commit:
+  ProcessFatalErrorReachesTheLogFile now triggers through the hidden
+  test-only --test-fail-after-window flag (not in --help), since no real
+  bad input fails there any more.
   **Layman:** Pointing the engine at a scene file in a folder it is not allowed to open makes it quit, when it should say so and show the demo scene.
   Kind: fix.
   Source: 3D_E-0874 main.cpp 41 rig, 2026-11-22.

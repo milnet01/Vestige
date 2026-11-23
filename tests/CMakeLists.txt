@@ -787,7 +787,7 @@ if(Python3_FOUND)
     )
 
     # Whole-program tests: run the real vestige binary (3D_E-0874). POSIX only:
-    # they lock a folder with chmod, and the Windows build runs under Wine.
+    # the Windows build runs under Wine, and one test locks a folder with chmod.
     if(NOT WIN32)
         add_test(
             NAME ProcessFatalErrorReachesTheLogFile
@@ -798,7 +798,17 @@ if(Python3_FOUND)
                     ${CMAKE_CURRENT_BINARY_DIR}/process/fatal_reaches_log
         )
         set_tests_properties(ProcessFatalErrorReachesTheLogFile PROPERTIES
-                             SKIP_RETURN_CODE 77 LABELS process TIMEOUT 180)
+                             LABELS process TIMEOUT 180)
+        add_test(
+            NAME ProcessLockedScenePathKeepsTheDemo
+            COMMAND Python3::Interpreter -I
+                    ${CMAKE_CURRENT_SOURCE_DIR}/process/locked_scene_keeps_demo.py
+                    $<TARGET_FILE:vestige>
+                    ${CMAKE_SOURCE_DIR}/assets
+                    ${CMAKE_CURRENT_BINARY_DIR}/process/locked_scene_keeps_demo
+        )
+        set_tests_properties(ProcessLockedScenePathKeepsTheDemo PROPERTIES
+                             SKIP_RETURN_CODE 77 LABELS process TIMEOUT 330)
     endif()
 else()
     message(WARNING

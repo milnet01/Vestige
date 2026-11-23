@@ -3,19 +3,18 @@
 # SPDX-License-Identifier: MIT
 """Whole-program test: a fatal error after the window opens reaches the log file.
 
-Runs the real vestige binary with --scene pointing into a folder it may not
-read. Opening the window succeeds; checking the scene path then throws, and the
-error must be written to logs/vestige_*.log, not only to the console
-(3D_E-0874, lane-02 main.cpp 41).
+Runs the real vestige binary with the hidden --test-fail-after-window flag:
+initialize() throws once the window is open, and the error must be written to
+logs/vestige_*.log, not only to the console (3D_E-0874, lane-02 main.cpp 41).
+No real bad input fails there since 3D_E-1002, hence the flag.
 
 Usage: fatal_reaches_log.py VESTIGE_BINARY ASSET_DIR WORK_DIR
-Needs a display (ctest runs under xvfb-run in CI). Exit 77 means skipped.
+Needs a display (ctest runs under xvfb-run in CI).
 """
 
 import glob
 import os
 import shutil
-import stat
 import subprocess
 import sys
 
@@ -28,29 +27,16 @@ def main() -> int:
         return 2
     binary, assets, work = sys.argv[1:]
 
-    if os.geteuid() == 0:
-        print("SKIP: root can read a locked folder, so the error cannot be caused")
-        return 77
-
-    if os.path.isdir(os.path.join(work, "locked")):
-        os.chmod(os.path.join(work, "locked"), stat.S_IRWXU)
     shutil.rmtree(work, ignore_errors=True)
-    locked = os.path.join(work, "locked")
     config = os.path.join(work, "config")
-    os.makedirs(locked)
     os.makedirs(config)
-    os.chmod(locked, 0)
 
     env = dict(os.environ)
     env["VESTIGE_CONFIG_DIR"] = config
     env["XDG_CONFIG_HOME"] = config
-    try:
-        run = subprocess.run(
-            [binary, "--assets", assets, "--scene",
-             os.path.join(locked, "x.scene")],
-            cwd=work, env=env, capture_output=True, text=True, timeout=120)
-    finally:
-        os.chmod(locked, stat.S_IRWXU)
+    run = subprocess.run(
+        [binary, "--assets", assets, "--test-fail-after-window"],
+        cwd=work, env=env, capture_output=True, text=True, timeout=120, check=False)
 
     console = run.stdout + run.stderr
     logs = glob.glob(os.path.join(work, "logs", "vestige_*.log"))
