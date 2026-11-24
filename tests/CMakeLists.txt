@@ -132,6 +132,7 @@ add_executable(vestige_tests
     test_audio_source_gone.cpp
     test_audio_source_reuse.cpp
     test_terrain_render_no_shadows.cpp
+    test_mirrored_winding_render.cpp
     test_texture_upload.cpp
     test_texture_reload.cpp
     test_skybox_exposure.cpp

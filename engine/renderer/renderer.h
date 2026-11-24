@@ -593,11 +593,13 @@ public:
     /// @return True if initialization succeeded.
     bool initTextRenderer(const std::string& fontPath, const std::string& assetPath);
 
-    /// @brief A batch of instances sharing the same mesh and material.
+    /// @brief A batch of instances sharing the same mesh and material, and
+    ///        all mirrored or none (3D_E-1001: a draw sets one front face).
     struct InstanceBatch
     {
         const Mesh* mesh;
         const Material* material;
+        bool mirrored = false;  ///< Every model matrix has a negative determinant (isMirrored)
         std::vector<glm::mat4> modelMatrices;
         std::vector<glm::mat4> prevModelMatrices;                   ///< Parallel to modelMatrices — previous-frame matrices for motion vectors (Slice R1)
         std::vector<const std::vector<glm::mat4>*> boneMatrixPtrs;  ///< Parallel to modelMatrices (nullptr for static)
@@ -606,7 +608,7 @@ public:
         std::vector<const std::vector<float>*> prevMorphWeightPtrs;     ///< Parallel — previous-frame morph weights (Slice R2)
     };
 
-    /// @brief Groups render items by (mesh, material) pair for instanced drawing.
+    /// @brief Groups render items by (mesh, material, mirrored) for instanced drawing.
     /// Static version for unit testing (allocates fresh containers each call).
     static std::vector<InstanceBatch> buildInstanceBatchesStatic(
         const std::vector<SceneRenderData::RenderItem>& items);
@@ -893,16 +895,26 @@ private:
     std::vector<SceneRenderData::RenderItem> m_cascadeCulledCasters;
 
     // Pooled instance batching (avoids per-frame map + vector allocation)
-    struct PairHash
+    struct BatchKey
     {
-        size_t operator()(const std::pair<const Mesh*, const Material*>& p) const
+        const Mesh* mesh;
+        const Material* material;
+        bool mirrored;
+        bool operator==(const BatchKey& o) const
         {
-            size_t h1 = std::hash<const void*>{}(p.first);
-            size_t h2 = std::hash<const void*>{}(p.second);
-            return h1 ^ (h2 * 2654435761u);
+            return mesh == o.mesh && material == o.material && mirrored == o.mirrored;
         }
     };
-    std::unordered_map<std::pair<const Mesh*, const Material*>, size_t, PairHash> m_batchIndexMap;
+    struct BatchKeyHash
+    {
+        size_t operator()(const BatchKey& k) const
+        {
+            size_t h1 = std::hash<const void*>{}(k.mesh);
+            size_t h2 = std::hash<const void*>{}(k.material);
+            return (h1 ^ (h2 * 2654435761u)) + (k.mirrored ? 1u : 0u);
+        }
+    };
+    std::unordered_map<BatchKey, size_t, BatchKeyHash> m_batchIndexMap;
     std::vector<InstanceBatch> m_instanceBatches;
     size_t m_instanceBatchCount = 0;
     void buildInstanceBatches(const std::vector<SceneRenderData::RenderItem>& items);

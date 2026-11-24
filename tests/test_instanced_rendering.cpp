@@ -50,6 +50,26 @@ TEST(InstanceBatchTest, SingleItemProducesSingleBatch)
     EXPECT_EQ(batches[0].modelMatrices.size(), 1u);
 }
 
+// 3D_E-1001: a batch is drawn with one front face, so a mirrored instance
+// (negative determinant) never shares a batch with an unmirrored one.
+TEST(InstanceBatchTest, MirroredInstancesBatchApartFromUnmirrored)
+{
+    const glm::mat4 mirrorX = glm::scale(glm::mat4(1.0f), glm::vec3(-1.0f, 1.0f, 1.0f));
+    const glm::mat4 mirrorAll = glm::scale(glm::mat4(1.0f), glm::vec3(-2.0f));
+    const glm::mat4 twoFlips = glm::scale(glm::mat4(1.0f), glm::vec3(-1.0f, -1.0f, 1.0f));
+
+    std::vector<SceneRenderData::RenderItem> items = {
+        makeItem(1, 1), makeItem(1, 1, mirrorX), makeItem(1, 1, mirrorAll),
+        makeItem(1, 1, twoFlips)};
+    auto batches = Renderer::buildInstanceBatchesStatic(items);
+
+    ASSERT_EQ(batches.size(), 2u);
+    EXPECT_FALSE(batches[0].mirrored);
+    EXPECT_EQ(batches[0].modelMatrices.size(), 2u) << "two flips are a rotation, not a mirror";
+    EXPECT_TRUE(batches[1].mirrored);
+    EXPECT_EQ(batches[1].modelMatrices.size(), 2u);
+}
+
 TEST(InstanceBatchTest, SameMeshMaterialGroupsTogether)
 {
     glm::mat4 m1 = glm::translate(glm::mat4(1.0f), glm::vec3(1.0f, 0.0f, 0.0f));

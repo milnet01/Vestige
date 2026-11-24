@@ -10,6 +10,7 @@
 #include "renderer/foliage_renderer.h"
 #include "renderer/grass_renderer.h"
 #include "renderer/tree_renderer.h"
+#include "renderer/mirrored_winding.h"
 #include "renderer/motion_overlay_prev_world.h"
 #include "renderer/normal_matrix.h"
 #include "renderer/sampler_fallback.h"
@@ -1960,6 +1961,12 @@ void Renderer::drawMesh(const Mesh& mesh, const glm::mat4& modelMatrix,
     {
         glDisable(GL_CULL_FACE);
     }
+    // A mirrored model reverses the winding (3D_E-1001).
+    const bool mirrored = isMirrored(modelMatrix);
+    if (mirrored)
+    {
+        glFrontFace(GL_CW);
+    }
 
     // Set polygon mode
     if (m_isWireframe)
@@ -1984,6 +1991,10 @@ void Renderer::drawMesh(const Mesh& mesh, const glm::mat4& modelMatrix,
     if (doubleSided)
     {
         glEnable(GL_CULL_FACE);
+    }
+    if (mirrored)
+    {
+        glFrontFace(GL_CCW);
     }
 
     // Textures are left bound — the next draw call rebinds what it needs.
@@ -2989,17 +3000,7 @@ static const std::array<PointShadowNames, MAX_POINT_SHADOW_LIGHTS>& getPointShad
 std::vector<Renderer::InstanceBatch> Renderer::buildInstanceBatchesStatic(
     const std::vector<SceneRenderData::RenderItem>& items)
 {
-    struct PairHash
-    {
-        size_t operator()(const std::pair<const Mesh*, const Material*>& p) const
-        {
-            size_t h1 = std::hash<const void*>{}(p.first);
-            size_t h2 = std::hash<const void*>{}(p.second);
-            return h1 ^ (h2 * 2654435761u);
-        }
-    };
-
-    std::unordered_map<std::pair<const Mesh*, const Material*>, size_t, PairHash> indexMap;
+    std::unordered_map<BatchKey, size_t, BatchKeyHash> indexMap;
     std::vector<InstanceBatch> batches;
 
     for (const auto& item : items)
@@ -3010,7 +3011,8 @@ std::vector<Renderer::InstanceBatch> Renderer::buildInstanceBatchesStatic(
         const bool isSkinnedOrMorphed =
             (item.boneMatrices != nullptr || item.morphWeights != nullptr);
 
-        auto key = std::make_pair(item.mesh, item.material);
+        const bool mirrored = isMirrored(item.worldMatrix);
+        const BatchKey key{item.mesh, item.material, mirrored};
         auto it = isSkinnedOrMorphed ? indexMap.end() : indexMap.find(key);
         if (it != indexMap.end())
         {
@@ -3031,6 +3033,7 @@ std::vector<Renderer::InstanceBatch> Renderer::buildInstanceBatchesStatic(
             InstanceBatch batch;
             batch.mesh = item.mesh;
             batch.material = item.material;
+            batch.mirrored = mirrored;
             batch.modelMatrices.push_back(item.worldMatrix);
             batch.prevModelMatrices.push_back(item.worldMatrix);
             batch.boneMatrixPtrs.push_back(item.boneMatrices);
@@ -3069,7 +3072,10 @@ void Renderer::buildInstanceBatches(
         const bool isSkinnedOrMorphed =
             (item.boneMatrices != nullptr || item.morphWeights != nullptr);
 
-        auto key = std::make_pair(item.mesh, item.material);
+        // 3D_E-1001: a mirrored instance needs the other front face, which is
+        // set per draw, so it never shares a batch with an unmirrored one.
+        const bool mirrored = isMirrored(item.worldMatrix);
+        const BatchKey key{item.mesh, item.material, mirrored};
         auto it = isSkinnedOrMorphed ? m_batchIndexMap.end() : m_batchIndexMap.find(key);
         if (it != m_batchIndexMap.end())
         {
@@ -3094,6 +3100,7 @@ void Renderer::buildInstanceBatches(
                 // Reuse existing batch (retains modelMatrices capacity)
                 m_instanceBatches[idx].mesh = item.mesh;
                 m_instanceBatches[idx].material = item.material;
+                m_instanceBatches[idx].mirrored = mirrored;
                 m_instanceBatches[idx].modelMatrices.clear();
                 m_instanceBatches[idx].modelMatrices.push_back(item.worldMatrix);
                 m_instanceBatches[idx].prevModelMatrices.clear();
@@ -3112,6 +3119,7 @@ void Renderer::buildInstanceBatches(
                 InstanceBatch batch;
                 batch.mesh = item.mesh;
                 batch.material = item.material;
+                batch.mirrored = mirrored;
                 batch.modelMatrices.push_back(item.worldMatrix);
                 batch.prevModelMatrices.push_back(prevModel);
                 batch.boneMatrixPtrs.push_back(item.boneMatrices);
@@ -3525,33 +3533,40 @@ void Renderer::renderScene(const SceneRenderData& renderData, const Camera& came
 
         for (const auto& [material, batchPtrs] : m_materialGroups)
         {
-            // Build indirect commands for this material group
-            m_indirectBuffer->clear();
-            for (const auto* batchPtr : batchPtrs)
+            // One indirect draw per front face (3D_E-1001): unmirrored batches,
+            // then mirrored ones.
+            for (const bool mirrored : {false, true})
             {
-                if (m_meshPool->hasMesh(batchPtr->mesh))
+                // Build indirect commands for this material group
+                m_indirectBuffer->clear();
+                for (const auto* batchPtr : batchPtrs)
                 {
-                    MeshPoolEntry entry = m_meshPool->getEntry(batchPtr->mesh);
-                    m_indirectBuffer->addCommand(entry, batchPtr->modelMatrices,
-                                                 batchPtr->prevModelMatrices);
+                    if (batchPtr->mirrored == mirrored && m_meshPool->hasMesh(batchPtr->mesh))
+                    {
+                        MeshPoolEntry entry = m_meshPool->getEntry(batchPtr->mesh);
+                        m_indirectBuffer->addCommand(entry, batchPtr->modelMatrices,
+                                                     batchPtr->prevModelMatrices);
+                    }
                 }
-            }
-            m_indirectBuffer->upload();
+                m_indirectBuffer->upload();
 
-            if (m_indirectBuffer->getCommandCount() > 0)
-            {
-                uploadMaterialUniforms(*material);
+                if (m_indirectBuffer->getCommandCount() > 0)
+                {
+                    uploadMaterialUniforms(*material);
 
-                bool doubleSided = material->isDoubleSided();
-                if (doubleSided) glDisable(GL_CULL_FACE);
-                if (m_isWireframe) glPolygonMode(GL_FRONT_AND_BACK, GL_LINE);
+                    bool doubleSided = material->isDoubleSided();
+                    if (doubleSided) glDisable(GL_CULL_FACE);
+                    if (mirrored) glFrontFace(GL_CW);
+                    if (m_isWireframe) glPolygonMode(GL_FRONT_AND_BACK, GL_LINE);
 
-                m_indirectBuffer->draw();
-                m_cullingStats.drawCalls += m_indirectBuffer->getCommandCount();
-                m_cullingStats.instanceBatches += m_indirectBuffer->getCommandCount();
+                    m_indirectBuffer->draw();
+                    m_cullingStats.drawCalls += m_indirectBuffer->getCommandCount();
+                    m_cullingStats.instanceBatches += m_indirectBuffer->getCommandCount();
 
-                if (m_isWireframe) glPolygonMode(GL_FRONT_AND_BACK, GL_FILL);
-                if (doubleSided) glEnable(GL_CULL_FACE);
+                    if (m_isWireframe) glPolygonMode(GL_FRONT_AND_BACK, GL_FILL);
+                    if (mirrored) glFrontFace(GL_CCW);
+                    if (doubleSided) glEnable(GL_CULL_FACE);
+                }
             }
         }
 
@@ -3620,6 +3635,7 @@ void Renderer::renderScene(const SceneRenderData& renderData, const Camera& came
 
                 bool doubleSided = batch.material->isDoubleSided();
                 if (doubleSided) glDisable(GL_CULL_FACE);
+                if (batch.mirrored) glFrontFace(GL_CW);
                 if (m_isWireframe) glPolygonMode(GL_FRONT_AND_BACK, GL_LINE);
 
                 batch.mesh->bind();
@@ -3631,6 +3647,7 @@ void Renderer::renderScene(const SceneRenderData& renderData, const Camera& came
                 batch.mesh->unbind();
 
                 if (m_isWireframe) glPolygonMode(GL_FRONT_AND_BACK, GL_FILL);
+                if (batch.mirrored) glFrontFace(GL_CCW);
                 if (doubleSided) glEnable(GL_CULL_FACE);
 
                 m_sceneShader.setBool("u_useInstancing", false);
@@ -3690,7 +3707,9 @@ void Renderer::renderScene(const SceneRenderData& renderData, const Camera& came
         uploadMaterialUniforms(*clothItem.material);
 
         bool doubleSided = clothItem.material->isDoubleSided();
+        const bool mirrored = isMirrored(clothItem.worldMatrix);
         if (doubleSided) glDisable(GL_CULL_FACE);
+        if (mirrored) glFrontFace(GL_CW);
         if (m_isWireframe) glPolygonMode(GL_FRONT_AND_BACK, GL_LINE);
 
         clothItem.mesh->bind();
@@ -3700,6 +3719,7 @@ void Renderer::renderScene(const SceneRenderData& renderData, const Camera& came
         clothItem.mesh->unbind();
 
         if (m_isWireframe) glPolygonMode(GL_FRONT_AND_BACK, GL_FILL);
+        if (mirrored) glFrontFace(GL_CCW);
         if (doubleSided) glEnable(GL_CULL_FACE);
     }
 
@@ -3988,6 +4008,7 @@ void Renderer::renderShadowPass(const std::vector<SceneRenderData::RenderItem>& 
             int count = static_cast<int>(batch.modelMatrices.size());
             // Phase 13 G1: bind this batch's albedo for the RSM flux term.
             bindShadowFluxAlbedo(m_shadowDepthShader, batch.material);
+            if (batch.mirrored) glFrontFace(GL_CW);  // 3D_E-1001
             if (count >= MIN_INSTANCE_BATCH_SIZE && m_instanceBuffer)
             {
                 m_shadowDepthShader.setBool("u_useInstancing", true);
@@ -4038,6 +4059,7 @@ void Renderer::renderShadowPass(const std::vector<SceneRenderData::RenderItem>& 
                     batch.mesh->unbind();
                 }
             }
+            if (batch.mirrored) glFrontFace(GL_CCW);
         }
 
         // Render vegetation shadows into every cascade so grass + tree shadows
@@ -4157,6 +4179,7 @@ void Renderer::renderPointShadowPass(const std::vector<int>& shadowCasters)
                 int count = static_cast<int>(batch.modelMatrices.size());
                 // Phase 13 G1: bind this batch's albedo for the RSM flux term.
                 bindShadowFluxAlbedo(m_pointShadowDepthShader, batch.material);
+                if (batch.mirrored) glFrontFace(GL_CW);  // 3D_E-1001
                 if (count >= MIN_INSTANCE_BATCH_SIZE && m_instanceBuffer)
                 {
                     // Skinned meshes never batch (buildInstanceBatches), but a
@@ -4202,6 +4225,7 @@ void Renderer::renderPointShadowPass(const std::vector<int>& shadowCasters)
                     }
                     batch.mesh->unbind();
                 }
+                if (batch.mirrored) glFrontFace(GL_CCW);
             }
 
             shadowMap->endFace();
@@ -4482,11 +4506,15 @@ void Renderer::renderIdBuffer(const SceneRenderData& renderData,
             m_idBufferShader.setVec3("u_entityColor", glm::vec3(r, g, b));
             m_idBufferShader.setMat4("u_model", item.worldMatrix);
 
+            // A mirrored item is picked on the side it shows (3D_E-1001).
+            const bool mirrored = isMirrored(item.worldMatrix);
+            if (mirrored) glFrontFace(GL_CW);
             item.mesh->bind();
             glDrawElements(GL_TRIANGLES,
                 static_cast<GLsizei>(item.mesh->getIndexCount()),
                 GL_UNSIGNED_INT, nullptr);
             item.mesh->unbind();
+            if (mirrored) glFrontFace(GL_CCW);
         }
     };
 
@@ -4663,11 +4691,15 @@ void Renderer::renderSelectionOutline(const SceneRenderData& renderData,
             glBindBufferBase(GL_SHADER_STORAGE_BUFFER, 2, m_boneMatrixSSBO);
         }
         m_outlineShader.setMat4("u_model", oi.worldMatrix);
+        // A mirrored item reverses the winding (3D_E-1001).
+        const bool mirrored = isMirrored(oi.worldMatrix);
+        if (mirrored) glFrontFace(GL_CW);
         oi.mesh->bind();
         glDrawElements(GL_TRIANGLES,
             static_cast<GLsizei>(oi.mesh->getIndexCount()),
             GL_UNSIGNED_INT, nullptr);
         oi.mesh->unbind();
+        if (mirrored) glFrontFace(GL_CCW);
     }
 
     // Pass 2: Draw scaled-up version where stencil != 1 → orange outline ring
@@ -4699,11 +4731,15 @@ void Renderer::renderSelectionOutline(const SceneRenderData& renderData,
             * oi.worldMatrix;
 
         m_outlineShader.setMat4("u_model", scaledModel);
+        // The uniform outline scale keeps the mirror's sign.
+        const bool mirrored = isMirrored(oi.worldMatrix);
+        if (mirrored) glFrontFace(GL_CW);
         oi.mesh->bind();
         glDrawElements(GL_TRIANGLES,
             static_cast<GLsizei>(oi.mesh->getIndexCount()),
             GL_UNSIGNED_INT, nullptr);
         oi.mesh->unbind();
+        if (mirrored) glFrontFace(GL_CCW);
     }
 
     // Restore OpenGL state

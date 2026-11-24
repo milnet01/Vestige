@@ -577,7 +577,7 @@ Test files relevant to `engine/renderer/`:
 | SSAO kernel determinism | `tests/test_ssao.cpp` | Deterministic kernel + noise tile |
 | IBL split-sum (`EnvironmentMap` capture sequence + prefilter loop) | `tests/test_ibl.cpp`, `tests/test_ibl_capture_sequence.cpp` | Bracket contract (mock guard) + smoke |
 | SH probe grid (`SHProbeGrid` configuration + projection) | `tests/test_sh_probe_grid.cpp` | Coefficient layout + binding |
-| Instanced rendering (`buildInstanceBatches` → `(mesh, material)` grouping) | `tests/test_instanced_rendering.cpp` | Static-mode batch-build contract |
+| Instanced rendering (`buildInstanceBatches` → `(mesh, material, mirrored)` grouping) | `tests/test_instanced_rendering.cpp` | Static-mode batch-build contract |
 | Skybox (procedural + cubemap load) | (integration tests; unit tests required GL context and were removed 2026-05-02) | Public API contract |
 | Color grading (`ColorGradingLut::loadCubeFile` + neutral LUT) | `tests/test_color_grading.cpp` | `.cube` round-trip |
 | Color-vision matrix (Viénot 1999) | `tests/test_color_vision_filter.cpp` | Identity for Normal, dichromacy projections |

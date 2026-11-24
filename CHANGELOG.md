@@ -25,6 +25,16 @@ may change any interface without notice.
 
 ## [Unreleased]
 
+### 2026-11-24 Fixed — mirrored objects show their outside (3D_E-1001)
+
+- **A mirrored object shows its outside and casts its own shadow** (3D_E-1001)
+  An object flipped like a mirror image by a negative scale showed its
+  inside: a one-sided surface
+  vanished from the side it faces and appeared from behind, and cast no
+  shadow where its twin would. Mirrored objects are now batched apart
+  from the rest and drawn with the other triangle winding as the front,
+  in the scene, cloth, shadow, picking and selection-outline passes.
+
 ### 2026-11-24 Fixed — Cursor bridge focuses the tab it finds (3D_E-0874)
 
 - **Cursor bridge: focusing or opening a file uses the tab it already

@@ -8475,7 +8475,7 @@ shipped that have no invocation path at all.
   Source: frameledger-release-2026-11-21.
   Lanes: tooling.
 
-- 📋 [3D_E-1001] **A mirrored one-sided mesh shows its back faces: the renderer never flips the front face for a negative-determinant model matrix.**
+- ✅ [3D_E-1001] **A mirrored one-sided mesh shows its back faces: the renderer never flips the front face for a negative-determinant model matrix.**
   Read, not run, 2026-11-21 (while answering ExperiRays on
   EXRAY-0006's cull). engine/renderer/renderer.cpp sets
   glFrontFace(GL_CCW) once at start-up; no draw sets GL_CW, and nothing
@@ -8490,6 +8490,15 @@ shipped that have no invocation path at all.
   Tell ExperiRays when it ships.
   CPU / GPU placement: CPU picks the front-face state per draw from the
   model matrix's sign, as the cull state is picked per material today.
+  Shipped 2026-11-24. Batches key on (mesh, material, mirrored);
+  a mirrored draw sets glFrontFace(GL_CW) for its duration in the
+  scene (single, instanced, MDI), cloth, directional and point shadow,
+  ID-buffer and outline passes. Proof:
+  tests/test_mirrored_winding_render.cpp, red on the old renderer
+  (mirrored centre pixel = empty scene; 0 of its twin's 18976 shadow
+  texels), green after; InstanceBatchTest.MirroredInstancesBatchApartFromUnmirrored.
+  Not covered: tree, foliage and grass renderers draw their own
+  instances and were not changed.
   **Layman:** An object flipped like a mirror image in the editor shows its inside instead of its outside.
   Kind: fix.
   Source: exray-0006-cull-questions-2026-11-21.
