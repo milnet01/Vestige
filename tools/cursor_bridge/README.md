@@ -21,7 +21,7 @@ Two independent pieces:
 
 1. **`extension/`** — a VS Code extension (Cursor-compatible because
    Cursor accepts all VS Code extensions). Listens on
-   `localhost:39801` (configurable) for JSON-RPC-style commands and
+   `localhost:39801` for JSON-RPC-style commands and
    executes them against the `vscode.*` API.
 
 2. **`mcp_server/`** — a Node MCP server Claude Code attaches to via
@@ -86,8 +86,10 @@ reachable.
 ## Config
 
 The extension auto-starts on Cursor launch and listens on port 39801.
-To change the port (e.g. if it clashes with something local), edit
-`extension/src/extension.ts` → `const PORT` and rebuild.
+The port is fixed in the source. To change it (e.g. if it clashes with
+something local), set the same number in both halves and rebuild both:
+`extension/src/extension.ts` → `const PORT`, and
+`mcp_server/src/index.ts` → `const BRIDGE_PORT`.
 
 ## Security
 

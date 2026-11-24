@@ -1,6 +1,6 @@
 <!-- ants-roadmap-format: 1 -->
 <!-- Generated from the Ants Terminal roadmap store. Edit it with roadmap_log; hand edits are discarded by the next write. -->
-<!-- ants-roadmap-id-high-water: 3D_E=1003 3D_E#S=989 -->
+<!-- ants-roadmap-id-high-water: 3D_E=1005 3D_E#S=989 -->
 
 # Vestige Engine Roadmap
 
@@ -7381,7 +7381,7 @@ shipped that have no invocation path at all.
   Source: review-readability 2026-10-31 at 7b2a81d.
   Lanes: physics.
 
-- 🚧 [3D_E-0874] **Check the remaining readability possible bugs and MEDIUM findings.**
+- ✅ [3D_E-0874] **Check the remaining readability possible bugs and MEDIUM findings.**
   Per-subsystem lists: Vestige_private/readability-2026-10-31/batches/leads-rest-1.md, -2, -3 and each lane file; progress in leads-rest-1-result.md. 3D_E-0823..0850 stay open as their index. User chose 2026-11-01 to check each when its subsystem is next worked on; a later priority list includes backlog, so they sit last in the fix order.
   2026-11-05 progress. Lanes 02, 03, 04, 05, 06, 07, 10, 23 verified by
   read-only sonnet agents (each REAL re-checked before fixing); verdicts
@@ -7742,6 +7742,17 @@ shipped that have no invocation path at all.
   uniform-scale fast path; now the columns must also be orthogonal (test
   red on the old code). tests in test_cascaded_shadow_map.cpp and
   test_normal_matrix.cpp.
+  2026-11-24: closed. Every possible-bug row in the lane files is now
+  fixed, not a bug, stale, documented by its own comment, or moved.
+  lane-27 cursor_bridge: ide_focus and ide_open_file opened a second tab
+  in the active group when the file was open in another group (seen in
+  a hidden Cursor run, then one tab after the fix); README no longer
+  calls the port configurable and names both constants. Latent, no
+  caller, moved to fix with their first caller: lane-06 particle depth
+  collision (3D_E-1004), lane-09 foot IK (3D_E-1005). The MEDIUM
+  findings were not checked here; they stay with the per-subsystem
+  items 3D_E-0823..0850, checked when each subsystem is next worked on
+  (user, 2026-11-01).
   **Layman:** About 290 lower-risk possible bugs and the medium findings are still unchecked.
   Kind: review-fix.
   Source: review-readability 2026-10-31 at 7b2a81d.
@@ -14717,3 +14728,36 @@ record, and a real clearance before commercial release needs counsel.
   Source: user-request-2026-11-23 (asked by ExperiRays, EXRAY-0048).
   Lanes: renderer.
   Blocked-by: 3D_E-0998.
+
+- 📋 [3D_E-1004] **Fix GPU particle depth collision before anything turns it on.**
+  Nothing calls GPUParticleEmitter::enableDepthCollision, so the path
+  never runs. Two known faults wait in it, in
+  assets/shaders/particle_simulate.comp.glsl's depth-buffer collision
+  block: the particle's depth is remapped by *0.5+0.5 though the depth
+  buffer is reverse-Z in [0,1], and the bounce reflects about world up
+  instead of the surface it hit. Left unfixed on 2026-11-24 because no
+  caller exists to prove a fix against, and the surface normal's source
+  (reconstructed from depth, or a G-buffer normal) is the caller's
+  design choice. Fix both in the change that adds the first caller,
+  with a GPU test that sees a particle stop at a wall.
+  CPU / GPU placement: GPU (compute pass), unchanged.
+  **Layman:** Particles that should bounce off walls would bounce wrongly, but nothing in the engine switches that feature on yet.
+  Kind: fix.
+  Source: review-readability 2026-10-31 at 7b2a81d (3D_E-0874 lane-06, lane-09).
+  Lanes: renderer.
+
+- 📋 [3D_E-1005] **Bend the leg in foot IK before anything uses it.**
+  solveFootIK (engine/animation/ik_solver.cpp) has no caller outside
+  tests. It lowers the pelvis by the one foot's whole drop, so the leg
+  reaches the ground without bending; real foot placement lowers the
+  pelvis by the lower foot of two and bends each leg for the rest. An
+  upside-down ground normal also skips ankle alignment, with no
+  fallback axis (solveLookAtIK has one). Left unfixed on 2026-11-24:
+  the fix changes the request to take both feet, and that shape
+  belongs to the first caller. Fix both in that change, with tests in
+  tests/test_ik_solver.cpp for uneven ground and the flipped normal.
+  CPU / GPU placement: CPU, unchanged.
+  **Layman:** Characters' feet would not bend their knees on uneven ground, but nothing in the engine uses foot placement yet.
+  Kind: fix.
+  Source: review-readability 2026-10-31 at 7b2a81d (3D_E-0874 lane-06, lane-09).
+  Lanes: animation.

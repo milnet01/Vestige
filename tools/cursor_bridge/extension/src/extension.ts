@@ -36,28 +36,44 @@ function tabPath(tab: vscode.Tab): string | undefined {
   return input.uri.fsPath;
 }
 
+/**
+ * The editor group that already shows `path`, preferring the active
+ * group, or undefined if no group does. showTextDocument with no
+ * viewColumn opens in the active group, so a file open only in another
+ * group would get a second tab there instead of being focused.
+ */
+function groupShowing(path: string): vscode.ViewColumn | undefined {
+  const active = vscode.window.tabGroups.activeTabGroup;
+  const groups = [active, ...vscode.window.tabGroups.all.filter((g) => g !== active)];
+  const holder = groups.find((g) => g.tabs.some((t) => tabPath(t) === path));
+  return holder?.viewColumn;
+}
+
+/** Show `path` in the group that already holds it, else the active group. */
+async function showFile(path: string): Promise<void> {
+  const doc = await vscode.workspace.openTextDocument(path);
+  await vscode.window.showTextDocument(doc, { preview: false, viewColumn: groupShowing(path) });
+}
+
 const commands: Record<string, CommandHandler> = {
   /** Open or focus a file in a new/existing tab. */
   async ide_open_file(args: { path: string }) {
     if (!args?.path || typeof args.path !== 'string') {
       throw new Error('path required');
     }
-    const doc = await vscode.workspace.openTextDocument(args.path);
-    await vscode.window.showTextDocument(doc, { preview: false });
+    await showFile(args.path);
     return { path: args.path };
   },
 
   /** Focus an already-open tab. Fails if the file is not open. */
   async ide_focus(args: { path: string }) {
-    if (!args?.path) {
+    if (!args?.path || typeof args.path !== 'string') {
       throw new Error('path required');
     }
-    const open = await commands.ide_get_open_tabs({});
-    if (!open.paths.includes(args.path)) {
+    if (groupShowing(args.path) === undefined) {
       throw new Error(`file not currently open: ${args.path}`);
     }
-    const doc = await vscode.workspace.openTextDocument(args.path);
-    await vscode.window.showTextDocument(doc, { preview: false });
+    await showFile(args.path);
     return { path: args.path };
   },
 

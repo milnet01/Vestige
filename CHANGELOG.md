@@ -25,6 +25,15 @@ may change any interface without notice.
 
 ## [Unreleased]
 
+### 2026-11-24 Fixed — Cursor bridge focuses the tab it finds (3D_E-0874)
+
+- **Cursor bridge: focusing or opening a file uses the tab it already
+  has** (3D_E-0874)
+  With the file open only in another editor group, `ide_focus` and
+  `ide_open_file` opened a second tab in the active group. They now
+  show the file in the group that holds it. The README no longer calls
+  the port configurable; it names the two constants to change.
+
 ### 2026-11-23 Fixed — shadow caster count, normals on sheared objects (3D_E-0874)
 
 - **The shadow-caster count per cascade is right on every frame** (3D_E-0874)
