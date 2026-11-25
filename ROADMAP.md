@@ -1,6 +1,6 @@
 <!-- ants-roadmap-format: 1 -->
 <!-- Generated from the Ants Terminal roadmap store. Edit it with roadmap_log; hand edits are discarded by the next write. -->
-<!-- ants-roadmap-id-high-water: 3D_E=1018 3D_E#S=989 -->
+<!-- ants-roadmap-id-high-water: 3D_E=1019 3D_E#S=989 -->
 
 # Vestige Engine Roadmap
 
@@ -8559,6 +8559,18 @@ shipped that have no invocation path at all.
   Kind: investigate.
   Source: 3D_E-0816 fix 2026-11-25.
   Lanes: renderer.
+
+- 📋 [3D_E-1019] **The run file's GPU-busy reading comes from the GPU the engine renders on.**
+  engine/profiler/machine_load.cpp takes the first DRM card that has a
+  `gpu_busy_percent` file, not the card the GL context runs on. Match
+  the context's GPU to its DRM node instead (ExperiRays EXRAY-0010 uses
+  VK_EXT_physical_device_drm; on GL, match by PCI id or renderer), and
+  write no `gpu_busy_pct` where no node matches. Test: a fake sysfs
+  tree with two cards, the rendering one second.
+  **Layman:** On a machine with two graphics cards, the frame log could report how busy the wrong card was.
+  Kind: fix.
+  Source: exray-0010-review-2026-11-25.
+  Lanes: profiler.
 
 ## 0.3.0 — An editor a builder can use
 
