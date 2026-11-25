@@ -6734,7 +6734,7 @@ shipped that have no invocation path at all.
   Source: user-request-2026-10-26.
   Lanes: tooling.
 
-- 📋 [3D_E-0816] **Find why the meadow ground glints, and remove the hand-set roughness lift in terrain.frag.**
+- ✅ [3D_E-0816] **Find why the meadow ground glints, and remove the hand-set roughness lift in terrain.frag.**
   3D_E-0808 raised the meadow sun about 3.14 x. Terrain specular then
   showed as pale patches through the grass (--stills, spec off in a
   scratch shader copy removed them). The shipped workaround moves ground
@@ -6742,6 +6742,21 @@ shipped that have no invocation path at all.
   whether those maps are too glossy for soil, or whether the cause is
   missing specular occlusion from the grass canopy. Settle which, fix
   that, and drop the lift.
+  2026-11-25: cause found and fixed. Neither glossy maps nor the
+  grass canopy: mipmaps average the detail normals, so far ground
+  shaded a flat normal with the near roughness. sampleGround() now
+  widens roughness by the spread the shortened normal stands for
+  (vMF lobe, alpha^2 += 2/kappa; no fitted constants); Low takes the
+  spread from each layer's 1x1 mip. The lift is gone. Measured on the
+  meadow --visual-test (27 views, terrain highlight = render minus a
+  spec-off render; % of pixels brighter by over 25/255, summed): no
+  lift 88, hand-set lift 41, fix 10. Test
+  test_terrain_normal_variance red (far roughness 0.30, expected
+  0.79) then green. Terrain pass median, old and new shader
+  alternated: 1.47/1.48 vs 1.50/1.46 ms. The absolute 60 FPS floor
+  was not read: Firefox and Spotify held the GPU 20-90 % busy.
+  CPU / GPU placement: GPU, per-fragment ALU in the existing terrain
+  shader; no CPU work.
   **Layman:** Bare ground looked wet in strong sun, so it was made more matt by eye; the real reason still needs finding.
   Kind: investigate.
   Source: 3D_E-0808 fix 2026-10-31.

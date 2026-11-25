@@ -251,6 +251,21 @@ struct GroundSample
 // (no reference dataset). TODO: revisit via Formula Workbench (design §4.4 item 2).
 const float FAR_TILING_SCALE = 0.25;
 
+// Roughness that keeps the bumps a mipmap averaged away (3D_E-0816). A mip
+// averages detail normals, so far ground gets a shorter normal that, once
+// normalised, is flat: lit with the map's roughness it glinted like wet stone.
+// Read the averaged normal as a von Mises-Fisher lobe; its length `len` gives
+// the sharpness kappa = (3 len - len^3) / (1 - len^2) (Banerjee et al. 2005,
+// as used for normal-map filtering by Han et al. 2007). Near its peak that
+// lobe matches a Beckmann/GGX lobe of alpha^2 = 2 / kappa, and the two spreads
+// add. Engine convention: alpha = roughness^2. No fitted constants.
+float normalVarianceRoughness(float roughness, float len)
+{
+    float alpha = roughness * roughness;
+    float invKappa = (1.0 - len * len) / max(3.0 * len - len * len * len, 1e-4);
+    return sqrt(sqrt(alpha * alpha + 2.0 * invKappa));
+}
+
 GroundSample sampleGround(vec2 uv, vec4 splatWeights)
 {
     vec3 a0 = texture(u_albedoArray,   vec3(uv * u_layerTiling[0], 0.0)).rgb;
@@ -282,20 +297,31 @@ GroundSample sampleGround(vec2 uv, vec4 splatWeights)
     g.ao        = m0.r * w.x + m1.r * w.y + m2.r * w.z + m3.r * w.w;
     g.roughness = m0.g * w.x + m1.g * w.y + m2.g * w.z + m3.g * w.w;
 
-    // Detail normals are a Medium/High feature. Low skips the four normal-array
-    // taps (its "albedo + AO only" tier) and returns a flat tangent normal, so the
-    // shading normal stays the terrain macro normal.
+    // Detail normals are a Medium/High feature. Low returns a flat tangent normal,
+    // so the shading normal stays the terrain macro normal.
     if (u_groundQuality >= 1)
     {
         vec3 n0 = texture(u_normalArray, vec3(uv * u_layerTiling[0], 0.0)).rgb * 2.0 - 1.0;
         vec3 n1 = texture(u_normalArray, vec3(uv * u_layerTiling[1], 1.0)).rgb * 2.0 - 1.0;
         vec3 n2 = texture(u_normalArray, vec3(uv * u_layerTiling[2], 2.0)).rgb * 2.0 - 1.0;
         vec3 n3 = texture(u_normalArray, vec3(uv * u_layerTiling[3], 3.0)).rgb * 2.0 - 1.0;
-        g.tnormal = normalize(n0 * w.x + n1 * w.y + n2 * w.z + n3 * w.w);
+        vec3 blended = n0 * w.x + n1 * w.y + n2 * w.z + n3 * w.w;
+        float len = clamp(length(blended), 1e-3, 1.0);
+        g.tnormal = blended / len;
+        g.roughness = normalVarianceRoughness(g.roughness, len);
     }
     else
     {
+        // The bumps are still there on Low, just unshown: take their whole-texture
+        // spread from each layer's 1x1 mip (one texel, the same for every pixel).
+        float top = float(textureQueryLevels(u_normalArray) - 1);
+        vec3 n0 = textureLod(u_normalArray, vec3(0.5, 0.5, 0.0), top).rgb * 2.0 - 1.0;
+        vec3 n1 = textureLod(u_normalArray, vec3(0.5, 0.5, 1.0), top).rgb * 2.0 - 1.0;
+        vec3 n2 = textureLod(u_normalArray, vec3(0.5, 0.5, 2.0), top).rgb * 2.0 - 1.0;
+        vec3 n3 = textureLod(u_normalArray, vec3(0.5, 0.5, 3.0), top).rgb * 2.0 - 1.0;
+        float len = clamp(length(n0 * w.x + n1 * w.y + n2 * w.z + n3 * w.w), 1e-3, 1.0);
         g.tnormal = vec3(0.0, 0.0, 1.0);
+        g.roughness = normalVarianceRoughness(g.roughness, len);
     }
     g.weights = w;
     return g;
@@ -437,11 +463,7 @@ void main()
         // Subtle large-scale brightness variation to break exact tiling repeats.
         albedo          = outAlbedo * tilingDetail(v_worldPos.xz * 0.15);
         groundAO        = outAO;
-        // The maps average 0.46-0.69, which glints like wet ground under the full
-        // sun and shows through the grass as pale patches (3D_E-0808). Half way to
-        // fully rough restores a matt look. Hand-set by eye against --stills.
-        // TODO: revisit via Formula Workbench
-        groundRoughness = mix(outRough, 1.0, 0.5);
+        groundRoughness = outRough;
         N               = worldN;
     }
     else if (u_triplanarEnabled && u_textureTiling > 0.0)

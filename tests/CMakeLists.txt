@@ -19,6 +19,7 @@ add_executable(vestige_tests
     test_subsurface_parity.cpp
     test_foliage_translucency.cpp
     test_terrain_ggx_parity.cpp
+    test_terrain_normal_variance.cpp
     test_terrain_material_set.cpp
     test_terrain_edges.cpp
     test_terrain_brush.cpp

@@ -25,6 +25,14 @@ may change any interface without notice.
 
 ## [Unreleased]
 
+### 2026-11-25 Fixed — Far meadow ground no longer glints like wet stone (3D_E-0816)
+
+Mipmaps average the ground's bump normals, so distant ground was lit as if
+polished. The terrain shader now widens roughness by the bumpiness the
+mipmap hides, and the hand-set roughness lift added under 3D_E-0808 is
+removed. Low quality takes the bumps' spread from each layer's smallest mip.
+Test: `test_terrain_normal_variance`.
+
 ### 2026-11-24 Fixed — mirrored objects show their outside (3D_E-1001)
 
 - **A mirrored object shows its outside and casts its own shadow** (3D_E-1001)
