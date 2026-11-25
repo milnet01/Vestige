@@ -1,6 +1,6 @@
 <!-- ants-roadmap-format: 1 -->
 <!-- Generated from the Ants Terminal roadmap store. Edit it with roadmap_log; hand edits are discarded by the next write. -->
-<!-- ants-roadmap-id-high-water: 3D_E=1017 3D_E#S=989 -->
+<!-- ants-roadmap-id-high-water: 3D_E=1018 3D_E#S=989 -->
 
 # Vestige Engine Roadmap
 
@@ -8547,6 +8547,18 @@ shipped that have no invocation path at all.
   Kind: fix.
   Source: 3D_E-0874 main.cpp 41 rig, 2026-11-22.
   Lanes: engine.
+
+- 📋 [3D_E-1018] **Check whether normal-mapped props glint at a distance, as the meadow ground did.**
+  3D_E-0816 found far ground glinting because mipmaps average the detail
+  normals and the shader then lit a flat normal with near roughness. It
+  fixed terrain.frag only (normalVarianceRoughness). scene.frag.glsl and
+  other normal-mapped shaders normalise the sampled normal the same way,
+  so distant normal-mapped props may glint too. Render a far view with
+  and without the same widening; adopt it where it changes the image.
+  **Layman:** Shiny-looking spots on far-away objects may have the same cause as the shiny meadow ground; worth checking.
+  Kind: investigate.
+  Source: 3D_E-0816 fix 2026-11-25.
+  Lanes: renderer.
 
 ## 0.3.0 — An editor a builder can use
 
