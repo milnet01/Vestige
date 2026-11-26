@@ -1,6 +1,6 @@
 <!-- ants-roadmap-format: 1 -->
 <!-- Generated from the Ants Terminal roadmap store. Edit it with roadmap_log; hand edits are discarded by the next write. -->
-<!-- ants-roadmap-id-high-water: 3D_E=1019 3D_E#S=989 -->
+<!-- ants-roadmap-id-high-water: 3D_E=1020 3D_E#S=989 -->
 
 # Vestige Engine Roadmap
 
@@ -8548,13 +8548,30 @@ shipped that have no invocation path at all.
   Source: 3D_E-0874 main.cpp 41 rig, 2026-11-22.
   Lanes: engine.
 
-- 📋 [3D_E-1018] **Check whether normal-mapped props glint at a distance, as the meadow ground did.**
+- ✅ [3D_E-1018] **Check whether normal-mapped props glint at a distance, as the meadow ground did.**
   3D_E-0816 found far ground glinting because mipmaps average the detail
   normals and the shader then lit a flat normal with near roughness. It
   fixed terrain.frag only (normalVarianceRoughness). scene.frag.glsl and
   other normal-mapped shaders normalise the sampled normal the same way,
   so distant normal-mapped props may glint too. Render a far view with
   and without the same widening; adopt it where it changes the image.
+  Done 2026-11-26: no change adopted. Rendered the meadow (27 views) and
+  the Tabernacle (64 views, --biblical-demo) with scene.frag as is, with
+  3D_E-0816's widening (normalVarianceRoughness on the sampled normal's
+  length), and with normal-mapped surfaces forced matte (proves the test
+  sees prop highlights: meadow 3.9 % of pixels dimmed by over 25/255,
+  summed). Meadow: the widening dims 0.48 % vs 0.27 % brightened, inside
+  the 1.7 % run-to-run noise; the changed pixels are leaf edges of trees,
+  which tree_mesh.frag draws with no specular. Tabernacle: the change is
+  real but wrong: the bronze altar top turns mottled. Cause, measured:
+  bronze, gold and silver maps keep length ~1.0 down to mip 7 (their bumps
+  are too gentle to average away, so there is no lost spread), and the
+  widening turns JPEG error at mip 0 (5th-percentile length 0.95-0.99)
+  into per-texel roughness. Maps that do shorten with distance (Acer and
+  Birch leaves, bark) belong to matte foliage. So no prop has both a
+  glossy lobe and a lost spread. If one ever does, divide by the mip-0
+  length rather than use the raw length. Rig:
+  Scratchpad/Vestige/glint1018 (deleted after).
   **Layman:** Shiny-looking spots on far-away objects may have the same cause as the shiny meadow ground; worth checking.
   Kind: investigate.
   Source: 3D_E-0816 fix 2026-11-25.
@@ -8571,6 +8588,20 @@ shipped that have no invocation path at all.
   Kind: fix.
   Source: exray-0010-review-2026-11-25.
   Lanes: profiler.
+
+- 📋 [3D_E-1020] **Check that the ground's short normals at full size are real lost detail, not a repack fault.**
+  assets/textures/terrain/*_normal.png are 512 px repacks of 1K+ ambientCG
+  maps (3D_E-0031, 3c14c1b). At mip 0 their median vector length is grass
+  0.66, rock 0.84, sand 0.87, dirt 0.96 (measured 2026-11-26). 3D_E-0816's
+  normalVarianceRoughness reads that as spread, so near ground is widened
+  too. Right if the repack's averaging made the shortness; wrong if the
+  source is not unit length or the repack scaled blue. Measure the source
+  maps' lengths downscaled the same way; if they differ, re-export the
+  normals renormalised and fold the spread into the roughness channel.
+  **Layman:** The ground fix makes the ground a little rougher wherever its bump map says detail was lost; this checks that the bump map is telling the truth up close.
+  Kind: investigate.
+  Source: 3D_E-1018 finding 2026-11-26.
+  Lanes: renderer.
 
 ## 0.3.0 — An editor a builder can use
 
