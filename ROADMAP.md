@@ -8589,7 +8589,7 @@ shipped that have no invocation path at all.
   Source: exray-0010-review-2026-11-25.
   Lanes: profiler.
 
-- 📋 [3D_E-1020] **Check that the ground's short normals at full size are real lost detail, not a repack fault.**
+- ✅ [3D_E-1020] **Check that the ground's short normals at full size are real lost detail, not a repack fault.**
   assets/textures/terrain/*_normal.png are 512 px repacks of 1K+ ambientCG
   maps (3D_E-0031, 3c14c1b). At mip 0 their median vector length is grass
   0.66, rock 0.84, sand 0.87, dirt 0.96 (measured 2026-11-26). 3D_E-0816's
@@ -8598,6 +8598,15 @@ shipped that have no invocation path at all.
   source is not unit length or the repack scaled blue. Measure the source
   maps' lengths downscaled the same way; if they differ, re-export the
   normals renormalised and fold the spread into the roughness channel.
+  Closed 2026-11-27 with no change: the shortness is real lost
+  detail. The ambientCG 1K NormalGL sources are already short (median
+  grass 0.689, rock 0.877, dirt 0.984, sand 0.922); a 2x box shrink of
+  each gives grass 0.660, rock 0.834, dirt 0.963, sand 0.872, and the
+  shipped 512 px maps match that (mean per-channel gap 0.024-0.035;
+  blue means equal), so the repack is faithful. Grass001 at 4K, box-
+  shrunk step by step, runs 0.884 / 0.796 / 0.712 / 0.664 from 4096 to
+  512 px, and its p90 is 1.000 at 4K: averaging, not a uniform scale or
+  blue fault. normalVarianceRoughness reads true spread near the camera.
   **Layman:** The ground fix makes the ground a little rougher wherever its bump map says detail was lost; this checks that the bump map is telling the truth up close.
   Kind: investigate.
   Source: 3D_E-1018 finding 2026-11-26.
