@@ -25,6 +25,16 @@ may change any interface without notice.
 
 ## [Unreleased]
 
+### 2026-11-28 Fixed — the frame log's GPU figures are the rendering card's (3D_E-1019)
+
+On Linux the frame log's `gpu_busy_pct` and `gpu_clock_mhz` came from the
+first card with a busy file, which on a two-card machine may not be the
+one the engine draws on. The engine now reads every card before the window
+opens and, once frames start, keeps the card its own GPU clients
+(`/proc/self/fdinfo`, `drm-pdev`) spent the most time on. No match, no GPU
+fields. Windows is unchanged. Test: `MachineLoadCard.*` in
+`test_machine_load`.
+
 ### 2026-11-25 Fixed — Far meadow ground no longer glints like wet stone (3D_E-0816)
 
 Mipmaps average the ground's bump normals, so distant ground was lit as if

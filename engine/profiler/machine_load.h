@@ -77,6 +77,24 @@ double parseGpuBusyPercent(const std::string& text);
 bool parseDrmEngineNs(const std::string& fdinfo, unsigned long long& clientId,
                       unsigned long long& engineNs);
 
+/// @brief One graphics card that reports a busy percent (amdgpu's sysfs files).
+struct DrmCard
+{
+    std::string devicePath;  ///< e.g. `/sys/class/drm/card1/device`.
+    std::string pdev;        ///< Its PCI address, e.g. `0000:30:00.0`.
+};
+
+/// @brief Every card under @p drmRoot (normally `/sys/class/drm`) whose
+///        `device` folder holds `gpu_busy_percent`, once per card, by path.
+std::vector<DrmCard> listGpuBusyCards(const std::string& drmRoot);
+
+/// @brief The `devicePath` of the card in @p cards that this process renders
+///        on, from its DRM `fdinfo` texts: the card (`drm-pdev`) its clients
+///        spent the most engine time on. Empty when no client names a card in
+///        @p cards, or two cards tie for the most.
+std::string renderingCardPath(const std::vector<DrmCard>& cards,
+                              const std::vector<std::string>& ownFdinfos);
+
 /// @brief The share of the machine's CPU time that programs other than this
 ///        one used between two readings, clamped to 0..1. Negative when no
 ///        time passed.
@@ -124,12 +142,15 @@ public:
     MachineLoadSampler(const MachineLoadSampler&) = delete;
     MachineLoadSampler& operator=(const MachineLoadSampler&) = delete;
 
-    /// @brief Reads the start values. Blocks for about half a second: on
+    /// @brief Reads the start values, for every card on Linux, since the
+    ///        window does not exist yet. Blocks for about half a second: on
     ///        Linux one GPU busy reading jumps, so this keeps the highest of a
     ///        few; on Windows the figures are rates over that window.
     void start();
 
-    /// @brief Starts the thread that samples the peaks.
+    /// @brief Picks the card the engine renders on, which needs the GL context,
+    ///        and starts the thread that samples the peaks. With no card
+    ///        matched, the GPU figures stay unknown.
     void beginRun();
 
     /// @brief Stops the thread, reads the end values and returns everything.
@@ -142,8 +163,18 @@ public:
 private:
     void samplePeaks();
 
+    /// A card's start readings, taken before the engine knows which card it uses.
+    struct CardStart
+    {
+        DrmCard card;
+        double busy = -1.0;
+        double clockMhz = -1.0;
+    };
+
     MachineLoad m_load;  ///< The thread writes the peaks; read after the join.
-    std::string m_gpuDevicePath;  ///< `/sys/class/drm/cardN/device`, or empty.
+    std::vector<CardStart> m_cardStarts;  ///< Every card, from `start()`.
+    std::string m_gpuDevicePath;  ///< The rendering card's, from `beginRun()`; or empty.
+    std::string m_gpuPdev;        ///< That card's PCI address.
     std::thread m_thread;
     std::mutex m_mutex;
     std::condition_variable m_wake;

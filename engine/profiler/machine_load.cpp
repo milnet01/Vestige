@@ -49,6 +49,29 @@ bool readUnsigned(const std::string& text, std::size_t& pos, unsigned long long&
     return true;
 }
 
+/// The `drm-pdev` value of one fdinfo text: the PCI address of the client's
+/// card. Empty when the text has none.
+std::string drmPdev(const std::string& fdinfo)
+{
+    static const std::string PDEV_KEY = "drm-pdev:";
+    std::istringstream lines(fdinfo);
+    std::string line;
+    while (std::getline(lines, line))
+    {
+        if (line.compare(0, PDEV_KEY.size(), PDEV_KEY) == 0)
+        {
+            const std::size_t start = line.find_first_not_of(" \t", PDEV_KEY.size());
+            if (start == std::string::npos)
+            {
+                return {};
+            }
+            const std::size_t end = line.find_last_not_of(" \t\r");
+            return line.substr(start, end - start + 1);
+        }
+    }
+    return {};
+}
+
 #ifdef __linux__
 /// The peaks are the highest of samples this long (FLED-0001 § 4.2: "about
 /// one second"). The whole-GPU figure is averaged from this many readings
@@ -68,46 +91,35 @@ std::string readTextFile(const std::string& path)
     return text.str();
 }
 
-/// The first DRM card that reports a busy percent: amdgpu's sysfs files.
-std::string findGpuDevicePath()
+/// The text of every file in `/proc/self/fdinfo`.
+std::vector<std::string> readOwnFdinfos()
 {
-    std::error_code error;
-    std::filesystem::directory_iterator cards("/sys/class/drm", error);
-    if (error)
-    {
-        return {};
-    }
-    std::string best;
-    for (const auto& entry : cards)
-    {
-        const std::string device = entry.path().string() + "/device";
-        if (std::filesystem::exists(device + "/gpu_busy_percent", error)
-            && (best.empty() || device < best))
-        {
-            best = device;
-        }
-    }
-    return best;
-}
-
-/// GPU engine time of every DRM client this process holds, in nanoseconds.
-/// False when no file descriptor reports any: then our own work cannot be
-/// left out, and the format says to give no peak.
-bool readOwnGpuEngineNs(unsigned long long& totalNs)
-{
+    std::vector<std::string> texts;
     std::error_code error;
     std::filesystem::directory_iterator files("/proc/self/fdinfo", error);
     if (error)
     {
-        return false;
+        return texts;
     }
+    for (const auto& entry : files)
+    {
+        texts.push_back(readTextFile(entry.path().string()));
+    }
+    return texts;
+}
+
+/// GPU engine time this process's DRM clients on the card @p pdev spent, in
+/// nanoseconds. False when no client there reports any: then our own work
+/// cannot be left out, and the format says to give no peak.
+bool readOwnGpuEngineNs(const std::string& pdev, unsigned long long& totalNs)
+{
     // Two descriptors of one client report the same figures: count it once.
     std::map<unsigned long long, unsigned long long> byClient;
-    for (const auto& entry : files)
+    for (const std::string& text : readOwnFdinfos())
     {
         unsigned long long clientId = 0;
         unsigned long long engineNs = 0;
-        if (parseDrmEngineNs(readTextFile(entry.path().string()), clientId, engineNs))
+        if (drmPdev(text) == pdev && parseDrmEngineNs(text, clientId, engineNs))
         {
             byClient[clientId] = std::max(byClient[clientId], engineNs);
         }
@@ -403,6 +415,95 @@ bool parseDrmEngineNs(const std::string& fdinfo, unsigned long long& clientId,
     return true;
 }
 
+std::vector<DrmCard> listGpuBusyCards(const std::string& drmRoot)
+{
+    std::vector<DrmCard> cards;
+    std::error_code error;
+    std::filesystem::directory_iterator entries(drmRoot, error);
+    if (error)
+    {
+        return cards;
+    }
+    // cardN and renderDN of one card share its device folder: keep the
+    // lowest path for each PCI address.
+    std::map<std::string, std::string> byPdev;
+    for (const auto& entry : entries)
+    {
+        const std::filesystem::path device = entry.path() / "device";
+        if (!std::filesystem::exists(device / "gpu_busy_percent", error))
+        {
+            continue;
+        }
+        const std::filesystem::path target = std::filesystem::canonical(device, error);
+        if (error)
+        {
+            continue;
+        }
+        const std::string pdev = target.filename().string();
+        const std::string path = device.string();
+        auto found = byPdev.find(pdev);
+        if (found == byPdev.end() || path < found->second)
+        {
+            byPdev[pdev] = path;
+        }
+    }
+    for (const auto& [pdev, path] : byPdev)
+    {
+        cards.push_back({path, pdev});
+    }
+    std::sort(cards.begin(), cards.end(),
+              [](const DrmCard& a, const DrmCard& b) { return a.devicePath < b.devicePath; });
+    return cards;
+}
+
+std::string renderingCardPath(const std::vector<DrmCard>& cards,
+                              const std::vector<std::string>& ownFdinfos)
+{
+    // Mesa may open every card to probe it, so the card that did the work
+    // is the one with the most engine time. One client open twice counts
+    // once; a client id is only unique on its own card.
+    std::map<std::pair<std::string, unsigned long long>, unsigned long long> byClient;
+    for (const std::string& text : ownFdinfos)
+    {
+        unsigned long long clientId = 0;
+        unsigned long long engineNs = 0;
+        const std::string pdev = drmPdev(text);
+        if (!pdev.empty() && parseDrmEngineNs(text, clientId, engineNs))
+        {
+            unsigned long long& most = byClient[{pdev, clientId}];
+            most = std::max(most, engineNs);
+        }
+    }
+    std::map<std::string, unsigned long long> byPdev;
+    for (const auto& [client, engineNs] : byClient)
+    {
+        byPdev[client.first] += engineNs;
+    }
+
+    std::string best;
+    unsigned long long bestNs = 0;
+    bool tied = false;
+    for (const DrmCard& card : cards)
+    {
+        const auto found = byPdev.find(card.pdev);
+        if (found == byPdev.end())
+        {
+            continue;
+        }
+        if (best.empty() || found->second > bestNs)
+        {
+            best = card.devicePath;
+            bestNs = found->second;
+            tied = false;
+        }
+        else if (found->second == bestNs)
+        {
+            tied = true;
+        }
+    }
+    return tied ? std::string() : best;
+}
+
 double otherCpuShare(const CpuTicks& before, const CpuTicks& after,
                      unsigned long long ownTicksBefore, unsigned long long ownTicksAfter)
 {
@@ -483,21 +584,28 @@ void MachineLoadSampler::start()
 #ifdef __linux__
     m_load.loadStart = parseLoadAverageShare(readTextFile("/proc/loadavg"),
                                              std::thread::hardware_concurrency());
-    m_gpuDevicePath = findGpuDevicePath();
-    if (m_gpuDevicePath.empty())
+    for (const DrmCard& card : listGpuBusyCards("/sys/class/drm"))
+    {
+        CardStart start;
+        start.card = card;
+        start.clockMhz = parseGpuClockMhz(readTextFile(card.devicePath + "/pp_dpm_sclk"));
+        m_cardStarts.push_back(start);
+    }
+    if (m_cardStarts.empty())
     {
         return;
     }
-    m_load.gpuClockStartMhz = parseGpuClockMhz(readTextFile(m_gpuDevicePath + "/pp_dpm_sclk"));
     for (int reading = 0; reading < START_GPU_READINGS; ++reading)
     {
         if (reading > 0)
         {
             std::this_thread::sleep_for(START_GPU_READING_GAP);
         }
-        m_load.gpuBusyStart =
-            std::max(m_load.gpuBusyStart,
-                     parseGpuBusyPercent(readTextFile(m_gpuDevicePath + "/gpu_busy_percent")));
+        for (CardStart& start : m_cardStarts)
+        {
+            start.busy = std::max(start.busy, parseGpuBusyPercent(readTextFile(
+                                                  start.card.devicePath + "/gpu_busy_percent")));
+        }
     }
 #elif defined(_WIN32)
     readEdge(m_load.loadStart, m_load.gpuBusyStart);
@@ -511,6 +619,23 @@ void MachineLoadSampler::beginRun()
     {
         return;
     }
+#ifdef __linux__
+    std::vector<DrmCard> cards;
+    for (const CardStart& start : m_cardStarts)
+    {
+        cards.push_back(start.card);
+    }
+    m_gpuDevicePath = renderingCardPath(cards, readOwnFdinfos());
+    for (const CardStart& start : m_cardStarts)
+    {
+        if (start.card.devicePath == m_gpuDevicePath)
+        {
+            m_gpuPdev = start.card.pdev;
+            m_load.gpuBusyStart = start.busy;
+            m_load.gpuClockStartMhz = start.clockMhz;
+        }
+    }
+#endif
     m_stop = false;
     m_thread = std::thread([this]() { samplePeaks(); });
 #endif
@@ -558,7 +683,7 @@ void MachineLoadSampler::samplePeaks()
     bool haveCpu = parseProcStatCpu(readTextFile("/proc/stat"), cpuBefore)
                    && parseSelfStatTicks(readTextFile("/proc/self/stat"), ownTicksBefore);
     unsigned long long gpuNsBefore = 0;
-    bool haveGpu = !m_gpuDevicePath.empty() && readOwnGpuEngineNs(gpuNsBefore);
+    bool haveGpu = !m_gpuDevicePath.empty() && readOwnGpuEngineNs(m_gpuPdev, gpuNsBefore);
     Clock::time_point windowStart = Clock::now();
 
     double busySum = 0.0;
@@ -597,7 +722,7 @@ void MachineLoadSampler::samplePeaks()
 
             const Clock::time_point now = Clock::now();
             unsigned long long gpuNsNow = 0;
-            if (haveGpu && busyReadings > 0 && readOwnGpuEngineNs(gpuNsNow))
+            if (haveGpu && busyReadings > 0 && readOwnGpuEngineNs(m_gpuPdev, gpuNsNow))
             {
                 const auto windowNs = static_cast<unsigned long long>(
                     std::chrono::duration_cast<std::chrono::nanoseconds>(now - windowStart)

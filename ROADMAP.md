@@ -1,6 +1,6 @@
 <!-- ants-roadmap-format: 1 -->
 <!-- Generated from the Ants Terminal roadmap store. Edit it with roadmap_log; hand edits are discarded by the next write. -->
-<!-- ants-roadmap-id-high-water: 3D_E=1020 3D_E#S=989 -->
+<!-- ants-roadmap-id-high-water: 3D_E=1021 3D_E#S=989 -->
 
 # Vestige Engine Roadmap
 
@@ -8577,13 +8577,21 @@ shipped that have no invocation path at all.
   Source: 3D_E-0816 fix 2026-11-25.
   Lanes: renderer.
 
-- 📋 [3D_E-1019] **The run file's GPU-busy reading comes from the GPU the engine renders on.**
+- ✅ [3D_E-1019] **The run file's GPU-busy reading comes from the GPU the engine renders on.**
   engine/profiler/machine_load.cpp takes the first DRM card that has a
   `gpu_busy_percent` file, not the card the GL context runs on. Match
   the context's GPU to its DRM node instead (ExperiRays EXRAY-0010 uses
   VK_EXT_physical_device_drm; on GL, match by PCI id or renderer), and
   write no `gpu_busy_pct` where no node matches. Test: a fake sysfs
   tree with two cards, the rendering one second.
+  Shipped 2026-11-28 (Linux). start() reads every card with a busy file
+  (listGpuBusyCards); beginRun(), once the GL context exists, keeps the
+  card whose drm-pdev this process's fdinfo clients spent the most engine
+  time on (renderingCardPath); no match or a tie gives no GPU fields. Own
+  engine time is counted on that card only. Tests MachineLoadCard.* (fake
+  sysfs, rendering card second): red under the old lowest-path rule, then
+  green. Headless run on the RX 6600 still writes gpu_busy_pct and
+  gpu_clock_mhz. Windows follow-up: 3D_E-1021.
   **Layman:** On a machine with two graphics cards, the frame log could report how busy the wrong card was.
   Kind: fix.
   Source: exray-0010-review-2026-11-25.
@@ -8611,6 +8619,19 @@ shipped that have no invocation path at all.
   Kind: investigate.
   Source: 3D_E-1018 finding 2026-11-26.
   Lanes: renderer.
+
+- 📋 [3D_E-1021] **Windows: the run file's GPU-busy reading comes from the GPU the engine renders on.**
+  busiestGpuEnginePercent (engine/profiler/machine_load.cpp) takes the
+  busiest engine over every "GPU Engine" row, whatever card (luid) it is
+  on, so a busier second card wins. Keep only rows of the rendering
+  card's LUID: GL_EXT_memory_object_win32's GL_DEVICE_LUID_EXT, or the
+  LUID of the engine's own pid rows with the most use. No match, no
+  field, as 3D_E-1019 does on Linux. Test: rows on two LUIDs, the
+  rendering one quieter.
+  **Layman:** On a Windows machine with two graphics cards, the frame log could report how busy the wrong card was.
+  Kind: fix.
+  Source: 3D_E-1019 follow-up, 2026-11-28.
+  Lanes: profiler.
 
 ## 0.3.0 — An editor a builder can use
 

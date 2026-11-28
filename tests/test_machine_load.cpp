@@ -8,7 +8,10 @@
 
 #include <gtest/gtest.h>
 
+#include <filesystem>
+#include <fstream>
 #include <string>
+#include <utility>
 #include <vector>
 
 using namespace Vestige;
@@ -138,6 +141,98 @@ TEST(MachineLoadWindows, BusiestEngineSumsOverProcessesAndCanLeaveOneOut)
         << "rows exist but all are ours: others used nothing";
     EXPECT_LT(busiestGpuEnginePercent({}, 0), 0.0) << "no row means unknown, not idle";
 }
+
+#ifndef _WIN32
+namespace
+{
+/// A fake `/sys` with three cards: 0a and 30 report a busy percent (30 under
+/// both card1 and renderD128), 40 does not. Removed when it goes out of scope.
+class FakeSysfs
+{
+public:
+    FakeSysfs()
+    {
+        namespace fs = std::filesystem;
+        m_root = fs::temp_directory_path()
+                 / ("vestige_drm_" + std::to_string(::testing::UnitTest::GetInstance()->random_seed())
+                    + "_" + ::testing::UnitTest::GetInstance()->current_test_info()->name());
+        fs::remove_all(m_root);
+        for (const char* pdev : {"0000:0a:00.0", "0000:30:00.0", "0000:40:00.0"})
+        {
+            fs::create_directories(m_root / "devices" / pdev);
+        }
+        std::ofstream(m_root / "devices" / "0000:0a:00.0" / "gpu_busy_percent") << "0\n";
+        std::ofstream(m_root / "devices" / "0000:30:00.0" / "gpu_busy_percent") << "0\n";
+        const std::pair<const char*, const char*> links[] = {
+            {"card0", "0000:0a:00.0"},
+            {"card1", "0000:30:00.0"},
+            {"renderD128", "0000:30:00.0"},
+            {"card2", "0000:40:00.0"},
+        };
+        for (const auto& [card, pdev] : links)
+        {
+            fs::create_directories(m_root / "drm" / card);
+            fs::create_directory_symlink(fs::path("../../devices") / pdev,
+                                         m_root / "drm" / card / "device");
+        }
+    }
+    ~FakeSysfs() { std::filesystem::remove_all(m_root); }
+    FakeSysfs(const FakeSysfs&) = delete;
+    FakeSysfs& operator=(const FakeSysfs&) = delete;
+
+    std::string drm() const { return (m_root / "drm").string(); }
+
+private:
+    std::filesystem::path m_root;
+};
+
+std::string fdinfo(unsigned clientId, const char* pdev, unsigned long long gfxNs)
+{
+    return "drm-driver:\tamdgpu\ndrm-client-id:\t" + std::to_string(clientId)
+           + "\ndrm-pdev:\t" + pdev + "\ndrm-engine-gfx:\t" + std::to_string(gfxNs) + " ns\n";
+}
+} // namespace
+
+TEST(MachineLoadCard, ListsEachCardWithABusyPercentOnce)
+{
+    const FakeSysfs sysfs;
+    const std::vector<DrmCard> cards = listGpuBusyCards(sysfs.drm());
+    ASSERT_EQ(cards.size(), 2u);
+    EXPECT_EQ(cards[0].devicePath, sysfs.drm() + "/card0/device");
+    EXPECT_EQ(cards[0].pdev, "0000:0a:00.0");
+    EXPECT_EQ(cards[1].devicePath, sysfs.drm() + "/card1/device");
+    EXPECT_EQ(cards[1].pdev, "0000:30:00.0");
+}
+
+// 3D_E-1019: the engine renders on the second card, so its reading is that
+// card's, not the first card's.
+TEST(MachineLoadCard, PicksTheCardThisProcessRendersOn)
+{
+    const FakeSysfs sysfs;
+    const std::vector<DrmCard> cards = listGpuBusyCards(sysfs.drm());
+    // A small client on card0 (a probe), the real one on card1 open twice.
+    // Client ids are only unique per card, so the two share one.
+    const std::vector<std::string> own = {
+        "pos:\t0\nflags:\t02\n",
+        fdinfo(9, "0000:0a:00.0", 1000),
+        fdinfo(9, "0000:30:00.0", 5000000),
+        fdinfo(9, "0000:30:00.0", 5000000),
+    };
+    EXPECT_EQ(renderingCardPath(cards, own), sysfs.drm() + "/card1/device");
+}
+
+TEST(MachineLoadCard, NoMatchOrATieGivesNoCard)
+{
+    const FakeSysfs sysfs;
+    const std::vector<DrmCard> cards = listGpuBusyCards(sysfs.drm());
+    EXPECT_EQ(renderingCardPath(cards, {}), "");
+    // Rendering on the card with no busy percent (another vendor's).
+    EXPECT_EQ(renderingCardPath(cards, {fdinfo(3, "0000:40:00.0", 9000)}), "");
+    EXPECT_EQ(renderingCardPath(cards, {fdinfo(3, "0000:0a:00.0", 500),
+                                        fdinfo(4, "0000:30:00.0", 500)}),
+              "");
+}
+#endif
 
 // The sampler against the real machine. What it reads depends on the machine,
 // so this checks only that the figures it gives are in range and that the
